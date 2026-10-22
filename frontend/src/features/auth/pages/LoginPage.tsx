@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { Alert } from '@/components/Alert'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
@@ -80,6 +80,12 @@ export function LoginPage() {
             <Button type="submit" loading={pending} className="w-full">
               Đăng nhập
             </Button>
+            <p className="text-center text-sm text-stone-700">
+              Chưa có tài khoản?{' '}
+              <Link to="/register" className="font-medium text-primary hover:underline">
+                Đăng ký
+              </Link>
+            </p>
           </form>
         )}
       </div>

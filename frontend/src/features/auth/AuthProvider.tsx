@@ -1,9 +1,16 @@
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  createUserWithEmailAndPassword,
+  deleteUser,
+  onAuthStateChanged,
+  sendEmailVerification,
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { queryClient } from '@/app/query-client'
 import { getErrorMessage, setAuthTokenProvider, setDevUser } from '@/lib/api-client'
 import { firebaseAuth } from '@/lib/firebase'
-import { getMe, type Me } from './api'
+import { getMe, registerAccount, type Me } from './api'
 import { AuthContext, type AuthContextValue } from './auth-context'
 import { firebaseErrorMessage } from './firebase-errors'
 
@@ -19,6 +26,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthContextValue['status']>(() =>
     firebaseAuth || localStorage.getItem(DEV_USER_KEY) ? 'loading' : 'anonymous',
   )
+
+  // Đang đăng ký: Firebase tự đăng nhập tài khoản mới, không coi đó là một phiên HMS.
+  const registering = useRef(false)
 
   const loadMe = useCallback(async () => {
     setMe(await getMe())
@@ -39,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const auth = firebaseAuth
     if (auth) {
       return onAuthStateChanged(auth, (user) => {
+        if (registering.current) return
         if (!user) return clearSession()
         setAuthTokenProvider(() => user.getIdToken())
         loadMe().catch(() => signOut(auth))
@@ -77,6 +88,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setDevUser(devUser)
         localStorage.setItem(DEV_USER_KEY, JSON.stringify(devUser))
         await loadMe()
+      },
+      async register({ email, password, ...profile }) {
+        if (!firebaseAuth) throw new Error('Chưa cấu hình Firebase')
+        registering.current = true
+        try {
+          const { user } = await createUserWithEmailAndPassword(
+            firebaseAuth,
+            email,
+            password,
+          ).catch((error) => {
+            throw new Error(firebaseErrorMessage(error))
+          })
+          try {
+            await registerAccount(await user.getIdToken(), profile)
+          } catch (error) {
+            // Không để lại tài khoản Firebase không có tài khoản HMS tương ứng.
+            await deleteUser(user).catch(() => undefined)
+            throw new Error(getErrorMessage(error, 'Không đăng ký được'))
+          }
+          await sendEmailVerification(user)
+        } finally {
+          await signOut(firebaseAuth)
+          registering.current = false
+        }
       },
       async logout() {
         if (firebaseAuth) await signOut(firebaseAuth)

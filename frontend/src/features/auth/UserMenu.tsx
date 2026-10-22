@@ -28,7 +28,9 @@ export function UserMenu() {
 
   return (
     <span className="flex items-center gap-4">
-      <span className="tracking-normal text-pearl-900 normal-case">{me.fullName}</span>
+      <Link to="/profile" className="tracking-normal text-pearl-900 normal-case hover:text-primary">
+        {me.fullName}
+      </Link>
       <button type="button" onClick={onLogout} className="uppercase hover:text-primary">
         Đăng xuất
       </button>

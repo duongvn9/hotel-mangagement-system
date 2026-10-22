@@ -24,6 +24,7 @@ export function renderWithAuth(
     isDevMode: false,
     login: vi.fn(),
     loginAsDev: vi.fn(),
+    register: vi.fn(),
     logout: vi.fn(),
     refresh: vi.fn(),
     ...auth,

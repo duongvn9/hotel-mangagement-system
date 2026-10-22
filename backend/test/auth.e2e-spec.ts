@@ -5,10 +5,13 @@ import {
   type INestApplication,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { getModelToken } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { Role } from '../src/common/constants/role.enum.js';
 import { Roles } from '../src/common/decorators/roles.decorator.js';
+import { User } from '../src/modules/users/schemas/user.schema.js';
 
 @Controller('probe')
 class ProbeController {
@@ -70,4 +73,45 @@ describe('Auth (e2e)', () => {
 
   it('GET /auth/dev-accounts không cần đăng nhập ở dev', () =>
     get('/auth/dev-accounts').expect(200));
+
+  it('header dev sai: 400 theo format lỗi chung', async () => {
+    const res = await get('/probe/any', { 'x-dev-role': 'ADMIN' }).expect(400);
+    expect(res.body.path).toBe('/api/v1/probe/any');
+  });
+
+  it('PATCH /users/me chỉ sửa được họ tên, số điện thoại (BR-ACC-06)', async () => {
+    const users = app.get<Model<User>>(getModelToken(User.name));
+    await users.deleteMany({ email: 'profile-e2e@hms.local' });
+    const user = await users.create({
+      email: 'profile-e2e@hms.local',
+      fullName: 'Trước Khi Sửa',
+      role: 'CUSTOMER',
+    });
+    const headers = { 'x-dev-user-id': String(user._id) };
+    const patch = (body: object) =>
+      request(app.getHttpServer())
+        .patch('/api/v1/users/me')
+        .set(headers)
+        .send(body);
+
+    const ok = await patch({ fullName: 'Sau Khi Sửa', phone: '0912345678' });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({
+      fullName: 'Sau Khi Sửa',
+      role: 'CUSTOMER',
+    });
+    await patch({ role: 'MANAGER' }).expect(400);
+    await patch({ isActive: false }).expect(400);
+    await patch({ phone: '123' }).expect(400);
+    expect(await users.findById(user._id).lean()).toMatchObject({
+      role: 'CUSTOMER',
+      isActive: true,
+    });
+  });
+
+  it('POST /auth/register không có token: 401', () =>
+    request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({ fullName: 'Khách Mới' })
+      .expect(401));
 });
