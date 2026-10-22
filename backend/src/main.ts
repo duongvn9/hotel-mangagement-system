@@ -34,7 +34,8 @@ async function bootstrap() {
       .setTitle('HMS API')
       .setDescription('Hotel Management System API')
       .setVersion('1.0')
-      .addBearerAuth();
+      .addBearerAuth()
+      .addSecurityRequirements('bearer');
     // Ô nhập header giả lập user cho Swagger, xem common/auth/dev-auth.middleware.ts
     if (config.get('env', { infer: true }) !== 'production') {
       doc
