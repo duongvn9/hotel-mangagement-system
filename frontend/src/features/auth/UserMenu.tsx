@@ -4,7 +4,10 @@ import { useAuth } from './auth-context'
 
 // shortcut: menu tạm theo role, chuyển vào layout theo role khi có H10 (Khoa).
 const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
-  MANAGER: [{ to: '/manager/accounts', label: 'Tài khoản' }],
+  MANAGER: [
+    { to: '/manager/accounts', label: 'Tài khoản' },
+    { to: '/manager/roles', label: 'Vai trò' },
+  ],
 }
 
 /** Góc phải header: link đăng nhập, hoặc tên người dùng + đăng xuất (UC03). */

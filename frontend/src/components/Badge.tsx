@@ -12,7 +12,7 @@ const TONES = {
 export function Badge({ tone, children }: { tone: keyof typeof TONES; children: ReactNode }) {
   return (
     <span
-      className={`inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ${TONES[tone]}`}
+      className={`inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold whitespace-nowrap ${TONES[tone]}`}
     >
       <span aria-hidden className="size-1.5 rounded-full bg-current" />
       {children}

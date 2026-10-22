@@ -5,8 +5,8 @@ import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import { SelectField } from '@/components/SelectField'
 import { TextField } from '@/components/TextField'
-import { ROLE_LABELS } from '@/features/auth/api'
 import { useAuth } from '@/features/auth/auth-context'
+import { listRoles } from '@/features/roles/api'
 import { getErrorMessage } from '@/lib/api-client'
 import { AccountForm } from '../AccountForm'
 import {
@@ -20,8 +20,6 @@ import {
 } from '../api'
 
 const LIMIT = 20
-// shortcut: chỉ có 5 role hệ thống, đổi sang GET /roles khi có màn quản lý role (UC44).
-const ROLE_OPTIONS = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }))
 
 /** UC42 View Account List + UC43 Create / Update Account (chỉ Manager, BR-RBAC-01). */
 export function AccountsPage() {
@@ -31,6 +29,13 @@ export function AccountsPage() {
   const [query, setQuery] = useState<AccountQuery>({ page: 1, limit: LIMIT })
   const [editing, setEditing] = useState<Account | 'new' | null>(null)
   const [notice, setNotice] = useState('')
+
+  const roles = useQuery({ queryKey: ['roles'], queryFn: listRoles })
+  // Chỉ gán role đang dùng (BR-RBAC-05); bảng vẫn hiện tên role đã ngừng dùng.
+  const roleOptions = (roles.data ?? [])
+    .filter((r) => r.isActive)
+    .map((r) => ({ value: r.code, label: r.name }))
+  const roleName = (code: string) => roles.data?.find((r) => r.code === code)?.name ?? code
 
   const { data, isPending, isError } = useQuery({
     queryKey: ['accounts', query],
@@ -78,7 +83,7 @@ export function AccountsPage() {
         <AccountForm
           key={editing === 'new' ? 'new' : editing.id}
           account={editing === 'new' ? undefined : editing}
-          roleOptions={ROLE_OPTIONS}
+          roleOptions={roleOptions}
           isSelf={editing !== 'new' && editing.id === me?.id}
           pending={save.isPending}
           error={save.isError ? getErrorMessage(save.error) : undefined}
@@ -97,7 +102,7 @@ export function AccountsPage() {
         />
         <SelectField
           label="Vai trò"
-          options={[{ value: '', label: 'Tất cả' }, ...ROLE_OPTIONS]}
+          options={[{ value: '', label: 'Tất cả' }, ...roleOptions]}
           value={query.role ?? ''}
           onChange={(e) => filter({ role: e.target.value || undefined })}
         />
@@ -139,7 +144,7 @@ export function AccountsPage() {
                 <td className="px-4 font-medium text-pearl-900">{account.fullName}</td>
                 <td className="px-4">{account.email}</td>
                 <td className="px-4">{account.phone ?? '—'}</td>
-                <td className="px-4">{ROLE_LABELS[account.role] ?? account.role}</td>
+                <td className="px-4">{roleName(account.role)}</td>
                 <td className="px-4">
                   {account.isActive ? (
                     <Badge tone="success">Hoạt động</Badge>
