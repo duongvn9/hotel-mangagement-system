@@ -1,4 +1,5 @@
 import { Link, Outlet } from 'react-router'
+import { UserMenu } from '@/features/auth/UserMenu'
 import { env } from '@/lib/env'
 
 const currentYear = new Date().getFullYear()
@@ -11,10 +12,11 @@ export function PublicLayout() {
           <Link to="/" className="font-display text-2xl font-semibold text-pearl-900">
             {env.appName}
           </Link>
-          <nav className="text-sm font-medium tracking-wide text-stone-700 uppercase">
+          <nav className="flex items-center gap-6 text-sm font-medium tracking-wide text-stone-700 uppercase">
             <Link to="/" className="hover:text-primary">
               Trang chủ
             </Link>
+            <UserMenu />
           </nav>
         </div>
       </header>
