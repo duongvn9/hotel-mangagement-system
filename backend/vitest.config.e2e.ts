@@ -7,5 +7,7 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.e2e-spec.ts'],
+    // Các file e2e dùng chung một database nên chạy lần lượt.
+    fileParallelism: false,
   },
 });

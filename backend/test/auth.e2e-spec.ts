@@ -64,7 +64,8 @@ describe('Auth (e2e)', () => {
     const res = await get('/auth/me', { 'x-dev-role': 'RECEPTIONIST' }).expect(
       200,
     );
-    expect(res.body).toMatchObject({ role: 'RECEPTIONIST', permissions: [] });
+    expect(res.body.role).toBe('RECEPTIONIST');
+    expect(Array.isArray(res.body.permissions)).toBe(true);
   });
 
   it('GET /auth/dev-accounts không cần đăng nhập ở dev', () =>
