@@ -1,4 +1,5 @@
 import { Logger, type INestApplicationContext } from '@nestjs/common';
+import { seedFeedback } from '../modules/feedback/seed.js';
 import { seedRoles } from '../modules/roles/seed.js';
 import { seedUsers } from '../modules/users/seed.js';
 
@@ -9,6 +10,7 @@ export type Seed = (app: INestApplicationContext) => Promise<void>;
 export const SEEDS: Record<string, Seed> = {
   roles: seedRoles,
   users: seedUsers,
+  feedback: seedFeedback,
 };
 
 export async function runSeeds(app: INestApplicationContext) {
