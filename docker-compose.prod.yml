@@ -1,0 +1,89 @@
+# Môi trường PRODUCTION.
+#   cp .env.example .env   # điền mật khẩu và secret thật
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Chỉ container "web" (nginx) mở cổng ra ngoài. Backend và MongoDB nằm trong mạng nội bộ.
+
+name: hms
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?Thiếu MONGO_ROOT_USERNAME trong .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Thiếu MONGO_ROOT_PASSWORD trong .env}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-hms}
+    volumes:
+      - mongo-data:/data/db
+    networks: [backend-net]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging: *default-logging
+
+  backend:
+    build:
+      context: ./backend
+      target: prod
+    image: hms-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_PREFIX: api
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongo:27017/${MONGO_DB:-hms}?authSource=admin
+      CORS_ORIGINS: ${CORS_ORIGINS:?Thiếu CORS_ORIGINS trong .env}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
+      VNPAY_TMN_CODE: ${VNPAY_TMN_CODE:-}
+      VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET:-}
+      VNPAY_PAYMENT_URL: ${VNPAY_PAYMENT_URL:-}
+      VNPAY_RETURN_URL: ${VNPAY_RETURN_URL:-}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_APP_PASSWORD: ${MAIL_APP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks: [backend-net, frontend-net]
+    logging: *default-logging
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: prod
+      args:
+        VITE_API_BASE_URL: /api/v1
+        VITE_APP_NAME: ${VITE_APP_NAME:-Grand Emily HMS}
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:-}
+        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:-}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:-}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:-}
+    image: hms-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-80}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [frontend-net]
+    logging: *default-logging
+
+networks:
+  backend-net:
+  frontend-net:
+
+volumes:
+  mongo-data:

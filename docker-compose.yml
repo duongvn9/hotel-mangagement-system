@@ -1,0 +1,94 @@
+# Môi trường DEV: hot reload cho cả backend và frontend.
+#   docker compose up --watch          # khuyên dùng: tự đồng bộ code khi sửa
+#   docker compose --profile tools up  # thêm mongo-express (http://localhost:8081)
+# Không cần file .env để chạy dev; muốn đổi giá trị thì copy .env.example thành .env.
+
+name: hms-dev
+
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-hms}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-hms_dev_password}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-hms}
+    ports:
+      - "${MONGO_PORT:-27017}:27017"   # mở để dùng MongoDB Compass khi dev
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-hms}:${MONGO_ROOT_PASSWORD:-hms_dev_password}@mongo:27017/${MONGO_DB:-hms}?authSource=admin
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      SWAGGER_ENABLED: "true"
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: sync
+          path: ./backend/src
+          target: /app/src
+        - action: rebuild
+          path: ./backend/package-lock.json
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: dev
+    environment:
+      VITE_PROXY_TARGET: http://backend:3000
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      - backend
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend/src
+          target: /app/frontend/src
+        - action: sync
+          path: ./frontend/public
+          target: /app/frontend/public
+        - action: sync
+          path: ./design-system
+          target: /app/design-system
+        - action: rebuild
+          path: ./frontend/package-lock.json
+        - action: rebuild
+          path: ./frontend/vite.config.ts
+
+  mongo-express:
+    image: mongo-express:1
+    profiles: ["tools"]
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_ROOT_USERNAME:-hms}:${MONGO_ROOT_PASSWORD:-hms_dev_password}@mongo:27017/?authSource=admin
+      ME_CONFIG_BASICAUTH_ENABLED: "false"
+    ports:
+      - "8081:8081"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo-data:
