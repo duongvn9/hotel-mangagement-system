@@ -9,6 +9,7 @@ import { DevAuthMiddleware } from './common/auth/dev-auth.middleware.js';
 import { configuration, type AppConfig } from './config/configuration.js';
 import { envValidationSchema } from './config/env.validation.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { RolesModule } from './modules/roles/roles.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
 @Module({
@@ -28,6 +29,7 @@ import { UsersModule } from './modules/users/users.module.js';
     }),
     HealthModule,
     UsersModule,
+    RolesModule,
     // Module nghiệp vụ thêm vào đây, xem src/modules/README.md
   ],
 })

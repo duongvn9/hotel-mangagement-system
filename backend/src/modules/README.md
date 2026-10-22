@@ -44,3 +44,17 @@ Quy ước:
 - Schema theo quy ước dữ liệu chung ở `common/database/conventions.ts`: `timestamps: true`, xoá mềm bằng `isActive`, tiền là số nguyên VND, ngày nghiệp vụ lấy bằng `toBusinessDate()`.
 - Lấy người dùng hiện tại bằng `@CurrentUser() user: AuthUser` (`{ id, email, role }`).
 - Test theo role khi chưa có Firebase: gửi header `x-dev-role: MANAGER` (và `x-dev-user-id: <_id User>` nếu cần) qua Swagger (nút Authorize) hoặc Postman. Chỉ có tác dụng khi `NODE_ENV` khác `production`.
+
+## Seed dữ liệu mẫu
+
+```bash
+npm run seed                          # chạy trực tiếp (cần backend/.env)
+docker compose exec backend npm run seed   # khi chạy bằng Docker
+```
+
+Chạy lại nhiều lần vẫn an toàn: chỉ thêm bản ghi còn thiếu, không ghi đè dữ liệu đã sửa. Log in ra `_id` của 5 tài khoản mẫu (`customer`, `receptionist`, `service`, `operations`, `manager` + `@hms.local`) để dùng cho header `x-dev-user-id`.
+
+Thêm seed cho module của mình:
+
+1. Viết `modules/<tên>/seed.ts` export một hàm kiểu `Seed` (xem `src/database/seed.ts`). Lấy model bằng `app.get(getModelToken(X.name))`, ghi bằng `updateOne(..., { $setOnInsert }, { upsert: true })` theo một khóa duy nhất.
+2. Thêm hàm đó vào `SEEDS` trong `src/database/seed.ts`, đặt sau các seed mà dữ liệu của mình tham chiếu tới (ví dụ `bookings` sau `rooms` và `users`).
