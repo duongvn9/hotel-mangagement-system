@@ -256,7 +256,7 @@ docker compose -f docker-compose.prod.yml up -d --build    # hoặc: make prod
 5. Create Service Order cần Service (Lâm) và một booking đang ở; seed sẵn booking `CHECKED_IN` mẫu để không phải chờ Check-in.
 6. Revenue Report cần dữ liệu thanh toán từ Deposit VNPay.
 
-Trong lúc chờ DB và auth, các bạn dựng giao diện bằng mock data rồi nối API sau. Ai làm được gì ngay, các "hợp đồng" cần chốt sớm và quy trình cho mỗi task: xem [`docs/HUONG-DAN-TRIEN-KHAI.md`](docs/HUONG-DAN-TRIEN-KHAI.md).
+Trong lúc chờ DB và auth, các bạn dựng giao diện bằng mock data rồi nối API sau. Ai làm được gì ngay, các "hợp đồng" cần chốt sớm và quy trình cho mỗi task: xem [`docs/HUONG-DAN-TRIEN-KHAI.md`](docs/HUONG-DAN-TRIEN-KHAI.md). Phần nền tảng đã xong (đăng nhập, phân quyền, seed) và cách dùng lại: [`docs/TIEN-DO-DUONG.md`](docs/TIEN-DO-DUONG.md).
 
 ### 7.2 Tổng quan phân công
 
