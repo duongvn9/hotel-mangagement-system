@@ -34,10 +34,23 @@ async function bootstrap() {
       .setTitle('HMS API')
       .setDescription('Hotel Management System API')
       .setVersion('1.0')
-      .addBearerAuth()
-      .build();
+      .addBearerAuth();
+    // Ô nhập header giả lập user cho Swagger, xem common/auth/dev-auth.middleware.ts
+    if (config.get('env', { infer: true }) !== 'production') {
+      doc
+        .addApiKey(
+          { type: 'apiKey', in: 'header', name: 'x-dev-role' },
+          'x-dev-role',
+        )
+        .addApiKey(
+          { type: 'apiKey', in: 'header', name: 'x-dev-user-id' },
+          'x-dev-user-id',
+        )
+        .addSecurityRequirements('x-dev-role')
+        .addSecurityRequirements('x-dev-user-id');
+    }
     SwaggerModule.setup(`${prefix}/docs`, app, () =>
-      SwaggerModule.createDocument(app, doc),
+      SwaggerModule.createDocument(app, doc.build()),
     );
   }
 

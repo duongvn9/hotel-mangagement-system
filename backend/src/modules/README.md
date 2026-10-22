@@ -41,3 +41,6 @@ Quy ước:
 - Endpoint mặc định cần đăng nhập; endpoint cho Guest gắn `@Public()`.
 - Giới hạn role bằng `@Roles(Role.Manager, ...)` (xem `common/`).
 - Không đọc `process.env` trực tiếp trong module, dùng `ConfigService`.
+- Schema theo quy ước dữ liệu chung ở `common/database/conventions.ts`: `timestamps: true`, xoá mềm bằng `isActive`, tiền là số nguyên VND, ngày nghiệp vụ lấy bằng `toBusinessDate()`.
+- Lấy người dùng hiện tại bằng `@CurrentUser() user: AuthUser` (`{ id, email, role }`).
+- Test theo role khi chưa có Firebase: gửi header `x-dev-role: MANAGER` (và `x-dev-user-id: <_id User>` nếu cần) qua Swagger (nút Authorize) hoặc Postman. Chỉ có tác dụng khi `NODE_ENV` khác `production`.
