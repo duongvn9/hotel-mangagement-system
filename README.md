@@ -154,6 +154,11 @@ Lệnh hay dùng (chạy trong `backend/` hoặc `frontend/`):
 | `npm run test:e2e` | E2E backend (cần MongoDB đang chạy) |
 | `npm run build` | Build production |
 
+### Lỗi thường gặp
+
+- **MongoDB thoát ngay khi khởi động, log có "Linux kernel versions 6.19 and newer has a known incompatibility"**: MongoDB (mọi bản, kể cả Docker) không chạy trên kernel Linux 6.19 đến 7.0.13 ([ghi chú của MongoDB](https://www.mongodb.com/docs/manual/release-notes/8.0)). Cập nhật Docker Desktop hoặc kernel lên 7.0.14 trở lên; nếu chưa được thì tạm dùng MongoDB Atlas (gói free) và đặt `MONGODB_URI` trỏ tới đó.
+- **`npm ci` báo lockfile không khớp**: kiểm tra `node -v` là 24 và `npm -v` là 11.
+
 ### 4.4 Production
 
 ```bash
