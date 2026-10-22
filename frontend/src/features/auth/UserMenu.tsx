@@ -2,6 +2,11 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { useAuth } from './auth-context'
 
+// shortcut: menu tạm theo role, chuyển vào layout theo role khi có H10 (Khoa).
+const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
+  MANAGER: [{ to: '/manager/accounts', label: 'Tài khoản' }],
+}
+
 /** Góc phải header: link đăng nhập, hoặc tên người dùng + đăng xuất (UC03). */
 export function UserMenu() {
   const { me, logout } = useAuth()
@@ -28,6 +33,11 @@ export function UserMenu() {
 
   return (
     <span className="flex items-center gap-4">
+      {ROLE_LINKS[me.role]?.map((link) => (
+        <Link key={link.to} to={link.to} className="hover:text-primary">
+          {link.label}
+        </Link>
+      ))}
       <Link to="/profile" className="tracking-normal text-pearl-900 normal-case hover:text-primary">
         {me.fullName}
       </Link>

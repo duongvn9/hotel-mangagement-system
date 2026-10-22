@@ -13,10 +13,7 @@ import type { Model } from 'mongoose';
 import type { AuthUser } from '../../common/auth/auth-user.js';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator.js';
 import { User } from '../users/schemas/user.schema.js';
-import {
-  ID_TOKEN_VERIFIER,
-  type IdTokenVerifier,
-} from './firebase.provider.js';
+import { ID_TOKEN_VERIFIER, type IdTokenVerifier } from './firebase.module.js';
 
 /**
  * Xác thực (BR-INT-01, BR-ACC-02, BR-ACC-04): đọc `Authorization: Bearer <Firebase ID token>`,
