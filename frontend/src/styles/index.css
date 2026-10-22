@@ -1,0 +1,21 @@
+/* Token gốc của Grand Emily design system (CSS variables + Google Fonts) */
+@import '../../../design-system/tokens.css';
+@import 'tailwindcss';
+@config '../../tailwind.config.js';
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+  }
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
