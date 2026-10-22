@@ -1,6 +1,6 @@
 # Tiến độ phần việc của Vũ Ngọc Dương
 
-> Viết cho thành viên và AI agent của các thành viên khác đọc trước khi code. Cập nhật 23/10/2026, tính đến PR #9 trên `main`.
+> Viết cho thành viên và AI agent của các thành viên khác đọc trước khi code. Cập nhật 23/10/2026: đã nối Firebase project `hrm-wdp`.
 > Phân công gốc: [README mục 7](../README.md#7-kế-hoạch-sprint-1-và-phân-công), cách phối hợp: [HUONG-DAN-TRIEN-KHAI.md](HUONG-DAN-TRIEN-KHAI.md).
 
 ## Đọc nhanh
@@ -26,7 +26,7 @@
 | 23, 24, 25 | UC44 Role List, UC46 Create/Update Role, UC45 Assign Permissions | Xong | #7, #9 |
 | 26, 27 | UC40 Feedback List, UC41 Reply to Feedback | Xong | #8 |
 
-Chưa kiểm tra với Firebase thật (nhóm chưa có project Firebase); mọi luồng đã chạy thử ở chế độ dev và có test e2e trên MongoDB.
+Firebase project của nhóm là `hrm-wdp` (Email/Password đã bật, Web app "HMS"); đã nối frontend và backend: trang đăng nhập dùng Firebase thật, backend kiểm tra ID token của project này. Mọi luồng đã chạy thử ở chế độ dev và có test e2e trên MongoDB; đăng ký, xác minh email, đăng nhập bằng tài khoản Firebase thật do Dương thử thủ công.
 
 ## 2. Dùng lại được ngay
 
@@ -104,7 +104,7 @@ handler(@CurrentUser() user: AuthUser) {}   // user = { id, email, role }; undef
 | Khoa | UC39 Submit Feedback | Thêm `POST /feedback` (`@Roles(Role.Customer)`) vào `FeedbackController`, kiểm tra booking thuộc khách và đã `CHECKED_OUT` |
 | Khoa | Layout theo role (H10) | Chuyển `ROLE_LINKS` của `UserMenu` vào menu layout; có thể bọc `RequireAuth` ở route cha |
 | Vũ, Lâm | Gắn `@Permissions()` cho endpoint của nhân viên (task, sự cố, bảo trì) | Để role do Manager tạo thêm (ví dụ `HOUSEKEEPING` có `task:execute`) dùng được |
-| Cả nhóm | Firebase project | Điền biến theo README mục 4.4 rồi thử đăng ký, đăng nhập thật |
+| Cả nhóm | Bật Firebase khi dev (không bắt buộc) | Điền config Web của `hrm-wdp` theo [HUONG-DAN-TRIEN-KHAI.md mục 2.4](HUONG-DAN-TRIEN-KHAI.md#24-firebase-của-nhóm); service account xin Dương qua kênh riêng |
 
 ## 4. Lưu ý khi sửa code liên quan
 
@@ -118,7 +118,8 @@ handler(@CurrentUser() user: AuthUser) {}   // user = { id, email, role }; undef
 
 - Đăng xuất chỉ xoá phiên trên trình duyệt; ID token đã cấp còn dùng được tới khi hết hạn (tối đa khoảng 1 giờ).
 - Tài khoản mẫu `@hms.local` không xác minh được email trên Firebase thật, chỉ dùng cho chế độ dev.
-- Tài khoản Manager tạo khi backend chưa có service account Firebase chỉ tồn tại trong HMS (không đăng nhập Firebase được); production sẽ báo 503 thay vì tạo thiếu.
+- Backend chưa điền service account Firebase thì tài khoản Manager tạo chỉ tồn tại trong HMS (không đăng nhập Firebase được); production sẽ báo 503 thay vì tạo thiếu.
+- Muốn có tài khoản Manager thật để thử: đăng ký ở `/register`, xác minh email, rồi dùng Swagger với header `x-dev-role: MANAGER` gọi `PATCH /users/{id}` với `{ "role": "MANAGER" }`.
 - Header dev `x-dev-role` chỉ nhận 5 role hệ thống; role tự tạo kiểm tra bằng unit test hoặc Firebase thật.
 
 ## 6. Kiểm tra nhanh

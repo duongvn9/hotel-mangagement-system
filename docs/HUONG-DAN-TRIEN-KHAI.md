@@ -39,21 +39,20 @@ Dự án dùng MongoDB nên không có migration chung chạy tuần tự. Task 
 
 Tham chiếu sang entity của người khác: chỉ cần `@Prop({ type: Types.ObjectId, ref: 'Room' })`, không cần đợi schema `Room` có mặt.
 
-### 2.2 Auth: gắn decorator ngay, guard đến sau
+### 2.2 Auth: đã chạy thật (cập nhật 23/10)
 
-Hiện chưa có guard nào chặn request, nên endpoint chạy được ngay. Cứ gắn đúng từ đầu:
+Xác thực Firebase và phân quyền đã ở `main` (#15). **Mọi endpoint mặc định cần đăng nhập**, nên gắn đúng ngay khi viết controller:
 
 ```ts
-@Public()                                  // Guest gọi được
-@Roles(Role.Receptionist, Role.Manager)    // khi #15 merge, guard tự áp dụng
+@Public()                                  // Guest gọi được (tìm phòng, xem phòng...)
+@Roles(Role.Receptionist, Role.Manager)    // chỉ các role này, sai role thì 403
+@Permissions('task:execute')               // thêm nếu muốn role do Manager tạo cũng dùng được (UC45)
+handler(@CurrentUser() user: AuthUser) {}  // { id, email, role }
 ```
 
-Đề xuất Dương làm **đầu tiên trong #15** (khoảng 1 giờ, merge sáng 23/10):
-
-- Decorator `@CurrentUser()` trả về `{ id, email, role }`.
-- Ở môi trường dev, middleware đọc header `x-dev-user-id` và `x-dev-role` để giả lập người dùng. Như vậy mọi người test được API theo role bằng Swagger/Postman trước khi Firebase xong.
-
-Frontend: trong lúc chưa có đăng nhập, mỗi feature tự giả lập role khi dev (ví dụ thêm biến `VITE_DEV_ROLE` vào `.env.local` và `.env.example`), không chặn route.
+- Test theo role không cần Firebase: header `x-dev-role` (và `x-dev-user-id` lấy từ log `npm run seed`) qua Swagger/Postman.
+- Frontend: bọc trang bằng `<RequireAuth roles={[...]}>`, lấy người dùng bằng `useAuth()`. Không điền `VITE_FIREBASE_*` thì trang đăng nhập cho chọn tài khoản mẫu; điền rồi thì đăng nhập Firebase thật (xem mục 2.4).
+- Chi tiết, API và ví dụ: [`TIEN-DO-DUONG.md`](TIEN-DO-DUONG.md).
 
 ### 2.3 Frontend làm trước bằng dữ liệu giả
 
@@ -70,11 +69,29 @@ export async function getRoomTypes(): Promise<RoomType[]> {
 
 Kiểu dữ liệu (`RoomType`, `Booking`…) lấy theo hợp đồng ở mục 3 để khi bỏ mock không phải sửa component.
 
+### 2.4 Firebase của nhóm
+
+- Project Firebase: **`hrm-wdp`** (tên HRM-WDP), đã bật đăng nhập Email/Password, đã có Web app "HMS".
+- Muốn đăng nhập thật khi dev: điền vào `frontend/.env.local`
+
+  ```
+  VITE_FIREBASE_API_KEY=AIzaSyBliZJmXzvP61K1JmQdBllJImiVfw92fgA
+  VITE_FIREBASE_AUTH_DOMAIN=hrm-wdp.firebaseapp.com
+  VITE_FIREBASE_PROJECT_ID=hrm-wdp
+  VITE_FIREBASE_APP_ID=1:846769117605:web:2a9a45a6ff93e88f78704c
+  ```
+
+  và `FIREBASE_PROJECT_ID=hrm-wdp` vào `backend/.env`. Đây là config Web công khai (vẫn bị nhúng vào JS gửi xuống trình duyệt), không phải secret.
+- Service account (`FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, chỉ cần khi Manager tạo tài khoản nhân viên) là **secret**: xin Dương qua kênh riêng, không commit, không dán lên Jira hay nhóm chat chung.
+- Để trống các biến `VITE_FIREBASE_*` thì quay lại chế độ dev (chọn tài khoản mẫu), tiện khi test nhiều role.
+
 ---
 
 ## 3. Hợp đồng cần chốt sớm
 
 Đây là những thứ người khác phụ thuộc. Người sở hữu mở **một PR nhỏ chỉ chứa hợp đồng** (schema, enum, interface, service trả dữ liệu giả) trước hạn, rồi mới làm logic thật.
+
+Trạng thái 23/10: **H1, H2 đã merge** (PR #1); H3–H10 chưa có trên `main`.
 
 | # | Hợp đồng | Chủ sở hữu | Ai dùng | Hạn merge |
 |---|---|---|---|---|
@@ -99,11 +116,10 @@ Thứ tự dưới đây đã tính phụ thuộc. Số `#` là số task trong 
 
 ### Vũ Ngọc Dương (đường găng, cả nhóm ưu tiên review PR của Dương)
 
-1. H1 + H2 (sáng 23/10): quy ước chung, `@CurrentUser()`, giả lập role ở dev, schema `User`.
-2. #14: schema `Role`, `Permission`, script `npm run seed` tổng, dữ liệu staff mẫu cho 5 role.
-3. #15: Firebase Admin xác thực ID token + `RolesGuard` global. Khi merge, mọi `@Roles()` đã gắn sẵn tự có hiệu lực.
-4. #16 Login, #17 Logout, rồi đợt 2 (#19–#22).
-- Làm được ngay: tất cả, không chờ ai.
+**Đã xong (23/10), đã ở `main`:** H1, H2, #13–#17, #19–#27, Firebase project `hrm-wdp`. Xem [`TIEN-DO-DUONG.md`](TIEN-DO-DUONG.md).
+
+- Còn lại: seed booking `CHECKED_IN` mẫu (#14), làm ngay khi Hiếu merge schema `Booking` (H5).
+- Việc tiếp: review PR hợp đồng H3–H10 của cả nhóm, hỗ trợ ai bị chặn vì auth/seed.
 
 ### Trần Bảo Lâm (dữ liệu gốc, nhiều người chờ)
 
