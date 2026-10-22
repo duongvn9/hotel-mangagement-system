@@ -89,7 +89,7 @@ describe('AccountsPage', () => {
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith('/users/s1', {
         fullName: STAFF.fullName,
-        phone: undefined,
+        phone: '',
         role: 'RECEPTIONIST',
         isActive: false,
       }),

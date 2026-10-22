@@ -10,7 +10,9 @@ import type { Model } from 'mongoose';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { Role } from '../src/common/constants/role.enum.js';
+import { Permissions } from '../src/common/decorators/permissions.decorator.js';
 import { Roles } from '../src/common/decorators/roles.decorator.js';
+import { seedRoles } from '../src/modules/roles/seed.js';
 import { User } from '../src/modules/users/schemas/user.schema.js';
 
 @Controller('probe')
@@ -23,6 +25,13 @@ class ProbeController {
   @Roles(Role.Manager)
   @Get('manager')
   manager() {
+    return { ok: true };
+  }
+
+  @Roles(Role.Manager)
+  @Permissions('task:execute')
+  @Get('task')
+  task() {
     return { ok: true };
   }
 }
@@ -42,6 +51,7 @@ describe('Auth (e2e)', () => {
     app.setGlobalPrefix('api');
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
     await app.init();
+    await seedRoles(app);
   });
 
   afterAll(async () => {
@@ -60,6 +70,12 @@ describe('Auth (e2e)', () => {
     await get('/probe/any', { 'x-dev-role': 'CUSTOMER' }).expect(200);
     await get('/probe/manager', { 'x-dev-role': 'CUSTOMER' }).expect(403);
     await get('/probe/manager', { 'x-dev-role': 'MANAGER' }).expect(200);
+  });
+
+  it('@Permissions(): role có đủ permission (theo seed) dùng được (UC45)', async () => {
+    await get('/probe/task', { 'x-dev-role': 'MANAGER' }).expect(200);
+    await get('/probe/task', { 'x-dev-role': 'SERVICE_STAFF' }).expect(200);
+    await get('/probe/task', { 'x-dev-role': 'CUSTOMER' }).expect(403);
   });
 
   it('GET /auth/me trả về role của người đang đăng nhập', async () => {
@@ -103,6 +119,8 @@ describe('Auth (e2e)', () => {
     await patch({ role: 'MANAGER' }).expect(400);
     await patch({ isActive: false }).expect(400);
     await patch({ phone: '123' }).expect(400);
+    const cleared = await patch({ phone: '' }).expect(200);
+    expect(cleared.body.phone).toBeUndefined();
     expect(await users.findById(user._id).lean()).toMatchObject({
       role: 'CUSTOMER',
       isActive: true,

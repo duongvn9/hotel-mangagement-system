@@ -42,12 +42,16 @@ export function AccountForm({
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    const common = {
-      fullName: form.fullName.trim(),
-      phone: form.phone.trim() || undefined,
-    }
+    // Khi sửa, gửi chuỗi rỗng để xoá số điện thoại; khi tạo thì bỏ trống luôn.
+    const common = { fullName: form.fullName.trim(), phone: form.phone.trim() }
     if (!account) {
-      onSubmit({ ...common, email: form.email.trim(), password: form.password, role: form.role })
+      onSubmit({
+        ...common,
+        phone: common.phone || undefined,
+        email: form.email.trim(),
+        password: form.password,
+        role: form.role,
+      })
     } else {
       onSubmit(isSelf ? common : { ...common, role: form.role, isActive: form.isActive })
     }
