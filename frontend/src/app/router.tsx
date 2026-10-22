@@ -1,4 +1,5 @@
 import { createBrowserRouter } from 'react-router'
+import { accountRoutes } from '@/features/accounts/routes'
 import { authRoutes } from '@/features/auth/routes'
 import { PublicLayout } from '@/layouts/PublicLayout'
 import { HomePage } from '@/pages/HomePage'
@@ -15,6 +16,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomePage /> },
       ...authRoutes,
+      ...accountRoutes,
       { path: '*', element: <NotFoundPage /> },
     ],
   },

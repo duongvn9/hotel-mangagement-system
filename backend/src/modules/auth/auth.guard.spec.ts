@@ -8,7 +8,7 @@ import type { Request } from 'express';
 import type { Model } from 'mongoose';
 import type { User } from '../users/schemas/user.schema.js';
 import { AuthGuard } from './auth.guard.js';
-import type { IdTokenVerifier } from './firebase.provider.js';
+import type { IdTokenVerifier } from './firebase.module.js';
 
 const DB_USER = {
   _id: '6718a1b2c3d4e5f601234567',

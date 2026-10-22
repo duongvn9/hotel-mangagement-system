@@ -15,10 +15,7 @@ import type { AppConfig } from '../../config/configuration.js';
 import { Role } from '../roles/schemas/role.schema.js';
 import type { ProfileDto } from '../users/dto/profile.dto.js';
 import { User } from '../users/schemas/user.schema.js';
-import {
-  ID_TOKEN_VERIFIER,
-  type IdTokenVerifier,
-} from './firebase.provider.js';
+import { ID_TOKEN_VERIFIER, type IdTokenVerifier } from './firebase.module.js';
 
 export interface MeResponse {
   id: string;
