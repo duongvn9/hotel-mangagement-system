@@ -58,4 +58,16 @@ describe('Auth (e2e)', () => {
     await get('/probe/manager', { 'x-dev-role': 'CUSTOMER' }).expect(403);
     await get('/probe/manager', { 'x-dev-role': 'MANAGER' }).expect(200);
   });
+
+  it('GET /auth/me trả về role của người đang đăng nhập', async () => {
+    await get('/auth/me').expect(401);
+    const res = await get('/auth/me', { 'x-dev-role': 'RECEPTIONIST' }).expect(
+      200,
+    );
+    expect(res.body.role).toBe('RECEPTIONIST');
+    expect(Array.isArray(res.body.permissions)).toBe(true);
+  });
+
+  it('GET /auth/dev-accounts không cần đăng nhập ở dev', () =>
+    get('/auth/dev-accounts').expect(200));
 });
