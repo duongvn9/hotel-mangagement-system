@@ -7,7 +7,9 @@ const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
   MANAGER: [
     { to: '/manager/accounts', label: 'Tài khoản' },
     { to: '/manager/roles', label: 'Vai trò' },
+    { to: '/staff/feedback', label: 'Phản hồi' },
   ],
+  RECEPTIONIST: [{ to: '/staff/feedback', label: 'Phản hồi' }],
 }
 
 /** Góc phải header: link đăng nhập, hoặc tên người dùng + đăng xuất (UC03). */

@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router'
 import { accountRoutes } from '@/features/accounts/routes'
 import { authRoutes } from '@/features/auth/routes'
+import { feedbackRoutes } from '@/features/feedback/routes'
 import { roleRoutes } from '@/features/roles/routes'
 import { PublicLayout } from '@/layouts/PublicLayout'
 import { HomePage } from '@/pages/HomePage'
@@ -19,6 +20,7 @@ export const router = createBrowserRouter([
       ...authRoutes,
       ...accountRoutes,
       ...roleRoutes,
+      ...feedbackRoutes,
       { path: '*', element: <NotFoundPage /> },
     ],
   },
