@@ -15,9 +15,19 @@ const STAFF = {
 const SELF = { ...STAFF, id: ME.id, email: ME.email, fullName: ME.fullName, role: 'MANAGER' }
 
 function setup() {
+  const roles = ['CUSTOMER', 'RECEPTIONIST', 'SERVICE_STAFF', 'MANAGER'].map((code) => ({
+    id: code,
+    code,
+    name: code === 'RECEPTIONIST' ? 'Lễ tân' : code,
+    isActive: true,
+  }))
   const get = vi
     .spyOn(api, 'get')
-    .mockResolvedValue({ data: { items: [STAFF, SELF], total: 2, page: 1, limit: 20 } })
+    .mockImplementation(async (url: string) =>
+      url === '/roles'
+        ? { data: roles }
+        : { data: { items: [STAFF, SELF], total: 2, page: 1, limit: 20 } },
+    )
   const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { ...STAFF, email: 'moi@hms.vn' } })
   const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: STAFF })
   renderWithAuth([{ path: '/', element: <AccountsPage /> }], {
@@ -35,6 +45,7 @@ describe('AccountsPage', () => {
   it('hiển thị danh sách và lọc theo vai trò', async () => {
     const { get } = setup()
     expect(await screen.findByText('Trần Thị Lễ Tân')).toBeInTheDocument()
+    await screen.findByRole('option', { name: 'Lễ tân' })
     fireEvent.change(screen.getAllByLabelText(/Vai trò/)[0], { target: { value: 'RECEPTIONIST' } })
     await waitFor(() =>
       expect(get).toHaveBeenLastCalledWith('/users', {
@@ -45,6 +56,7 @@ describe('AccountsPage', () => {
 
   it('tạo tài khoản mới', async () => {
     const { post } = setup()
+    await screen.findByText('Trần Thị Lễ Tân')
     fireEvent.click(screen.getByRole('button', { name: 'Thêm mới' }))
     const form = screen.getByRole('form', { name: 'Tạo tài khoản' })
     type(form, /Email/, 'moi@hms.vn')
