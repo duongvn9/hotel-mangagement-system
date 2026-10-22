@@ -101,4 +101,14 @@ describe('UsersService.update (UC43)', () => {
       { new: true, runValidators: true },
     );
   });
+
+  it('số điện thoại rỗng thì xoá số', async () => {
+    const { service, users } = setup();
+    await service.update(ID, { phone: '', fullName: 'Tên' }, 'manager-id');
+    expect(users.findByIdAndUpdate).toHaveBeenCalledWith(
+      ID,
+      { $set: { fullName: 'Tên' }, $unset: { phone: 1 } },
+      { new: true, runValidators: true },
+    );
+  });
 });

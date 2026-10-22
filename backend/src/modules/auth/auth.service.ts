@@ -58,6 +58,7 @@ export class AuthService {
     try {
       const user = await this.users.create({
         ...dto,
+        phone: dto.phone || undefined,
         email,
         firebaseUid: decoded.uid,
         role: RoleCode.Customer,

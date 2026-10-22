@@ -21,7 +21,8 @@ export function ProfilePage() {
     setMessage(undefined)
     setPending(true)
     try {
-      await updateProfile({ fullName: fullName.trim(), phone: phone.trim() || undefined })
+      // Chuỗi rỗng = xoá số điện thoại.
+      await updateProfile({ fullName: fullName.trim(), phone: phone.trim() })
       await refresh()
       setMessage({ tone: 'success', text: 'Đã lưu hồ sơ' })
     } catch (error) {

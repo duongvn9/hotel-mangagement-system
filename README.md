@@ -121,7 +121,10 @@ Tài liệu nguồn: **SRS - HMS** (Hanoi, 09/2025), giao diện theo [`DESIGN.m
 git clone https://github.com/duongvn9/hotel-mangagement-system.git
 cd hotel-mangagement-system
 docker compose up --build --watch      # hoặc: make dev
+docker compose exec backend npm run seed   # terminal khác, sau khi container đã chạy: tạo dữ liệu mẫu
 ```
+
+Máy đã cài sẵn MongoDB (cổng 27017 bị chiếm) thì cho MongoDB của Docker dùng cổng khác: `MONGO_PORT=27018 docker compose up --build --watch` (hoặc đặt `MONGO_PORT=27018` trong `.env`).
 
 | Địa chỉ | Nội dung |
 |---|---|
@@ -140,9 +143,11 @@ docker compose up --build --watch      # hoặc: make dev
 ```bash
 docker compose up -d mongo                         # chỉ chạy MongoDB
 
-cd backend && cp .env.example .env && npm ci && npm run start:dev
+cd backend && cp .env.example .env && npm ci && npm run seed && npm run start:dev
 cd frontend && cp .env.example .env.local && npm ci && npm run dev
 ```
+
+Dùng MongoDB cài trên máy (không đặt mật khẩu) thay cho Docker: sửa `backend/.env` thành `MONGODB_URI=mongodb://127.0.0.1:27017/hms`.
 
 Lệnh hay dùng (chạy trong `backend/` hoặc `frontend/`):
 
@@ -152,6 +157,7 @@ Lệnh hay dùng (chạy trong `backend/` hoặc `frontend/`):
 | `npm run format` | Prettier |
 | `npm test` | Unit test (Vitest) |
 | `npm run test:e2e` | E2E backend (cần MongoDB đang chạy) |
+| `npm run seed` | Tạo dữ liệu mẫu (backend). Chạy lại nhiều lần vẫn an toàn, không ghi đè dữ liệu đã sửa |
 | `npm run build` | Build production |
 
 ### Lỗi thường gặp
@@ -159,7 +165,21 @@ Lệnh hay dùng (chạy trong `backend/` hoặc `frontend/`):
 - **MongoDB thoát ngay khi khởi động, log có "Linux kernel versions 6.19 and newer has a known incompatibility"**: MongoDB (mọi bản, kể cả Docker) không chạy trên kernel Linux 6.19 đến 7.0.13 ([ghi chú của MongoDB](https://www.mongodb.com/docs/manual/release-notes/8.0)). Cập nhật Docker Desktop hoặc kernel lên 7.0.14 trở lên; nếu chưa được thì tạm dùng MongoDB Atlas (gói free) và đặt `MONGODB_URI` trỏ tới đó.
 - **`npm ci` báo lockfile không khớp**: kiểm tra `node -v` là 24 và `npm -v` là 11.
 
-### 4.4 Production
+### 4.4 Đăng nhập khi dev
+
+Chưa điền Firebase (`VITE_FIREBASE_*` ở frontend, `FIREBASE_PROJECT_ID` ở backend) thì trang http://localhost:5173/login hiện danh sách tài khoản mẫu, bấm vào là đăng nhập (frontend gửi header `x-dev-user-id`, `x-dev-role`; backend chỉ nhận khi `NODE_ENV` khác `production`). Danh sách trống thì chạy `npm run seed`.
+
+| Tài khoản mẫu | Thử được |
+|---|---|
+| `manager@hms.local` | `/manager/accounts` (tài khoản), `/manager/roles` (vai trò, phân quyền), `/staff/feedback` (xem phản hồi) |
+| `receptionist@hms.local` | `/staff/feedback` (xem, trả lời phản hồi) |
+| `customer@hms.local`, `service@hms.local`, `operations@hms.local` | `/profile` (hồ sơ), đăng xuất |
+
+- Thử API trên Swagger http://localhost:3000/api/docs: bấm **Authorize**, điền `x-dev-role` (ví dụ `MANAGER`), thêm `x-dev-user-id` (lấy `_id` in ra khi chạy seed) nếu API cần User thật.
+- Có Firebase: điền `FIREBASE_PROJECT_ID` (đủ để kiểm tra đăng nhập) vào `backend/.env` và `VITE_FIREBASE_*` vào `frontend/.env.local`. Trang đăng nhập chuyển sang email/mật khẩu, `/register` dùng được. Muốn Manager tạo được tài khoản nhân viên trên Firebase thì điền thêm `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` (service account).
+- Tài khoản mẫu dùng email `@hms.local` nên không xác minh được trên Firebase thật: chỉ dùng cho chế độ dev.
+
+### 4.5 Production
 
 ```bash
 cp .env.example .env          # điền MONGO_ROOT_PASSWORD, CORS_ORIGINS, secret Firebase/VNPay/Gmail

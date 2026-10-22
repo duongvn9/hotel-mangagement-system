@@ -37,6 +37,12 @@ const toAccount = (user: LeanUser) => ({
 const escapeRegex = (text: string) =>
   text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** phone rỗng nghĩa là xoá số điện thoại (UC04, UC43). */
+const toUpdate = ({ phone, ...rest }: { phone?: string }) =>
+  phone === ''
+    ? { $set: rest, $unset: { phone: 1 } }
+    : { $set: phone ? { ...rest, phone } : rest };
+
 const isDuplicateKey = (error: unknown) =>
   (error as { code?: number }).code === 11000;
 
@@ -52,11 +58,10 @@ export class UsersService {
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     const user = isValidObjectId(userId)
       ? await this.users
-          .findByIdAndUpdate(
-            userId,
-            { $set: dto },
-            { new: true, runValidators: true },
-          )
+          .findByIdAndUpdate(userId, toUpdate(dto), {
+            new: true,
+            runValidators: true,
+          })
           .lean()
       : null;
     if (!user) throw new NotFoundException('Không tìm thấy tài khoản');
@@ -116,6 +121,7 @@ export class UsersService {
     try {
       const user = await this.users.create({
         ...dto,
+        phone: dto.phone || undefined,
         email,
         ...(firebaseUid ? { firebaseUid } : {}),
         emailVerified: true,
@@ -145,11 +151,10 @@ export class UsersService {
 
     const user = isValidObjectId(id)
       ? await this.users
-          .findByIdAndUpdate(
-            id,
-            { $set: dto },
-            { new: true, runValidators: true },
-          )
+          .findByIdAndUpdate(id, toUpdate(dto), {
+            new: true,
+            runValidators: true,
+          })
           .lean()
       : null;
     if (!user) throw new NotFoundException('Không tìm thấy tài khoản');

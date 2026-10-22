@@ -41,6 +41,7 @@ Quy ước:
 - Endpoint mặc định cần đăng nhập (`AuthGuard` toàn cục kiểm tra `Authorization: Bearer <Firebase ID token>`, sai thì 401); endpoint cho Guest gắn `@Public()`.
 - `RolesGuard` toàn cục chặn sai role bằng 403. Endpoint không gắn `@Roles()` thì mọi user đã đăng nhập đều gọi được.
 - Giới hạn role bằng `@Roles(Role.Manager, ...)` (xem `common/`).
+- Muốn role do Manager tự tạo (UC46) cũng dùng được endpoint thì thêm `@Permissions('task:execute')`: user qua nếu role nằm trong `@Roles()` HOẶC role có đủ permission (gán ở UC45). Mã permission xem `modules/roles/seed.ts`. Frontend: `<RequireAuth roles={[...]} permissions={['task:execute']}>`.
 - Không đọc `process.env` trực tiếp trong module, dùng `ConfigService`.
 - Schema theo quy ước dữ liệu chung ở `common/database/conventions.ts`: `timestamps: true`, xoá mềm bằng `isActive`, tiền là số nguyên VND, ngày nghiệp vụ lấy bằng `toBusinessDate()`.
 - Lấy người dùng hiện tại bằng `@CurrentUser() user: AuthUser` (`{ id, email, role }`).

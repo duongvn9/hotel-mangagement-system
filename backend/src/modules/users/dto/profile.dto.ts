@@ -7,9 +7,9 @@ export class ProfileDto {
   @Length(2, 100)
   fullName: string;
 
-  /** Số di động Việt Nam 10 chữ số, ví dụ 0901234567. */
+  /** Số di động Việt Nam 10 chữ số, ví dụ 0901234567. Khi sửa, gửi chuỗi rỗng để xoá số. */
   @IsOptional()
-  @Matches(/^0\d{9}$/, {
+  @Matches(/^(0\d{9})?$/, {
     message: 'Số điện thoại phải gồm 10 chữ số, bắt đầu bằng 0',
   })
   phone?: string;
