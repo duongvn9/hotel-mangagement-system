@@ -20,13 +20,19 @@ export class User {
   @Prop({ trim: true })
   phone?: string;
 
+  /** BR-ACC-02: tài khoản tự đăng ký phải xác minh email mới dùng được (đồng bộ từ Firebase). */
+  @Prop({ default: false })
+  emailVerified: boolean;
+
   /**
    * Mã role, ví dụ 'MANAGER'. Lưu mã (không lưu ObjectId) để guard so sánh với @Roles()
    * mà không cần đọc DB. Không giới hạn trong enum Role vì Manager tạo thêm role ở UC46.
+   * Vì vậy mã role không được đổi sau khi tạo (BR-RBAC-05), UC46 chỉ sửa tên và mô tả.
    */
   @Prop({ required: true, default: Role.Customer, index: true })
   role: string;
 
+  /** Trạng thái tài khoản. false = đã khoá, không đăng nhập được nhưng giữ dữ liệu cũ (BR-RBAC-04). */
   @Prop({ default: true })
   isActive: boolean;
 }
