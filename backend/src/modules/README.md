@@ -38,7 +38,8 @@ Danh sách module dự kiến (theo SRS và phân công Sprint 1):
 Quy ước:
 
 - Import nội bộ dùng đuôi `.js` (dự án chạy ESM, `"type": "module"`).
-- Endpoint mặc định cần đăng nhập; endpoint cho Guest gắn `@Public()`.
+- Endpoint mặc định cần đăng nhập (`AuthGuard` toàn cục kiểm tra `Authorization: Bearer <Firebase ID token>`, sai thì 401); endpoint cho Guest gắn `@Public()`.
+- `RolesGuard` toàn cục chặn sai role bằng 403. Endpoint không gắn `@Roles()` thì mọi user đã đăng nhập đều gọi được.
 - Giới hạn role bằng `@Roles(Role.Manager, ...)` (xem `common/`).
 - Không đọc `process.env` trực tiếp trong module, dùng `ConfigService`.
 - Schema theo quy ước dữ liệu chung ở `common/database/conventions.ts`: `timestamps: true`, xoá mềm bằng `isActive`, tiền là số nguyên VND, ngày nghiệp vụ lấy bằng `toBusinessDate()`.
