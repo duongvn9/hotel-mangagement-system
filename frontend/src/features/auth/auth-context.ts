@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { DevAccount, Me } from './api'
+import type { DevAccount, Me, ProfileInput } from './api'
 
 export interface AuthContextValue {
   me: Me | null
@@ -8,6 +8,8 @@ export interface AuthContextValue {
   isDevMode: boolean
   login(email: string, password: string): Promise<void>
   loginAsDev(account: DevAccount): Promise<void>
+  /** UC01: tạo tài khoản, gửi email xác minh rồi đăng xuất (phải xác minh mới đăng nhập được). */
+  register(input: ProfileInput & { email: string; password: string }): Promise<void>
   logout(): Promise<void>
   /** Tải lại thông tin người dùng, ví dụ sau khi sửa hồ sơ. */
   refresh(): Promise<void>
