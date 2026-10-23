@@ -6,12 +6,58 @@
 - #64: **MERGED**, PR #16 tại merge commit `4046fe0`; đã kiểm tra local commit này là ancestor của `origin/main`. Merge không đồng nghĩa đã xác nhận integration contract nguồn thật.
 - PR #16: https://github.com/duongvn9/hotel-mangagement-system/pull/16 — đã merge; các giả định mapping collection và tích hợp nguồn vẫn chưa được giải quyết.
 - #66 / PROMPT03 / UC37: **MERGED**, PR #17 tại merge commit `53401ad`; đã xác minh merge. https://github.com/duongvn9/hotel-mangagement-system/pull/17
-- #67 / UC38: **Implemented, pending PR review, không Done** trên `feature/vu-67-task-progress` (tên startup, không dùng tên trailing mâu thuẫn `feature/67-task-progress`). Commit `3712665` đã push; draft PR #18: https://github.com/duongvn9/hotel-mangagement-system/pull/18 — chờ CI/review, chưa merge.
-- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET giữ nguyên, UC38 đã có PATCH tiến độ và form detail. Mục 10 là hiện trạng #67; mục 9 lưu lịch sử UC37 trước merge; mục 8 lưu mốc #64 trước merge; mục 4–7 là lịch sử.
+- #67 / UC38: **MERGED**, PR #18 tại merge commit `341f87f`; đã xác minh commit là ancestor của local `origin/main` khi triển khai #65. Commit triển khai `3712665`; các bằng chứng pending trong mục 10 được giữ như lịch sử trước merge.
+- #65: **Implemented, pending review, không Done** trên `feature/vu-65-staff-dashboards`; chưa commit/push/PR, parent sẽ bổ sung. Xem mục 11.
+- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET giữ nguyên, UC38 đã có PATCH tiến độ và form detail. Mục 11 là hiện trạng #65; mục 10 lưu bằng chứng #67 trước merge; mục 9 lưu lịch sử UC37 trước merge; mục 8 lưu mốc #64 trước merge; mục 4–7 là lịch sử.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
 
-## 10. Jira #67 / UC38 Update Task Progress (hiện trạng)
+## 11. Jira #65 — Service Staff & Operations Staff dashboards
+
+### Baseline và phạm vi
+
+- Nhánh `feature/vu-65-staff-dashboards`, working tree sạch trước triển khai; HEAD và local `origin/main` cùng `341f87fe607c312ba89e9b3f6276ffcc80b088f1`. Đã kiểm tra ancestor `c970bf4` (H8/PR #15), `4046fe0` (#64/PR #16), `53401ad` (#66/PR #17), `341f87f` (#67/PR #18). Không fetch trong lượt này; đây là xác minh refs local, không phải xác nhận remote mới nhất.
+- Đã đọc SRS ngoài repo `SRS - HMS.docx.md` mục 1.5.2, `screenflow.drawio.png`, DESIGN, role constants, route/menu/layout, Task API/hooks và giới hạn query BE. Không đọc secrets/env; không thay BE, dependency hoặc lockfile. Không commit/push.
+- #65 **Implemented, pending review, không Done**. Chưa có commit/PR mới; parent bổ sung sau review.
+- H10 chưa có shell theo role trong baseline: router vẫn dùng `PublicLayout` và menu tạm `ROLE_LINKS`. Feature export routes/API/hook độc lập, chỉ tích hợp router/menu tối thiểu, không ghi đè shell. `TODO(#18)` tại chỗ mount dashboard dành cho tích hợp H10 tương lai; số TODO là nhãn được yêu cầu, không khẳng định PR #18 triển khai H10.
+
+### Routes và quyền
+
+- `/staff/service/dashboard`: chỉ `SERVICE_STAFF`; `/staff/operations/dashboard`: chỉ `OPERATIONS_STAFF`, dùng `RequireAuth` với đúng một role, không permission fallback. Customer, Manager, Receptionist, custom role kể cả có `task:execute` và role staff còn lại không vào dashboard chéo. Không triển khai Manager dashboard.
+- Hai page export riêng, nội dung dịch vụ/vận hành riêng; menu chỉ hiện dashboard của role hiện tại. `/staff/tasks` và `/staff/tasks/:id` giữ nguyên quyền role OR task permission hiện hữu.
+- CTA “Xem công việc được giao” tới `/staff/tasks`, hồ sơ tới `/profile`, task tới detail hiện hữu. Đã đối chiếu route objects thực sự mount qua router: Service History, Report Service Issue, Equipment Fault/Damage, Maintenance History chưa có route; bỏ link hoàn toàn, không tạo link giả hoặc nút disabled. Khi module nguồn merge cần kiểm tra signature/guard/context trước khi bổ sung, đặc biệt Report Service Issue cần task context.
+
+### API đọc và định nghĩa số liệu
+
+- API thật qua shared Axios, không mock production: ba `GET /tasks/me?status=ASSIGNED|IN_PROGRESS|COMPLETED&page=1&limit=1` lấy `total` độc lập. Base URL hiện hữu quyết định prefix `/api/v1`; không gửi userId/assignedTo/actor từ client, server `CurrentUser` scope OWN.
+- Active = ASSIGNED + IN_PROGRESS. Đọc từng status với `limit=100`, page từ 1 tới `ceil(total/100)`; không dùng một trang làm toàn bộ tổng. Có AbortSignal TanStack Query → Axios, kiểm tra abort giữa trang, hủy khi unmount/đổi user. Query key `['assigned-tasks', me.id, 'dashboard', me.role]`, không giữ previous user data; tương thích invalidation prefix OWN của UC38.
+- Bound vận hành bảo thủ: tối đa **100 trang / 10.000 active task mỗi status**, nhỏ hơn page cap API 10.000; không giả định đây là số lượng staff tối đa. Nếu vượt cap, sai page/limit/total, total đổi, thiếu items, trùng ID hoặc status sai: báo lỗi cụ thể, không render metrics/priority một phần; có thử lại. Không tự retry lỗi consistency/4xx; network/5xx retry tối đa hai lần, có refresh thủ công.
+- Đã giao/Đang thực hiện/Hoàn thành = server totals từng trạng thái; Hoàn thành là mọi thời điểm, không phải hôm nay. Near due = active có dueAt hợp lệ trong `[readAt, readAt + 24 giờ]`; overdue = active có dueAt `< readAt`. Không gồm completed hoặc thiếu/invalid dueAt. `readAt` là client clock khi đọc xong, không phải giờ server; hiển thị thời điểm và định nghĩa cạnh cards.
+- Priority list: tính trên **toàn bộ** active đã đọc rồi lấy 5; dueAt tăng dần (không hạn sau), cùng hạn theo thứ tự chuỗi đã biết `URGENT > HIGH > MEDIUM/NORMAL > LOW`, chuỗi chưa biết sau rồi so sánh chuỗi và ID để deterministic. Đây chỉ là presentation ranking, không bổ sung enum nghiệp vụ; unknown priority vẫn hiển thị nguyên văn với badge fallback.
+- **Snapshot limitation:** các requests không atomic; phát hiện count drift/duplicate/missing nhưng không phát hiện mọi chuyển đổi hoặc reassignment bù trừ giữ nguyên total. Total các status cũng có thể thuộc các thời điểm khác nhau. Không tuyên bố ảnh chụp transaction; trang có caveat và refresh, cần làm mới khi task thay đổi. Không sửa API BE để hứa snapshot không tồn tại.
+
+### UI, kiểm thử và bằng chứng QA
+
+- Token Tailwind/design hiện hữu, cards một cột mobile → nhiều cột desktop, wrap nav/badges, long title, status/priority bằng chữ chứ không chỉ màu, focus-visible cho links, loading `role=status`, lỗi `role=alert`, empty state; không hardcoded hex hoặc thư viện mới.
+- 25 tests mới chạy component/routes/RequireAuth/menu/query thật, chỉ mock HTTP (AuthContext fixture hiện hữu, Date.now cố định trong test). Bao phủ server totals, nhiều trang active (task ưu tiên ở trang cuối), due boundaries/overdue/completed exclusion, unknown priority, role denial cả custom permission, anonymous/auth loading, loading/empty, 403/404, network retry/recovery, cap/partial/changed/duplicate/malformed page, cancel signal, user switch/cache isolation và invalidation prefix OWN.
+- 375px **jsdom smoke** chỉ đặt innerWidth và kiểm tra DOM/mobile-first classes, wrap/focus/labels; jsdom không layout/render media queries. **Chưa manual browser QA**, không có bằng chứng viewport 375px thực tế, keyboard/contrast/overflow thực tế, live authenticated API hoặc CI head mới. Không coi mock HTTP là kiểm chứng backend authorization.
+
+| Lệnh tại frontend | Kết quả local lượt #65 |
+|---|---|
+| `npx --no-install prettier --write` chỉ 7 file TS/TSX thay đổi | PASS |
+| `npx --no-install prettier --check "src/features/staff-dashboards/*.{ts,tsx}" "src/app/router.tsx" "src/features/auth/UserMenu.tsx"` | PASS |
+| `npm run lint` | PASS |
+| `npm run typecheck` | PASS sau sửa typing params trong tests; không nới config |
+| `npm test` | PASS: 90 tests / 10 files, gồm 25 tests dashboard mới |
+| `npm run build` | PASS; warning chunk >500 kB không chặn build |
+| `git diff --check` | PASS sau cập nhật tài liệu và lượt validation cuối |
+
+- Files: `frontend/src/features/staff-dashboards/{api.ts,hooks.ts,routes.tsx,StaffDashboardPage.tsx,staff-dashboards.test.tsx}`, router, UserMenu và tài liệu này. Không thay Task API/lifecycle BE.
+- Cần parent/reviewer: review UX/metric definitions, QA browser desktop/375px + keyboard, hai staff thật đổi session/không thấy dữ liệu chéo, task update rồi về dashboard, giới hạn/snapshot, và xác nhận H10 integration khi shell có thật; chưa đánh dấu Done.
+
+## 10. Jira #67 / UC38 Update Task Progress (lịch sử triển khai trước merge)
+
+> #67 đã MERGED qua PR #18 tại `341f87f`. Các phát biểu pending/CI/chưa merge bên dưới giữ bằng chứng ở mốc triển khai trước merge; không phải trạng thái hiện tại. Xem mục 11 cho lượt #65.
 
 ### Contract backend và thông báo thay đổi hành vi
 
@@ -190,9 +236,9 @@ Tests dùng mock persistence theo H8, schema/index Mongoose thật in-memory, co
 |---|---|---|---|
 | H8 | Contract Task dùng chung | MERGED | PR #15 / main `c970bf4` |
 | 64 | Task core, lifecycle, source reference | MERGED; integration assumptions nguồn thật chưa giải quyết | PR #16 / merge `4046fe0` |
-| 65 | Staff / Operations Dashboard | Chưa làm | Chưa có |
+| 65 | Staff / Operations Dashboard | Implemented, pending review; không Done, browser QA/CI pending | `feature/vu-65-staff-dashboards`; chưa commit/PR |
 | 66 | UC37 View Assigned Tasks | MERGED | PR #17 / merge `53401ad` |
-| 67 | UC38 Update Task Progress | Implemented, pending PR review (không Done); CI/e2e/manual QA pending | `feature/vu-67-task-progress`; commit/PR pending parent |
+| 67 | UC38 Update Task Progress | MERGED; lịch sử QA và giới hạn ở mục 10 | PR #18 / merge `341f87f` |
 | 68 | UC22 Create Service Order | Chưa làm | Chưa có |
 | 69 | UC23 View Service Orders (Customer) | Chưa làm | Chưa có |
 | 70 | UC24 View Service Order Requests | Chưa làm | Chưa có |
