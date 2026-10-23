@@ -55,10 +55,18 @@ export const seedRooms: Seed = async (app) => {
   for (const { type, ...sample } of samples) {
     const roomType = await types.findOne({ name: type }).lean();
     if (!roomType) throw new Error(`Seed rooms requires RoomType ${type}`);
+    const timestamp = new Date();
     await rooms.updateOne(
       { roomNumber: sample.roomNumber },
-      { $setOnInsert: { ...sample, roomType: roomType._id } },
-      { upsert: true },
+      {
+        $setOnInsert: {
+          ...sample,
+          roomType: roomType._id,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+      },
+      { upsert: true, timestamps: false },
     );
   }
 };

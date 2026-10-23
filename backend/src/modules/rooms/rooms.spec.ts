@@ -29,6 +29,7 @@ describe('UC47 Room schema and query', () => {
       { unique: true },
     ]);
     expect(RoomSchema.path('roomType').options.ref).toBe('RoomType');
+    expect(RoomSchema.path('roomType').instance).toBe('ObjectId');
     for (const field of [
       'amenities',
       'capacity',
