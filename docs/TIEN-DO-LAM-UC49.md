@@ -1,7 +1,7 @@
 # Bàn giao #28 — UC49 View Room Type List
 
 > Triển khai cho Trần Bảo Lâm từ main `9a0fb22`, nhánh `feature/28-room-type-list`.
-> Code hoàn thành cục bộ; xem kết quả kiểm thử và các gate còn chặn xuất bản ở cuối tài liệu.
+> Code và kiểm tra cục bộ đã hoàn tất; lỗi format đã sửa, Docker được miễn theo yêu cầu. Xem cập nhật mới nhất ở cuối tài liệu.
 
 ## Phạm vi
 
@@ -174,3 +174,16 @@ Tiêu đề PR đã chốt: `feat(room-types): UC49 view room type list (#28)`. 
 - #32–33: có Amenity model và seed tối thiểu.
 - H6: mới có phần RoomType; vẫn cần Room/RoomStatus và adapter nguồn phòng thật ở task riêng.
 - H4 Service chưa được triển khai; không coi #28 là hoàn thành mọi hợp đồng cơ sở vật chất.
+
+## Cập nhật mới nhất — sửa format và miễn Docker (23/10/2026)
+
+Mục này thay thế các thông tin “còn chặn xuất bản” ở snapshot bàn giao trước.
+
+- Người dùng đã cho phép sửa format cả phần backend kế thừa và **tạm bỏ qua Docker vì máy không cài được Docker**.
+- Đã tạo nhánh `fix/28-backend-format`, commit `57e572e`, chỉ format 24 file qua Prettier rồi merge cục bộ về feature.
+- Đã đối chiếu AST TypeScript trước/sau: cấu trúc tương đương khi bỏ trivia và ngoặc dư; không sửa logic nghiệp vụ.
+- Backend `npm run format:check`, `lint`, `typecheck`, `build`: **pass**.
+- Backend unit chạy lại: **151/151 pass**; e2e chạy lại trên DB sạch `hms_task28_format_final`: **43/43 pass**. Tham số một worker thread và timeout giữ như các lệnh ở bảng trên.
+- Frontend không đổi trong lần sửa format; kết quả trước đó **31/31 test**, lint/format/typecheck/build pass vẫn áp dụng.
+- Docker là **miễn kiểm tra theo yêu cầu người dùng**, không phải đã chạy/pass.
+- Không còn blocker kiểm tra cục bộ của UC49 theo phạm vi đã điều chỉnh. Xuất bản tiếp theo quy trình Git được người dùng cho phép: push feature, merge commit vào main và push; máy không có gh CLI nên dùng phương án Git trực tiếp. Trạng thái remote và commit merge xác nhận qua báo cáo cuối/git log.
