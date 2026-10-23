@@ -7,6 +7,8 @@ import { AvailabilityController } from './availability.controller.js';
 import { AvailabilityService } from './availability.service.js';
 import { AvailabilityClock, AvailabilityRoomSource } from './availability.adapters.js';
 import { MongoAvailabilityRoomSource } from './mongo-availability-room-source.js';
+import { BookingsController } from './bookings.controller.js';
+import { BookingsService } from './bookings.service.js';
 
 @Module({
   imports: [
@@ -16,10 +18,11 @@ import { MongoAvailabilityRoomSource } from './mongo-availability-room-source.js
       { name: RoomHold.name, schema: RoomHoldSchema },
     ]),
   ],
-  controllers: [AvailabilityController],
+  controllers: [AvailabilityController, BookingsController],
   providers: [
     AvailabilityService,
     AvailabilityClock,
+    BookingsService,
     {
       provide: AvailabilityRoomSource,
       useClass: MongoAvailabilityRoomSource,
