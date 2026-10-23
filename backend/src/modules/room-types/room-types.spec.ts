@@ -5,6 +5,7 @@ import { ListRoomTypesQuery } from './dto/list-room-types.dto.js';
 import { RoomType, RoomTypeSchema } from './schemas/room-type.schema.js';
 import { AmenitySchema } from '../amenities/schemas/amenity.schema.js';
 import { RoomTypesService } from './room-types.service.js';
+import type { AmenitiesService } from '../amenities/amenities.service.js';
 
 describe('UC49 query and schema', () => {
   const RoomTypes = model<RoomType>('UC49UnitRoomType', RoomTypeSchema);
@@ -92,7 +93,10 @@ describe('RoomTypesService', () => {
         .mockReturnValue({ exec: vi.fn().mockResolvedValue(rows.length) }),
     };
     return {
-      service: new RoomTypesService(modelMock as unknown as Model<RoomType>),
+      service: new RoomTypesService(
+        modelMock as unknown as Model<RoomType>,
+        {} as AmenitiesService,
+      ),
       modelMock,
       chain,
     };

@@ -7,6 +7,8 @@
 
 > Cập nhật sau snapshot: xem [bàn giao UC49 của Lâm](TIEN-DO-LAM-UC49.md) cho schema RoomType/Amenity và task #28 đang triển khai. Trạng thái chưa merge và kết quả kiểm thử nằm trong file bàn giao; các mục hiện trạng bên dưới mô tả baseline ban đầu.
 
+> Cập nhật 23/10/2026: UC49 đã merge main tại `4134194`; main khi bắt đầu #29 là `4213c8d`. Xem [bàn giao UC50](TIEN-DO-LAM-UC50.md) cho API tạo/sửa, form và kiểm thử mới; seed Node đang bị chặn bởi import Connection của module Task có sẵn trên main. Các bảng snapshot bên dưới không phải tiến độ hiện tại.
+
 ## 1. Cách sử dụng tài liệu
 
 Người dùng là **Trần Bảo Lâm**, thành viên phát triển HMS. Quy trình mong muốn:
@@ -390,7 +392,7 @@ Backend e2e cần MongoDB và DB test riêng. CI hiện chạy lint/format/typec
 - Có báo cáo file thay đổi, hành vi, kiểm thử, điểm bàn giao và phụ thuộc chưa giải quyết.
 - Theo quy trình nhóm, Jira Done còn cần merge, CI xanh, review ít nhất một người, chạy được Docker và Swagger đúng. Code local xong không tự đồng nghĩa Jira Done.
 
-Nhánh theo task từ main, commit Conventional Commits, PR có mã Jira thật khi đã biết. Không tự commit/push/merge hoặc sửa Jira chỉ vì prompt yêu cầu triển khai code.
+Quy trình thường trực người dùng đã yêu cầu: làm xong nhánh nào thì push và merge ngay nhánh đó vào main bằng merge commit, áp dụng cho cả feature/* và fix/*. Sau merge, pull main mới nhất rồi mới tạo nhánh feature hoặc fix tiếp theo. Fix tách từ feature chưa merge phải giữ thứ tự phụ thuộc: feature vào main trước, rồi tích hợp fix; không dừng ở merge fix về feature. Commit Conventional Commits, PR ghi mã Jira thật khi đã biết. Không cần hỏi lại quyền commit/push/merge khi đủ scope và các check bắt buộc đã pass hoặc được người dùng miễn rõ ràng; nếu chưa đủ điều kiện thì ghi rõ blocker. Không tự sửa Jira.
 
 ## 13. Mẫu prompt để Claude giao Codex
 
@@ -436,7 +438,7 @@ Tiêu chí nghiệm thu:
 Hãy triển khai trong workspace, không chỉ đưa kế hoạch.
 Trước khi thay đổi, đọc code liên quan và kiểm tra thay đổi đang có của người dùng.
 Nếu thiếu SRS/hợp đồng quan trọng, nêu chính xác điểm thiếu; vẫn làm phần độc lập.
-Không tự gửi mail thật, commit/push/merge hay sửa trạng thái Jira khi chưa được yêu cầu.
+Áp dụng quy trình Git thường trực ở mục 12: xong nhánh feature hoặc fix nào thì push và merge nhánh đó vào main khi đủ điều kiện, rồi pull main mới nhất trước khi tạo nhánh tiếp theo. Không tự gửi mail thật hoặc sửa trạng thái Jira khi chưa được yêu cầu.
 Kết thúc báo cáo: đã làm gì, file chính, kiểm thử thực chạy,
 giả định/giới hạn và hợp đồng bàn giao để cập nhật context cho task sau.
 ```

@@ -1,6 +1,10 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RoomTypeAmenityResponse {
+  @ApiPropertyOptional({
+    description: 'Included in create/update/detail responses for the editor',
+  })
+  isActive?: boolean;
   @ApiProperty()
   id: string;
 
