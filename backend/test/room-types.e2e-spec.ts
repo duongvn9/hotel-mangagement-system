@@ -9,7 +9,6 @@ import { Amenity } from '../src/modules/amenities/schemas/amenity.schema.js';
 import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
 import { seedAmenities } from '../src/modules/amenities/seed.js';
 import { seedRoomTypes } from '../src/modules/room-types/seed.js';
-import { runSeeds } from '../src/database/seed.js';
 
 describe('UC49 room types (e2e)', () => {
   let app: INestApplication;
@@ -138,9 +137,10 @@ describe('UC49 room types (e2e)', () => {
       amenities.create({ name: prefix + 'Wi-Fi' }),
     ).rejects.toMatchObject({ code: 11000 });
   });
-  it('runs the full seed twice without duplicates or overwriting edits', async () => {
-    // Only the dedicated seed e2e database is used. Other modules own their data.
-    await runSeeds(app);
+  it('runs facility seeds twice without duplicates or overwriting edits', async () => {
+    // Seed only this feature: do not create users/bookings owned by other suites.
+    await seedAmenities(app);
+    await seedRoomTypes(app);
     const firstTypes = await types.countDocuments();
     const firstAmenities = await amenities.countDocuments();
     const sample = await types.findOne({ name: 'Standard' }).lean();
@@ -148,7 +148,8 @@ describe('UC49 room types (e2e)', () => {
       { _id: sample!._id },
       { $set: { description: 'UC49 edited description' } },
     );
-    await runSeeds(app);
+    await seedAmenities(app);
+    await seedRoomTypes(app);
     await seedAmenities(app);
     await seedRoomTypes(app);
     expect(await types.countDocuments()).toBe(firstTypes);
