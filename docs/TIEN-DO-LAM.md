@@ -511,3 +511,10 @@ Người dùng đã yêu cầu sửa luôn lỗi import. `TasksService` đổi `
 Lượt e2e đầu sau sửa có 77/78 pass: suite Seed để lại customer@hms.local trong DB dùng chung, làm H5 (kỳ vọng chưa có customer mẫu) thất bại khi thứ tự chạy dựa vào cache thay đổi. Không sửa source/test Booking để che lỗi; chạy lại toàn bộ trên DB mới với `--no-cache`. Kết quả lượt cuối và merge được ghi theo kiểm tra thực tế, không coi lượt 77/78 là pass.
 
 Lượt cuối: **78/78 e2e pass, 14 file**, trên DB mới `hms_task29_connection_nocache_test`, lệnh `npm run test:e2e -- --maxWorkers=1 --pool=threads --hookTimeout=60000 --testTimeout=30000 --no-cache`. Tất cả kiểm tra ứng dụng yêu cầu đã pass; Docker giữ miễn kiểm tra theo yêu cầu người dùng trước đó. Quy trình xuất bản dùng merge commit lần lượt `fix/28-room-type-capacity` rồi `fix/64-task-connection-import` (nhánh sau chứa bản sửa trước); không có gh CLI nên dùng Git trực tiếp như đã được cho phép. Lịch sử Git và báo cáo cuối xác nhận commit merge thực tế; các dòng “chưa push/merge” phía trên là snapshot trước khi sửa blocker.
+
+## Sửa CI e2e — 24/10/2026
+
+- Run GitHub Actions 39999694245: frontend pass; backend lint/format/typecheck và 448 unit tests pass, nhưng e2e UC50 dừng vì guard chỉ nhận database `hms_task29_*test`, trong khi workflow dùng `hms_test` (16 test bị skip).
+- Thay guard đặc thù task bằng `assertTestDatabase`: kiểm tra protocol MongoDB và chính tên database theo mẫu `hms_*test`, nhận `hms_test` của CI. Không kiểm tra substring toàn URI; host, credentials hoặc query chứa tên test không thể vượt guard. URI lỗi không bị đưa vào thông báo để tránh lộ thông tin đăng nhập.
+- Bổ sung 12 ca kiểm thử guard, gồm database CI/task hợp lệ và database development/production/backup, protocol sai, URI thiếu/sai. Không bỏ qua test hay thay đổi workflow Docker; Docker cục bộ vẫn được miễn theo yêu cầu.
+- Xác minh cục bộ: backend lint, format, typecheck, build pass; 460/460 unit tests pass. Chạy đúng lệnh e2e mặc định với database `hms_test` trên MongoDB cục bộ pass 95/95. Không chạy Docker cục bộ.
