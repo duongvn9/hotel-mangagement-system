@@ -1,5 +1,7 @@
 # Sửa sức chứa RoomType — #28 / #29
 
+> Cập nhật sau kiểm tra ban đầu: người dùng đã cho phép sửa lỗi runtime Task. Nhánh `fix/64-task-connection-import`, commit `7ff5996`, đổi Connection sang type-only import; npm run seed toàn ứng dụng đã pass hai lần và ứng dụng Node/Swagger/API/UI thật đã khởi động thành công. Xem mục cập nhật cuối tài liệu; các blocker seed ghi bên dưới là kết quả lịch sử trước bản sửa import.
+
 Ngày 24/10/2026. Nhánh `fix/28-room-type-capacity`, từ main `e49794c` sau khi pull; đã xác nhận UC49 (`4134194`) và UC50 (`e49794c`) có trong lịch sử main. Đây là sửa lệch ERD theo yêu cầu người dùng, không phải mở rộng H6 hoặc Booking.
 
 ## Hợp đồng mới
@@ -96,3 +98,19 @@ SyntaxError: The requested module 'mongoose' does not provide an export named 'C
 Module Task không có diff so với main; lỗi này đã được tái hiện trên main sạch ở lần bàn giao UC50 trước. Chưa push/mở PR/merge bản sửa sức chứa, vì prompt mới yêu cầu không xuất bản khi check bắt buộc còn đỏ/chưa chạy. Quyết định miễn blocker khi merge UC50 trước đó không tự được coi là miễn cho task sửa sức chứa mới.
 
 Sau khi xử lý hoặc có miễn kiểm tra rõ ràng cho blocker: cập nhật main, chạy lại check cần thiết rồi push/PR/merge commit theo quy trình. Tiêu đề PR đã yêu cầu: `fix(room-types): split capacity into adult/child (#28, #29)`.
+
+## Cập nhật sửa lỗi runtime Task — 24/10/2026
+
+Người dùng đã yêu cầu sửa luôn lỗi import. `TasksService` đổi `import { Connection, Model, Types }` thành `import { Model, Types, type Connection }`. Connection không còn bị import như giá trị ESM; `@InjectConnection()` vẫn dùng token Mongoose đã khai báo tường minh. Không sửa business logic Task/Booking.
+
+- Backend lint, format:check, typecheck và build sau sửa: pass.
+- Backend unit sau sửa: 418/418 pass.
+- `npm run seed` toàn ứng dụng: **hai lần đều pass** trên DB riêng `hms_task29_capacity_fixed_seed_test`. Đã chuẩn bị document legacy và document mới đã chỉnh trước khi chạy; sau mỗi lượt kiểm tra migration 3 -> 3/0, giá/mô tả/timestamps cũ giữ nguyên, bản ghi mới 7/2 không bị ghi đè, mỗi mẫu có đúng một bản ghi.
+- Node chạy `dist/main.js` thành công; smoke HTTP thật xác nhận Swagger dùng adultCapacity/childCapacity, từ chối field capacity cũ, list seed đúng, POST 201 và partial PATCH 200 giữ field còn lại.
+- Edge 375×812 nối API đã compile và MongoDB thật: pass; Standard tải đúng 2 người lớn/1 trẻ em và tiện nghi seed. Không dùng API fixture cho lượt này. Focus trap/Esc/return focus pass, document width 375, dialog width 343; đã xem ảnh `.task29-validation/capacity-live-mobile-375.png`.
+- Frontend không đổi trong bản sửa import; kết quả 108 test và lint/format/typecheck/build đã pass ở lượt sửa sức chứa vẫn áp dụng.
+- Docker tiếp tục được miễn theo yêu cầu trước của người dùng; không tuyên bố đã chạy/pass container.
+
+Lượt e2e đầu sau sửa có 77/78 pass: suite Seed để lại customer@hms.local trong DB dùng chung, làm H5 (kỳ vọng chưa có customer mẫu) thất bại khi thứ tự chạy dựa vào cache thay đổi. Không sửa source/test Booking để che lỗi; chạy lại toàn bộ trên DB mới với `--no-cache`. Kết quả lượt cuối và merge được ghi theo kiểm tra thực tế, không coi lượt 77/78 là pass.
+
+Lượt cuối: **78/78 e2e pass, 14 file**, trên DB mới `hms_task29_connection_nocache_test`, lệnh `npm run test:e2e -- --maxWorkers=1 --pool=threads --hookTimeout=60000 --testTimeout=30000 --no-cache`. Tất cả kiểm tra ứng dụng yêu cầu đã pass; Docker giữ miễn kiểm tra theo yêu cầu người dùng trước đó. Quy trình xuất bản dùng merge commit lần lượt `fix/28-room-type-capacity` rồi `fix/64-task-connection-import` (nhánh sau chứa bản sửa trước); không có gh CLI nên dùng Git trực tiếp như đã được cho phép. Lịch sử Git và báo cáo cuối xác nhận commit merge thực tế; các dòng “chưa push/merge” phía trên là snapshot trước khi sửa blocker.
