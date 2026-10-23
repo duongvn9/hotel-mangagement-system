@@ -3,7 +3,8 @@
 ## Đọc nhanh
 
 - H8: **MERGED**, PR #15 trong main tại `c970bf4`; commit này là ancestor của HEAD đã kiểm tra local.
-- #64: **Implemented, pending QA/PR**, không phải Done. Branch `feature/vu-64-task-core`; không commit/push/tạo PR trong lượt này.
+- #64: **Implemented / draft PR pending review**, không phải Done. Branch `feature/vu-64-task-core`, commit `46a093d`, đã push thành công.
+- PR #16: https://github.com/duongvn9/hotel-mangagement-system/pull/16 — chưa merge, chờ CI/review và xác nhận integration contract.
 - Task core có persistence, atomic active-work uniqueness và chuyển trạng thái nội bộ có CAS. Không có controller, CRUD/UI hoặc endpoint cập nhật trạng thái. Mục 8 là hiện trạng; mục 5–7 giữ làm lịch sử.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
@@ -85,7 +86,7 @@ Tests dùng mock persistence theo H8, schema/index Mongoose thật in-memory, co
 | # | Task | Trạng thái | Commit/PR |
 |---|---|---|---|
 | H8 | Contract Task dùng chung | MERGED | PR #15 / main `c970bf4` |
-| 64 | Task core, lifecycle, source reference | Implemented, pending QA/PR (không Done) | `feature/vu-64-task-core`, chưa commit |
+| 64 | Task core, lifecycle, source reference | Implemented, pending QA/PR (không Done) | `46a093d` / draft PR #16 |
 | 65 | Staff / Operations Dashboard | Chưa làm | Chưa có |
 | 66 | UC37 View Assigned Tasks | Chưa làm | Chưa có |
 | 67 | UC38 Update Task Progress | Chưa làm | Chưa có |
