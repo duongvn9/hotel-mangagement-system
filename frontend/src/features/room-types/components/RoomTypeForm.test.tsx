@@ -84,7 +84,11 @@ describe('UC50 form', () => {
     fill()
     fireEvent.click(screen.getByRole('button', { name: 'Lưu loại phòng' }))
     expect(await screen.findByText(message)).toBeInTheDocument()
-    expect(screen.getByLabelText(label)).toHaveAttribute('aria-invalid', 'true')
+    expect(
+      label === 'Tiện nghi'
+        ? screen.getByRole('group', { name: 'Tiện nghi' })
+        : screen.getByLabelText(label),
+    ).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByLabelText(/Tên loại phòng/)).toHaveValue('Deluxe')
   })
   it('loads existing fields, retains inactive amenities and sends only changed fields', async () => {
@@ -136,6 +140,17 @@ describe('UC50 form', () => {
     expect(screen.getByRole('button', { name: 'Thử lại tiện nghi' })).toBeInTheDocument()
   })
   it('opens create/edit dialogs, handles Esc and refreshes list while keeping filters', async () => {
+    // jsdom does not implement native dialog methods; browser behavior is checked separately.
+    if (!HTMLDialogElement.prototype.showModal)
+      Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+        configurable: true,
+        value() {},
+      })
+    if (!HTMLDialogElement.prototype.close)
+      Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+        configurable: true,
+        value() {},
+      })
     vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (
       this: HTMLDialogElement,
     ) {
@@ -170,7 +185,7 @@ describe('UC50 form', () => {
         params: expect.objectContaining({ page: 2 }),
       }),
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Sửa Standard' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa Standard' }))
     expect(await screen.findByLabelText('Mô tả')).toHaveValue('Hai khách')
     fireEvent.change(screen.getByLabelText('Mô tả'), { target: { value: 'Mới' } })
     fireEvent.click(screen.getByRole('button', { name: 'Lưu loại phòng' }))
