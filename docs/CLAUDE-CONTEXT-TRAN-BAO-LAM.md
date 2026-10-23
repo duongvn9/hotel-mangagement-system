@@ -392,7 +392,7 @@ Backend e2e cần MongoDB và DB test riêng. CI hiện chạy lint/format/typec
 - Có báo cáo file thay đổi, hành vi, kiểm thử, điểm bàn giao và phụ thuộc chưa giải quyết.
 - Theo quy trình nhóm, Jira Done còn cần merge, CI xanh, review ít nhất một người, chạy được Docker và Swagger đúng. Code local xong không tự đồng nghĩa Jira Done.
 
-Nhánh theo task từ main, commit Conventional Commits, PR có mã Jira thật khi đã biết. Không tự commit/push/merge hoặc sửa Jira chỉ vì prompt yêu cầu triển khai code.
+Quy trình thường trực người dùng đã yêu cầu: mỗi task tạo nhánh từ main mới nhất, commit Conventional Commits; hoàn thành chức năng nào thì push và merge ngay chức năng đó vào main bằng merge commit, không gom nhiều chức năng hoặc dừng ở bước push. PR ghi mã Jira thật khi đã biết. Sau merge, pull main mới nhất trước khi tạo nhánh task tiếp theo. Không cần hỏi lại quyền commit/push/merge khi đủ scope và các check bắt buộc đã pass hoặc được người dùng miễn rõ ràng; nếu chưa đủ điều kiện thì ghi rõ blocker. Không tự sửa Jira.
 
 ## 13. Mẫu prompt để Claude giao Codex
 
@@ -438,7 +438,7 @@ Tiêu chí nghiệm thu:
 Hãy triển khai trong workspace, không chỉ đưa kế hoạch.
 Trước khi thay đổi, đọc code liên quan và kiểm tra thay đổi đang có của người dùng.
 Nếu thiếu SRS/hợp đồng quan trọng, nêu chính xác điểm thiếu; vẫn làm phần độc lập.
-Không tự gửi mail thật, commit/push/merge hay sửa trạng thái Jira khi chưa được yêu cầu.
+Áp dụng quy trình Git thường trực ở mục 12: xong chức năng nào thì push và merge chức năng đó vào main khi đủ điều kiện, rồi pull main mới nhất. Không tự gửi mail thật hoặc sửa trạng thái Jira khi chưa được yêu cầu.
 Kết thúc báo cáo: đã làm gì, file chính, kiểm thử thực chạy,
 giả định/giới hạn và hợp đồng bàn giao để cập nhật context cho task sau.
 ```

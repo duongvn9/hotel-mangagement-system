@@ -78,6 +78,7 @@ Thứ tự: `roles → users → amenities → room-types → bookings → feedb
 - Mỗi chức năng tạo nhánh từ main mới nhất: feature/<task>[-<task>]-<slug>.
 - Lỗi phát sinh tạo nhánh fix/<task>-<slug> từ nhánh chức năng hoặc main nếu đã merge.
 - Commit Conventional Commits nhỏ theo phạm vi.
+- Hoàn thành chức năng/task nào thì push và merge ngay chức năng/task đó vào `main` bằng merge commit; không gom nhiều chức năng và không dừng ở bước push nhánh. Áp dụng khi đủ scope và các check bắt buộc đã pass hoặc được người dùng miễn rõ ràng. Sau merge, pull `main` mới nhất rồi mới tạo nhánh cho task tiếp theo. Đây là quy trình thường trực người dùng đã yêu cầu, không cần hỏi lại quyền push/merge khi đủ điều kiện.
 - Chỉ push/PR/merge khi đủ scope và tất cả check bắt buộc pass. Merge commit, không force-push, không tự sửa Jira/nhánh người khác.
 - Nếu baseline main đỏ: ghi rõ lỗi có sẵn, không sửa ngoài phạm vi. Không merge khi còn check đỏ hoặc chưa chạy.
 - User đã cho phép push/PR/merge trong prompt #28 nhưng có điều kiện kiểm tra trên; không cần hỏi lại khi đã đủ điều kiện.
