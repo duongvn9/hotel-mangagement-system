@@ -87,7 +87,48 @@ Lần triển khai ban đầu chạy từ thư mục `backend` (chưa cài depen
 
 Kết quả ban đầu được giữ làm lịch sử; kết quả chạy lại nằm ở mục 5. Chưa xác nhận merge. Bàn giao contract qua PR cho Lâm/Hiếu/Khoa, chưa xác nhận nhóm đã tiếp nhận.
 
-## 5. FIX PROMPT 01 — Backend CI
+## 6. Xác minh lại sau khi main cập nhật
+
+- Đã fetch; working tree sạch trước kiểm tra, vẫn ở `feature/H8-task-contract`. PR head được kiểm tra: `2473b8205fd983b0e570a2d8ebbf7555b51940c5`.
+- Đúng run của head này: `39939610125`, backend FAIL tại format:check, frontend PASS, docker SKIPPED; các bước backend typecheck/unit/e2e/build bị CI skip sau lỗi format.
+- H8: `npx --no-install prettier --check "src/modules/tasks/**/*.ts"` PASS, không sửa thêm source H8.
+- **Kết luận mới thay thế blocker cũ:** `origin/main` hiện là `4134194ab4b99b60e92af07d891e6f2ee26f53e6`, đã có commit `57e572e` sửa formatting kế thừa. Kiểm tra Prettier toàn bộ backend của main trong detached worktree riêng PASS; dùng executable Prettier đã cài tại repo, không cài/sửa file trong worktree. Worktree kiểm tra đã được gỡ sạch.
+- Run main mới `39951483423` có conclusion SUCCESS. Vì vậy không được nói main hiện tại vẫn fail format: lỗi chỉ còn trên nhánh PR dùng base cũ `9a0fb22`.
+- Đã chạy lại tại branch PR: lint PASS, typecheck PASS, unit tests 184/184 PASS (15 files), build PASS; format toàn backend vẫn FAIL 24 file bên dưới. E2E local chưa chạy vì chưa xác minh DB test an toàn.
+- GitHub báo PR `mergeable: CONFLICTING`, `mergeStateStatus: DIRTY`. Chưa tự merge/rebase/main sync và chưa giải quyết conflict ngoài phạm vi.
+- Hướng xử lý: phối hợp Dương xác nhận bản sửa formatting đã ở main; không cần tạo PR formatting trùng lặp. Xin xác nhận cập nhật nhánh H8 từ main và giải quyết conflict có kiểm soát, sau đó chạy lại format/lint/typecheck/unit/e2e/build và kiểm tra CI head mới. Nếu còn lỗi formatting ngoài H8 sau đồng bộ, tách PR chỉ-format được Dương đồng ý thay vì đưa vào PR #15.
+- PR #15 vẫn draft, chưa an toàn merge; không merge, không bắt đầu PROMPT 02.
+
+24 file lỗi trên nhánh PR, kế thừa từ main cũ (main hiện tại đã sạch):
+
+```text
+backend/src/modules/bookings/availability.adapters.ts
+backend/src/modules/bookings/availability.core.spec.ts
+backend/src/modules/bookings/availability.core.ts
+backend/src/modules/bookings/availability.service.spec.ts
+backend/src/modules/bookings/availability.service.ts
+backend/src/modules/bookings/bookings.module.ts
+backend/src/modules/bookings/schemas/booking.schema.ts
+backend/src/modules/bookings/schemas/room-hold.schema.ts
+backend/src/modules/bookings/schemas/schemas.spec.ts
+backend/src/modules/bookings/seed.ts
+backend/src/modules/invoices/invoice-adapters.spec.ts
+backend/src/modules/invoices/invoice-adapters.ts
+backend/src/modules/invoices/invoice-calculator.spec.ts
+backend/src/modules/invoices/invoice-calculator.ts
+backend/src/modules/invoices/invoices.module.ts
+backend/src/modules/invoices/invoices.service.spec.ts
+backend/src/modules/invoices/invoices.service.ts
+backend/src/modules/invoices/schemas/invoice-charge.schema.ts
+backend/src/modules/invoices/schemas/invoice.schema.ts
+backend/src/modules/payments/payments.module.ts
+backend/src/modules/payments/schemas/payment-transaction.schema.ts
+backend/test/availability.e2e-spec.ts
+backend/test/h5-schemas.e2e-spec.ts
+backend/test/invoices.e2e-spec.ts
+```
+
+## 5. FIX PROMPT 01 — Backend CI (lịch sử)
 
 - Run PR lỗi: `39937737755`, HEAD `5ede98f`, step `Run npm run format:check` exit 1: 29 file sai Prettier, gồm 5 file H8 và 24 file có sẵn từ base.
 - Base `main@9a0fb22` cũng lỗi step format trong run `39926213558`. Các file Bookings/Invoices/Payments và e2e bị báo không có thay đổi trong PR. Không sửa format ngoài phạm vi để tránh overlap; đây là blocker CI kế thừa cần chủ module xử lý hoặc cho phép PR format riêng.
