@@ -2,7 +2,8 @@
 
 ## Đọc nhanh
 
-- H8/#64 đã viết contract backend trên `feature/H8-task-contract`, chưa xác nhận QA do thiếu dependency cục bộ; chưa commit/merge.
+- H8/#64: **Implemented / draft PR pending QA & review**, chưa merge. Branch `feature/H8-task-contract`, commit triển khai `f820ef5`.
+- PR: https://github.com/duongvn9/hotel-mangagement-system/pull/15 — đã push thành công; QA bị chặn do thiếu dependency cục bộ.
 - Chỉ có schema, DTO, service tạo Task và hàm chuyển trạng thái thuần. Không có controller, UI hoặc endpoint cập nhật trạng thái.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
@@ -11,8 +12,8 @@
 
 | # | Task | Trạng thái | Commit/PR |
 |---|---|---|---|
-| H8 | Contract Task dùng chung | Đã viết, chờ QA/review | Branch `feature/H8-task-contract`; chờ commit/PR |
-| 64 | Task core, lifecycle, source reference | Đã viết trong phạm vi H8; chưa xác nhận QA | Branch `feature/H8-task-contract`; chờ commit/PR |
+| H8 | Contract Task dùng chung | Đã viết, chờ QA/review | `f820ef5` / draft PR #15 |
+| 64 | Task core, lifecycle, source reference | Đã viết trong phạm vi H8; chưa xác nhận QA | `f820ef5` / draft PR #15 |
 | 65 | Staff / Operations Dashboard | Chưa làm | Chưa có |
 | 66 | UC37 View Assigned Tasks | Chưa làm | Chưa có |
 | 67 | UC38 Update Task Progress | Chưa làm | Chưa có |
