@@ -40,11 +40,11 @@ export class ListRoomTypesQuery {
   limit = 10;
 
   @ApiPropertyOptional({
-    enum: ['name', 'basePrice', 'capacity'],
+    enum: ['name', 'basePrice', 'adultCapacity', 'childCapacity'],
     default: 'name',
   })
-  @IsIn(['name', 'basePrice', 'capacity'])
-  sortBy: 'name' | 'basePrice' | 'capacity' = 'name';
+  @IsIn(['name', 'basePrice', 'adultCapacity', 'childCapacity'])
+  sortBy: 'name' | 'basePrice' | 'adultCapacity' | 'childCapacity' = 'name';
 
   @ApiPropertyOptional({ enum: ['asc', 'desc'], default: 'asc' })
   @IsIn(['asc', 'desc'])

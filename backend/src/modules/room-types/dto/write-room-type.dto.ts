@@ -35,7 +35,13 @@ export class CreateRoomTypeDto {
   @IsInt()
   @Min(1)
   @Max(Number.MAX_SAFE_INTEGER)
-  capacity: number;
+  adultCapacity: number;
+
+  @ApiProperty({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })
+  @IsInt()
+  @Min(0)
+  @Max(Number.MAX_SAFE_INTEGER)
+  childCapacity: number;
 
   @ApiProperty({
     minimum: 1,

@@ -116,17 +116,24 @@ export function RoomTypesPage() {
                 <caption className="sr-only">Danh sách loại phòng</caption>
                 <thead className="bg-stone-200 text-xs text-stone-700 uppercase">
                   <tr>
-                    {['Tên', 'Mô tả', 'Sức chứa', 'Giá', 'Tiện nghi', 'Trạng thái', 'Thao tác'].map(
-                      (name, index) => (
-                        <th
-                          key={name}
-                          scope="col"
-                          className={`px-4 py-4 ${index === 2 || index === 3 ? 'text-right' : ''}`}
-                        >
-                          {name}
-                        </th>
-                      ),
-                    )}
+                    {[
+                      'Tên',
+                      'Mô tả',
+                      'Người lớn',
+                      'Trẻ em',
+                      'Giá',
+                      'Tiện nghi',
+                      'Trạng thái',
+                      'Thao tác',
+                    ].map((name, index) => (
+                      <th
+                        key={name}
+                        scope="col"
+                        className={`px-4 py-4 ${[2, 3, 4].includes(index) ? 'text-right' : ''}`}
+                      >
+                        {name}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -138,7 +145,8 @@ export function RoomTypesPage() {
                       <td className="max-w-64 px-4 py-4 break-words text-stone-700">
                         {roomType.description || 'Chưa có mô tả'}
                       </td>
-                      <td className="px-4 py-4 text-right">{roomType.capacity}</td>
+                      <td className="px-4 py-4 text-right">{roomType.adultCapacity}</td>
+                      <td className="px-4 py-4 text-right">{roomType.childCapacity}</td>
                       <td className="px-4 py-4 text-right whitespace-nowrap">
                         {money.format(roomType.basePrice)}
                       </td>

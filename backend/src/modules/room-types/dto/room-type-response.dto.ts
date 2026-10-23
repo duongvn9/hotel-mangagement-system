@@ -23,7 +23,10 @@ export class RoomTypeResponse {
   description: string;
 
   @ApiProperty({ minimum: 1 })
-  capacity: number;
+  adultCapacity: number;
+
+  @ApiProperty({ minimum: 0 })
+  childCapacity: number;
 
   @ApiProperty({ description: 'Integer VND, greater than zero' })
   basePrice: number;

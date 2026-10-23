@@ -4,7 +4,8 @@ export interface RoomType {
   id: string
   name: string
   description: string
-  capacity: number
+  adultCapacity: number
+  childCapacity: number
   basePrice: number
   amenities: { id: string; name: string; isActive?: boolean }[]
   isActive: boolean
@@ -16,7 +17,7 @@ export interface RoomTypeQuery {
   isActive?: boolean
   page: number
   limit: number
-  sortBy?: 'name' | 'basePrice' | 'capacity'
+  sortBy?: 'name' | 'basePrice' | 'adultCapacity' | 'childCapacity'
   sortOrder?: 'asc' | 'desc'
 }
 
@@ -34,7 +35,8 @@ export async function listRoomTypes(query: RoomTypeQuery): Promise<RoomTypeList>
 export interface RoomTypeInput {
   name: string
   description: string
-  capacity: number
+  adultCapacity: number
+  childCapacity: number
   basePrice: number
   amenities: string[]
   isActive: boolean
