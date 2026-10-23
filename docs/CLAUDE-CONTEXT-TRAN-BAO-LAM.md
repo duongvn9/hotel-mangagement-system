@@ -7,6 +7,8 @@
 
 > Cập nhật sau snapshot: xem [bàn giao UC49 của Lâm](TIEN-DO-LAM-UC49.md) cho schema RoomType/Amenity và task #28 đang triển khai. Trạng thái chưa merge và kết quả kiểm thử nằm trong file bàn giao; các mục hiện trạng bên dưới mô tả baseline ban đầu.
 
+> Cập nhật 23/10/2026: UC49 đã merge main tại `4134194`; main khi bắt đầu #29 là `4213c8d`. Xem [bàn giao UC50](TIEN-DO-LAM-UC50.md) cho API tạo/sửa, form và kiểm thử mới; seed Node đang bị chặn bởi import Connection của module Task có sẵn trên main. Các bảng snapshot bên dưới không phải tiến độ hiện tại.
+
 ## 1. Cách sử dụng tài liệu
 
 Người dùng là **Trần Bảo Lâm**, thành viên phát triển HMS. Quy trình mong muốn:

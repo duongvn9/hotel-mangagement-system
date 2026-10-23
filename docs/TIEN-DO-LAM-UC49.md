@@ -3,6 +3,8 @@
 > Triển khai cho Trần Bảo Lâm từ main `9a0fb22`, nhánh `feature/28-room-type-list`.
 > Code và kiểm tra cục bộ đã hoàn tất; lỗi format đã sửa, Docker được miễn theo yêu cầu. Xem cập nhật mới nhất ở cuối tài liệu.
 
+> Xác nhận khi bắt đầu UC50 ngày 23/10/2026: UC49 đã merge main qua `4134194`. Bàn giao tiếp theo: [UC50 — tạo/sửa loại phòng](TIEN-DO-LAM-UC50.md). Các trạng thái “chưa merge” bên dưới là lịch sử trước thời điểm xuất bản UC49.
+
 ## Phạm vi
 
 - Backend đọc danh sách RoomType thật từ MongoDB, có schema Amenity tối thiểu.
