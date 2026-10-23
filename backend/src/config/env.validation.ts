@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import { vnpayConfigFields } from './vnpay.config.js';
 
 /**
  * Kiểm tra biến môi trường ngay khi app khởi động.
@@ -24,10 +25,11 @@ export const envValidationSchema = Joi.object({
   FIREBASE_PRIVATE_KEY: Joi.string().allow('').optional(),
 
   // VNPay (UC20, UC21)
-  VNPAY_TMN_CODE: Joi.string().allow('').optional(),
-  VNPAY_HASH_SECRET: Joi.string().allow('').optional(),
-  VNPAY_PAYMENT_URL: Joi.string().allow('').optional(),
-  VNPAY_RETURN_URL: Joi.string().allow('').optional(),
+  VNPAY_TMN_CODE: vnpayConfigFields.tmnCode.allow('').optional(),
+  VNPAY_HASH_SECRET: vnpayConfigFields.hashSecret.allow('').optional(),
+  VNPAY_PAYMENT_URL: vnpayConfigFields.paymentUrl.allow('').optional(),
+  VNPAY_RETURN_URL: vnpayConfigFields.returnUrl.allow('').optional(),
+  VNPAY_IPN_URL: vnpayConfigFields.ipnUrl.allow('').optional(),
 
   // Gmail notification (BR-NOTI)
   MAIL_USER: Joi.string().allow('').optional(),
