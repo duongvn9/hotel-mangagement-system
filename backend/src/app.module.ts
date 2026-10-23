@@ -23,6 +23,7 @@ import { PaymentsApiModule } from './modules/payments/payments-api.module.js';
 import { TasksModule } from './modules/tasks/tasks.module.js';
 import { AmenitiesModule } from './modules/amenities/amenities.module.js';
 import { RoomTypesModule } from './modules/room-types/room-types.module.js';
+import { RoomsModule } from './modules/rooms/rooms.module.js';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { RoomTypesModule } from './modules/room-types/room-types.module.js';
     TasksModule,
     AmenitiesModule,
     RoomTypesModule,
+    RoomsModule,
     // Module nghiệp vụ thêm vào đây, xem src/modules/README.md
   ],
   // Khai báo ở đây (không dùng app.useGlobal* trong main.ts) để test e2e cũng có.

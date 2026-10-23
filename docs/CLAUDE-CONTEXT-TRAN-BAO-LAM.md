@@ -1,15 +1,15 @@
 # Context dự án HMS cho Claude — phần việc Trần Bảo Lâm
 
-> Hợp đồng RoomType mới nhất ngày 24/10/2026: bản sửa [tách sức chứa người lớn/trẻ em](SUA-LOI-ROOM-TYPE-CAPACITY.md) thay capacity bằng adultCapacity/childCapacity, có migration trong seed. Nhánh triển khai fix/28-room-type-capacity; fix/64-task-connection-import sửa tiếp lỗi ESM Connection theo yêu cầu người dùng, seed toàn ứng dụng đã pass hai lần. Xem tài liệu cho kiểm tra và trạng thái xuất bản mới nhất. UC50 gốc đã merge main tại e49794c. Các mô tả capacity ở snapshot cũ bên dưới không thay thế hợp đồng mới; H6 vẫn giữ capacity/guests riêng.
+> Hợp đồng RoomType mới nhất ngày 24/10/2026: bản sửa [tách sức chứa người lớn/trẻ em](TIEN-DO-LAM.md#capacity) thay capacity bằng adultCapacity/childCapacity, có migration trong seed. Nhánh triển khai fix/28-room-type-capacity; fix/64-task-connection-import sửa tiếp lỗi ESM Connection theo yêu cầu người dùng, seed toàn ứng dụng đã pass hai lần. Xem tài liệu cho kiểm tra và trạng thái xuất bản mới nhất. UC50 gốc đã merge main tại e49794c. Các mô tả capacity ở snapshot cũ bên dưới không thay thế hợp đồng mới; H6 vẫn giữ capacity/guests riêng.
 
 > Snapshot đọc từ repository ngày 23/10/2026, HEAD `9a0fb22` (merge PR #14, H6 availability).
 > Mục đích: cung cấp context cho Claude phân tích và viết prompt giao Codex thực hiện từng task hoàn chỉnh của Trần Bảo Lâm, kế thừa đúng code của nhóm.
 > Đây là tài liệu bàn giao, không phải bằng chứng mọi chức năng đã chạy end-to-end. Phiên tạo tài liệu chỉ đọc code và tài liệu, không chạy lại test, ứng dụng hay kết nối Firebase/Gmail/VNPay.
 
 
-> Cập nhật sau snapshot: xem [bàn giao UC49 của Lâm](TIEN-DO-LAM-UC49.md) cho schema RoomType/Amenity và task #28 đang triển khai. Trạng thái chưa merge và kết quả kiểm thử nằm trong file bàn giao; các mục hiện trạng bên dưới mô tả baseline ban đầu.
+> Cập nhật sau snapshot: xem [bàn giao UC49 của Lâm](TIEN-DO-LAM.md#uc49) cho schema RoomType/Amenity và task #28 đang triển khai. Trạng thái chưa merge và kết quả kiểm thử nằm trong file bàn giao; các mục hiện trạng bên dưới mô tả baseline ban đầu.
 
-> Cập nhật 23/10/2026: UC49 đã merge main tại `4134194`; main khi bắt đầu #29 là `4213c8d`. Xem [bàn giao UC50](TIEN-DO-LAM-UC50.md) cho API tạo/sửa, form và kiểm thử mới; seed Node đang bị chặn bởi import Connection của module Task có sẵn trên main. Các bảng snapshot bên dưới không phải tiến độ hiện tại.
+> Cập nhật 23/10/2026: UC49 đã merge main tại `4134194`; main khi bắt đầu #29 là `4213c8d`. Xem [bàn giao UC50](TIEN-DO-LAM.md#uc50) cho API tạo/sửa, form và kiểm thử mới; seed Node đang bị chặn bởi import Connection của module Task có sẵn trên main. Các bảng snapshot bên dưới không phải tiến độ hiện tại.
 
 ## 1. Cách sử dụng tài liệu
 

@@ -4,6 +4,7 @@ import { authRoutes } from '@/features/auth/routes'
 import { feedbackRoutes } from '@/features/feedback/routes'
 import { roleRoutes } from '@/features/roles/routes'
 import { roomTypeRoutes } from '@/features/room-types/routes'
+import { roomRoutes } from '@/features/rooms/routes'
 import { taskRoutes } from '@/features/tasks/routes'
 import { staffDashboardRoutes } from '@/features/staff-dashboards/routes'
 
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
       ...accountRoutes,
       ...roleRoutes,
       ...roomTypeRoutes,
+      ...roomRoutes,
       ...feedbackRoutes,
       ...taskRoutes,
       // TODO(#18): Move staff dashboards into the H10 role layout when available.
