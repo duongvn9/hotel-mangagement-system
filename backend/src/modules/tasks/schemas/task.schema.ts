@@ -16,7 +16,12 @@ export class Task {
   @Prop({ required: true, trim: true })
   priority: string;
 
-  @Prop({ type: String, enum: TaskStatus, required: true, default: TaskStatus.Assigned })
+  @Prop({
+    type: String,
+    enum: TaskStatus,
+    required: true,
+    default: TaskStatus.Assigned,
+  })
   status: TaskStatus;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })

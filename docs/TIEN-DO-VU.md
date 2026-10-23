@@ -3,7 +3,7 @@
 ## Đọc nhanh
 
 - H8/#64: **Implemented / draft PR pending QA & review**, chưa merge. Branch `feature/H8-task-contract`, commit triển khai `f820ef5`.
-- PR: https://github.com/duongvn9/hotel-mangagement-system/pull/15 — đã push thành công; QA bị chặn do thiếu dependency cục bộ.
+- PR: https://github.com/duongvn9/hotel-mangagement-system/pull/15 — đã push thành công; local checks đã chạy lại sau `npm ci`, CI còn blocker format kế thừa từ base (xem mục 5).
 - Chỉ có schema, DTO, service tạo Task và hàm chuyển trạng thái thuần. Không có controller, UI hoặc endpoint cập nhật trạng thái.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
@@ -76,7 +76,7 @@ const task = await tasksService.create({
 
 Đã thêm unit test lifecycle toàn bộ 9 cặp enum và giá trị ngoài enum, schema/default/index, Nest injection, DTO và service validation, assignee/permission, mapping và nguồn không tồn tại, persistence/lỗi DB. Model và Connection được mock trong test service; schema validation chạy in-memory. **Không phải** kiểm thử tích hợp MongoDB hay nguồn thật.
 
-Đã chạy từ thư mục `backend` (không cài dependency, không chạy DB):
+Lần triển khai ban đầu chạy từ thư mục `backend` (chưa cài dependency, không chạy DB):
 
 | Lệnh chính xác | Kết quả |
 |---|---|
@@ -85,4 +85,24 @@ const task = await tasksService.create({
 | `npm test -- src/modules/tasks/tasks.spec.ts` | Không chạy được: `vitest` not recognized |
 | `npm run build` | Không chạy được: `nest` not recognized |
 
-Chưa có kết quả pass; cần chạy lại bốn lệnh khi dependency đã sẵn sàng, sau đó `npm test` để kiểm tra regression toàn backend. Chưa chạy e2e vì thiếu dependency và chưa xác minh MongoDB test an toàn. Không cài package trong lần thực hiện này. `git diff --check` đạt trước commit. Commit/PR được cập nhật sau khi tạo thành công; chưa xác nhận merge. Bàn giao contract qua PR cho Lâm/Hiếu/Khoa, chưa xác nhận nhóm đã tiếp nhận.
+Kết quả ban đầu được giữ làm lịch sử; kết quả chạy lại nằm ở mục 5. Chưa xác nhận merge. Bàn giao contract qua PR cho Lâm/Hiếu/Khoa, chưa xác nhận nhóm đã tiếp nhận.
+
+## 5. FIX PROMPT 01 — Backend CI
+
+- Run PR lỗi: `39937737755`, HEAD `5ede98f`, step `Run npm run format:check` exit 1: 29 file sai Prettier, gồm 5 file H8 và 24 file có sẵn từ base.
+- Base `main@9a0fb22` cũng lỗi step format trong run `39926213558`. Các file Bookings/Invoices/Payments và e2e bị báo không có thay đổi trong PR. Không sửa format ngoài phạm vi để tránh overlap; đây là blocker CI kế thừa cần chủ module xử lý hoặc cho phép PR format riêng.
+- Đã format các file H8 bằng Prettier hiện có trong lockfile, không đổi dependencies/config CI/assertions.
+- Khi chạy đầy đủ unit tests local, phát hiện thêm lỗi H8: TasksModule import UsersModule kéo theo FirebaseModule yêu cầu ConfigService trong bài test injection cô lập. Đã đăng ký lại chính UserSchema/RoleSchema hiện hữu bằng MongooseModule.forFeature, không sao chép/sửa schema và không phụ thuộc Firebase. Giữ nguyên test injection và assertions; test đã pass.
+
+| Lệnh tại `backend` | Kết quả thực tế sau sửa |
+|---|---|
+| `npm ci` | Thành công với lockfile hiện có; có cảnh báo dependency deprecated/install scripts, không đổi package/lockfile |
+| `npm run lint` | PASS |
+| `npm run typecheck` | PASS |
+| `npm test` | PASS: 15 files, 184 tests, gồm 54 tests H8 |
+| `npm run build` | PASS |
+| `npx --no-install prettier --check "src/modules/tasks/**/*.ts"` | PASS |
+| `npm run format:check` | FAIL: 24 file Bookings/Invoices/Payments/e2e kế thừa, không còn file H8 |
+| `git diff --check` | PASS |
+
+Chưa chạy e2e local vì chưa xác minh MongoDB test an toàn. CI sẽ được kiểm tra sau push; không báo H8 Done hoặc PR sẵn sàng merge khi backend check còn fail. Source integration vẫn cần xác nhận mapping collection và nguồn thật; unit tests mock DB không thay thế tích hợp đó.
