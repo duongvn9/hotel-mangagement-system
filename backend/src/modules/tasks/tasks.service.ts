@@ -7,7 +7,7 @@ import {
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { Connection, Model, Types } from 'mongoose';
+import { Model, Types, type Connection } from 'mongoose';
 import { Role as StaffRole } from '../../common/constants/role.enum.js';
 import { Role } from '../roles/schemas/role.schema.js';
 import { User } from '../users/schemas/user.schema.js';
