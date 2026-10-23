@@ -3,25 +3,27 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { Invoice, InvoiceSchema } from './schemas/invoice.schema.js';
 import { BookingsModule } from '../bookings/bookings.module.js';
 import { PaymentsModule } from '../payments/payments.module.js';
+import { RoomsModule } from '../rooms/rooms.module.js';
 import { InvoicesService } from './invoices.service.js';
 import {
   InvoicePricingAdapter,
   InvoiceChargesAdapter,
-  UnavailableInvoicePricingAdapter,
   PersistedInvoiceChargesAdapter,
 } from './invoice-adapters.js';
+import { RoomTypePricingAdapter } from './room-type-pricing.adapter.js';
 
 @Module({
   imports: [
     BookingsModule,
     PaymentsModule,
+    RoomsModule,
     MongooseModule.forFeature([{ name: Invoice.name, schema: InvoiceSchema }]),
   ],
   providers: [
     InvoicesService,
     {
       provide: InvoicePricingAdapter,
-      useClass: UnavailableInvoicePricingAdapter,
+      useClass: RoomTypePricingAdapter,
     },
     {
       provide: InvoiceChargesAdapter,
