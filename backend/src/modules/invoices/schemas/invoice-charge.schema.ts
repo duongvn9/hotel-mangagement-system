@@ -22,7 +22,11 @@ export class InvoiceCharge {
   @Prop({ trim: true, minlength: 1 })
   sourceId?: string;
 
-  @Prop({ type: Boolean, required: true, validate: (value: boolean) => value === true })
+  @Prop({
+    type: Boolean,
+    required: true,
+    validate: (value: boolean) => value === true,
+  })
   approved: true;
 }
 

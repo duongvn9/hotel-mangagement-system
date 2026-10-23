@@ -10,25 +10,47 @@ export interface RoomPricingLine {
 }
 
 export abstract class InvoicePricingAdapter {
-  abstract getRoomLines(booking: BookingDocument): Promise<readonly RoomPricingLine[]>;
+  abstract getRoomLines(
+    booking: BookingDocument,
+  ): Promise<readonly RoomPricingLine[]>;
 }
 
 @Injectable()
 export class UnavailableInvoicePricingAdapter extends InvoicePricingAdapter {
   getRoomLines(_booking: BookingDocument): Promise<readonly RoomPricingLine[]> {
-    return Promise.reject(new ServiceUnavailableException('Authoritative room pricing snapshot adapter is not configured'));
+    return Promise.reject(
+      new ServiceUnavailableException(
+        'Authoritative room pricing snapshot adapter is not configured',
+      ),
+    );
   }
 }
 
 export abstract class InvoiceChargesAdapter {
-  abstract getApprovedCharges(invoice: InvoiceDocument): Promise<readonly InvoiceCharge[]>;
+  abstract getApprovedCharges(
+    invoice: InvoiceDocument,
+  ): Promise<readonly InvoiceCharge[]>;
 }
 
 @Injectable()
 export class PersistedInvoiceChargesAdapter extends InvoiceChargesAdapter {
-  getApprovedCharges(invoice: InvoiceDocument): Promise<readonly InvoiceCharge[]> {
-    if (!invoice.charges.length && [invoice.serviceTotal, invoice.additionalTotal, invoice.discountTotal, invoice.taxTotal].some((amount) => amount > 0)) {
-      return Promise.reject(new ServiceUnavailableException('Legacy invoice requires authoritative charge sources before recalculation'));
+  getApprovedCharges(
+    invoice: InvoiceDocument,
+  ): Promise<readonly InvoiceCharge[]> {
+    if (
+      !invoice.charges.length &&
+      [
+        invoice.serviceTotal,
+        invoice.additionalTotal,
+        invoice.discountTotal,
+        invoice.taxTotal,
+      ].some((amount) => amount > 0)
+    ) {
+      return Promise.reject(
+        new ServiceUnavailableException(
+          'Legacy invoice requires authoritative charge sources before recalculation',
+        ),
+      );
     }
     return Promise.resolve(invoice.charges);
   }
