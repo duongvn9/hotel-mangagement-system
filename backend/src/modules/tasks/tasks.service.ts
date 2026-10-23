@@ -14,6 +14,11 @@ import { User } from '../users/schemas/user.schema.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
 import { Task } from './schemas/task.schema.js';
 import {
+  AssignedTaskDto,
+  AssignedTasksPageDto,
+} from './dto/assigned-task.dto.js';
+import { ListAssignedTasksQuery } from './dto/list-assigned-tasks.dto.js';
+import {
   canTransitionTaskStatus,
   TaskSourceType,
   TaskStatus,
@@ -34,6 +39,99 @@ export class TasksService {
     @InjectModel(Role.name) private readonly roles: Model<Role>,
     @InjectConnection() private readonly connection: Connection,
   ) {}
+
+  private readonly assignedProjection = {
+    _id: 1,
+    title: 1,
+    taskType: 1,
+    priority: 1,
+    status: 1,
+    assignedAt: 1,
+    dueAt: 1,
+    completedAt: 1,
+    workResult: 1,
+    sourceType: 1,
+    sourceId: 1,
+  };
+
+  async listAssigned(
+    actorUserId: string,
+    query: ListAssignedTasksQuery,
+  ): Promise<AssignedTasksPageDto> {
+    const assignedTo = this.assignedActorId(actorUserId);
+    const filter = {
+      assignedTo,
+      ...(query.status === undefined ? {} : { status: query.status }),
+      ...(query.taskType === undefined ? {} : { taskType: query.taskType }),
+      ...(query.keyword === undefined
+        ? {}
+        : {
+            title: {
+              $regex: query.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+              $options: 'i',
+            },
+          }),
+    };
+    const [tasks, total] = await Promise.all([
+      this.tasks
+        .find(filter)
+        .select(this.assignedProjection)
+        .sort({ assignedAt: -1, _id: -1 })
+        .skip((query.page - 1) * query.limit)
+        .limit(query.limit)
+        .lean(),
+      this.tasks.countDocuments(filter),
+    ]);
+    return {
+      items: tasks.map((task) => this.assignedResponse(task)),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
+  }
+
+  async findAssigned(
+    actorUserId: string,
+    taskId: string,
+  ): Promise<AssignedTaskDto> {
+    const assignedTo = this.assignedActorId(actorUserId);
+    if (!/^[a-fA-F0-9]{24}$/.test(taskId))
+      throw new NotFoundException('Task not found');
+    const task = await this.tasks
+      .findOne({ _id: new Types.ObjectId(taskId), assignedTo })
+      .select(this.assignedProjection)
+      .lean();
+    if (!task) throw new NotFoundException('Task not found');
+    return this.assignedResponse(task);
+  }
+
+  private assignedActorId(id: string): Types.ObjectId {
+    if (typeof id !== 'string' || !/^[a-fA-F0-9]{24}$/.test(id)) {
+      throw new BadRequestException('Invalid actor ID');
+    }
+    return new Types.ObjectId(id);
+  }
+
+  private assignedResponse(
+    task: Task & { _id: Types.ObjectId },
+  ): AssignedTaskDto {
+    return {
+      id: String(task._id),
+      title: task.title,
+      taskType: task.taskType,
+      priority: task.priority,
+      status: task.status,
+      assignedAt: task.assignedAt.toISOString(),
+      ...(task.dueAt === undefined ? {} : { dueAt: task.dueAt.toISOString() }),
+      ...(task.completedAt === undefined
+        ? {}
+        : { completedAt: task.completedAt.toISOString() }),
+      ...(task.workResult === undefined ? {} : { workResult: task.workResult }),
+      sourceType: task.sourceType,
+      sourceId: String(task.sourceId),
+      sourceSummary: null,
+    };
+  }
 
   async create(input: CreateTaskDto) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) {

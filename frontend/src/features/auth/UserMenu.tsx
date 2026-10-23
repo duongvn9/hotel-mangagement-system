@@ -48,6 +48,12 @@ export function UserMenu() {
           {link.label}
         </Link>
       ))}
+      {(['SERVICE_STAFF', 'OPERATIONS_STAFF'].includes(me.role) ||
+        me.permissions.includes('task:execute')) && (
+        <Link to="/staff/tasks" className="inline-flex min-h-11 items-center hover:text-primary">
+          Công việc được giao
+        </Link>
+      )}
       <Link to="/profile" className="tracking-normal text-pearl-900 normal-case hover:text-primary">
         {me.fullName}
       </Link>
