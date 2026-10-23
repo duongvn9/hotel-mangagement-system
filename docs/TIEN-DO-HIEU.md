@@ -7,11 +7,12 @@
 ## 1. Đọc nhanh
 
 - H5 schemas đã merge vào `main` qua PR #12.
-- H7 invoice calculation và `InvoicesService` đã merge qua PR #13; còn chờ nguồn pricing thực.
-- H6 availability core đã merge qua PR #14; còn chờ Room/RoomType từ Lâm để hoàn thiện UC05 và public API.
-- VNPay foundation đã push; nay bổ sung settlement persistence (compare-and-set) và các endpoint thanh toán (khởi tạo cọc/thanh toán cuối, Return, IPN). Chưa ghi nhận merge trong remote-tracking hiện tại.
-- UC20 đặt cọc (#47) và UC21 thanh toán cuối (#52) đã có settlement bền vững + endpoint + test; còn chờ nguồn pricing thực (Room/RoomType của Lâm), Guest authorization và sandbox acceptance với credentials thật.
-- Create Booking (#46) và UC05 end-to-end vẫn bị chặn: repo chưa có model Room riêng (chỉ có RoomType). Không tự tạo lại schema của Lâm.
+- H7 invoice calculation và `InvoicesService` đã merge qua PR #13; nay đã có nguồn pricing thực từ `RoomType.basePrice` (`RoomTypePricingAdapter`).
+- H6 availability core đã merge qua PR #14; nay đã nối Room adapter thật (model Room của Lâm) và có endpoint UC05 công khai — UC05 end-to-end.
+- VNPay foundation + settlement persistence (compare-and-set) + endpoint thanh toán (cọc/thanh toán cuối, Return, IPN) đã merge vào `main`.
+- UC20 đặt cọc (#47) và UC21 thanh toán cuối (#52) đã có settlement + endpoint + test; nay số tiền tính từ pricing thực. Còn chờ Guest authorization và sandbox acceptance với credentials thật.
+- Create Booking (#46) nay đã hết blocker (model Room đã có) nhưng CHƯA triển khai workflow đặt phòng.
+- Không tạo lại các schema hoặc enum đã có; không coi kết quả availability là bảo đảm đặt phòng thành công.
 - Không tạo lại các schema hoặc enum đã có; không coi kết quả availability là bảo đảm đặt phòng thành công.
 
 ## 2. Bảng tiến độ
@@ -19,13 +20,13 @@
 | Hạng mục | Đã hoàn thành | Còn thiếu | Trạng thái |
 |---|---|---|---|
 | H5 — Booking & Payment contracts | Booking, RoomHold, Invoice, PaymentTransaction; enum; indexes; seed; tests | Dữ liệu Room thực cho seed booking; nối seed feedback vào booking thật | Đã merge PR #12 |
-| #45 / H7 — Invoice calculation | Calculator, service, charge ledger, payment reconciliation, adapters, tests | Pricing snapshot/adapter thực; nguồn service charges và tích hợp workflow | Core/service đã merge PR #13 |
-| #43 / H6 — UC05 Search Available Rooms | Overlap core, Booking/Hold queries, clock, Room adapter boundary, tests | Room/RoomType thực, public API, DTO, Swagger, HTTP integration tests | Core đã merge PR #14; UC05 chưa end-to-end |
-| VNPay foundation | Config, ký URL, xác minh Return/IPN, validation, processing plan, tests | — | Đã push; chờ PR review/merge |
-| VNPay settlement + endpoints | Mongo settlement port (CAS, idempotent), initiation service, controller (deposit/final/Return/IPN), authorization Customer/staff, e2e | Nguồn pricing thực, Guest token auth, sandbox acceptance, HTTPS IPN khi deploy | Đã push |
-| #46 — Create Booking | Có H5 và H6 làm nền tảng | Model Room (Lâm), workflow, ownership/Guest access, pricing snapshot, concurrency-safe hold, expiration | Chưa hoàn thành — chờ Room |
-| #47 — UC20 Make Deposit Payment | Payment schema, H7, VNPay foundation, settlement + endpoint + test | Nguồn cọc từ pricing thực, Guest auth, sandbox acceptance | Settlement/endpoint xong; chờ pricing/Room |
-| #52 — UC21 Pay Final Invoice | H7, VNPay foundation, settlement + endpoint theo dư nợ + test | Dư nợ từ pricing thực, sandbox acceptance | Settlement/endpoint xong; chờ pricing/Room |
+| #45 / H7 — Invoice calculation | Calculator, service, charge ledger, payment reconciliation, adapters, tests; pricing thực từ RoomType.basePrice | Nguồn service charges và tích hợp workflow | Core/service merge PR #13; pricing adapter thật đã push |
+| #43 / H6 — UC05 Search Available Rooms | Overlap core, Booking/Hold queries, clock, Room adapter thật, public endpoint `GET /availability`, DTO, Swagger, e2e | — | End-to-end; đã push |
+| VNPay foundation | Config, ký URL, xác minh Return/IPN, validation, processing plan, tests | — | Đã merge main |
+| VNPay settlement + endpoints | Mongo settlement port (CAS, idempotent), initiation service, controller (deposit/final/Return/IPN), authorization Customer/staff, e2e | Guest token auth, sandbox acceptance, HTTPS IPN khi deploy | Đã merge main |
+| #46 — Create Booking | Có H5, H6 (đã nối Room), H7 pricing làm nền tảng | Workflow, ownership/Guest access, pricing snapshot, concurrency-safe hold, expiration | Chưa triển khai (đã hết blocker Room) |
+| #47 — UC20 Make Deposit Payment | Payment schema, H7, VNPay settlement + endpoint + test; tiền tính từ pricing thực | Guest auth, sandbox acceptance | Settlement/endpoint xong |
+| #52 — UC21 Pay Final Invoice | H7 pricing thực, VNPay settlement + endpoint theo dư nợ + test | Sandbox acceptance | Settlement/endpoint xong |
 
 ## 3. Contracts dùng lại
 
@@ -77,7 +78,8 @@ AvailabilityService.findAvailableRooms({ checkIn, checkOut, guests, roomTypeId? 
 - `PENDING_DEPOSIT` không tự chặn vô thời hạn; cần hold còn hiệu lực.
 - Hold phải active, chưa hết hạn và giao khoảng lưu trú; không phụ thuộc MongoDB TTL đã xóa document hay chưa.
 - Hold có booking cha inactive/cancelled/checked-out không chặn. Hold thiếu booking cha được xử lý bảo thủ đến hết hạn; cần giữ chính sách này rõ ràng khi tích hợp workflow.
-- Room adapter mặc định báo chưa sẵn sàng; chưa có endpoint trả phòng giả.
+- Room adapter thật: `MongoAvailabilityRoomSource` (`mongo-availability-room-source.ts`) đọc model Room, populate RoomType. Ánh xạ (Hiếu quyết định vì RoomType tách adult/child): `capacity = adultCapacity + childCapacity`; `operationallyAvailable = status !== MAINTENANCE` (OCCUPIED/CLEANING do overlap reservation xử lý). Phòng thiếu RoomType bị loại.
+- Endpoint UC05: `GET /api/v1/availability` `@Public()`, DTO `SearchAvailabilityDto` (checkIn/checkOut YYYY-MM-DD, guests, roomTypeId?), Swagger. Chỉ trả `{ id, roomTypeId, capacity }`, không lộ booking/customer.
 
 Chi tiết: [H6-AVAILABILITY.md](H6-AVAILABILITY.md).
 
@@ -101,18 +103,18 @@ Biến cấu hình: `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`, `VNPAY_PAYMENT_URL`, 
 
 ### A. Review và thống nhất contracts
 
-- [ ] Review/merge nhánh VNPay foundation và kiểm tra CI remote.
-- [ ] Xác nhận Room/RoomType H3 từ Lâm đã merge trước khi nối adapter.
-- [ ] Thống nhất nguồn đơn giá, pricing snapshot và cách tính thời lượng lưu trú.
+- [x] Review/merge nhánh VNPay foundation và kiểm tra CI remote.
+- [x] Xác nhận Room/RoomType H3 từ Lâm đã merge trước khi nối adapter.
+- [x] Thống nhất nguồn đơn giá (RoomType.basePrice) và cách tính thời lượng lưu trú (số đêm theo ngày nghiệp vụ).
 - [ ] Xác nhận chính sách đặt cọc, thời hạn hold, thuế và giảm giá từ SRS/contracts; không tự đặt tỷ lệ.
-- [ ] Thống nhất trạng thái vận hành phòng và nguồn dữ liệu service/additional charges.
+- [ ] Thống nhất nguồn dữ liệu service/additional charges.
 
 ### B. Hoàn thiện UC05 / H6
 
-- [ ] Viết Room data adapter dùng model thật, capacity, room type và operational status.
-- [ ] Public search endpoint với `@Public()`, DTO validation và Swagger.
-- [ ] Chỉ trả dữ liệu phòng công khai, không lộ booking/customer.
-- [ ] Thêm HTTP/DB integration tests với Room/RoomType thật.
+- [x] Viết Room data adapter dùng model thật, capacity (adult+child), room type và operational status (loại MAINTENANCE).
+- [x] Public search endpoint với `@Public()`, DTO validation và Swagger.
+- [x] Chỉ trả dữ liệu phòng công khai, không lộ booking/customer.
+- [x] Thêm HTTP/DB integration tests với Room/RoomType thật.
 
 ### C. #46 — Create Booking
 
@@ -168,10 +170,12 @@ Không tự mở rộng sang Checkout, Service Order, frontend hoặc refund khi
 | H6 | 130 pass | 30 pass | PASS |
 | VNPay foundation | 208 pass, gồm 78 VNPay tests | 30 pass | PASS |
 | VNPay settlement + endpoints | 340 unit pass | 57 e2e pass (gồm 4 settlement + 7 payments) | PASS (lint/typecheck/build) |
+| UC05 adapter/endpoint + pricing thật | 460 unit pass | 101 e2e pass (gồm 5 UC05 + 1 pricing) | PASS (lint/typecheck/build) |
 
-- Backend được kiểm thử trên Node 24; E2E dùng MongoDB 8 và database test riêng.
+- Backend được kiểm thử trên Node 24 (lượt này Node 22); E2E dùng MongoDB 8 và database test riêng. E2E chạy ổn định với `--no-cache` để tránh phụ thuộc thứ tự suite dùng chung DB.
 - VNPay có digest đối chiếu độc lập, không chỉ tự ký rồi tự verify.
-- UC20/UC21 đã có e2e settlement + endpoint với MongoDB thật (pricing và cấu hình VNPay dùng test adapter/fixture). Chưa có test giao dịch thanh toán thật qua sandbox VNPay.
+- UC20/UC21 đã có e2e settlement + endpoint với MongoDB thật; nay pricing dùng adapter thật. Chưa có test giao dịch thanh toán thật qua sandbox VNPay.
+- UC05 e2e dùng Room/RoomType thật (overlap, loại MAINTENANCE, lọc số khách, query sai); pricing e2e kiểm tra 2 phòng × 3 đêm.
 - Khi sửa code phải chạy lại trong thư mục `backend`:
 
 ```text
@@ -191,9 +195,11 @@ E2E chỉ chạy khi có MongoDB phù hợp; không dùng database dev/productio
 | H5 | `feature/hieunc-h5-schemas` | `5bb9a9730ccf65d964590711f650d05949f18e18` | Merged PR #12 |
 | H7 | `feature/hieunc-h7-invoice` | `3b7f19e5168d7a60502dfebb1e9a079742e2a1a8` | Merged PR #13 |
 | H6 | `feature/hieunc-h6-availability` | `61b831e7ed3242204bc9bfd6adde7659106191d9` | Merged PR #14 |
-| VNPay foundation | `feature/hieunc-vnpay-foundation` | `03f6bfffae3fe5c7e2494038646be6cd6d1dfb62` | Đã push, chưa ghi nhận merge |
-| VNPay settlement persistence | `feature/hieunc-vnpay-foundation` | `d1a8bb5` | Đã push |
-| VNPay deposit/final endpoints | `feature/hieunc-vnpay-foundation` | `f18f8df` | Đã push |
+| VNPay foundation | `feature/hieunc-vnpay-foundation` | `03f6bfffae3fe5c7e2494038646be6cd6d1dfb62` | Đã merge main |
+| VNPay settlement persistence | `feature/hieunc-vnpay-foundation` | `d1a8bb5` | Đã merge main (e91521c) |
+| VNPay deposit/final endpoints | `feature/hieunc-vnpay-foundation` | `f18f8df` | Đã merge main (e91521c) |
+| UC05 Room adapter + endpoint | `feature/hieunc-availability-pricing` | `91e96db` | Đã push |
+| H7 pricing từ RoomType | `feature/hieunc-availability-pricing` | `262e45e` | Đã push |
 
 Commit messages tương ứng:
 
@@ -204,6 +210,8 @@ feat(booking): add room availability calculation core
 feat(payment): add vnpay integration foundation
 feat(payment): persist vnpay settlement with atomic compare-and-set
 feat(payment): add vnpay deposit and final payment endpoints
+feat(booking): wire room availability source and UC05 search endpoint
+feat(invoice): price invoices from room type base price
 ```
 
 ## 8. Quy tắc cập nhật tài liệu
