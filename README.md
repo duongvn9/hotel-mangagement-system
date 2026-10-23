@@ -215,7 +215,7 @@ docker compose -f docker-compose.prod.yml up -d --build    # hoặc: make prod
 - `main` luôn chạy được. Mỗi task một nhánh từ `main`: `feature/UC07-create-booking`, `fix/UC16-checkin-status`, `chore/ci-cache`.
 - Mở PR vào `main`, CI phải xanh và có ít nhất 1 người review. Ghi mã task Jira trong tiêu đề PR.
 - Rebase hoặc merge `main` thường xuyên để tránh conflict lớn cuối sprint.
-- Hoàn thành chức năng/task nào thì push và merge ngay chức năng/task đó vào `main` bằng merge commit khi đủ phạm vi và các kiểm tra bắt buộc đã pass hoặc được miễn rõ ràng; không chờ gom nhiều chức năng hoặc chỉ dừng ở push nhánh. Sau merge, pull `main` mới nhất trước khi tạo nhánh task tiếp theo.
+- Làm xong nhánh nào thì push và merge ngay nhánh đó vào `main` bằng merge commit, áp dụng cho cả `feature/*` và `fix/*`, khi đủ phạm vi và các kiểm tra bắt buộc đã pass hoặc được miễn rõ ràng. Sau merge, pull `main` mới nhất rồi mới tạo nhánh feature hoặc fix tiếp theo. Nhánh fix cũng phải được tích hợp vào `main`; nếu fix tách từ feature chưa merge, đưa feature vào main trước để giữ đủ phụ thuộc.
 
 **Commit** theo [Conventional Commits](https://www.conventionalcommits.org/): `feat(booking): tạo booking nhiều phòng`, `fix(auth): ...`, `docs: ...`, `test: ...`, `chore: ...`.
 
