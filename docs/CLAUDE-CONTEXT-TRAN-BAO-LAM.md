@@ -1,5 +1,7 @@
 # Context dự án HMS cho Claude — phần việc Trần Bảo Lâm
 
+> Tiến độ/hợp đồng của Lâm được gộp duy nhất tại [TIEN-DO-LAM.md](TIEN-DO-LAM.md). Mục [UC47/H3](TIEN-DO-LAM.md#uc47) mô tả schema Room, RoomStatus, API danh sách và seed trước bookings của task #30; kiểm tra trạng thái xuất bản mới nhất trong tài liệu đó. Không tạo thêm file tiến độ riêng theo UC.
+
 > Hợp đồng RoomType mới nhất ngày 24/10/2026: bản sửa [tách sức chứa người lớn/trẻ em](TIEN-DO-LAM.md#capacity) thay capacity bằng adultCapacity/childCapacity, có migration trong seed. Nhánh triển khai fix/28-room-type-capacity; fix/64-task-connection-import sửa tiếp lỗi ESM Connection theo yêu cầu người dùng, seed toàn ứng dụng đã pass hai lần. Xem tài liệu cho kiểm tra và trạng thái xuất bản mới nhất. UC50 gốc đã merge main tại e49794c. Các mô tả capacity ở snapshot cũ bên dưới không thay thế hợp đồng mới; H6 vẫn giữ capacity/guests riêng.
 
 > Snapshot đọc từ repository ngày 23/10/2026, HEAD `9a0fb22` (merge PR #14, H6 availability).
