@@ -152,9 +152,9 @@ describe('VNPay settlement persistence (e2e)', () => {
     expect(plan.action).toBe('compare-and-set');
     if (plan.action !== 'compare-and-set') return;
 
-    expect(await settlement.commitAtomically(await expected(txnRef), plan)).toBe(
-      'committed',
-    );
+    expect(
+      await settlement.commitAtomically(await expected(txnRef), plan),
+    ).toBe('committed');
 
     const payment = await payments.findOne({ transactionRef: txnRef });
     expect(payment?.status).toBe(PaymentStatus.Success);
@@ -177,9 +177,9 @@ describe('VNPay settlement persistence (e2e)', () => {
       await expected(txnRef),
     );
     if (plan.action !== 'compare-and-set') throw new Error('expected CAS');
-    expect(await settlement.commitAtomically(await expected(txnRef), plan)).toBe(
-      'committed',
-    );
+    expect(
+      await settlement.commitAtomically(await expected(txnRef), plan),
+    ).toBe('committed');
 
     // Payment đã SUCCESS; prepareIpn trả 'duplicate' và settlement cũng báo duplicate.
     const replay = vnpay.prepareIpn(
@@ -205,12 +205,14 @@ describe('VNPay settlement persistence (e2e)', () => {
     expect(plan.action).toBe('compare-and-set');
     if (plan.action !== 'compare-and-set') return;
 
-    expect(await settlement.commitAtomically(await expected(txnRef), plan)).toBe(
-      'committed',
-    );
+    expect(
+      await settlement.commitAtomically(await expected(txnRef), plan),
+    ).toBe('committed');
     const payment = await payments.findOne({ transactionRef: txnRef });
     expect(payment?.status).toBe(PaymentStatus.Cancelled);
-    expect((await bookings.findById(bookingId))?.status).toBe('PENDING_DEPOSIT');
+    expect((await bookings.findById(bookingId))?.status).toBe(
+      'PENDING_DEPOSIT',
+    );
     expect((await invoices.findById(invoiceId))?.balanceDue).toBe(1000000);
   });
 

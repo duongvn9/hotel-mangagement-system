@@ -11,7 +11,10 @@ import { Model, Types } from 'mongoose';
 import type { AuthUser } from '../../common/auth/auth-user.js';
 import { BookingStatus } from '../../common/constants/booking-status.enum.js';
 import { Role } from '../../common/constants/role.enum.js';
-import { Booking, type BookingDocument } from '../bookings/schemas/booking.schema.js';
+import {
+  Booking,
+  type BookingDocument,
+} from '../bookings/schemas/booking.schema.js';
 import { InvoicesService } from '../invoices/invoices.service.js';
 import {
   PaymentMethod,
@@ -62,7 +65,12 @@ export class PaymentsService {
     if (booking.status !== BookingStatus.PendingDeposit) {
       throw new ConflictException('Booking is not awaiting a deposit');
     }
-    return this.initiate(booking, PaymentPurpose.Deposit, booking.depositAmount, options);
+    return this.initiate(
+      booking,
+      PaymentPurpose.Deposit,
+      booking.depositAmount,
+      options,
+    );
   }
 
   async initiateFinal(
@@ -140,7 +148,9 @@ export class PaymentsService {
         createdAt: now,
         expiresAt: new Date(now.getTime() + PAYMENT_WINDOW_MS),
         ...(options.locale === undefined ? {} : { locale: options.locale }),
-        ...(options.bankCode === undefined ? {} : { bankCode: options.bankCode }),
+        ...(options.bankCode === undefined
+          ? {}
+          : { bankCode: options.bankCode }),
       },
     );
     return { transactionRef: payment.transactionRef, paymentUrl, amount };

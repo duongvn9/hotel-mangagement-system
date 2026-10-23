@@ -31,7 +31,11 @@ export class PaymentsController {
     @CurrentUser() user: AuthUser,
     @Req() req: Request,
   ) {
-    return this.payments.initiateDeposit(dto.bookingId, user, this.options(dto, req));
+    return this.payments.initiateDeposit(
+      dto.bookingId,
+      user,
+      this.options(dto, req),
+    );
   }
 
   @Post('final')
@@ -43,7 +47,11 @@ export class PaymentsController {
     @CurrentUser() user: AuthUser,
     @Req() req: Request,
   ) {
-    return this.payments.initiateFinal(dto.bookingId, user, this.options(dto, req));
+    return this.payments.initiateFinal(
+      dto.bookingId,
+      user,
+      this.options(dto, req),
+    );
   }
 
   @Get('vnpay/return')

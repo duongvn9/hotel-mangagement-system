@@ -134,7 +134,9 @@ describe('Payments VNPay endpoints (e2e)', () => {
     expect(response.body.transactionRef).toMatch(/^[A-Za-z0-9]+$/);
     expect(response.body.paymentUrl).toContain(settings.paymentUrl);
     expect(response.body.paymentUrl).toContain('vnp_SecureHash=');
-    const pending = await payments.findOne({ transactionRef: response.body.transactionRef });
+    const pending = await payments.findOne({
+      transactionRef: response.body.transactionRef,
+    });
     expect(pending?.status).toBe('PENDING');
     expect(pending?.amount).toBe(300000);
   });
@@ -172,7 +174,9 @@ describe('Payments VNPay endpoints (e2e)', () => {
     const txnRef = init.body.transactionRef as string;
 
     const raw = ipnCallback(txnRef, 300000);
-    const first = await http().get(`/api/v1/payments/vnpay/ipn?${raw}`).expect(200);
+    const first = await http()
+      .get(`/api/v1/payments/vnpay/ipn?${raw}`)
+      .expect(200);
     expect(first.body).toEqual({ RspCode: '00', Message: 'Confirm Success' });
     expect((await bookings.findById(bookingId))?.status).toBe('CONFIRMED');
     expect(await invoices.findOne({ booking: bookingId })).toMatchObject({
@@ -181,14 +185,24 @@ describe('Payments VNPay endpoints (e2e)', () => {
       status: 'PARTIALLY_PAID',
     });
 
-    const replay = await http().get(`/api/v1/payments/vnpay/ipn?${raw}`).expect(200);
-    expect(replay.body).toEqual({ RspCode: '02', Message: 'Order already confirmed' });
+    const replay = await http()
+      .get(`/api/v1/payments/vnpay/ipn?${raw}`)
+      .expect(200);
+    expect(replay.body).toEqual({
+      RspCode: '02',
+      Message: 'Order already confirmed',
+    });
   });
 
   it('returns Order not found for an unknown IPN transaction', async () => {
     const raw = ipnCallback('UNKNOWNREF123', 300000);
-    const response = await http().get(`/api/v1/payments/vnpay/ipn?${raw}`).expect(200);
-    expect(response.body).toEqual({ RspCode: '01', Message: 'Order not found' });
+    const response = await http()
+      .get(`/api/v1/payments/vnpay/ipn?${raw}`)
+      .expect(200);
+    expect(response.body).toEqual({
+      RspCode: '01',
+      Message: 'Order not found',
+    });
   });
 
   it('verifies a return redirect read-only without changing state', async () => {
@@ -203,9 +217,16 @@ describe('Payments VNPay endpoints (e2e)', () => {
     const response = await http()
       .get(`/api/v1/payments/vnpay/return?${ipnCallback(txnRef, 300000)}`)
       .expect(200);
-    expect(response.body).toMatchObject({ transactionRef: txnRef, status: 'SUCCESS' });
+    expect(response.body).toMatchObject({
+      transactionRef: txnRef,
+      status: 'SUCCESS',
+    });
     // Return không đổi trạng thái: payment vẫn PENDING, booking vẫn chờ cọc.
-    expect((await payments.findOne({ transactionRef: txnRef }))?.status).toBe('PENDING');
-    expect((await bookings.findById(bookingId))?.status).toBe('PENDING_DEPOSIT');
+    expect((await payments.findOne({ transactionRef: txnRef }))?.status).toBe(
+      'PENDING',
+    );
+    expect((await bookings.findById(bookingId))?.status).toBe(
+      'PENDING_DEPOSIT',
+    );
   });
 });

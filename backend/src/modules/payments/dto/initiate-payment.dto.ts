@@ -6,7 +6,10 @@ export class InitiatePaymentDto {
   @IsMongoId()
   bookingId: string;
 
-  @ApiPropertyOptional({ enum: ['vn', 'en'], description: 'Ngôn ngữ trang VNPay' })
+  @ApiPropertyOptional({
+    enum: ['vn', 'en'],
+    description: 'Ngôn ngữ trang VNPay',
+  })
   @IsOptional()
   @IsIn(['vn', 'en'])
   locale?: 'vn' | 'en';

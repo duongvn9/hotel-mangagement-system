@@ -112,7 +112,9 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
    * Best-effort: nếu hoá đơn chưa có totalAmount hợp lệ (pricing chưa cấu hình) thì bỏ qua;
    * payment đã SUCCESS nên H7 recalculate sẽ hội tụ khi có nguồn giá.
    */
-  private async reconcileInvoice(expected: ExpectedVnpayPayment): Promise<void> {
+  private async reconcileInvoice(
+    expected: ExpectedVnpayPayment,
+  ): Promise<void> {
     const invoiceId = new Types.ObjectId(expected.invoice.id);
     for (let attempt = 0; attempt < 5; attempt++) {
       const invoice = await this.invoices.findById(invoiceId);
