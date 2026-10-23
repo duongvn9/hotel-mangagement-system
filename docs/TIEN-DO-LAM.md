@@ -10,7 +10,7 @@ Cập nhật 24/10/2026. Đây là tài liệu tiến độ và bàn giao duy nh
 | #29 UC50 | Đã merge main: e49794c |
 | Tách sức chứa adultCapacity/childCapacity | Đã merge main: cfb2394 |
 | Sửa import Connection của Task | Đã merge main: 7684a45; seed toàn ứng dụng pass hai lần |
-| #30 UC47 View Room List + H3 Room/RoomStatus | Đang triển khai trên feature/30-room-list từ main 7684a45 |
+| #30 UC47 View Room List + H3 Room/RoomStatus | Đã triển khai và kiểm tra đầy đủ; feature/30-room-list + fix/30-room-status-schema, baseline main 7684a45 |
 
 Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, không dùng capacity. H6 vẫn giữ hợp đồng capacity/guests riêng; chưa nối adapter Room thật. Các mục lịch sử bên dưới ghi lại đúng trạng thái từng thời điểm, kể cả blocker đã được xử lý; không dùng snapshot cũ để kết luận trạng thái hiện tại.
 
@@ -23,7 +23,78 @@ Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, khôn
 <a id="uc47"></a>
 ## #30 — UC47 View Room List và hợp đồng H3
 
-Phạm vi: GET /api/v1/rooms, schema Room/RoomStatus, seed, trang /manager/rooms và kiểm thử. Chỉ đọc; không có nút hoặc API tạo/sửa/ngừng phòng (thuộc #31). Chi tiết và kết quả kiểm tra được cập nhật trong mục này trước khi xuất bản.
+Phạm vi: GET /api/v1/rooms, schema Room/RoomStatus, seed, trang /manager/rooms và kiểm thử. Chỉ đọc; không có nút hoặc API tạo/sửa/ngừng phòng (thuộc #31). Nhánh feature/30-room-list từ main 7684a45, commit triển khai 29b2038; gộp tài liệu 01314d5. Nhánh fix/30-room-status-schema xử lý các lỗi phát hiện khi kiểm tra.
+
+### Hợp đồng H3 — Room và RoomStatus
+
+- `common/constants/room-status.enum.ts`: đúng bốn giá trị AVAILABLE, OCCUPIED, CLEANING, MAINTENANCE; không thêm RESERVED/OUT_OF_SERVICE.
+- Model `Room`, collection `rooms`, timestamps. Field: roomNumber string required/trim/unique chính xác; floor số nguyên an toàn bắt buộc; roomType ObjectId required ref RoomType; status enum required, mặc định AVAILABLE; notes trim, mặc định rỗng; isActive mặc định true.
+- Sức chứa/giá ở RoomType; Amenity chỉ gắn RoomType. Không thêm field capacity/amenities/giá vào Room hoặc quan hệ Equipment trước task tương ứng.
+- RoomsModule import RoomTypesModule một chiều, export RoomsService và MongooseModule. Module khác import RoomsModule và inject model qua getModelToken(Room.name); không tạo schema Room thứ hai.
+- UC47 chỉ có `RoomsService.list(ListRoomsQuery)`. Điểm mở rộng #31: tái sử dụng schema/enum/module/API client/route/UI này rồi bổ sung endpoint ghi, validation references và form theo prompt UC48 riêng.
+- Adapter H6 sau này đọc Room._id -> id, Room.roomType -> roomTypeId, Room.isActive và Room.status; cần populate RoomType để đọc isActive và hai field sức chứa. H6 vẫn dùng capacity/guests riêng; Hiếu quyết định ánh xạ. Không nối AvailabilityRoomSource trong UC47.
+
+### GET /api/v1/rooms
+
+Quyền MANAGER hoặc permission facility:manage, cùng cơ chế OR như room-types. Guard frontend không thay guard backend.
+
+Query: search literal theo roomNumber không phân biệt hoa thường, tối đa 100 ký tự; roomTypeId ObjectId; status một trong bốn giá trị; isActive true/false, bỏ qua = tất cả; floor số nguyên; page >= 1 mặc định 1; limit 1–100 mặc định 10; sortBy roomNumber/floor/status, sortOrder asc/desc, mặc định roomNumber asc. DTO dùng pipe whitelist/forbidNonWhitelisted/transform hiện có; query lạ/sai trả 400 theo filter lỗi chuẩn.
+
+Response `{ items, total, page, limit }`, item `{ id, roomNumber, floor, roomType: { id, name, isActive } | null, status, notes, isActive }`. Thiếu RoomType không làm sập danh sách: trả null và log cảnh báo chứa Room ID. Trả cả phòng inactive và loại phòng inactive, không tự sửa tham chiếu hoặc timestamps khi đọc.
+
+Mongo collation `{ locale: 'en', numericOrdering: true }`, sort thêm `_id asc` làm tiêu chí phụ; count dùng cùng collation. Thứ tự số tự nhiên là **20 < 101 < 1010**, không phải thứ tự chuỗi 101 < 1010 < 20 trong ví dụ prompt. Không thay unique index bằng collation mới.
+
+### Frontend
+
+`features/rooms/`: api.ts, hooks.ts, routes.tsx, pages/RoomsPage.tsx. Route `/manager/rooms` ghép dưới PublicLayout hiện tại; menu Manager có “Phòng”. Một H1, bộ lọc tìm số phòng debounce 300ms, RoomType, trạng thái vận hành và hoạt động. Filter reset về trang 1; đổi trang giữ filter. API hỗ trợ floor nhưng UC47 chưa thêm bộ lọc tầng ngoài toolbar đã yêu cầu.
+
+Bộ lọc RoomType tải tất cả trang API room-types hiện có (limit 100 mỗi lượt), gồm loại inactive có nhãn “ngừng”. Query options độc lập: lỗi tải loại phòng có thông báo/thử lại và khóa riêng dropdown đó, bảng và các filter khác vẫn hoạt động.
+
+Bảng sáu cột: Số phòng, Tầng, Loại phòng, Trạng thái vận hành, Ghi chú, Hoạt động. Số căn phải; Badge tiếng Việt Trống/Có khách/Đang dọn/Bảo trì, nhãn Ngừng và Loại phòng ngừng. Ghi chú truncate, có title, aria-label đầy đủ và có thể focus. Có loading, lỗi/thử lại, rỗng chưa có phòng và rỗng do lọc. Bảng cuộn trong container trên 375px; component/token chung, không import icon hoặc mock production.
+
+### Seed và thay đổi hành vi booking mẫu
+
+Registry mới: **roles → users → amenities → room-types → rooms → bookings → feedback**.
+
+Seed sáu phòng trên ba tầng: Standard 101 OCCUPIED / 102 AVAILABLE; Deluxe 201 CLEANING / 202 MAINTENANCE; Suite 301 AVAILABLE / 302 MAINTENANCE inactive. Có ghi chú ở các phòng cần giải thích. RoomType Suite vẫn inactive theo seed cũ và được hiển thị rõ trong danh sách.
+
+Upsert theo roomNumber với `$setOnInsert`, không ghi đè chỉnh sửa. Riêng seed Room tắt auto timestamps trên update và đặt createdAt/updatedAt trong `$setOnInsert`, để chạy lại giữ nguyên cả timestamps của bản ghi đã có.
+
+Trên DB mới, 101 là phòng active đầu tiên được chèn và đang OCCUPIED. seedBookings hiện tìm phòng active đầu tiên bằng collection rooms nên sau bổ sung seed Room sẽ tạo được `SEED-CHECKED-IN-001`, trạng thái CHECKED_IN, tham chiếu phòng 101; trước đây nó bỏ qua vì chưa có Room. Không sửa schema/logic/seed Booking hoặc Feedback. Với DB đã có phòng do người dùng chỉnh, seed vẫn giữ dữ liệu; lựa chọn active đầu tiên của seedBookings là hành vi hiện có, không tự chọn lại phòng hoặc ép trạng thái để ghi đè dữ liệu.
+
+### Kiểm tra và bàn giao theo mẫu mục 15
+
+- Ngày/baseline: 24/10/2026, main 7684a45. Đã kiểm tra lịch sử UC49, UC50 và hai nhánh fix trước khi triển khai.
+- Baseline backend: lint/typecheck và 418 test pass. Baseline frontend: lint/typecheck và 108 test pass.
+- Test riêng UC47: backend 30 unit, 17 e2e; frontend 13 test đều pass. Toàn repo và smoke ứng dụng thật được ghi kết quả cuối tại đây sau khi chạy xong.
+- Lỗi phát hiện đã sửa trên nhánh fix: khai báo tường minh String cho enum và Schema.Types.ObjectId cho roomType; giữ timestamps của phòng khi seed lại. Không sửa module booking/availability/invoice/payment.
+- Mỗi suite mới chỉ dọn Room/RoomType có prefix hoặc Room sample do chính suite tạo; không xóa collection module khác. DB test riêng, không dùng DB dev.
+- Giả định: roomNumber trim, unique phân biệt hoa thường theo index binary; floor required là số nguyên an toàn, cho phép 0 và tầng âm, không thêm trần nghiệp vụ; isActive tách khỏi trạng thái vận hành; route/quyền như trên.
+- H3 đủ schema Room/RoomStatus để Hiếu/Khoa dùng; adapter H6, flow check-in/out và CRUD Room vẫn thuộc task khác. Không có mock/TODO chặn UC47 trong production.
+- Tài liệu tiến độ sau này tiếp tục ghi ở file này, không tạo file TIEN-DO-LAM theo từng UC. Context dự án riêng vẫn giữ để các prompt tiếp tục đọc.
+
+### Kết quả cuối UC47 — 24/10/2026
+
+| Kiểm tra | Kết quả thực chạy |
+|---|---|
+| Backend lint/format:check/typecheck/build | Pass |
+| Backend unit toàn repo | 448/448 pass, 20 file |
+| Backend e2e toàn repo | 95/95 pass, 15 file; DB riêng hms_task29_uc47_final_test, cổng 27030 |
+| Frontend lint/format:check/typecheck/build | Pass; Vite còn cảnh báo bundle > 500kB |
+| Frontend toàn bộ test | 121/121 pass, 12 file |
+| npm run seed hai lần trên DB mới | Pass; DB riêng hms_task30_seed_test; đúng sáu phòng, đủ bốn trạng thái, một phòng inactive |
+| Giữ chỉnh sửa sau seed lại | Pass; đã đổi floor/notes/updatedAt của 101 giữa hai lượt và kiểm tra toàn bộ dữ liệu Room giữ nguyên |
+| Seed Booking sau khi có Rooms | Pass; SEED-CHECKED-IN-001 là CHECKED_IN, tham chiếu phòng 101 OCCUPIED |
+| Swagger ứng dụng đã compile | GET /api/v1/rooms và response roomType nullable đúng schema |
+| API + UI thật, Edge 375×812 | Pass; sáu dòng, đủ cột/nhãn, bộ lọc có Suite (ngừng), menu Phòng; document width = viewport = 375, vùng bảng 341px và bảng 850px cuộn nội bộ; đã xem ảnh |
+| Git diff --check và liên kết tài liệu cũ | Pass; không còn tham chiếu tới ba file tiến độ đã gộp |
+| Docker | Miễn theo yêu cầu trước của người dùng; không chạy/không tuyên bố pass |
+
+Backend unit dùng `npm test -- --maxWorkers=1 --pool=threads --testTimeout=30000`; e2e dùng `npm run test:e2e -- --maxWorkers=1 --pool=threads --hookTimeout=60000 --testTimeout=30000 --no-cache`. No-cache tránh phụ thuộc thứ tự suite Seed/H5 đã ghi nhận trước đó; không sửa source/test booking/availability/invoices/payments. Frontend dùng `npm test -- --maxWorkers=1 --pool=forks --testTimeout=30000`.
+
+Artifact local được ignore tại `.task29-validation/`: uc47-seed-result.json, uc47-seed-snapshot.json, uc47-live-result.json, uc47-live-mobile-375.png và các script kiểm tra. Smoke dùng API đã compile và MongoDB thật, không intercept hoặc mock dữ liệu production. Feedback seed tiếp tục chạy như trước; TODO liên kết booking thật của Feedback trong snapshot cũ không thuộc task này.
+
+Xuất bản theo quy trình đã được người dùng cho phép: push feature/30-room-list và fix/30-room-status-schema, merge commit lần lượt vào main rồi pull main mới nhất. Không có gh CLI nên dùng Git trực tiếp, không tạo PR giả; tiêu đề chức năng tương ứng `feat(rooms): UC47 view room list (#30)`. Commit merge thực tế được xác nhận qua Git log/báo cáo cuối.
 
 ## Lịch sử bàn giao đã gộp
 

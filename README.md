@@ -373,4 +373,6 @@ Cột "Cần xong trước" ghi số thứ tự task (cột `#`) và người l�
 
 ## Thành viên
 
+Tiến độ và hợp đồng bàn giao của Trần Bảo Lâm được cập nhật chung tại [docs/TIEN-DO-LAM.md](docs/TIEN-DO-LAM.md).
+
 Nguyễn Công Hiếu · Vũ Ngọc Dương · Nguyễn Đăng Khoa · Lê Anh Vũ · Trần Bảo Lâm
