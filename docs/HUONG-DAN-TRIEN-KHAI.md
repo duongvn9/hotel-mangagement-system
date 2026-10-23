@@ -172,6 +172,42 @@ Thứ tự dưới đây đã tính phụ thuộc. Số `#` là số task trong 
 - Comment trên task Jira bị chặn: chặn bởi task nào, cần gì cụ thể (một enum, một field, một hàm).
 - Nhắn trực tiếp chủ task kia. Nếu quá nửa ngày chưa xử lý, báo trong buổi họp ngắn hằng ngày.
 
+## Phase 4: VNPay sandbox foundation (Hiếu)
+
+Đã chuẩn bị protocol, `VnpayService` export từ `PaymentsModule`, Joi/ConfigService và test Nest DI. Đây **không phải** hoàn thành UC20/UC21: không có controller, initiation công khai, DB write, gọi gateway, checkout, refund hay frontend.
+
+### Đặc tả và cấu hình
+
+Đối chiếu tài liệu chính thức ngày 23/10/2026:
+- https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html
+- https://sandbox.vnpayment.vn/apis/docs/bang-ma-loi/
+
+API `2.1.0`, command `pay`, VND; sắp xếp tên tham số tăng dần, `encodeURIComponent` theo mẫu Node của VNPAY, đổi `%20` thành `+`, ghép `&`, HMAC-SHA512 UTF-8 hex. Không dùng `URLSearchParams` để canonicalize vì cách encode punctuation khác mẫu Node. So sánh hash bằng `timingSafeEqual` sau kiểm tra đúng 128 hex. Bỏ `vnp_SecureHash` và `vnp_SecureHashType` khỏi dữ liệu ký; nếu hash type có mặt chỉ chấp nhận `HMACSHA512`.
+
+Biến backend: `VNPAY_TMN_CODE` (8 chữ/số), `VNPAY_HASH_SECRET`, `VNPAY_PAYMENT_URL` (chỉ sandbox chính thức), `VNPAY_RETURN_URL`; `VNPAY_IPN_URL` tùy chọn, HTTPS, dành đăng ký với VNPAY chứ không gửi trong URL thanh toán. Không cấu hình vẫn boot; gọi service thiếu cấu hình sẽ 503, không ghi giá trị secret vào thông báo. URL callback không có credentials/query/fragment; HTTP chỉ dành return localhost. Không đặt secret trong VITE, log, repo hoặc frontend. Các URL trong env example chỉ là cấu hình mẫu, chưa có route hoạt động.
+
+Số tiền là số nguyên VND dương, tối đa **9.999.999.999 VND**, suy ra từ trường `vnp_Amount Numeric[1,12]` và nhân 100; không phải khẳng định hạn mức thương mại của sandbox/ngân hàng. Từ chối số lẻ, NaN, Infinity, overflow, không làm tròn/cắt phần lẻ. `CreateDate`/`ExpireDate` bắt buộc, UTC chuyển `Asia/Ho_Chi_Minh`, `yyyyMMddHHmmss`; hết hạn phải sau khởi tạo. IP phải là IP hợp lệ; locale vn/en, bank tùy chọn. OrderInfo do server tạo `HMS {purpose} {transactionRef}` từ record, không nhận mô tả từ client.
+
+### Return và chuẩn bị IPN
+
+`verifyReturn(rawQuery, expected)` chỉ xác minh/đọc. Truyền **raw query chưa parse**, không truyền object `req.query` vì parser có thể làm mất duplicate. Từ chối trùng key kể cả percent-encoded, array/object syntax, unknown key, empty, invalid UTF-8/percent encoding, control character và query quá 8192 ký tự. Đây là chính sách fail-closed của HMS, không phải hạn mức VNPAY.
+
+Callback cần TmnCode, Amount, BankCode, OrderInfo, TransactionNo, ResponseCode, TransactionStatus, TxnRef và SecureHash; BankTranNo/CardType/PayDate tùy chọn theo đặc tả. HMS yêu cầu PayDate hợp lệ và provider ref khác 0 khi thành công để đáp ứng invariant H7. Xác minh merchant, txnref, amount và metadata purpose; kiểm tra PaymentTransaction→Booking→Invoice, active, method VNPAY, enum hiện có. Expected phải được server đọc từ DB; không bao giờ lấy expected từ client. Không yêu cầu customer/Firebase nên Guest vẫn tương thích, nhưng chưa cấp quyền initiation.
+
+Thành công chỉ khi **ResponseCode=00 AND TransactionStatus=00**; mẫu PHP có OR không được sao chép. ResponseCode 24 là hủy; các kết quả khác không ghi nhận thành công. `prepareIpn` trả plan compare-and-set cho pending và kết quả terminal rõ ràng; trạng thái chưa hoàn tất/đảo/refund/nghi ngờ hoặc mã mâu thuẫn trả review. Duplicate dựa trên trạng thái/provider ref/paidAt đã persist, không dựa cache trong RAM. Terminal conflict không được coi là duplicate. Plan chưa phải cập nhật DB và không được trả ACK thành công chỉ vì tạo plan thành công.
+
+### Hợp đồng persistence đang chờ UC20/UC21
+
+`VnpaySettlementPort.commitAtomically` là interface, **chưa có adapter thực thi**. Trước khi mở IPN cần:
+1. Initiation được phân quyền: ownership Customer hoặc capability Guest có giới hạn; amount từ deposit policy hoặc balance hiện hành H7, không từ client. Persist transaction pending trước redirect, transactionRef duy nhất, không tái sử dụng; persist/freeze metadata và quan hệ của attempt.
+2. Sau checksum, load expected theo txnref từ DB. Trong Mongo transaction/replica set: đọc lại và so sánh toàn bộ expected, CAS status Pending cùng amount/method/purpose/quan hệ; giữ unique index `(method, providerTransactionRef)` của H5. Provider ref `0` của giao dịch lỗi không được chiếm unique reference dùng cho giao dịch thực; adapter cần chính sách receipt riêng cho failure replay.
+3. Cập nhật PaymentTransaction, Invoice, Booking và durable receipt/outbox trong cùng transaction; không cộng tiền/recalculate/notification lại khi duplicate. CAS thua phải đọc receipt đã commit và phân biệt duplicate/conflict. Không dùng plan cũ ngoài transaction. Receipt cần lưu cả response/status/fingerprint để phân biệt mọi replay khác nội dung; schema hiện tại chưa lưu các trường này.
+4. H7 `optimisticConcurrency` chỉ bảo vệ một Invoice, **không** tạo atomicity xuyên collection. Cần session-aware adapter và pricing snapshot thật; H7 hiện fail-closed nếu chưa có `InvoicePricingAdapter`. Không gọi recalculate độc lập sau ghi payment rồi tuyên bố atomic.
+5. IPN GET HTTPS, checksum trước lookup; trả JSON `RspCode`/`Message`: 00 sau commit, 02 sau xác nhận duplicate bền vững, 01 không tìm thấy, 04 sai amount, 97 sai chữ ký, 99 lỗi/conflict/chưa thể xử lý. 00/02 dừng retry; 01/04/97/99/timeout retry tối đa 10 lần, cách 5 phút theo tài liệu. Không dùng Return để ghi tiền hoặc trả ACK IPN.
+6. Thêm Mongo replica-set integration/concurrency/crash-recovery test, guest authorization, current balance/deposit policy, notification outbox và kiểm thử sandbox thật trước đánh dấu UC20/UC21 Done. Foundation không thực hiện thanh toán thật.
+
+Test fixture HMAC được tính độc lập bằng .NET HMACSHA512 trên canonical text cố định, không chỉ sign-then-verify cùng implementation. Test hiện có bao phủ config, timezone, amount boundary, signed tampering/metadata, duplicate query, relation mismatch, cancellation/failure/review và persisted duplicate/conflict ở lớp plan; Nest DI kiểm tra export service không cần Mongo. Chưa tuyên bố đã test concurrent persistent settlement.
+
 ## 7. Nhịp làm việc trong tuần
 
 | Ngày | Mốc |
