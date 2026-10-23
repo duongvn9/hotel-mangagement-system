@@ -34,7 +34,9 @@ describe('UC49 RoomTypesPage', () => {
     expect(screen.getByRole('cell', { name: /850\.000\s*₫/ })).toBeInTheDocument()
     expect(screen.getByText('Wi-Fi')).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(screen.queryByRole('button', { name: /Thêm|Sửa|Xóa/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Thêm loại phòng' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sửa Standard' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Xóa/ })).not.toBeInTheDocument()
   })
   it('shows loading until API resolves', () => {
     vi.spyOn(api, 'get').mockReturnValue(new Promise(() => {}))
