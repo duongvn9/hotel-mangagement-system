@@ -1,5 +1,7 @@
 # Bàn giao #28 — UC49 View Room Type List
 
+> Cập nhật 24/10/2026: xem [sửa sức chứa RoomType](SUA-LOI-ROOM-TYPE-CAPACITY.md) cho adultCapacity/childCapacity, migration và trạng thái nhánh sửa. Các mô tả field capacity bên dưới là hợp đồng lịch sử UC49.
+
 > Triển khai cho Trần Bảo Lâm từ main `9a0fb22`, nhánh `feature/28-room-type-list`.
 > Code và kiểm tra cục bộ đã hoàn tất; lỗi format đã sửa, Docker được miễn theo yêu cầu. Xem cập nhật mới nhất ở cuối tài liệu.
 
