@@ -5,6 +5,7 @@ import { seedUsers } from '../modules/users/seed.js';
 import { seedBookings } from '../modules/bookings/seed.js';
 import { seedAmenities } from '../modules/amenities/seed.js';
 import { seedRoomTypes } from '../modules/room-types/seed.js';
+import { seedRooms } from '../modules/rooms/seed.js';
 
 /** Seed của một module. Lấy model bằng app.get(getModelToken(X.name)), chạy lại nhiều lần vẫn đúng. */
 export type Seed = (app: INestApplicationContext) => Promise<void>;
@@ -15,6 +16,7 @@ export const SEEDS: Record<string, Seed> = {
   users: seedUsers,
   amenities: seedAmenities,
   'room-types': seedRoomTypes,
+  rooms: seedRooms,
   bookings: seedBookings,
   feedback: seedFeedback,
 };
