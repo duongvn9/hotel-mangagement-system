@@ -3,6 +3,8 @@ import { seedFeedback } from '../modules/feedback/seed.js';
 import { seedRoles } from '../modules/roles/seed.js';
 import { seedUsers } from '../modules/users/seed.js';
 import { seedBookings } from '../modules/bookings/seed.js';
+import { seedAmenities } from '../modules/amenities/seed.js';
+import { seedRoomTypes } from '../modules/room-types/seed.js';
 
 /** Seed của một module. Lấy model bằng app.get(getModelToken(X.name)), chạy lại nhiều lần vẫn đúng. */
 export type Seed = (app: INestApplicationContext) => Promise<void>;
@@ -11,6 +13,8 @@ export type Seed = (app: INestApplicationContext) => Promise<void>;
 export const SEEDS: Record<string, Seed> = {
   roles: seedRoles,
   users: seedUsers,
+  amenities: seedAmenities,
+  'room-types': seedRoomTypes,
   bookings: seedBookings,
   feedback: seedFeedback,
 };

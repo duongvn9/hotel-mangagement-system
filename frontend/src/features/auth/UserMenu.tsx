@@ -5,6 +5,7 @@ import { useAuth } from './auth-context'
 // shortcut: menu tạm theo role, chuyển vào layout theo role khi có H10 (Khoa).
 const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
   MANAGER: [
+    { to: '/manager/room-types', label: 'Loại phòng' },
     { to: '/manager/accounts', label: 'Tài khoản' },
     { to: '/manager/roles', label: 'Vai trò' },
     { to: '/staff/feedback', label: 'Phản hồi' },
@@ -37,12 +38,22 @@ export function UserMenu() {
   }
 
   return (
-    <span className="flex items-center gap-4">
+    <span className="flex flex-wrap items-center gap-4">
       {ROLE_LINKS[me.role]?.map((link) => (
-        <Link key={link.to} to={link.to} className="hover:text-primary">
+        <Link
+          key={link.to}
+          to={link.to}
+          className="inline-flex min-h-11 items-center hover:text-primary"
+        >
           {link.label}
         </Link>
       ))}
+      {(['SERVICE_STAFF', 'OPERATIONS_STAFF'].includes(me.role) ||
+        me.permissions.includes('task:execute')) && (
+        <Link to="/staff/tasks" className="inline-flex min-h-11 items-center hover:text-primary">
+          Công việc được giao
+        </Link>
+      )}
       <Link to="/profile" className="tracking-normal text-pearl-900 normal-case hover:text-primary">
         {me.fullName}
       </Link>
