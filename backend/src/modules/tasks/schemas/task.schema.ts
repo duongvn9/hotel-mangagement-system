@@ -50,3 +50,13 @@ export const TaskSchema = SchemaFactory.createForClass(Task);
 TaskSchema.index({ assignedTo: 1, status: 1 });
 TaskSchema.index({ status: 1 });
 TaskSchema.index({ sourceType: 1, sourceId: 1 });
+TaskSchema.index(
+  { sourceType: 1, sourceId: 1, taskType: 1 },
+  {
+    name: 'unique_active_task_work',
+    unique: true,
+    partialFilterExpression: {
+      status: { $in: [TaskStatus.Assigned, TaskStatus.InProgress] },
+    },
+  },
+);
