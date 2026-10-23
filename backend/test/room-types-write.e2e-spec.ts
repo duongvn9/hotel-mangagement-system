@@ -7,6 +7,8 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
 import { Amenity } from '../src/modules/amenities/schemas/amenity.schema.js';
+import { seedAmenities } from '../src/modules/amenities/seed.js';
+import { seedRoomTypes } from '../src/modules/room-types/seed.js';
 
 describe('UC50 write API', () => {
   let app: INestApplication;
@@ -219,6 +221,44 @@ describe('UC50 write API', () => {
         [active, inactive].includes(row.id),
       ),
     ).toBe(false);
+  });
+  it('retains Manager edits when facility seeds run again', async () => {
+    await seedAmenities(app);
+    await seedRoomTypes(app);
+    const sample = await types.findOne({ name: 'Standard' }).lean();
+    const change = {
+      description: 'UC50 manager edit',
+      capacity: 7,
+      basePrice: 1234567,
+      amenities: [],
+      isActive: false,
+    };
+    await http()
+      .patch('/api/v1/room-types/' + sample!._id)
+      .set(manager)
+      .send(change)
+      .expect(200);
+    await seedAmenities(app);
+    await seedRoomTypes(app);
+    const result = await http()
+      .get('/api/v1/room-types/' + sample!._id)
+      .set(manager)
+      .expect(200);
+    expect(result.body).toMatchObject(change);
+  });
+  it('blocks invalid legacy reactivation but preserves its record on deactivation', async () => {
+    const legacy = await types.collection.insertOne({
+      name: prefix + 'Legacy',
+      description: '',
+      capacity: 0,
+      basePrice: 0,
+      amenities: [],
+      isActive: false,
+    });
+    const path = '/api/v1/room-types/' + legacy.insertedId;
+    await http().patch(path).set(manager).send({ isActive: true }).expect(400);
+    await http().patch(path).set(manager).send({ isActive: false }).expect(200);
+    expect(await types.findById(legacy.insertedId)).not.toBeNull();
   });
   it('documents all write endpoints and DTOs in Swagger', () => {
     const document = SwaggerModule.createDocument(
