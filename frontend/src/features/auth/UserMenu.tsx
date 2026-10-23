@@ -11,6 +11,8 @@ const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
     { to: '/staff/feedback', label: 'Phản hồi' },
   ],
   RECEPTIONIST: [{ to: '/staff/feedback', label: 'Phản hồi' }],
+  SERVICE_STAFF: [{ to: '/staff/service/dashboard', label: 'Bảng điều khiển dịch vụ' }],
+  OPERATIONS_STAFF: [{ to: '/staff/operations/dashboard', label: 'Bảng điều khiển vận hành' }],
 }
 
 /** Góc phải header: link đăng nhập, hoặc tên người dùng + đăng xuất (UC03). */

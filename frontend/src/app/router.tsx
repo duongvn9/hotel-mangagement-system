@@ -5,6 +5,8 @@ import { feedbackRoutes } from '@/features/feedback/routes'
 import { roleRoutes } from '@/features/roles/routes'
 import { roomTypeRoutes } from '@/features/room-types/routes'
 import { taskRoutes } from '@/features/tasks/routes'
+import { staffDashboardRoutes } from '@/features/staff-dashboards/routes'
+
 import { PublicLayout } from '@/layouts/PublicLayout'
 import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
@@ -25,6 +27,8 @@ export const router = createBrowserRouter([
       ...roomTypeRoutes,
       ...feedbackRoutes,
       ...taskRoutes,
+      // TODO(#18): Move staff dashboards into the H10 role layout when available.
+      ...staffDashboardRoutes,
       { path: '*', element: <NotFoundPage /> },
     ],
   },
