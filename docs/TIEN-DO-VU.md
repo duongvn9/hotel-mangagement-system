@@ -6,7 +6,7 @@
 - #64: **MERGED**, PR #16 tại merge commit `4046fe0`; đã kiểm tra local commit này là ancestor của `origin/main`. Merge không đồng nghĩa đã xác nhận integration contract nguồn thật.
 - PR #16: https://github.com/duongvn9/hotel-mangagement-system/pull/16 — đã merge; các giả định mapping collection và tích hợp nguồn vẫn chưa được giải quyết.
 - #66 / PROMPT03 / UC37: **MERGED**, PR #17 tại merge commit `53401ad`; đã xác minh merge. https://github.com/duongvn9/hotel-mangagement-system/pull/17
-- #67 / UC38: **Implemented, pending PR review, không Done** trên `feature/vu-67-task-progress` (tên startup, không dùng tên trailing mâu thuẫn `feature/67-task-progress`). Commit/PR còn pending, parent sẽ thực hiện sau.
+- #67 / UC38: **Implemented, pending PR review, không Done** trên `feature/vu-67-task-progress` (tên startup, không dùng tên trailing mâu thuẫn `feature/67-task-progress`). Commit `3712665` đã push; draft PR #18: https://github.com/duongvn9/hotel-mangagement-system/pull/18 — chờ CI/review, chưa merge.
 - Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET giữ nguyên, UC38 đã có PATCH tiến độ và form detail. Mục 10 là hiện trạng #67; mục 9 lưu lịch sử UC37 trước merge; mục 8 lưu mốc #64 trước merge; mục 4–7 là lịch sử.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
