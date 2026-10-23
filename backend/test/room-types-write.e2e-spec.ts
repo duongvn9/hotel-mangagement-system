@@ -9,6 +9,7 @@ import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js'
 import { Amenity } from '../src/modules/amenities/schemas/amenity.schema.js';
 import { seedAmenities } from '../src/modules/amenities/seed.js';
 import { seedRoomTypes } from '../src/modules/room-types/seed.js';
+import { assertTestDatabase } from './test-database.js';
 
 describe('UC50 write API', () => {
   let app: INestApplication;
@@ -29,8 +30,7 @@ describe('UC50 write API', () => {
   });
   beforeAll(async () => {
     // A dedicated test DB is required; never run cleanup against a development DB.
-    if (!/hms_task29_.*test/.test(process.env.MONGODB_URI ?? ''))
-      throw new Error('Set dedicated hms_task29_*test MONGODB_URI');
+    assertTestDatabase(process.env.MONGODB_URI);
     const module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
