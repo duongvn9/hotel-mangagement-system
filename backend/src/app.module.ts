@@ -20,6 +20,8 @@ import { BookingsModule } from './modules/bookings/bookings.module.js';
 import { InvoicesModule } from './modules/invoices/invoices.module.js';
 import { PaymentsModule } from './modules/payments/payments.module.js';
 import { TasksModule } from './modules/tasks/tasks.module.js';
+import { AmenitiesModule } from './modules/amenities/amenities.module.js';
+import { RoomTypesModule } from './modules/room-types/room-types.module.js';
 
 @Module({
   imports: [
@@ -45,6 +47,8 @@ import { TasksModule } from './modules/tasks/tasks.module.js';
     InvoicesModule,
     PaymentsModule,
     TasksModule,
+    AmenitiesModule,
+    RoomTypesModule,
     // Module nghiệp vụ thêm vào đây, xem src/modules/README.md
   ],
   // Khai báo ở đây (không dùng app.useGlobal* trong main.ts) để test e2e cũng có.

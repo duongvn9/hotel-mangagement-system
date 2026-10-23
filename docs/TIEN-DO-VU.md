@@ -3,10 +3,21 @@
 ## Đọc nhanh
 
 - H8/#64: **Implemented / draft PR pending QA & review**, chưa merge. Branch `feature/H8-task-contract`, commit triển khai `f820ef5`.
-- PR: https://github.com/duongvn9/hotel-mangagement-system/pull/15 — đã push thành công; local checks đã chạy lại sau `npm ci`, CI còn blocker format kế thừa từ base (xem mục 5).
+- PR: https://github.com/duongvn9/hotel-mangagement-system/pull/15 — đã đồng bộ main theo ủy quyền; local format/lint/typecheck/205 unit tests/build PASS. Xem mục 7 để biết kết quả mới; mục 5–6 là lịch sử.
 - Chỉ có schema, DTO, service tạo Task và hàm chuyển trạng thái thuần. Không có controller, UI hoặc endpoint cập nhật trạng thái.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
+
+## 7. Đồng bộ origin/main và xử lý conflict
+
+- Người dùng đã cho phép merge main vào feature; đã fetch và xác nhận working tree sạch trên `feature/H8-task-contract` trước merge.
+- Merge `origin/main@4134194` bằng merge thường, không rebase/reset/force-push, không sửa local main.
+- Chỉ conflict `backend/src/app.module.ts`, tại imports và danh sách module: giữ TasksModule của H8 cùng AmenitiesModule/RoomTypesModule từ main. Không chọn nguyên file ours/theirs; không đổi business rule/public contract.
+- Các sửa formatting `57e572e` và UC49 từ main được giữ. Diff so với main chỉ còn H8, đăng ký TasksModule và tài liệu Vũ; source H8 không thay đổi trong merge.
+- Sau giải quyết: `npm run format:check` PASS, `npm run lint` PASS, `npm run typecheck` PASS, `npm test` PASS (16 files, 205 tests), `npm run build` PASS, `git diff --check` PASS. Nest injection/schema export tests H8 nằm trong unit suite đã pass.
+- Không chạy E2E local vì chưa xác minh được database test cô lập an toàn; CI sẽ chạy với service MongoDB test của workflow. Không dùng DB cấu hình cá nhân để thử.
+- Chờ xác minh GitHub checks sau push. H8 vẫn Implemented / PR pending review, không phải đã merge; nguồn thật và mapping collection cần chủ module xác nhận như mục 3.
+- Không merge PR #15, không triển khai PROMPT 02.
 
 ## 1. Trạng thái task
 
