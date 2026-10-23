@@ -3,6 +3,7 @@ dist/
 coverage/
 *.log
 *.tsbuildinfo
+.task29-validation/
 
 # Biến môi trường: chỉ commit file .example
 .env

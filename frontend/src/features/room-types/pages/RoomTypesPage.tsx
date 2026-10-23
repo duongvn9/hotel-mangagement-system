@@ -8,11 +8,14 @@ import { getErrorMessage } from '@/lib/api-client'
 import { AmenityChips } from '../components/AmenityChips'
 import { useRoomTypes } from '../hooks'
 import type { RoomTypeQuery } from '../api'
+import { RoomTypeEditor } from '../components/RoomTypeForm'
 
 const money = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' })
 
-/** UC49: read-only manager catalog; availability is not date-based physical inventory. */
+/** Manager catalog; availability is not date-based physical inventory. */
 export function RoomTypesPage() {
+  const [editor, setEditor] = useState<{ id: string | null } | null>(null)
+  const [success, setSuccess] = useState(false)
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState<RoomTypeQuery>({ page: 1, limit: 10 })
   useEffect(() => {
@@ -38,6 +41,25 @@ export function RoomTypesPage() {
           Thông tin loại phòng và trạng thái mở đặt phòng.
         </p>
       </div>
+      {success && <Alert tone="success">Đã lưu loại phòng. Danh sách đã được cập nhật.</Alert>}
+      <Button
+        onClick={() => {
+          setSuccess(false)
+          setEditor({ id: null })
+        }}
+      >
+        Thêm loại phòng
+      </Button>
+      {editor && (
+        <RoomTypeEditor
+          id={editor.id}
+          onClose={() => setEditor(null)}
+          onSuccess={() => {
+            setEditor(null)
+            setSuccess(true)
+          }}
+        />
+      )}
       <div role="search" aria-label="Lọc loại phòng" className="grid gap-4 md:grid-cols-2">
         <TextField
           label="Tìm theo tên"
@@ -94,7 +116,7 @@ export function RoomTypesPage() {
                 <caption className="sr-only">Danh sách loại phòng</caption>
                 <thead className="bg-stone-200 text-xs text-stone-700 uppercase">
                   <tr>
-                    {['Tên', 'Mô tả', 'Sức chứa', 'Giá', 'Tiện nghi', 'Trạng thái'].map(
+                    {['Tên', 'Mô tả', 'Sức chứa', 'Giá', 'Tiện nghi', 'Trạng thái', 'Thao tác'].map(
                       (name, index) => (
                         <th
                           key={name}
@@ -127,6 +149,18 @@ export function RoomTypesPage() {
                         <Badge tone={roomType.availableForBooking ? 'success' : 'neutral'}>
                           {roomType.availableForBooking ? 'Có thể đặt' : 'Ngừng đặt'}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-4">
+                        <Button
+                          variant="secondary"
+                          aria-label={`Sửa ${roomType.name}`}
+                          onClick={() => {
+                            setSuccess(false)
+                            setEditor({ id: roomType.id })
+                          }}
+                        >
+                          Sửa
+                        </Button>
                       </td>
                     </tr>
                   ))}
