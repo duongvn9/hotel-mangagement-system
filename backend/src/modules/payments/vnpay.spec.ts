@@ -6,6 +6,8 @@ import { Types } from 'mongoose';
 import { createHmac } from 'node:crypto';
 import { envValidationSchema } from '../../config/env.validation.js';
 import { VNPAY_SANDBOX_URL } from '../../config/vnpay.config.js';
+import { Booking } from '../bookings/schemas/booking.schema.js';
+import { Invoice } from '../invoices/schemas/invoice.schema.js';
 import { PaymentsModule } from './payments.module.js';
 import { PaymentMethod, PaymentPurpose, PaymentStatus, PaymentTransaction } from './schemas/payment-transaction.schema.js';
 import { VnpayService, type ExpectedVnpayPayment } from './vnpay.service.js';
@@ -37,7 +39,9 @@ function callback(changes: Record<string, string | undefined>): string {
 }
 async function moduleFor(config: unknown = settings) {
   return Test.createTestingModule({ imports: [ConfigModule.forRoot({ ignoreEnvFile: true, ignoreEnvVars: true, load: [() => ({ vnpay: config })] }), PaymentsModule] })
-    .overrideProvider(getModelToken(PaymentTransaction.name)).useValue({}).compile();
+    .overrideProvider(getModelToken(PaymentTransaction.name)).useValue({})
+    .overrideProvider(getModelToken(Booking.name)).useValue({})
+    .overrideProvider(getModelToken(Invoice.name)).useValue({}).compile();
 }
 
 describe('VNPay protocol reference vectors', () => {
