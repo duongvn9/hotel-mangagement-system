@@ -1,7 +1,13 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { useAuth } from '@/features/auth/auth-context'
-import { getAssignedTask, listAssignedTasks, type TaskQuery } from './api'
+import {
+  getAssignedTask,
+  listAssignedTasks,
+  updateTaskProgress,
+  type TaskProgressInput,
+  type TaskQuery,
+} from './api'
 
 function retryTask(failureCount: number, error: unknown) {
   const status = isAxiosError(error) ? error.response?.status : undefined
@@ -16,6 +22,29 @@ export function useAssignedTasks(query: TaskQuery) {
     queryFn: () => listAssignedTasks(query),
     enabled: Boolean(me),
     retry: retryTask,
+  })
+}
+
+export function useUpdateTaskProgress(id: string) {
+  const { me } = useAuth()
+  const client = useQueryClient()
+  const detailKey = ['assigned-task', me?.id, id]
+  const refresh = () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: detailKey, exact: true }),
+      client.invalidateQueries({ queryKey: ['assigned-tasks', me?.id] }),
+    ])
+
+  return useMutation({
+    mutationFn: (input: TaskProgressInput) => updateTaskProgress(id, input),
+    retry: false,
+    onSuccess: async (task) => {
+      client.setQueryData(detailKey, task)
+      await refresh()
+    },
+    onError: async (error) => {
+      if (isAxiosError(error) && error.response?.status === 409) await refresh()
+    },
   })
 }
 

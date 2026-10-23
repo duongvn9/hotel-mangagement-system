@@ -1,4 +1,7 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { useEffect } from 'react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { AssignedTaskDetailPage } from './pages/AssignedTaskDetailPage'
 import { AxiosError, type AxiosResponse } from 'axios'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { UserMenu } from '@/features/auth/UserMenu'
@@ -8,7 +11,7 @@ import type { AssignedTask, TaskList } from './api'
 
 vi.mock('@/lib/api-client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/api-client')>()
-  return { ...original, api: { get: vi.fn() } }
+  return { ...original, api: { get: vi.fn(), patch: vi.fn() } }
 })
 
 const task: AssignedTask = {
@@ -24,6 +27,7 @@ const task: AssignedTask = {
 }
 const list: TaskList = { items: [task], total: 1, page: 1, limit: 20 }
 const get = vi.mocked(api.get)
+const patch = vi.mocked(api.patch)
 
 function renderTasks(path = '/staff/tasks', role = 'SERVICE_STAFF', permissions: string[] = []) {
   return renderWithAuth([...taskRoutes, { path: '/login', element: <p>Đăng nhập</p> }], {
@@ -43,6 +47,7 @@ function rejectStatus(status: number) {
 
 beforeEach(() => {
   get.mockReset()
+  patch.mockReset()
 })
 
 it.each(['SERVICE_STAFF', 'OPERATIONS_STAFF', 'CUSTOM_ROLE'])(
@@ -158,6 +163,193 @@ it('renders detail and trace-only missing source without mutations', async () =>
   expect(screen.getByText(/Thông tin nguồn hiện không khả dụng/)).toBeInTheDocument()
   expect(screen.getAllByRole('link')).toHaveLength(1)
   expect(screen.queryByRole('button')).not.toBeInTheDocument()
+})
+
+it('starts only after detail loads, prevents double submission and renders authoritative progress', async () => {
+  let resolve!: (value: { data: AssignedTask }) => void
+  get.mockResolvedValueOnce({ data: task })
+  patch.mockReturnValue(
+    new Promise((done) => {
+      resolve = done
+    }),
+  )
+  renderTasks('/staff/tasks/task-1')
+  const start = await screen.findByRole('button', { name: 'Bắt đầu công việc' })
+  fireEvent.click(start)
+  fireEvent.click(start)
+  await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+  expect(patch).toHaveBeenCalledWith('/tasks/task-1/progress', { status: 'IN_PROGRESS' })
+  expect(start).toBeDisabled()
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  const started: AssignedTask = { ...task, status: 'IN_PROGRESS' }
+  get.mockResolvedValue({ data: started })
+  await act(async () => resolve({ data: started }))
+  expect(await screen.findByRole('textbox')).toBeInTheDocument()
+  expect(await screen.findByText('Đã cập nhật tiến độ công việc.')).toBeInTheDocument()
+  expect(get).toHaveBeenCalledTimes(2)
+  expect(screen.queryByRole('button', { name: 'Bắt đầu công việc' })).not.toBeInTheDocument()
+})
+
+it.each(['', '   ', 'a'.repeat(2001)])(
+  'validates required and maximum completion result (%#. case)',
+  async (value) => {
+    get.mockResolvedValue({ data: { ...task, status: 'IN_PROGRESS' } })
+    renderTasks('/staff/tasks/task-1')
+    const input = await screen.findByRole('textbox')
+    fireEvent.change(input, { target: { value } })
+    fireEvent.click(screen.getByRole('button', { name: 'Hoàn thành công việc' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('từ 1 đến 2000 ký tự')
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(patch).not.toHaveBeenCalled()
+  },
+)
+
+it('completes with trimmed 2000-character result and becomes read-only without replay', async () => {
+  const result = 'a'.repeat(2000)
+  const completed: AssignedTask = {
+    ...task,
+    status: 'COMPLETED',
+    workResult: result,
+    completedAt: '2026-10-23T09:00:00Z',
+  }
+  get
+    .mockResolvedValueOnce({ data: { ...task, status: 'IN_PROGRESS' } })
+    .mockResolvedValue({ data: completed })
+  patch.mockResolvedValue({ data: completed })
+  renderTasks('/staff/tasks/task-1')
+  fireEvent.change(await screen.findByRole('textbox'), { target: { value: `  ${result}  ` } })
+  fireEvent.click(screen.getByRole('button', { name: 'Hoàn thành công việc' }))
+  expect(await screen.findByText('Đã cập nhật tiến độ công việc.')).toBeInTheDocument()
+  expect(patch).toHaveBeenCalledExactlyOnceWith('/tasks/task-1/progress', {
+    status: 'COMPLETED',
+    workResult: result,
+  })
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  expect(screen.getByText(result)).toBeInTheDocument()
+  expect(get).toHaveBeenCalledTimes(2)
+})
+
+it.each([400, 403, 404, 409, 500])(
+  'handles update %s without automatic mutation retry',
+  async (status) => {
+    get
+      .mockResolvedValueOnce({ data: task })
+      .mockResolvedValue({ data: { ...task, status: 'COMPLETED', workResult: 'Đã xử lý' } })
+    patch.mockRejectedValue(
+      new AxiosError('Rejected', undefined, undefined, undefined, {
+        status,
+        data: {},
+      } as AxiosResponse),
+    )
+    renderTasks('/staff/tasks/task-1')
+    fireEvent.click(await screen.findByRole('button', { name: 'Bắt đầu công việc' }))
+    const messages: Record<number, string> = {
+      400: 'Dữ liệu cập nhật không hợp lệ',
+      403: 'Bạn không có quyền',
+      404: 'Không tìm thấy công việc',
+      409: 'Trạng thái công việc đã thay đổi',
+      500: 'Không thể cập nhật công việc',
+    }
+    expect(await screen.findByRole('alert')).toHaveTextContent(messages[status]!)
+    expect(patch).toHaveBeenCalledTimes(1)
+    if (status === 409) {
+      expect(get).toHaveBeenCalledTimes(2)
+      expect(await screen.findByText('Đã xử lý')).toBeInTheDocument()
+      expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    } else {
+      expect(get).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('button', { name: 'Bắt đầu công việc' })).toHaveProperty(
+        'disabled',
+        status === 403 || status === 404,
+      )
+    }
+  },
+)
+
+it('disables completion input and prevents duplicate submissions while pending', async () => {
+  let resolve!: (value: { data: AssignedTask }) => void
+  get.mockResolvedValue({ data: { ...task, status: 'IN_PROGRESS' } })
+  patch.mockReturnValue(
+    new Promise((done) => {
+      resolve = done
+    }),
+  )
+  renderTasks('/staff/tasks/task-1')
+  const input = await screen.findByRole('textbox')
+  fireEvent.change(input, { target: { value: 'Đã xử lý' } })
+  const button = screen.getByRole('button', { name: 'Hoàn thành công việc' })
+  fireEvent.click(button)
+  fireEvent.click(button)
+  await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+  expect(input).toBeDisabled()
+  expect(button).toBeDisabled()
+  expect(screen.getByText('Đang thực hiện')).toBeInTheDocument()
+  const completed: AssignedTask = { ...task, status: 'COMPLETED', workResult: 'Đã xử lý' }
+  get.mockResolvedValue({ data: completed })
+  await act(async () => resolve({ data: completed }))
+  expect(await screen.findByText('Đã cập nhật tiến độ công việc.')).toBeInTheDocument()
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+})
+
+it('keeps result after a completion error and allows explicit retry', async () => {
+  const started = { ...task, status: 'IN_PROGRESS' }
+  get.mockResolvedValue({ data: started })
+  patch.mockRejectedValueOnce(
+    new AxiosError('Invalid', undefined, undefined, undefined, {
+      status: 400,
+      data: {},
+    } as AxiosResponse),
+  )
+  renderTasks('/staff/tasks/task-1')
+  fireEvent.change(await screen.findByRole('textbox'), { target: { value: ' Đã sửa ' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Hoàn thành công việc' }))
+  await screen.findByRole('alert')
+  expect(screen.getByRole('textbox')).toHaveValue(' Đã sửa ')
+  const completed = { ...task, status: 'COMPLETED', workResult: 'Đã sửa' }
+  get.mockResolvedValue({ data: completed })
+  patch.mockResolvedValue({ data: completed })
+  fireEvent.click(screen.getByRole('button', { name: 'Hoàn thành công việc' }))
+  await screen.findByText('Đã cập nhật tiến độ công việc.')
+  expect(patch).toHaveBeenCalledTimes(2)
+})
+
+it('invalidates only the current user detail and lists after success', async () => {
+  let client!: QueryClient
+  function Detail() {
+    const queryClient = useQueryClient()
+    useEffect(() => {
+      client = queryClient
+    }, [queryClient])
+    return <AssignedTaskDetailPage />
+  }
+  const started = { ...task, status: 'IN_PROGRESS' }
+  get.mockResolvedValueOnce({ data: task }).mockResolvedValue({ data: started })
+  patch.mockResolvedValue({ data: started })
+  renderWithAuth([{ path: '/staff/tasks/:id', element: <Detail /> }], {
+    path: '/staff/tasks/task-1',
+    auth: { status: 'authenticated', me: { ...ME, role: 'SERVICE_STAFF' } },
+  })
+  const start = await screen.findByRole('button', { name: 'Bắt đầu công việc' })
+  client.setQueryData(['assigned-tasks', ME.id, { page: 1 }], list)
+  client.setQueryData(['assigned-tasks', ME.id, { status: 'ASSIGNED' }], list)
+  client.setQueryData(['assigned-tasks', 'other', { page: 1 }], list)
+  client.setQueryData(['assigned-task', 'other', task.id], task)
+  const invalidate = vi.spyOn(client, 'invalidateQueries')
+  fireEvent.click(start)
+  await screen.findByText('Đã cập nhật tiến độ công việc.')
+  expect(invalidate).toHaveBeenCalledWith({
+    queryKey: ['assigned-task', ME.id, task.id],
+    exact: true,
+  })
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['assigned-tasks', ME.id] })
+  expect(client.getQueryState(['assigned-tasks', ME.id, { page: 1 }])?.isInvalidated).toBe(true)
+  expect(
+    client.getQueryState(['assigned-tasks', ME.id, { status: 'ASSIGNED' }])?.isInvalidated,
+  ).toBe(true)
+  expect(client.getQueryState(['assigned-tasks', 'other', { page: 1 }])?.isInvalidated).toBe(false)
+  expect(client.getQueryState(['assigned-task', 'other', task.id])?.isInvalidated).toBe(false)
+  expect(get).toHaveBeenCalledTimes(2)
 })
 
 it('shows a forbidden list error and disables retry', async () => {

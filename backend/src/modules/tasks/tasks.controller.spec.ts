@@ -68,11 +68,22 @@ describe('UC37 isolated HTTP with real authentication and role guards', () => {
   const find = vi.fn((filter: Record<string, any>) =>
     queryChain(records.filter((row) => matches(row, filter))),
   );
-  const findOne = vi.fn((filter: Record<string, any>) => ({
-    select: vi.fn(() => ({
+  const findOne = vi.fn((filter: Record<string, any>) => {
+    const chain = {
+      select: vi.fn(() => chain),
       lean: async () => records.find((row) => matches(row, filter)) ?? null,
-    })),
-  }));
+    };
+    return chain;
+  });
+  const findOneAndUpdate = vi.fn(
+    async (filter: Record<string, any>, update: any) => {
+      const row = records.find((item) => matches(item, filter));
+      if (!row) return null;
+      Object.assign(row, update.$set);
+      return row;
+    },
+  );
+  const createIndex = vi.fn(async () => 'unique_active_task_work');
   const countDocuments = vi.fn(
     async (filter: Record<string, any>) =>
       records.filter((row) => matches(row, filter)).length,
@@ -85,7 +96,14 @@ describe('UC37 isolated HTTP with real authentication and role guards', () => {
       ? { _id: 'role' }
       : null,
   );
+  let transitionRole = 'SERVICE_STAFF';
   const users = {
+    findById: vi.fn((id: string) => ({
+      lean: async () => ({
+        role: id === String(bob) ? 'OPERATIONS_STAFF' : transitionRole,
+        isActive: true,
+      }),
+    })),
     findOne: vi.fn(({ firebaseUid }: { firebaseUid: string }) => ({
       lean: async () => ({
         _id: firebaseUid === 'bob' ? bob : alice,
@@ -112,7 +130,13 @@ describe('UC37 isolated HTTP with real authentication and role guards', () => {
         TasksService,
         {
           provide: getModelToken(Task.name),
-          useValue: { find, findOne, countDocuments },
+          useValue: {
+            find,
+            findOne,
+            countDocuments,
+            findOneAndUpdate,
+            collection: { createIndex },
+          },
         },
         { provide: getModelToken(User.name), useValue: users },
         { provide: getModelToken(Role.name), useValue: { exists: roleExists } },
@@ -148,6 +172,10 @@ describe('UC37 isolated HTTP with real authentication and role guards', () => {
   });
   beforeEach(() => {
     vi.clearAllMocks();
+    transitionRole = 'SERVICE_STAFF';
+    records[0].status = TaskStatus.Assigned;
+    delete records[0].workResult;
+    delete records[0].completedAt;
   });
   const get = (path = '/tasks/me', actor = 'alice') =>
     request(app.getHttpServer()).get(path).auth(actor, { type: 'bearer' });
@@ -307,6 +335,100 @@ describe('UC37 isolated HTTP with real authentication and role guards', () => {
     expect(res.body.items[0]).not.toHaveProperty('secret');
     expect(res.body.items[0]).not.toHaveProperty('assignedTo');
     expect(sourceAccess).not.toHaveBeenCalled();
+  });
+
+  const patch = (body: unknown, actor = 'alice', id = String(taskId)) =>
+    request(app.getHttpServer())
+      .patch(`/tasks/${id}/progress`)
+      .auth(actor, { type: 'bearer' })
+      .send(body as object);
+
+  it('UC38 enforces real authentication, roles and private ownership', async () => {
+    await request(app.getHttpServer())
+      .patch(`/tasks/${taskId}/progress`)
+      .send({ status: 'IN_PROGRESS' })
+      .expect(401);
+    await patch({ status: 'IN_PROGRESS' }, 'invalid').expect(401);
+    for (const actor of ['denied', 'manager'])
+      await patch({ status: 'IN_PROGRESS' }, actor).expect(403);
+    for (const id of [String(otherId), String(new Types.ObjectId()), 'bad'])
+      await patch({ status: 'IN_PROGRESS' }, 'alice', id).expect(404);
+    expect(findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {},
+    { status: 'ASSIGNED' },
+    { status: 'PENDING' },
+    { status: ['IN_PROGRESS'] },
+    { status: 'COMPLETED' },
+    { status: 'COMPLETED', workResult: ' ' },
+    { status: 'COMPLETED', workResult: null },
+    { status: 'COMPLETED', workResult: 42 },
+    { status: 'COMPLETED', workResult: 'x'.repeat(2001) },
+    { status: 'IN_PROGRESS', workResult: 'premature' },
+    ...[
+      'expectedStatus',
+      'assignedTo',
+      'assigneeId',
+      'source',
+      'sourceType',
+      'sourceId',
+      'completedAt',
+      'actorUserId',
+    ].map((key) => ({ status: 'IN_PROGRESS', [key]: 'injected' })),
+  ])('UC38 rejects invalid progress %j', async (body) => {
+    await patch(body).expect(400);
+    expect(findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('UC38 starts and completes with safe serialization and immutable references', async () => {
+    await patch({ status: 'COMPLETED', workResult: 'skip' }).expect(409);
+    const start = await patch({ status: 'IN_PROGRESS' }).expect(200);
+    expect(start.body).toMatchObject({
+      id: String(taskId),
+      status: 'IN_PROGRESS',
+      sourceId: String(sourceId),
+      sourceSummary: null,
+    });
+    expect(start.body).not.toHaveProperty('completedAt');
+    expect(start.body).not.toHaveProperty('assignedTo');
+    expect(start.body).not.toHaveProperty('secret');
+    await patch({ status: 'IN_PROGRESS' }).expect(409);
+    const complete = await patch({
+      status: 'COMPLETED',
+      workResult: ' Resolved ',
+    }).expect(200);
+    expect(complete.body.workResult).toBe('Resolved');
+    expect(complete.body.completedAt).toMatch(/Z$/);
+    expect(records[0].assignedTo).toEqual(alice);
+    expect(records[0].sourceId).toEqual(sourceId);
+    await patch({ status: 'COMPLETED', workResult: 'replay' }).expect(409);
+    await patch({ status: 'IN_PROGRESS' }).expect(409);
+    expect(sourceAccess).not.toHaveBeenCalled();
+  });
+
+  it('UC38 permits an active custom executor only on own tasks', async () => {
+    transitionRole = 'CUSTOM_EXECUTOR';
+    await patch({ status: 'IN_PROGRESS' }, 'custom').expect(200);
+    await patch({ status: 'IN_PROGRESS' }, 'custom', String(otherId)).expect(
+      404,
+    );
+    expect(roleExists).toHaveBeenCalledWith({
+      code: 'CUSTOM_EXECUTOR',
+      isActive: true,
+      permissions: { $all: ['task:execute'] },
+    });
+  });
+
+  it('UC38 allows only one concurrent start and completion', async () => {
+    for (const body of [
+      { status: 'IN_PROGRESS' },
+      { status: 'COMPLETED', workResult: 'x'.repeat(2000) },
+    ]) {
+      const responses = await Promise.all([patch(body), patch(body)]);
+      expect(responses.map((res) => res.status).sort()).toEqual([200, 409]);
+    }
   });
 
   it('does not expose progress mutation routes', async () => {
