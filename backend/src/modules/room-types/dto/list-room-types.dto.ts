@@ -1,6 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class ListRoomTypesQuery {
   @ApiPropertyOptional({ description: 'Literal case-insensitive name search' })
@@ -11,7 +20,9 @@ export class ListRoomTypesQuery {
 
   @ApiPropertyOptional({ type: Boolean })
   @IsOptional()
-  @Transform(({ value }) => value === 'true' ? true : value === 'false' ? false : value)
+  @Transform(({ value }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
   @IsBoolean()
   isActive?: boolean;
 
@@ -28,7 +39,10 @@ export class ListRoomTypesQuery {
   @Max(100)
   limit = 10;
 
-  @ApiPropertyOptional({ enum: ['name', 'basePrice', 'capacity'], default: 'name' })
+  @ApiPropertyOptional({
+    enum: ['name', 'basePrice', 'capacity'],
+    default: 'name',
+  })
   @IsIn(['name', 'basePrice', 'capacity'])
   sortBy: 'name' | 'basePrice' | 'capacity' = 'name';
 

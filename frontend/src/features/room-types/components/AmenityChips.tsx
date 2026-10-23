@@ -6,7 +6,9 @@ export function AmenityChips({ amenities }: Pick<RoomType, 'amenities'>) {
   return (
     <div className="flex flex-wrap gap-2">
       {amenities.slice(0, 3).map((amenity) => (
-        <Badge key={amenity.id} tone="neutral">{amenity.name}</Badge>
+        <Badge key={amenity.id} tone="neutral">
+          {amenity.name}
+        </Badge>
       ))}
       {amenities.length > 3 && (
         <details className="text-stone-700">
@@ -14,7 +16,11 @@ export function AmenityChips({ amenities }: Pick<RoomType, 'amenities'>) {
             +{amenities.length - 3} tiện nghi
           </summary>
           <div className="flex flex-wrap gap-2">
-            {amenities.slice(3).map((amenity) => <Badge key={amenity.id} tone="neutral">{amenity.name}</Badge>)}
+            {amenities.slice(3).map((amenity) => (
+              <Badge key={amenity.id} tone="neutral">
+                {amenity.name}
+              </Badge>
+            ))}
           </div>
         </details>
       )}

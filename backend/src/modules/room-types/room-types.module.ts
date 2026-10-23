@@ -6,7 +6,12 @@ import { RoomTypesController } from './room-types.controller.js';
 import { RoomTypesService } from './room-types.service.js';
 
 @Module({
-  imports: [AmenitiesModule, MongooseModule.forFeature([{ name: RoomType.name, schema: RoomTypeSchema }])],
+  imports: [
+    AmenitiesModule,
+    MongooseModule.forFeature([
+      { name: RoomType.name, schema: RoomTypeSchema },
+    ]),
+  ],
   controllers: [RoomTypesController],
   providers: [RoomTypesService],
   exports: [MongooseModule, RoomTypesService],

@@ -30,7 +30,10 @@ export class RoomTypeResponse {
   @ApiProperty()
   isActive: boolean;
 
-  @ApiProperty({ description: 'Derived validity and active flag, not date-based room inventory' })
+  @ApiProperty({
+    description:
+      'Derived validity and active flag, not date-based room inventory',
+  })
   availableForBooking: boolean;
 }
 
