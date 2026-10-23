@@ -7,7 +7,8 @@ export { BookingStatus };
 export type BookingDocument = HydratedDocument<Booking>;
 
 export const validRooms = (rooms: Types.ObjectId[]): boolean =>
-  Array.isArray(rooms) && rooms.length > 0 &&
+  Array.isArray(rooms) &&
+  rooms.length > 0 &&
   rooms.every((room) => room instanceof Types.ObjectId) &&
   new Set(rooms.map(String)).size === rooms.length;
 
@@ -28,19 +29,33 @@ export class Booking {
   @Prop({ required: true, trim: true })
   guestPhone: string;
 
-  @Prop({ type: [{ type: Types.ObjectId, ref: 'Room' }], required: true, validate: validRooms })
+  @Prop({
+    type: [{ type: Types.ObjectId, ref: 'Room' }],
+    required: true,
+    validate: validRooms,
+  })
   rooms: Types.ObjectId[];
 
   @Prop({ required: true })
   checkIn: Date;
 
-  @Prop({ required: true, validate: function (this: Booking, value: Date) { return value > this.checkIn; } })
+  @Prop({
+    required: true,
+    validate: function (this: Booking, value: Date) {
+      return value > this.checkIn;
+    },
+  })
   checkOut: Date;
 
   @Prop({ required: true, min: 1, validate: Number.isSafeInteger })
   guests: number;
 
-  @Prop({ type: String, enum: BookingStatus, required: true, default: BookingStatus.PendingDeposit })
+  @Prop({
+    type: String,
+    enum: BookingStatus,
+    required: true,
+    default: BookingStatus.PendingDeposit,
+  })
   status: BookingStatus;
 
   @Prop({ required: true, validate: isMoneyVnd })
@@ -63,5 +78,11 @@ export class Booking {
 }
 
 export const BookingSchema = SchemaFactory.createForClass(Booking);
-BookingSchema.index({ rooms: 1, status: 1, checkIn: 1, checkOut: 1, isActive: 1 });
+BookingSchema.index({
+  rooms: 1,
+  status: 1,
+  checkIn: 1,
+  checkOut: 1,
+  isActive: 1,
+});
 BookingSchema.index({ customer: 1, createdAt: -1 });

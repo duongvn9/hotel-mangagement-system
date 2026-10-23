@@ -9,10 +9,15 @@ export const seedBookings: Seed = async (app) => {
   const users = app.get<Model<User>>(getModelToken(User.name));
   const bookings = app.get<Model<Booking>>(getModelToken(Booking.name));
   const connection = app.get<Connection>(getConnectionToken());
-  const customer = await users.findOne({ email: 'customer@hms.local', isActive: true }).lean();
+  const customer = await users
+    .findOne({ email: 'customer@hms.local', isActive: true })
+    .lean();
   const room = await connection.collection('rooms').findOne({ isActive: true });
   if (!customer || !room || !(room._id instanceof Types.ObjectId)) {
-    Logger.log('Skipping bookings: an active sample customer and Room are required', 'Seed');
+    Logger.log(
+      'Skipping bookings: an active sample customer and Room are required',
+      'Seed',
+    );
     return;
   }
   const sample = new bookings({
@@ -32,5 +37,9 @@ export const seedBookings: Seed = async (app) => {
   });
   await sample.validate();
   const { _id, ...data } = sample.toObject();
-  await bookings.updateOne({ code: sample.code }, { $setOnInsert: data }, { upsert: true });
+  await bookings.updateOne(
+    { code: sample.code },
+    { $setOnInsert: data },
+    { upsert: true },
+  );
 };

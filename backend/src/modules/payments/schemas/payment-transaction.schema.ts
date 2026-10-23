@@ -41,7 +41,12 @@ export class PaymentTransaction {
   @Prop({ type: String, required: true, enum: PaymentPurpose })
   purpose: PaymentPurpose;
 
-  @Prop({ type: String, required: true, enum: PaymentStatus, default: PaymentStatus.Pending })
+  @Prop({
+    type: String,
+    required: true,
+    enum: PaymentStatus,
+    default: PaymentStatus.Pending,
+  })
   status: PaymentStatus;
 
   @Prop({ required: true, validate: isMoneyVnd })
@@ -54,8 +59,12 @@ export class PaymentTransaction {
   isActive: boolean;
 }
 
-export const PaymentTransactionSchema = SchemaFactory.createForClass(PaymentTransaction);
+export const PaymentTransactionSchema =
+  SchemaFactory.createForClass(PaymentTransaction);
 PaymentTransactionSchema.index(
   { method: 1, providerTransactionRef: 1 },
-  { unique: true, partialFilterExpression: { providerTransactionRef: { $type: 'string' } } },
+  {
+    unique: true,
+    partialFilterExpression: { providerTransactionRef: { $type: 'string' } },
+  },
 );

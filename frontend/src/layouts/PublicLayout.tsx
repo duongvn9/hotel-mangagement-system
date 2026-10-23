@@ -8,11 +8,11 @@ export function PublicLayout() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-stone-300 bg-cream-50">
-        <div className="mx-auto flex h-16 max-w-container items-center justify-between px-4">
+        <div className="mx-auto flex min-h-16 max-w-container flex-wrap items-center justify-between gap-4 px-4 py-3">
           <Link to="/" className="font-display text-2xl font-semibold text-pearl-900">
             {env.appName}
           </Link>
-          <nav className="flex items-center gap-6 text-sm font-medium tracking-wide text-stone-700 uppercase">
+          <nav className="flex flex-wrap items-center gap-6 text-sm font-medium tracking-wide text-stone-700 uppercase">
             <Link to="/" className="hover:text-primary">
               Trang chủ
             </Link>

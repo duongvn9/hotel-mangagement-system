@@ -3,6 +3,7 @@ import { accountRoutes } from '@/features/accounts/routes'
 import { authRoutes } from '@/features/auth/routes'
 import { feedbackRoutes } from '@/features/feedback/routes'
 import { roleRoutes } from '@/features/roles/routes'
+import { roomTypeRoutes } from '@/features/room-types/routes'
 import { PublicLayout } from '@/layouts/PublicLayout'
 import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
       ...authRoutes,
       ...accountRoutes,
       ...roleRoutes,
+      ...roomTypeRoutes,
       ...feedbackRoutes,
       { path: '*', element: <NotFoundPage /> },
     ],
