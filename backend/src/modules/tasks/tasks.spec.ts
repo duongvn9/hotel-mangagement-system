@@ -471,6 +471,45 @@ describe('H8 task contract', () => {
     },
   );
 
+  it.each([
+    ['CUSTOM_EXECUTOR', true, true, true],
+    ['CUSTOM_EXECUTOR', true, false, false],
+    ['CUSTOM_EXECUTOR', false, true, false],
+    ['MANAGER', true, true, false],
+    ['OPERATIONS_STAFF', true, true, false],
+  ] as const)(
+    'transition eligibility %s active=%s permission=%s allowed=%s',
+    async (role, active, permission, allowed) => {
+      const { service, roles, tasks } = setup(role, active);
+      roles.exists.mockResolvedValue(permission ? { _id: ID } : null);
+      const operation = service.transitionAssignedTask(
+        ID,
+        ID,
+        TaskStatus.Assigned,
+        TaskStatus.InProgress,
+      );
+      if (allowed) await expect(operation).resolves.toBeDefined();
+      else {
+        await expect(operation).rejects.toThrow(BadRequestException);
+        expect(tasks.findOneAndUpdate).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it('bounds trimmed completion work result in the core', async () => {
+    const { service, tasks } = setup();
+    await expect(
+      service.transitionAssignedTask(
+        ID,
+        ID,
+        TaskStatus.InProgress,
+        TaskStatus.Completed,
+        'x'.repeat(2001),
+      ),
+    ).rejects.toThrow('Work result must not exceed 2000 characters');
+    expect(tasks.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
   it('rejects a concurrent status or assignee change at the final CAS', async () => {
     const { service, tasks } = setup();
     tasks.findOneAndUpdate.mockResolvedValue(null);

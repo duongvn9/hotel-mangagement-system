@@ -1,7 +1,7 @@
 import { VersioningType, type INestApplication } from '@nestjs/common';
-import { getModelToken } from '@nestjs/mongoose';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
-import { Types, type Model } from 'mongoose';
+import { Types, type Model, type Connection } from 'mongoose';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { ID_TOKEN_VERIFIER } from '../src/modules/auth/firebase.module.js';
@@ -18,6 +18,8 @@ describe('UC37 tasks (Mongo e2e)', () => {
   let tasks: Model<Task>;
   let users: Model<User>;
   let roles: Model<Role>;
+  let connection: Connection;
+  const issueId = new Types.ObjectId();
   const userIds = [
     new Types.ObjectId(),
     new Types.ObjectId(),
@@ -53,6 +55,10 @@ describe('UC37 tasks (Mongo e2e)', () => {
     tasks = app.get(getModelToken(Task.name));
     users = app.get(getModelToken(User.name));
     roles = app.get(getModelToken(Role.name));
+    connection = app.get(getConnectionToken());
+    await connection
+      .collection('issues')
+      .insertOne({ _id: issueId, status: 'OPEN', marker: tokenPrefix });
     await roles.create({
       _id: roleId,
       code: customRole,
@@ -80,8 +86,13 @@ describe('UC37 tasks (Mongo e2e)', () => {
         taskType: 'SERVICE',
         priority: 'NORMAL',
         status: TaskStatus.Assigned,
-        sourceType: TaskSourceType.ServiceOrder,
-        sourceId: new Types.ObjectId(),
+        sourceType:
+          i === 0
+            ? TaskSourceType.Issue
+            : i === 1
+              ? TaskSourceType.Maintenance
+              : TaskSourceType.ServiceOrder,
+        sourceId: i === 0 ? issueId : new Types.ObjectId(),
       })),
     );
   });
@@ -91,6 +102,8 @@ describe('UC37 tasks (Mongo e2e)', () => {
       if (tasks) await tasks.deleteMany({ _id: { $in: taskIds } });
       if (users) await users.deleteMany({ _id: { $in: userIds } });
       if (roles) await roles.deleteMany({ _id: roleId });
+      if (connection)
+        await connection.collection('issues').deleteOne({ _id: issueId });
     } finally {
       await app?.close();
     }
@@ -139,6 +152,90 @@ describe('UC37 tasks (Mongo e2e)', () => {
       { status: 'INVALID' },
     ])
       await get().query(query).expect(400);
+  });
+
+  const patch = (body: object, actor = 0, id = String(taskIds[actor])) =>
+    request(app.getHttpServer())
+      .patch(`/api/v1/tasks/${id}/progress`)
+      .auth(`${tokenPrefix}-${actor}`, { type: 'bearer' })
+      .send(body);
+
+  it('UC38 rejects unauthorized, foreign and invalid progress requests', async () => {
+    await request(app.getHttpServer())
+      .patch(`/api/v1/tasks/${taskIds[0]}/progress`)
+      .send({ status: 'IN_PROGRESS' })
+      .expect(401);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/tasks/${taskIds[0]}/progress`)
+      .set({ 'x-dev-role': 'MANAGER', 'x-dev-user-id': String(userIds[0]) })
+      .send({ status: 'IN_PROGRESS' })
+      .expect(403);
+    for (const id of [String(taskIds[1]), String(new Types.ObjectId()), 'bad'])
+      await patch({ status: 'IN_PROGRESS' }, 0, id).expect(404);
+    for (const body of [
+      { status: 'ASSIGNED' },
+      { status: 'INVALID' },
+      { status: 'COMPLETED' },
+      { status: 'COMPLETED', workResult: ' ' },
+      { status: 'COMPLETED', workResult: null },
+      { status: 'COMPLETED', workResult: 'x'.repeat(2001) },
+      { status: 'IN_PROGRESS', workResult: 'premature' },
+      ...[
+        'expectedStatus',
+        'assigneeId',
+        'assignedTo',
+        'sourceId',
+        'sourceType',
+        'completedAt',
+      ].map((key) => ({ status: 'IN_PROGRESS', [key]: 'injected' })),
+    ])
+      await patch(body).expect(400);
+    await patch({ status: 'COMPLETED', workResult: 'skip' }).expect(409);
+  });
+
+  it('UC38 real Mongo CAS permits only one start/completion, including custom own tasks; never closes source issue', async () => {
+    const issueBefore = await connection
+      .collection('issues')
+      .findOne({ _id: issueId });
+    for (let actor = 0; actor < 3; actor++) {
+      const before = await tasks.findById(taskIds[actor]).lean();
+      for (const body of [
+        { status: 'IN_PROGRESS' },
+        { status: 'COMPLETED', workResult: ` ${'x'.repeat(2000)} ` },
+      ]) {
+        const responses = await Promise.all([
+          patch(body, actor),
+          patch(body, actor),
+        ]);
+        expect(responses.map((res) => res.status).sort()).toEqual([200, 409]);
+        const success = responses.find((res) => res.status === 200)!;
+        expect(success.body).toEqual(
+          (await get(`/api/v1/tasks/${taskIds[actor]}`, actor).expect(200))
+            .body,
+        );
+        expect(success.body).not.toHaveProperty('assignedTo');
+        if (body.status === 'IN_PROGRESS')
+          expect(success.body).not.toHaveProperty('completedAt');
+        else {
+          expect(success.body.workResult).toBe('x'.repeat(2000));
+          expect(success.body.completedAt).toMatch(/Z$/);
+        }
+      }
+      await patch({ status: 'COMPLETED', workResult: 'replay' }, actor).expect(
+        409,
+      );
+      await patch({ status: 'IN_PROGRESS' }, actor).expect(409);
+      const after = await tasks.findById(taskIds[actor]).lean();
+      expect(after).toMatchObject({
+        assignedTo: before!.assignedTo,
+        sourceId: before!.sourceId,
+        sourceType: before!.sourceType,
+        assignedAt: before!.assignedAt,
+      });
+    }
+    expect(
+      await connection.collection('issues').findOne({ _id: issueId }),
+    ).toEqual(issueBefore);
   });
 
   it('enforces 401/403 and returns 404 for missing tasks', async () => {

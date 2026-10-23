@@ -12,6 +12,7 @@ import { Role as StaffRole } from '../../common/constants/role.enum.js';
 import { Role } from '../roles/schemas/role.schema.js';
 import { User } from '../users/schemas/user.schema.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
+import { UpdateTaskProgressDto } from './dto/update-task-progress.dto.js';
 import { Task } from './schemas/task.schema.js';
 import {
   AssignedTaskDto,
@@ -231,6 +232,42 @@ export class TasksService {
     }
   }
 
+  async updateAssignedProgress(
+    actorUserId: string,
+    taskId: string,
+    input: UpdateTaskProgressDto,
+  ): Promise<AssignedTaskDto> {
+    await this.findAssigned(actorUserId, taskId);
+    const expectedStatus =
+      input.status === TaskStatus.InProgress
+        ? TaskStatus.Assigned
+        : TaskStatus.InProgress;
+    const updated = await this.transitionAssignedTask(
+      taskId,
+      actorUserId,
+      expectedStatus,
+      input.status,
+      input.workResult,
+    );
+    return this.assignedResponse(updated);
+  }
+
+  private async assertTransitionEligible(actor: User, source: TaskSourceType) {
+    if (!Object.values(StaffRole).some((role) => role === actor.role)) {
+      if (
+        actor.isActive === true &&
+        (await this.roles.exists({
+          code: actor.role,
+          isActive: true,
+          permissions: { $all: ['task:execute'] },
+        }))
+      ) {
+        return;
+      }
+    }
+    this.assertEligible(actor, source);
+  }
+
   async transitionAssignedTask(
     taskId: string,
     actorUserId: string,
@@ -252,6 +289,11 @@ export class TasksService {
       if (typeof workResult !== 'string' || !workResult.trim()) {
         throw new BadRequestException('Completion requires a work result');
       }
+      if (workResult.trim().length > 2000) {
+        throw new BadRequestException(
+          'Work result must not exceed 2000 characters',
+        );
+      }
     } else if (workResult !== undefined) {
       throw new BadRequestException(
         'Work result is only accepted on completion',
@@ -269,7 +311,7 @@ export class TasksService {
       );
     const actor = await this.users.findById(actorUserId).lean();
     if (!actor) throw new NotFoundException('Assignee does not exist');
-    this.assertEligible(actor, task.sourceType);
+    await this.assertTransitionEligible(actor, task.sourceType);
     await this.ensureWorkIndex();
     const updated = await this.tasks.findOneAndUpdate(
       scope,

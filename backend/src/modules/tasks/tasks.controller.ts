@@ -1,4 +1,13 @@
-import { Controller, Get, Param, Query, ValidationPipe } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Query,
+  ValidationPipe,
+} from '@nestjs/common';
+import { UpdateTaskProgressDto } from './dto/update-task-progress.dto.js';
 import {
   ApiBearerAuth,
   ApiNotFoundResponse,
@@ -39,6 +48,23 @@ export class TasksController {
     query: ListAssignedTasksQuery,
   ) {
     return this.tasks.listAssigned(user.id, query);
+  }
+
+  @Patch(':id/progress')
+  @ApiOkResponse({ type: AssignedTaskDto })
+  progress(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
+    input: UpdateTaskProgressDto,
+  ) {
+    return this.tasks.updateAssignedProgress(user.id, id, input);
   }
 
   @Get(':id')
