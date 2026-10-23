@@ -2,14 +2,64 @@
 
 ## Đọc nhanh
 
-- H8: **MERGED**, PR #15 trong main tại `c970bf4`; commit này là ancestor của HEAD đã kiểm tra local.
-- #64: **Implemented / draft PR pending review**, không phải Done. Branch `feature/vu-64-task-core`, commit `46a093d`, đã push thành công.
-- PR #16: https://github.com/duongvn9/hotel-mangagement-system/pull/16 — chưa merge, chờ CI/review và xác nhận integration contract.
-- Task core có persistence, atomic active-work uniqueness và chuyển trạng thái nội bộ có CAS. Không có controller, CRUD/UI hoặc endpoint cập nhật trạng thái. Mục 8 là hiện trạng; mục 5–7 giữ làm lịch sử.
+- H8: **MERGED**, PR #15 tại `c970bf4`; đã kiểm tra local commit này là ancestor của `origin/main`.
+- #64: **MERGED**, PR #16 tại merge commit `4046fe0`; đã kiểm tra local commit này là ancestor của `origin/main`. Merge không đồng nghĩa đã xác nhận integration contract nguồn thật.
+- PR #16: https://github.com/duongvn9/hotel-mangagement-system/pull/16 — đã merge; các giả định mapping collection và tích hợp nguồn vẫn chưa được giải quyết.
+- #66 / PROMPT03 / UC37: **Implemented, pending PR review, không Done**; backend/frontend đã được agents triển khai trên `feature/vu-66-assigned-tasks`. Commit/PR còn pending; dùng tên branch startup người dùng chọn, không dùng tên trailing mâu thuẫn `feature/66-assigned-tasks`.
+- Task core có persistence, atomic active-work uniqueness và chuyển trạng thái nội bộ có CAS. UC37 hiện có controller GET và UI chỉ đọc; chưa có task mutation API UC38. Mục 9 là hiện trạng UC37; mục 8 lưu mốc #64 trước merge; mục 4–7 là lịch sử.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
 
-## 8. Jira #64 — Task Core (hiện trạng)
+## 9. PROMPT03 — Jira #66 / UC37 View Assigned Tasks (hiện trạng)
+
+### Phạm vi đã triển khai và bảo mật
+
+- Backend: `GET /api/v1/tasks/me` và `GET /api/v1/tasks/:id`. Actor chỉ lấy từ `@CurrentUser().id`; không nhận `userId`/`assignedTo` do client gửi. List, total và detail đều lọc `assignedTo` của actor; detail ID sai/không tồn tại/thuộc người khác cùng trả 404 để không tiết lộ quyền sở hữu.
+- AuthGuard/RolesGuard toàn cục: SERVICE_STAFF **hoặc** OPERATIONS_STAFF **hoặc** custom role đang active có `task:execute`. Đây là quyền đọc UC37, không thay đổi policy chuyên môn bảo thủ của create/transition nội bộ #64. Không cho Manager xem tất cả task chỉ vì là Manager.
+- Query có status, taskType chính xác, keyword tiêu đề literal (escape regex), page/limit có validation và giới hạn; sort ổn định `assignedAt` giảm dần rồi `_id` giảm dần. Field query lạ bị 400; không có endpoint liệt kê task người khác.
+- Response dùng projection allowlist và DTO, không trả document nguồn hoặc tùy ý populate. Giữ `sourceType`/`sourceId` để trace và **`sourceSummary: null`**. Null là fallback an toàn về privacy khi chưa có contract quyền đọc nguồn, không phải khẳng định nguồn đã mất hoặc đã được kiểm tra. Read không query collection nguồn: thiếu/xóa nguồn vẫn trả task được giao, không biến thành 404 task.
+- **Deferred:** tích hợp summary nguồn thật chỉ sau khi chủ module xác nhận schema, mapping collection và contract ủy quyền đọc/soft-delete. Không mở rộng thông tin Service Order/Issue/Maintenance, không đoán trường nghiệp vụ. Giữ các giả định `TASK_SOURCE_COLLECTIONS` của #64 và hoãn seed nguồn thật; không dùng e2e fixture làm seed nghiệp vụ.
+- Frontend: `/staff/tasks` và `/staff/tasks/:id`, gọi API thật qua shared API client và TanStack Query; query key có current user ID. Có lọc/phân trang, loading/empty/error, xử lý 403/404 và thông báo nguồn không khả dụng; không có permanent mock hoặc link mở nguồn chưa được ủy quyền. Mock chỉ nằm trong tests.
+- Menu “Công việc được giao” hiển thị cho service staff/operations staff hoặc role có `task:execute`, cùng policy với route. H10 vẫn chưa thay shell: router tiếp tục dùng `PublicLayout`, chỉ thêm feature routes/menu vào cấu trúc hiện hữu.
+- Chỉ đọc UC37: không có POST/PATCH/DELETE task, nút bắt đầu/hoàn thành hay API đổi trạng thái UC38; `transitionAssignedTask` vẫn là API service nội bộ #64.
+
+### Kiểm chứng và giới hạn bằng chứng
+
+Kết quả triển khai do agents bàn giao dưới đây; lượt cập nhật tài liệu đã đối chiếu source/Git và chạy lại `npm run lint`, `npm run typecheck` tại cả backend/frontend: PASS. Không coi các kết quả này là CI hoặc manual browser QA. Không cài lại dependencies, format-write, build hay chạy lại tests trong lượt chỉ sửa tài liệu này.
+
+| Phạm vi | Lệnh / bước đã chạy khi triển khai | Kết quả bàn giao |
+|---|---|---|
+| Backend | `npm run format:check`, `npm run lint`, `npm run typecheck` | PASS |
+| Backend | `npm test` | PASS: 262 tests, 17 files |
+| Backend | `npm run build` | PASS |
+| Frontend | `npm ci` với lockfile hiện có | PASS; không đổi dependency/lockfile |
+| Frontend | Sửa lỗi TypeScript của params trong test rồi chạy `npm run format:check`, `npm run lint`, `npm run typecheck` | PASS sau sửa |
+| Frontend | `npm test` | PASS: 52 tests, 9 files |
+| Frontend | `npm run build` | PASS; cảnh báo bundle size không chặn build |
+| Backend Mongo e2e | `backend/test/tasks.e2e-spec.ts` đã thêm | **Chưa chạy local**: chưa xác minh isolated DB an toàn; CI pending |
+
+- Isolated HTTP tests dùng AuthGuard/RolesGuard thật nhưng mock token verifier/persistence: hai staff khác nhau chỉ thấy list/total/detail của mình, không đọc chéo; kiểm tra custom permission role, 401/403/404, query injection/ownership override, projection và không truy cập nguồn. Đây không phải kiểm chứng tích hợp nguồn thật hoặc concurrency MongoDB.
+- Mongo e2e đã viết cho hai staff và custom role, missing-source fallback, lọc/phân trang và ownership. Fixture dùng ID riêng; cleanup chỉ xóa task/user/role do suite tự tạo theo ID, không drop database hoặc xóa toàn collection. Chưa chạy nên không báo PASS e2e; chỉ chạy khi có DB test cô lập được xác nhận hoặc CI phù hợp.
+- FE tests kiểm tra route/menu role OR permission, request API, loading/empty/filter/page, lỗi và detail fallback không mutation. Sửa test params bằng kiểm tra object và numeric page, không nới typecheck hoặc bỏ assertion.
+- **Chưa manual browser QA**, chưa xác nhận responsive ở viewport 375px, chưa QA nguồn thật; CI cho thay đổi #66 còn pending. #66 không Done, chưa có commit/PR trong mốc bàn giao này.
+
+### Manual QA cần thực hiện (chưa chạy)
+
+1. Dùng môi trường test được phép và hai staff A/B có task riêng: đăng nhập từng người, mở list/detail, xác nhận tổng/phân trang không lộ task người còn lại; nhập URL task B khi là A phải nhận 404.
+2. Kiểm tra anonymous, role không quyền và custom role active có `task:execute`; thử query `userId`/`assignedTo` phải bị từ chối. Xác nhận menu/route không thay thế authorization backend.
+3. Kiểm tra lọc status/taskType/keyword literal, đổi trang/reset bộ lọc, loading/empty/lỗi mạng/403/404 và retry; task thiếu nguồn vẫn có detail, `sourceSummary: null`, không link hoặc lộ nội dung nguồn.
+4. Kiểm tra desktop và mobile **375px**, keyboard/focus và trạng thái dài; ghi kết quả thực tế sau khi chạy. Không đánh dấu bước này đã PASS từ component tests.
+
+### File tham chiếu để review/bàn giao
+
+- BE controller và DI: `backend/src/modules/tasks/tasks.controller.ts`, `backend/src/modules/tasks/tasks.module.ts`; read scope/projection/serialization: `backend/src/modules/tasks/tasks.service.ts`.
+- Contract response/query: `backend/src/modules/tasks/dto/assigned-task.dto.ts`, `backend/src/modules/tasks/dto/list-assigned-tasks.dto.ts`; security tests: `backend/src/modules/tasks/tasks.controller.spec.ts`; Mongo e2e chưa chạy: `backend/test/tasks.e2e-spec.ts`.
+- FE API/query/route: `frontend/src/features/tasks/api.ts`, `frontend/src/features/tasks/hooks.ts`, `frontend/src/features/tasks/routes.tsx`; UI: `frontend/src/features/tasks/pages/AssignedTasksPage.tsx`, `frontend/src/features/tasks/pages/AssignedTaskDetailPage.tsx`, `frontend/src/features/tasks/TaskPresentation.tsx`, `frontend/src/features/tasks/presentation.ts`.
+- Router/menu/tests: `frontend/src/app/router.tsx`, `frontend/src/features/auth/UserMenu.tsx`, `frontend/src/features/tasks/tasks.test.tsx`. Hướng dẫn auth/API/route dùng lại: `docs/TIEN-DO-DUONG.md`, `docs/HUONG-DAN-TRIEN-KHAI.md`.
+
+## 8. Jira #64 — Task Core (mốc triển khai trước merge, lịch sử)
+
+> Các phát biểu “không có controller/UI”, “pending PR” và số test ở mục này mô tả mốc #64 trước merge, không phải hiện trạng #66. #64 đã MERGED tại `4046fe0`; contract nội bộ và rủi ro tích hợp bên dưới vẫn cần lưu ý.
 
 ### API nội bộ và phạm vi ủy quyền
 
@@ -86,9 +136,9 @@ Tests dùng mock persistence theo H8, schema/index Mongoose thật in-memory, co
 | # | Task | Trạng thái | Commit/PR |
 |---|---|---|---|
 | H8 | Contract Task dùng chung | MERGED | PR #15 / main `c970bf4` |
-| 64 | Task core, lifecycle, source reference | Implemented, pending QA/PR (không Done) | `46a093d` / draft PR #16 |
+| 64 | Task core, lifecycle, source reference | MERGED; integration assumptions nguồn thật chưa giải quyết | PR #16 / merge `4046fe0` |
 | 65 | Staff / Operations Dashboard | Chưa làm | Chưa có |
-| 66 | UC37 View Assigned Tasks | Chưa làm | Chưa có |
+| 66 | UC37 View Assigned Tasks | Implemented, pending PR review (không Done); CI/manual QA pending | `feature/vu-66-assigned-tasks`; commit/PR pending |
 | 67 | UC38 Update Task Progress | Chưa làm | Chưa có |
 | 68 | UC22 Create Service Order | Chưa làm | Chưa có |
 | 69 | UC23 View Service Orders (Customer) | Chưa làm | Chưa có |
@@ -145,7 +195,7 @@ const task = await tasksService.create({
 - **Hoãn seed Task**: seed hiện có User nhưng chưa có ServiceOrder/Issue/Maintenance hợp lệ. Không thêm seed trỏ ID bịa hoặc sửa seed người khác. Khi có nguồn thật, seed phải theo thứ tự phụ thuộc và gọi cùng validation.
 - Core #64 đã có `transitionAssignedTask` kiểm tra assignedTo + trạng thái cũ bằng CAS; UC38 HTTP vẫn chưa làm. Task hoàn thành không đồng nghĩa tự đóng Issue.
 
-## 4. QA và bàn giao
+## 4. QA và bàn giao (lịch sử H8; xem mục 9 cho UC37)
 
 Đã thêm unit test lifecycle toàn bộ 9 cặp enum và giá trị ngoài enum, schema/default/index, Nest injection, DTO và service validation, assignee/permission, mapping và nguồn không tồn tại, persistence/lỗi DB. Model và Connection được mock trong test service; schema validation chạy in-memory. **Không phải** kiểm thử tích hợp MongoDB hay nguồn thật.
 
@@ -160,7 +210,7 @@ Lần triển khai ban đầu chạy từ thư mục `backend` (chưa cài depen
 
 Kết quả ban đầu được giữ làm lịch sử; kết quả chạy lại nằm ở mục 5. Chưa xác nhận merge. Bàn giao contract qua PR cho Lâm/Hiếu/Khoa, chưa xác nhận nhóm đã tiếp nhận.
 
-## 6. Xác minh lại sau khi main cập nhật
+## 6. Xác minh lại sau khi main cập nhật (lịch sử trước merge H8)
 
 - Đã fetch; working tree sạch trước kiểm tra, vẫn ở `feature/H8-task-contract`. PR head được kiểm tra: `2473b8205fd983b0e570a2d8ebbf7555b51940c5`.
 - Đúng run của head này: `39939610125`, backend FAIL tại format:check, frontend PASS, docker SKIPPED; các bước backend typecheck/unit/e2e/build bị CI skip sau lỗi format.
