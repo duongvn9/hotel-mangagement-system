@@ -16,6 +16,9 @@ import { FeedbackModule } from './modules/feedback/feedback.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { RolesModule } from './modules/roles/roles.module.js';
 import { UsersModule } from './modules/users/users.module.js';
+import { BookingsModule } from './modules/bookings/bookings.module.js';
+import { InvoicesModule } from './modules/invoices/invoices.module.js';
+import { PaymentsModule } from './modules/payments/payments.module.js';
 
 @Module({
   imports: [
@@ -37,6 +40,9 @@ import { UsersModule } from './modules/users/users.module.js';
     RolesModule,
     AuthModule,
     FeedbackModule,
+    BookingsModule,
+    InvoicesModule,
+    PaymentsModule,
     // Module nghiệp vụ thêm vào đây, xem src/modules/README.md
   ],
   // Khai báo ở đây (không dùng app.useGlobal* trong main.ts) để test e2e cũng có.
