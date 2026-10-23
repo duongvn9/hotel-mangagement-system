@@ -2,13 +2,73 @@
 
 ## Đọc nhanh
 
-- H8/#64: **Implemented / draft PR pending QA & review**, chưa merge. Branch `feature/H8-task-contract`, commit triển khai `f820ef5`.
-- PR: https://github.com/duongvn9/hotel-mangagement-system/pull/15 — đã đồng bộ main theo ủy quyền; local format/lint/typecheck/205 unit tests/build PASS. Xem mục 7 để biết kết quả mới; mục 5–6 là lịch sử.
-- Chỉ có schema, DTO, service tạo Task và hàm chuyển trạng thái thuần. Không có controller, UI hoặc endpoint cập nhật trạng thái.
+- H8: **MERGED**, PR #15 trong main tại `c970bf4`; commit này là ancestor của HEAD đã kiểm tra local.
+- #64: **Implemented, pending QA/PR**, không phải Done. Branch `feature/vu-64-task-core`; không commit/push/tạo PR trong lượt này.
+- Task core có persistence, atomic active-work uniqueness và chuyển trạng thái nội bộ có CAS. Không có controller, CRUD/UI hoặc endpoint cập nhật trạng thái. Mục 8 là hiện trạng; mục 5–7 giữ làm lịch sử.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
 
-## 7. Đồng bộ origin/main và xử lý conflict
+## 8. Jira #64 — Task Core (hiện trạng)
+
+### API nội bộ và phạm vi ủy quyền
+
+Giữ nguyên `create(input: CreateTaskDto)`, enum status/source và hàm thuần H8. Không đăng ký HTTP. Module gọi phải import `TasksModule`; ví dụ DI thực tế (đường dẫn tính từ `src`):
+
+```ts
+import { Injectable, Module } from '@nestjs/common';
+import { TasksModule } from './modules/tasks/tasks.module.js';
+import { TasksService } from './modules/tasks/tasks.service.js';
+import { TaskStatus } from './modules/tasks/task-contract.js';
+
+@Injectable()
+class TaskConsumer {
+  constructor(readonly tasks: TasksService) {}
+
+  start(taskId: string, authenticatedUserId: string) {
+    return this.tasks.transitionAssignedTask(
+      taskId,
+      authenticatedUserId,
+      TaskStatus.Assigned,
+      TaskStatus.InProgress,
+    );
+  }
+}
+
+@Module({ imports: [TasksModule], providers: [TaskConsumer] })
+class ConsumerModule {}
+```
+
+- API mới: `transitionAssignedTask(taskId: string, actorUserId: string, expectedStatus: TaskStatus, nextStatus: TaskStatus, workResult?: string)`, trả document đã cập nhật. Chỉ ASSIGNED → IN_PROGRESS → COMPLETED; không có cập nhật trạng thái tùy ý, quyền manager override, reassignment hoặc sửa lịch sử.
+- Caller là trusted application service: phải xác thực người gọi và lấy `actorUserId` từ `AuthUser.id` do AuthGuard thiết lập, không lấy từ request body/Firebase UID; guard/permission của endpoint tương lai vẫn do caller chịu trách nhiệm. RolesGuard có thể cho custom role qua permission nhưng không chứng minh chuyên môn, nên core vẫn từ chối custom role. Giữ constructor/model Role của H8 để không phá DI hiện hữu; không còn dùng permission như fallback specialization.
+- Create: caller phải kiểm tra quyền giao việc, scope, accepted ServiceOrder/reviewed Issue và tính phù hợp taskType/tính chất issue. Core chỉ biết enum nguồn, taskType chuỗi không trắng và role chuyên môn theo nguồn; không đặt enum taskType, không đoán schema nguồn. Nguồn thật chưa tích hợp, chưa được coi là UC26/UC31 hoàn chỉnh.
+- Transition kiểm tra actor đang active và chuyên môn theo nguồn, đọc task trong scope assignedTo + expectedStatus rồi CAS cùng scope. Stale/missing/out-of-scope đều 409 để không lộ task người khác. Không có unconstrained status edit. Source/taskType không có API sửa; không hỗ trợ raw model writes từ caller. Việc khóa user đồng thời với write không có transaction xuyên collection; eligibility là snapshot tại thời điểm kiểm tra.
+- Completion yêu cầu workResult kiểu string không trắng; trim và ghi completedAt từ `new Date()` (UTC instant của server), không nhận completion time từ caller. Bắt đầu không nhận workResult. Không tự đóng Issue hoặc sửa nguồn.
+
+### Work identity, atomic index và migration
+
+- **Cùng công việc = cùng sourceType + sourceId + taskType đã trim**, so sánh chuỗi case-sensitive mặc định MongoDB; title hoặc assignee không thuộc identity. Title có thể sửa cách diễn đạt và đổi người không tạo thành công việc mới. Caller phải dùng taskType ổn định/canonical khi tích hợp; không dùng title/ID ngẫu nhiên làm taskType để né uniqueness.
+- Index unique chỉ áp dụng ASSIGNED/IN_PROGRESS, cho phép nhiều taskType trên nguồn và task mới sau khi task trước COMPLETED. Schema có index thật; service gọi `collection.createIndex` đúng definition trước create/CAS, dùng chung promise trong instance. Không dựa vào preflight `exists`, không dựa autoIndex bật. E11000 khi create hoặc build index → ConflictException; lỗi DB khác giữ nguyên, không giả thành duplicate.
+- **Migration risk:** duplicates active có sẵn khiến build index thất bại, service fail closed và không write; promise lỗi được giữ tới khi khởi động lại instance. DBA phải audit và xử lý bằng quy trình nghiệp vụ được duyệt rồi restart; không tự xóa/dedupe dữ liệu, không syncIndexes/dropIndex. Runtime cần quyền createIndex, kể cả deployment tắt autoIndex; index không tạo được thì không write. Không bảo vệ raw writes bỏ qua service hoặc operator xóa index sau khi khởi tạo.
+- Mapping `serviceorders` / `issues` / `maintenances` vẫn là giả định explicit chưa xác nhận, không thêm schema nguồn. Core chỉ query `_id`; nguồn thiếu → 404, lỗi nguồn DB truyền ra. Không dùng fake/dangling source IDs, tiếp tục hoãn seed tới khi có nguồn thật. Kiểm tra source tồn tại không giải quyết xóa nguồn đồng thời; chính sách bảo toàn reference do module nguồn thống nhất.
+- Error contract: input/ID/enum/field lạ không hợp lệ → 400; assignee hoặc source không tồn tại khi create → 404; inactive/ineligible assignee → 400; lifecycle sai, duplicate active work, index có duplicates, stale/foreign/missing task CAS → 409; completion/result sai → 400. Missing actor record khi transition → 404. Validation/lifecycle/eligibility lỗi không gọi update.
+
+### Kiểm chứng local
+
+Chỉ thay `tasks.service.ts`, `tasks.spec.ts`, `schemas/task.schema.ts` và tài liệu này. Không đổi các task #65–80, dependency/config, controller hoặc seed. Đã đọc SRS UC26/31/35–38, BR-TASK-01–05 và ERD ngoài repo; không đọc env/secrets.
+
+| Lệnh tại `backend` | Kết quả |
+|---|---|
+| `npx --no-install prettier --write "src/modules/tasks/**/*.ts"` | PASS, chỉ format file sở hữu |
+| `npm test -- src/modules/tasks/tasks.spec.ts` | PASS: 83 tests |
+| `npm run format:check` | PASS toàn backend |
+| `npm run lint` | PASS |
+| `npm run typecheck` | PASS |
+| `npm test` | PASS: 16 files, 234 tests |
+| `npm run build` | PASS |
+
+Tests dùng mock persistence theo H8, schema/index Mongoose thật in-memory, concurrent atomic persistence simulation (không phải MongoDB concurrency thật), Nest DI, validation/source/assignee/chuyên môn, index failure/duplicate/lỗi DB, toàn bộ lifecycle edges và CAS race, completion/result/UTC. Có warning Mongoose validateSync deprecated và vite-tsconfig-paths có thể thay bằng native Vite; không đổi config/dependency ngoài scope. Không thêm/chạy real DB e2e local vì chưa xác minh DB cô lập an toàn; không tuyên bố đã QA nguồn thật hoặc CI cho head chưa commit. Pending QA/PR, không Done.
+
+## 7. Đồng bộ origin/main và xử lý conflict (lịch sử trước khi PR #15 merged)
 
 - Người dùng đã cho phép merge main vào feature; đã fetch và xác nhận working tree sạch trên `feature/H8-task-contract` trước merge.
 - Merge `origin/main@4134194` bằng merge thường, không rebase/reset/force-push, không sửa local main.
@@ -24,8 +84,8 @@
 
 | # | Task | Trạng thái | Commit/PR |
 |---|---|---|---|
-| H8 | Contract Task dùng chung | Đã viết, chờ QA/review | `f820ef5` / draft PR #15 |
-| 64 | Task core, lifecycle, source reference | Đã viết trong phạm vi H8; chưa xác nhận QA | `f820ef5` / draft PR #15 |
+| H8 | Contract Task dùng chung | MERGED | PR #15 / main `c970bf4` |
+| 64 | Task core, lifecycle, source reference | Implemented, pending QA/PR (không Done) | `feature/vu-64-task-core`, chưa commit |
 | 65 | Staff / Operations Dashboard | Chưa làm | Chưa có |
 | 66 | UC37 View Assigned Tasks | Chưa làm | Chưa có |
 | 67 | UC38 Update Task Progress | Chưa làm | Chưa có |
@@ -53,7 +113,7 @@ Import `TasksModule` từ `modules/tasks/tasks.module.js` trong module gọi; in
 - Source lưu DB `SERVICE_ORDER`, `ISSUE`, `MAINTENANCE`; luôn bắt buộc `sourceId` ObjectId.
 - `canTransitionTaskStatus(from, to)` chỉ trả true cho `ASSIGNED → IN_PROGRESS`, `IN_PROGRESS → COMPLETED`. Mọi cặp khác false, kể cả giữ nguyên trạng thái.
 - Collection `tasks`: `title`, `taskType`, `priority`, `status`, `assignedTo` ref `User`, `assignedAt`, `dueAt?`, `completedAt?`, `workResult?`, `sourceType`, `sourceId`, timestamps.
-- Index: `{ assignedTo: 1, status: 1 }`, `{ status: 1 }`, `{ sourceType: 1, sourceId: 1 }`; không unique nguồn vì một nguồn có thể có nhiều task.
+- Index giữ nguyên ba index H8 và thêm `unique_active_task_work`: unique `{ sourceType: 1, sourceId: 1, taskType: 1 }`, partial `status: { $in: ['ASSIGNED', 'IN_PROGRESS'] }`. Một nguồn vẫn có nhiều loại công việc; xem mục 8 về work identity và migration.
 - ERD/SRS chưa chốt tập giá trị taskType/priority: giữ chuỗi không trắng, không tự đặt enum nghiệp vụ. `SERVICE`/`NORMAL` dưới đây chỉ là chuỗi minh họa.
 
 Ví dụ gọi nội bộ, các biến `persistedServiceOrder` và `activeStaff` phải là bản ghi thật đã được caller lấy từ DB, không dùng ID mẫu:
@@ -76,13 +136,13 @@ const task = await tasksService.create({
 
 ## 3. Phụ thuộc và giới hạn
 
-- Assignee phải tồn tại và `isActive === true`. Chấp nhận SERVICE_STAFF / OPERATIONS_STAFF theo UC37/38; role khác chỉ được nhận việc nếu Role đang active có permission **đã tồn tại** `task:execute`, theo cơ chế của Dương. Không tự thêm permission hoặc phân quyền riêng theo loại nguồn khi SRS chưa quy định.
+- Assignee phải tồn tại và `isActive === true`: SERVICE_ORDER chỉ SERVICE_STAFF (UC26/BR-SER-07), ISSUE nhận SERVICE_STAFF hoặc OPERATIONS_STAFF (UC31/BR-ISS-06), MAINTENANCE chỉ OPERATIONS_STAFF (actor UC35/36). Không suy diễn chuyên môn từ permission `task:execute`; custom roles bị từ chối bảo thủ cho tới khi có policy chuyên môn được thống nhất. ISSUE còn cần caller xác nhận chuyên môn theo tính chất issue/taskType vì chưa có taxonomy/schema nguồn.
 - Service nội bộ không xác thực người tạo task. Caller tương lai chịu trách nhiệm quyền tạo/giao việc và scope nguồn; `AuthUser.id` là User ID, không dùng Firebase UID làm assigneeId.
 - Validation hình dạng ID **khác** kiểm tra tồn tại: sau validation, service query DB thật bằng injected Connection với `_id` và projection `_id`.
 - Mapping collection explicit trong `TASK_SOURCE_COLLECTIONS`: SERVICE_ORDER → `serviceorders`, ISSUE → `issues`, MAINTENANCE → `maintenances`. Đây là giả định tích hợp cần chủ module nguồn xác nhận trước khi dùng; schema nguồn hiện chưa tồn tại. Không nhận tên collection từ caller. Nguồn/collection không tồn tại → từ chối tạo; lỗi DB truyền ra, không persist giả.
 - Không kiểm tra trạng thái duyệt/quyền xem/soft-delete của nguồn khi chưa có schema nguồn; caller nghiệp vụ phải bổ sung khi tích hợp. Kiểm tra tồn tại tại thời điểm tạo không thay thế transaction hoặc chính sách cấm xóa nguồn sau này.
 - **Hoãn seed Task**: seed hiện có User nhưng chưa có ServiceOrder/Issue/Maintenance hợp lệ. Không thêm seed trỏ ID bịa hoặc sửa seed người khác. Khi có nguồn thật, seed phải theo thứ tự phụ thuộc và gọi cùng validation.
-- UC38 sau này phải kiểm tra assignedTo với user hiện tại, cập nhật atomic theo trạng thái cũ, bắt buộc completedAt/workResult khi hoàn thành; Task hoàn thành không đồng nghĩa tự đóng Issue.
+- Core #64 đã có `transitionAssignedTask` kiểm tra assignedTo + trạng thái cũ bằng CAS; UC38 HTTP vẫn chưa làm. Task hoàn thành không đồng nghĩa tự đóng Issue.
 
 ## 4. QA và bàn giao
 
