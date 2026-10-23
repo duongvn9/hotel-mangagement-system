@@ -247,15 +247,13 @@ describe('VNPay Nest module foundation', () => {
     'handles outcome %s/%s safely',
     async (response, transaction, status, action) => {
       const module = await moduleFor();
-      const plan = module
-        .get(VnpayService)
-        .prepareIpn(
-          callback({
-            vnp_ResponseCode: response,
-            vnp_TransactionStatus: transaction,
-          }),
-          expected(),
-        );
+      const plan = module.get(VnpayService).prepareIpn(
+        callback({
+          vnp_ResponseCode: response,
+          vnp_TransactionStatus: transaction,
+        }),
+        expected(),
+      );
       expect(plan.result.status).toBe(status);
       expect(plan.action).toBe(action);
       await module.close();
@@ -317,12 +315,10 @@ describe('VNPay Nest module foundation', () => {
   ])('rejects invalid request options %#', async (change) => {
     const module = await moduleFor();
     expect(() =>
-      module
-        .get(VnpayService)
-        .createPaymentUrl(expected(), {
-          ...options,
-          ...change,
-        } as typeof options),
+      module.get(VnpayService).createPaymentUrl(expected(), {
+        ...options,
+        ...change,
+      } as typeof options),
     ).toThrow();
     await module.close();
   });

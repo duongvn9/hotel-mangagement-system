@@ -5,12 +5,7 @@ export const MAX_VNPAY_AMOUNT_VND = 9_999_999_999;
 export class VnpayValidationError extends Error {
   constructor(
     readonly reason:
-      | 'query'
-      | 'signature'
-      | 'fields'
-      | 'amount'
-      | 'relationship'
-      | 'conflict',
+      'query' | 'signature' | 'fields' | 'amount' | 'relationship' | 'conflict',
   ) {
     super(`Invalid VNPay ${reason}`);
   }
