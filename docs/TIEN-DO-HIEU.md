@@ -9,8 +9,9 @@
 - H5 schemas đã merge vào `main` qua PR #12.
 - H7 invoice calculation và `InvoicesService` đã merge qua PR #13; còn chờ nguồn pricing thực.
 - H6 availability core đã merge qua PR #14; còn chờ Room/RoomType từ Lâm để hoàn thiện UC05 và public API.
-- VNPay foundation đã push, chưa ghi nhận merge trong remote-tracking hiện tại; chưa có settlement persistence hoặc endpoint thanh toán hoàn chỉnh.
-- Chưa triển khai đầy đủ Create Booking (#46), UC20 đặt cọc (#47), UC21 thanh toán cuối (#52).
+- VNPay foundation đã push; nay bổ sung settlement persistence (compare-and-set) và các endpoint thanh toán (khởi tạo cọc/thanh toán cuối, Return, IPN). Chưa ghi nhận merge trong remote-tracking hiện tại.
+- UC20 đặt cọc (#47) và UC21 thanh toán cuối (#52) đã có settlement bền vững + endpoint + test; còn chờ nguồn pricing thực (Room/RoomType của Lâm), Guest authorization và sandbox acceptance với credentials thật.
+- Create Booking (#46) và UC05 end-to-end vẫn bị chặn: repo chưa có model Room riêng (chỉ có RoomType). Không tự tạo lại schema của Lâm.
 - Không tạo lại các schema hoặc enum đã có; không coi kết quả availability là bảo đảm đặt phòng thành công.
 
 ## 2. Bảng tiến độ
@@ -20,10 +21,11 @@
 | H5 — Booking & Payment contracts | Booking, RoomHold, Invoice, PaymentTransaction; enum; indexes; seed; tests | Dữ liệu Room thực cho seed booking; nối seed feedback vào booking thật | Đã merge PR #12 |
 | #45 / H7 — Invoice calculation | Calculator, service, charge ledger, payment reconciliation, adapters, tests | Pricing snapshot/adapter thực; nguồn service charges và tích hợp workflow | Core/service đã merge PR #13 |
 | #43 / H6 — UC05 Search Available Rooms | Overlap core, Booking/Hold queries, clock, Room adapter boundary, tests | Room/RoomType thực, public API, DTO, Swagger, HTTP integration tests | Core đã merge PR #14; UC05 chưa end-to-end |
-| VNPay foundation | Config, ký URL, xác minh Return/IPN, validation, processing plan, tests | Persistent settlement, endpoints, authorization, sandbox acceptance | Đã push; chờ PR review/merge |
-| #46 — Create Booking | Có H5 và H6 làm nền tảng | Workflow, ownership/Guest access, pricing snapshot, concurrency-safe hold, expiration | Chưa hoàn thành |
-| #47 — UC20 Make Deposit Payment | Có payment schema, H7 và VNPay foundation | Chính sách cọc, initiation, IPN settlement, booking transition, tests | Chưa hoàn thành |
-| #52 — UC21 Pay Final Invoice | Có H7 và VNPay foundation | Initiation theo dư nợ, settlement, chống double payment, tests | Chưa hoàn thành |
+| VNPay foundation | Config, ký URL, xác minh Return/IPN, validation, processing plan, tests | — | Đã push; chờ PR review/merge |
+| VNPay settlement + endpoints | Mongo settlement port (CAS, idempotent), initiation service, controller (deposit/final/Return/IPN), authorization Customer/staff, e2e | Nguồn pricing thực, Guest token auth, sandbox acceptance, HTTPS IPN khi deploy | Đã push |
+| #46 — Create Booking | Có H5 và H6 làm nền tảng | Model Room (Lâm), workflow, ownership/Guest access, pricing snapshot, concurrency-safe hold, expiration | Chưa hoàn thành — chờ Room |
+| #47 — UC20 Make Deposit Payment | Payment schema, H7, VNPay foundation, settlement + endpoint + test | Nguồn cọc từ pricing thực, Guest auth, sandbox acceptance | Settlement/endpoint xong; chờ pricing/Room |
+| #52 — UC21 Pay Final Invoice | H7, VNPay foundation, settlement + endpoint theo dư nợ + test | Dư nợ từ pricing thực, sandbox acceptance | Settlement/endpoint xong; chờ pricing/Room |
 
 ## 3. Contracts dùng lại
 
@@ -88,8 +90,10 @@ Nguồn chính: `backend/src/modules/payments/vnpay.protocol.ts`, `vnpay.service
 - Thành công yêu cầu đồng thời `vnp_ResponseCode = 00` và `vnp_TransactionStatus = 00`.
 - Return chỉ xác minh/đọc; không cập nhật trạng thái từ trang redirect.
 - `prepareIpn()` tạo plan `compare-and-set`, `duplicate` hoặc `review`.
-- `VnpaySettlementPort` chưa có Mongo adapter. Không ACK thành công chỉ vì tạo plan thành công.
-- Không giả định booking phải có Customer/Firebase; authorization cho Guest vẫn cần triển khai riêng.
+- `VnpaySettlementPort` nay có `MongoVnpaySettlementPort` (`vnpay-settlement.adapter.ts`): compare-and-set trên PaymentTransaction là bản ghi tiền authoritative và pricing-independent; cọc thành công thì chuyển booking `PENDING_DEPOSIT` → `CONFIRMED` và đối chiếu paid amounts theo invariant H7. Trả về `committed`/`duplicate`/`conflict` để IPN idempotent. Dùng CAS + optimistic concurrency, không dùng multi-document transaction.
+- Endpoint (`PaymentsApiModule`, `payments.service.ts`, `payments.controller.ts`): `POST payments/deposit` (UC20), `POST payments/final` (UC21) yêu cầu đăng nhập, authorize booking owner hoặc Receptionist/Manager, tính tiền phía server (cọc từ booking, dư nợ từ H7), chặn pending/paid trùng, trả URL VNPay đã ký. `GET payments/vnpay/return` `@Public()` chỉ xác minh. `GET payments/vnpay/ipn` `@Public()` settle bền vững, ACK (`RspCode`) sau commit.
+- Không ACK thành công chỉ vì tạo plan thành công.
+- Guest authorization (token/capability cho khách vãng lai) vẫn chưa triển khai; hiện chỉ hỗ trợ Customer sở hữu booking và nhân viên lễ tân/quản lý.
 
 Biến cấu hình: `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`, `VNPAY_PAYMENT_URL`, `VNPAY_RETURN_URL`, `VNPAY_IPN_URL`. Không commit `.env`, không đưa secret vào frontend hoặc log.
 
@@ -122,22 +126,23 @@ Biến cấu hình: `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`, `VNPAY_PAYMENT_URL`, 
 
 ### D. #47 — UC20 đặt cọc
 
-- [ ] Xác thực ownership hoặc Guest capability/token trước payment initiation.
-- [ ] Xác định tiền cọc từ chính sách server, không nhận tổng tiền từ frontend.
-- [ ] Persist pending payment attempt và metadata trước redirect.
-- [ ] Triển khai durable IPN processing: CAS, unique provider reference, receipt/outbox và replay checks.
-- [ ] Bảo đảm nhất quán PaymentTransaction/Invoice/Booking; chọn transaction/session strategy phù hợp.
-- [ ] Chỉ chuyển trạng thái booking sau khi xác nhận thanh toán bền vững.
-- [ ] IPN HTTPS, ACK sau commit, notification/recovery và concurrency tests.
+- [x] Xác thực ownership (Customer sở hữu) hoặc quyền nhân viên trước payment initiation. Guest capability/token vẫn chưa làm.
+- [x] Xác định tiền cọc từ chính sách server (`booking.depositAmount`), không nhận tổng tiền từ frontend.
+- [x] Persist pending payment attempt trước redirect; chặn pending/paid trùng.
+- [x] Durable IPN processing: CAS + unique provider reference + replay checks (idempotent). Receipt/outbox chưa làm.
+- [x] Bảo đảm nhất quán PaymentTransaction/Invoice/Booking bằng CAS + optimistic concurrency (không dùng multi-document transaction).
+- [x] Chỉ chuyển trạng thái booking (`CONFIRMED`) sau khi commit settlement bền vững.
+- [x] ACK IPN sau commit + concurrency/replay tests. HTTPS IPN là việc khi deploy.
 - [ ] Sandbox acceptance test với cấu hình được cấp qua kênh riêng.
 
 ### E. #52 — UC21 thanh toán cuối
 
-- [ ] Tính dư nợ từ H7 và dữ liệu authoritative tại thời điểm initiation.
-- [ ] Áp dụng ownership/quyền nhân viên phù hợp, không public tùy ý.
-- [ ] Tạo final-payment attempt và dùng chung settlement infrastructure.
-- [ ] Ngăn double payment, double recalculation và callback conflict.
-- [ ] Kiểm thử thanh toán đủ, callback lặp, concurrent callbacks và xử lý lỗi.
+- [x] Tính dư nợ từ H7 (`recalculate`) tại thời điểm initiation.
+- [x] Áp dụng ownership/quyền nhân viên; không public endpoint khởi tạo.
+- [x] Tạo final-payment attempt và dùng chung settlement infrastructure.
+- [x] Ngăn double payment (chặn pending/paid trùng) và callback conflict (CAS trả conflict/duplicate).
+- [x] Kiểm thử settlement, callback lặp, unknown order, Return read-only.
+- [ ] Dư nợ dựa trên pricing thực còn chờ model Room/RoomType của Lâm; sandbox acceptance.
 
 Không tự mở rộng sang Checkout, Service Order, frontend hoặc refund khi chưa có yêu cầu/phân công riêng.
 
@@ -162,10 +167,11 @@ Không tự mở rộng sang Checkout, Service Order, frontend hoặc refund khi
 | H7 | 99 pass | 29 pass | PASS |
 | H6 | 130 pass | 30 pass | PASS |
 | VNPay foundation | 208 pass, gồm 78 VNPay tests | 30 pass | PASS |
+| VNPay settlement + endpoints | 340 unit pass | 57 e2e pass (gồm 4 settlement + 7 payments) | PASS (lint/typecheck/build) |
 
 - Backend được kiểm thử trên Node 24; E2E dùng MongoDB 8 và database test riêng.
 - VNPay có digest đối chiếu độc lập, không chỉ tự ký rồi tự verify.
-- Chưa có test giao dịch thanh toán thật, durable settlement concurrency hoặc UC20/UC21 end-to-end.
+- UC20/UC21 đã có e2e settlement + endpoint với MongoDB thật (pricing và cấu hình VNPay dùng test adapter/fixture). Chưa có test giao dịch thanh toán thật qua sandbox VNPay.
 - Khi sửa code phải chạy lại trong thư mục `backend`:
 
 ```text
@@ -186,6 +192,8 @@ E2E chỉ chạy khi có MongoDB phù hợp; không dùng database dev/productio
 | H7 | `feature/hieunc-h7-invoice` | `3b7f19e5168d7a60502dfebb1e9a079742e2a1a8` | Merged PR #13 |
 | H6 | `feature/hieunc-h6-availability` | `61b831e7ed3242204bc9bfd6adde7659106191d9` | Merged PR #14 |
 | VNPay foundation | `feature/hieunc-vnpay-foundation` | `03f6bfffae3fe5c7e2494038646be6cd6d1dfb62` | Đã push, chưa ghi nhận merge |
+| VNPay settlement persistence | `feature/hieunc-vnpay-foundation` | `d1a8bb5` | Đã push |
+| VNPay deposit/final endpoints | `feature/hieunc-vnpay-foundation` | `f18f8df` | Đã push |
 
 Commit messages tương ứng:
 
@@ -194,6 +202,8 @@ feat(booking): add booking and payment schemas
 feat(invoice): implement invoice calculation service
 feat(booking): add room availability calculation core
 feat(payment): add vnpay integration foundation
+feat(payment): persist vnpay settlement with atomic compare-and-set
+feat(payment): add vnpay deposit and final payment endpoints
 ```
 
 ## 8. Quy tắc cập nhật tài liệu
