@@ -8,7 +8,8 @@ const room = {
   id: 'abcdef0123456789abcdef01',
   name: 'Standard',
   description: 'Hai khách',
-  capacity: 2,
+  adultCapacity: 2,
+  childCapacity: 0,
   basePrice: 850000,
   amenities: [{ id: 'abcdef0123456789abcdef02', name: 'Wi-Fi', isActive: false }],
   isActive: true,
@@ -30,7 +31,8 @@ function renderForm(initial?: typeof room) {
 }
 function fill() {
   fireEvent.change(screen.getByLabelText(/Tên loại phòng/), { target: { value: 'Deluxe' } })
-  fireEvent.change(screen.getByLabelText(/Sức chứa/), { target: { value: '3' } })
+  fireEvent.change(screen.getByLabelText(/Người lớn/), { target: { value: '3' } })
+  fireEvent.change(screen.getByLabelText(/Trẻ em/), { target: { value: '0' } })
   fireEvent.change(screen.getByLabelText(/Giá VND/), { target: { value: '1.500.000' } })
 }
 describe('UC50 form', () => {
@@ -43,11 +45,33 @@ describe('UC50 form', () => {
     renderForm()
     fireEvent.click(screen.getByRole('button', { name: 'Lưu loại phòng' }))
     expect(screen.getByLabelText(/Tên loại phòng/)).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByLabelText(/Sức chứa/)).toHaveAccessibleDescription(
-      'Sức chứa phải là số nguyên từ 1.',
+    expect(screen.getByLabelText(/Người lớn/)).toHaveAccessibleDescription(
+      'Số người lớn phải là số nguyên từ 1.',
+    )
+    expect(screen.getByLabelText(/Trẻ em/)).toHaveAccessibleDescription(
+      'Số trẻ em phải là số nguyên từ 0.',
     )
     expect(screen.getByLabelText(/Giá VND/)).toHaveAttribute('aria-invalid', 'true')
     await waitFor(() => expect(screen.getByLabelText(/Tên loại phòng/)).toHaveFocus())
+    expect(post).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['Người lớn', '0'],
+    ['Người lớn', '-1'],
+    ['Người lớn', '1.5'],
+    ['Người lớn', ''],
+    ['Trẻ em', '-1'],
+    ['Trẻ em', '1.5'],
+    ['Trẻ em', ''],
+  ])('rejects invalid %s value %s on the client', async (label, value) => {
+    const post = vi.spyOn(api, 'post')
+    renderForm()
+    fill()
+    const input = screen.getByLabelText(new RegExp(label))
+    fireEvent.change(input, { target: { value } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu loại phòng' }))
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(input).toHaveFocus())
     expect(post).not.toHaveBeenCalled()
   })
   it('submits integer VND, prevents double submit while pending, and succeeds', async () => {
@@ -66,8 +90,14 @@ describe('UC50 form', () => {
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
     expect(post).toHaveBeenCalledWith(
       '/room-types',
-      expect.objectContaining({ basePrice: 1500000, capacity: 3, amenities: [] }),
+      expect.objectContaining({
+        basePrice: 1500000,
+        adultCapacity: 3,
+        childCapacity: 0,
+        amenities: [],
+      }),
     )
+    expect(post.mock.calls[0][1]).not.toHaveProperty('capacity')
     expect(screen.getByRole('button', { name: 'Đang xử lý…' })).toBeDisabled()
     finish({ data: room })
     await waitFor(() => expect(success).toHaveBeenCalledOnce())
@@ -75,6 +105,8 @@ describe('UC50 form', () => {
   it.each([
     [409, 'Tên loại phòng đã tồn tại', /Tên loại phòng/],
     [400, 'amenities không hợp lệ: abc', 'Tiện nghi'],
+    [400, 'adultCapacity must not be less than 1', /Người lớn/],
+    [400, 'childCapacity must not be less than 0', /Trẻ em/],
   ])('maps API error %s to its field and retains input', async (status, message, label) => {
     vi.spyOn(api, 'post').mockRejectedValue({
       isAxiosError: true,
@@ -96,6 +128,8 @@ describe('UC50 form', () => {
     renderForm(room)
     expect(screen.getByLabelText('Wi-Fi (ngừng)')).toBeChecked()
     expect(screen.getByLabelText(/Giá VND/)).toHaveValue('850.000')
+    expect(screen.getByLabelText(/Người lớn/)).toHaveValue(2)
+    expect(screen.getByLabelText(/Trẻ em/)).toHaveValue(0)
     fireEvent.change(screen.getByLabelText('Mô tả'), { target: { value: 'Mới' } })
     fireEvent.click(screen.getByRole('button', { name: 'Lưu loại phòng' }))
     await waitFor(() =>

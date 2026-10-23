@@ -8,7 +8,8 @@ const room = {
   id: 'r1',
   name: 'Standard',
   description: 'Phòng hai khách',
-  capacity: 2,
+  adultCapacity: 2,
+  childCapacity: 0,
   basePrice: 850000,
   amenities: [{ id: 'a1', name: 'Wi-Fi' }],
   isActive: true,
@@ -29,10 +30,12 @@ describe('UC49 RoomTypesPage', () => {
     vi.spyOn(api, 'get').mockResolvedValue(response())
     renderPage()
     expect(await screen.findByRole('rowheader', { name: 'Standard' })).toBeInTheDocument()
-    for (const name of ['Tên', 'Mô tả', 'Sức chứa', 'Giá', 'Tiện nghi', 'Trạng thái'])
+    for (const name of ['Tên', 'Mô tả', 'Người lớn', 'Trẻ em', 'Giá', 'Tiện nghi', 'Trạng thái'])
       expect(screen.getByRole('columnheader', { name })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: /850\.000\s*₫/ })).toBeInTheDocument()
     expect(screen.getByText('Wi-Fi')).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '2' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '0' })).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Thêm loại phòng' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sửa Standard' })).toBeInTheDocument()
