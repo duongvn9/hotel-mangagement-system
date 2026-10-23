@@ -40,7 +40,11 @@ export function UserMenu() {
   return (
     <span className="flex flex-wrap items-center gap-4">
       {ROLE_LINKS[me.role]?.map((link) => (
-        <Link key={link.to} to={link.to} className="hover:text-primary">
+        <Link
+          key={link.to}
+          to={link.to}
+          className="inline-flex min-h-11 items-center hover:text-primary"
+        >
           {link.label}
         </Link>
       ))}

@@ -31,13 +31,7 @@ describe('UC49 RoomTypesPage', () => {
     expect(await screen.findByRole('rowheader', { name: 'Standard' })).toBeInTheDocument()
     for (const name of ['Tên', 'Mô tả', 'Sức chứa', 'Giá', 'Tiện nghi', 'Trạng thái'])
       expect(screen.getByRole('columnheader', { name })).toBeInTheDocument()
-    expect(
-      screen.getByText(
-        new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(
-          room.basePrice,
-        ),
-      ),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: /850\.000\s*₫/ })).toBeInTheDocument()
     expect(screen.getByText('Wi-Fi')).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(screen.queryByRole('button', { name: /Thêm|Sửa|Xóa/ })).not.toBeInTheDocument()
@@ -78,7 +72,9 @@ describe('UC49 RoomTypesPage', () => {
         params: { page: 1, limit: 10, isActive: false },
       }),
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
+    const next = await screen.findByRole('button', { name: 'Trang sau' })
+    await waitFor(() => expect(next).toBeEnabled())
+    fireEvent.click(next)
     await waitFor(() =>
       expect(get).toHaveBeenLastCalledWith('/room-types', {
         params: { page: 2, limit: 10, isActive: false },
