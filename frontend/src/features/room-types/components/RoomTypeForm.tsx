@@ -91,7 +91,8 @@ export function RoomTypeForm({
   const options = useQuery({ queryKey: ['amenity-options'], queryFn: getAmenityOptions })
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
-  const [capacity, setCapacity] = useState(String(initial?.capacity ?? ''))
+  const [adultCapacity, setAdultCapacity] = useState(String(initial?.adultCapacity ?? ''))
+  const [childCapacity, setChildCapacity] = useState(String(initial?.childCapacity ?? ''))
   const [price, setPrice] = useState(
     initial ? new Intl.NumberFormat('vi-VN').format(initial.basePrice) : '',
   )
@@ -119,7 +120,18 @@ export function RoomTypeForm({
       if (axios.isAxiosError(error) && error.response?.status === 409 && /tên/i.test(message))
         setErrors({ name: message })
       else if (/amenit|tiện nghi/i.test(message)) setErrors({ amenities: message })
-      else setGeneral(message)
+      else {
+        const raw = axios.isAxiosError(error) ? error.response?.data?.message : undefined
+        const messages: string[] = Array.isArray(raw) ? raw : [message]
+        const fieldErrors = Object.fromEntries(
+          ['adultCapacity', 'childCapacity'].flatMap((field) => {
+            const matched = messages.filter((text) => text.includes(field))
+            return matched.length ? [[field, matched.join(', ')]] : []
+          }),
+        )
+        if (Object.keys(fieldErrors).length) setErrors(fieldErrors)
+        else setGeneral(message)
+      }
       focusError()
     },
     onSettled: () => {
@@ -140,8 +152,18 @@ export function RoomTypeForm({
     const amount = Number(price.replaceAll('.', ''))
     if (!name.trim() || name.trim().length > 100)
       next.name = 'Nhập tên loại phòng (tối đa 100 ký tự).'
-    if (!capacity.trim() || !Number.isSafeInteger(Number(capacity)) || Number(capacity) < 1)
-      next.capacity = 'Sức chứa phải là số nguyên từ 1.'
+    if (
+      !adultCapacity.trim() ||
+      !Number.isSafeInteger(Number(adultCapacity)) ||
+      Number(adultCapacity) < 1
+    )
+      next.adultCapacity = 'Số người lớn phải là số nguyên từ 1.'
+    if (
+      !childCapacity.trim() ||
+      !Number.isSafeInteger(Number(childCapacity)) ||
+      Number(childCapacity) < 0
+    )
+      next.childCapacity = 'Số trẻ em phải là số nguyên từ 0.'
     if (!/^\d{1,3}(\.\d{3})*$|^\d+$/.test(price) || !Number.isSafeInteger(amount) || amount <= 0)
       next.basePrice = 'Giá phải là số nguyên VND lớn hơn 0.'
     setErrors(next)
@@ -154,7 +176,8 @@ export function RoomTypeForm({
     const input: RoomTypeInput = {
       name: name.trim(),
       description: description.trim(),
-      capacity: Number(capacity),
+      adultCapacity: Number(adultCapacity),
+      childCapacity: Number(childCapacity),
       basePrice: amount,
       amenities: selected,
       isActive,
@@ -210,14 +233,24 @@ export function RoomTypeForm({
           onChange={(event) => setDescription(event.target.value)}
         />
         <TextField
-          label="Sức chứa"
+          label="Người lớn"
           required
           type="number"
           min={1}
           step={1}
-          value={capacity}
-          onChange={(event) => setCapacity(event.target.value)}
-          error={errors.capacity}
+          value={adultCapacity}
+          onChange={(event) => setAdultCapacity(event.target.value)}
+          error={errors.adultCapacity}
+        />
+        <TextField
+          label="Trẻ em"
+          required
+          type="number"
+          min={0}
+          step={1}
+          value={childCapacity}
+          onChange={(event) => setChildCapacity(event.target.value)}
+          error={errors.childCapacity}
         />
         <TextField
           label="Giá VND"

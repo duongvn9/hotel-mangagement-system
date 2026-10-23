@@ -10,11 +10,20 @@ import type { AmenitiesService } from '../amenities/amenities.service.js';
 describe('UC49 query and schema', () => {
   const RoomTypes = model<RoomType>('UC49UnitRoomType', RoomTypeSchema);
   const Amenities = model('UC49UnitAmenity', AmenitySchema);
-  const valid = { name: 'Standard', capacity: 2, basePrice: 850000 };
+  const valid = {
+    name: 'Standard',
+    adultCapacity: 2,
+    childCapacity: 0,
+    basePrice: 850000,
+  };
   it.each([
-    { capacity: 0 },
-    { capacity: -1 },
-    { capacity: 1.5 },
+    { adultCapacity: 0 },
+    { adultCapacity: -1 },
+    { adultCapacity: 1.5 },
+    { adultCapacity: undefined },
+    { childCapacity: undefined },
+    { childCapacity: -1 },
+    { childCapacity: 1.5 },
     { basePrice: 0 },
     { basePrice: -1 },
     { basePrice: 1.5 },
@@ -46,7 +55,7 @@ describe('UC49 query and schema', () => {
       isActive: 'false',
       page: '2',
       limit: '5',
-      sortBy: 'capacity',
+      sortBy: 'adultCapacity',
       sortOrder: 'desc',
     });
     expect(await validate(query)).toEqual([]);
@@ -65,6 +74,7 @@ describe('UC49 query and schema', () => {
     { limit: 0 },
     { isActive: 'yes' },
     { sortBy: 'password' },
+    { sortBy: 'capacity' },
     { sortOrder: 'down' },
     { search: ['a'] },
   ])('rejects bad query %j', async (query) => {
@@ -139,7 +149,8 @@ describe('RoomTypesService', () => {
       _id: new Types.ObjectId(),
       name: 'Standard',
       description: '',
-      capacity: 2,
+      adultCapacity: 2,
+      childCapacity: 0,
       basePrice: 850000,
       isActive: true,
       amenities: [
@@ -151,8 +162,8 @@ describe('RoomTypesService', () => {
     const rows = [
       base,
       { ...base, isActive: false },
-      { ...base, capacity: 1.5 },
-      { ...base, capacity: 0 },
+      { ...base, adultCapacity: 1.5 },
+      { ...base, adultCapacity: 0 },
       { ...base, basePrice: 0 },
       { ...base, basePrice: 1.5 },
     ];
@@ -170,5 +181,38 @@ describe('RoomTypesService', () => {
       { id: String(base.amenities[1]!._id), name: 'Wi-Fi' },
     ]);
     expect(result.items[0]).not.toHaveProperty('privateField');
+    expect(result.items[0]).not.toHaveProperty('capacity');
+    expect(result.items[0]).toMatchObject({
+      adultCapacity: 2,
+      childCapacity: 0,
+    });
   });
+  it.each(['adultCapacity', 'childCapacity'] as const)(
+    'sorts by %s with a stable tie breaker',
+    async (sortBy) => {
+      const { service, chain } = setup();
+      await service.list(Object.assign(new ListRoomTypesQuery(), { sortBy }));
+      expect(chain.sort).toHaveBeenCalledWith({ [sortBy]: 1, _id: 1 });
+    },
+  );
+  it.each([-1, 1.5, undefined, Number.MAX_SAFE_INTEGER + 1])(
+    'does not open booking for invalid childCapacity %s',
+    async (childCapacity) => {
+      const { service } = setup([
+        {
+          _id: new Types.ObjectId(),
+          name: 'X',
+          adultCapacity: 2,
+          childCapacity,
+          basePrice: 1,
+          isActive: true,
+          amenities: [],
+        },
+      ]);
+      expect(
+        (await service.list(new ListRoomTypesQuery())).items[0]
+          .availableForBooking,
+      ).toBe(false);
+    },
+  );
 });

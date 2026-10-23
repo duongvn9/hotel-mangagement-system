@@ -8,7 +8,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ListRoomTypesQuery } from './dto/list-room-types.dto.js';
 import type { RoomTypeListResponse } from './dto/room-type-response.dto.js';
-import { RoomType, validBasePrice } from './schemas/room-type.schema.js';
+import {
+  RoomType,
+  validBasePrice,
+  validAdultCapacity,
+  validChildCapacity,
+} from './schemas/room-type.schema.js';
 import { AmenitiesService } from '../amenities/amenities.service.js';
 import {
   CreateRoomTypeDto,
@@ -48,17 +53,18 @@ export class RoomTypesService {
 
   private validBookingFields(value: {
     isActive: boolean;
-    capacity: number;
+    adultCapacity: number;
+    childCapacity: number;
     basePrice: number;
   }) {
     if (
       value.isActive &&
-      (!Number.isSafeInteger(value.capacity) ||
-        value.capacity < 1 ||
+      (!validAdultCapacity(value.adultCapacity) ||
+        !validChildCapacity(value.childCapacity) ||
         !validBasePrice(value.basePrice))
     )
       throw new BadRequestException(
-        'capacity và basePrice phải là số nguyên hợp lệ trước khi kích hoạt',
+        'adultCapacity, childCapacity và basePrice phải là số nguyên hợp lệ trước khi kích hoạt',
       );
   }
 
@@ -79,7 +85,8 @@ export class RoomTypesService {
     _id: Types.ObjectId;
     name: string;
     description?: string;
-    capacity: number;
+    adultCapacity: number;
+    childCapacity: number;
     basePrice: number;
     isActive: boolean;
     amenities: { _id: Types.ObjectId; name: string; isActive?: boolean }[];
@@ -88,7 +95,8 @@ export class RoomTypesService {
       id: String(row._id),
       name: row.name,
       description: row.description ?? '',
-      capacity: row.capacity,
+      adultCapacity: row.adultCapacity,
+      childCapacity: row.childCapacity,
       basePrice: row.basePrice,
       isActive: row.isActive,
       amenities: (row.amenities ?? []).filter(Boolean).map((a) => ({
@@ -98,8 +106,8 @@ export class RoomTypesService {
       })),
       availableForBooking:
         row.isActive === true &&
-        Number.isSafeInteger(row.capacity) &&
-        row.capacity >= 1 &&
+        validAdultCapacity(row.adultCapacity) &&
+        validChildCapacity(row.childCapacity) &&
         validBasePrice(row.basePrice),
     };
   }
@@ -141,7 +149,8 @@ export class RoomTypesService {
           .findOneAndUpdate(
             {
               _id: id,
-              capacity: current.capacity,
+              adultCapacity: current.adultCapacity,
+              childCapacity: current.childCapacity,
               basePrice: current.basePrice,
               isActive: current.isActive,
               amenities: current.amenities,
@@ -198,7 +207,8 @@ export class RoomTypesService {
         id: String(row._id),
         name: row.name,
         description: row.description ?? '',
-        capacity: row.capacity,
+        adultCapacity: row.adultCapacity,
+        childCapacity: row.childCapacity,
         basePrice: row.basePrice,
         amenities: (row.amenities ?? [])
           .filter(Boolean)
@@ -206,8 +216,8 @@ export class RoomTypesService {
         isActive: row.isActive,
         availableForBooking:
           row.isActive === true &&
-          Number.isSafeInteger(row.capacity) &&
-          row.capacity >= 1 &&
+          validAdultCapacity(row.adultCapacity) &&
+          validChildCapacity(row.childCapacity) &&
           validBasePrice(row.basePrice),
       })),
       total,

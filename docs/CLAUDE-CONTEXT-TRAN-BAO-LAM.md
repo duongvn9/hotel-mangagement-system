@@ -1,5 +1,7 @@
 # Context dự án HMS cho Claude — phần việc Trần Bảo Lâm
 
+> Hợp đồng RoomType mới nhất ngày 24/10/2026: bản sửa [tách sức chứa người lớn/trẻ em](SUA-LOI-ROOM-TYPE-CAPACITY.md) thay capacity bằng adultCapacity/childCapacity, có migration trong seed. Bản sửa hiện nằm trên nhánh fix/28-room-type-capacity, chưa merge main; xem tài liệu để biết check và blocker thực tế. UC50 đã merge main tại e49794c. Các mô tả capacity ở snapshot cũ bên dưới không thay thế hợp đồng mới của nhánh sửa; H6 vẫn giữ capacity/guests riêng.
+
 > Snapshot đọc từ repository ngày 23/10/2026, HEAD `9a0fb22` (merge PR #14, H6 availability).
 > Mục đích: cung cấp context cho Claude phân tích và viết prompt giao Codex thực hiện từng task hoàn chỉnh của Trần Bảo Lâm, kế thừa đúng code của nhóm.
 > Đây là tài liệu bàn giao, không phải bằng chứng mọi chức năng đã chạy end-to-end. Phiên tạo tài liệu chỉ đọc code và tài liệu, không chạy lại test, ứng dụng hay kết nối Firebase/Gmail/VNPay.

@@ -9,6 +9,7 @@ import { Amenity } from '../src/modules/amenities/schemas/amenity.schema.js';
 import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
 import { seedAmenities } from '../src/modules/amenities/seed.js';
 import { seedRoomTypes } from '../src/modules/room-types/seed.js';
+import { migrateRoomTypeCapacities } from '../src/modules/room-types/migrate-capacities.js';
 
 describe('UC49 room types (e2e)', () => {
   let app: INestApplication;
@@ -34,13 +35,15 @@ describe('UC49 room types (e2e)', () => {
     await types.create([
       {
         name: prefix + 'Standard.*',
-        capacity: 2,
+        adultCapacity: 2,
+        childCapacity: 0,
         basePrice: 850000,
         amenities: [amenity._id, new Types.ObjectId()],
       },
       {
         name: prefix + 'Suite',
-        capacity: 4,
+        adultCapacity: 4,
+        childCapacity: 2,
         basePrice: 2800000,
         isActive: false,
       },
@@ -79,6 +82,11 @@ describe('UC49 room types (e2e)', () => {
       amenities: [{ name: prefix + 'Wi-Fi' }],
     });
     expect(result.body.items[0]).not.toHaveProperty('_id');
+    expect(result.body.items[0]).not.toHaveProperty('capacity');
+    expect(result.body.items[0]).toMatchObject({
+      adultCapacity: 2,
+      childCapacity: 0,
+    });
     const inactive = await get()
       .query({ search: prefix, isActive: 'false' })
       .expect(200);
@@ -104,6 +112,7 @@ describe('UC49 room types (e2e)', () => {
     { isActive: 'yes' },
     { sortBy: 'secret' },
     { sortOrder: 'wrong' },
+    { sortBy: 'capacity' },
   ])('rejects invalid query %j', async (query) => {
     const response = await get().query(query).expect(400);
     expect(response.body).toMatchObject({
@@ -131,7 +140,12 @@ describe('UC49 room types (e2e)', () => {
   });
   it('enforces unique names in Mongo, not only schema metadata', async () => {
     await expect(
-      types.create({ name: prefix + 'Suite', capacity: 1, basePrice: 1 }),
+      types.create({
+        name: prefix + 'Suite',
+        adultCapacity: 1,
+        childCapacity: 0,
+        basePrice: 1,
+      }),
     ).rejects.toMatchObject({ code: 11000 });
     await expect(
       amenities.create({ name: prefix + 'Wi-Fi' }),
@@ -173,5 +187,83 @@ describe('UC49 room types (e2e)', () => {
     expect(document.components?.schemas?.RoomTypeResponse).toHaveProperty(
       'properties.availableForBooking',
     );
+    const schema = document.components?.schemas?.RoomTypeResponse;
+    expect(schema).toHaveProperty('properties.adultCapacity');
+    expect(schema).toHaveProperty('properties.childCapacity');
+    expect(schema).not.toHaveProperty('properties.capacity');
+  });
+  it('sorts independently by adult and child capacities', async () => {
+    for (const sortBy of ['adultCapacity', 'childCapacity']) {
+      const result = await get()
+        .query({ search: prefix, sortBy, sortOrder: 'desc' })
+        .expect(200);
+      expect(result.body.items[0].name).toBe(prefix + 'Suite');
+    }
+  });
+  it('migrates only legacy documents, preserves edited/partial documents and is idempotent', async () => {
+    const stamp = new Date('2026-01-01T00:00:00Z');
+    const rows = [
+      {
+        _id: new Types.ObjectId(),
+        name: prefix + 'Legacy',
+        capacity: 3,
+        description: 'Manager edited',
+        basePrice: 777,
+        isActive: false,
+        amenities: [],
+        createdAt: stamp,
+        updatedAt: stamp,
+      },
+      {
+        _id: new Types.ObjectId(),
+        name: prefix + 'Split',
+        capacity: 99,
+        adultCapacity: 5,
+        childCapacity: 2,
+        basePrice: 1,
+      },
+      {
+        _id: new Types.ObjectId(),
+        name: prefix + 'PartialAdult',
+        capacity: 99,
+        adultCapacity: 6,
+        basePrice: 1,
+      },
+      {
+        _id: new Types.ObjectId(),
+        name: prefix + 'PartialChild',
+        capacity: 99,
+        childCapacity: 4,
+        basePrice: 1,
+      },
+    ];
+    await types.collection.insertMany(rows);
+    await migrateRoomTypeCapacities(types);
+    const migrated = await types.collection.findOne({ _id: rows[0]._id });
+    expect(migrated).toMatchObject({
+      adultCapacity: 3,
+      childCapacity: 0,
+      description: 'Manager edited',
+      basePrice: 777,
+      isActive: false,
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    expect(migrated).not.toHaveProperty('capacity');
+    for (const row of rows.slice(1))
+      expect(await types.collection.findOne({ _id: row._id })).toEqual(row);
+    const once = await types.collection
+      .find({ _id: { $in: rows.map((row) => row._id) } })
+      .sort({ _id: 1 })
+      .toArray();
+    expect((await migrateRoomTypeCapacities(types)).modifiedCount).toBe(0);
+    await seedRoomTypes(app);
+    await seedRoomTypes(app);
+    expect(
+      await types.collection
+        .find({ _id: { $in: rows.map((row) => row._id) } })
+        .sort({ _id: 1 })
+        .toArray(),
+    ).toEqual(once);
   });
 });

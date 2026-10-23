@@ -22,7 +22,8 @@ describe('UC50 write API', () => {
   const http = () => request(app.getHttpServer());
   const payload = () => ({
     name: prefix + 'Standard',
-    capacity: 2,
+    adultCapacity: 2,
+    childCapacity: 0,
     basePrice: 850000,
     amenities: [active],
   });
@@ -108,7 +109,8 @@ describe('UC50 write API', () => {
       .expect(200);
     expect(detail.body).toMatchObject({
       description: 'Changed',
-      capacity: 2,
+      adultCapacity: 2,
+      childCapacity: 0,
       basePrice: 850000,
     });
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -163,7 +165,8 @@ describe('UC50 write API', () => {
       { _id: id },
       { updatedAt: 'today' },
       { extra: true },
-      { capacity: '2' },
+      { adultCapacity: '2' },
+      { capacity: 2 },
       { isActive: null },
     ])
       await http()
@@ -222,13 +225,60 @@ describe('UC50 write API', () => {
       ),
     ).toBe(false);
   });
+  it.each([
+    { adultCapacity: 0 },
+    { adultCapacity: -1 },
+    { adultCapacity: 1.5 },
+    { adultCapacity: undefined },
+    { childCapacity: -1 },
+    { childCapacity: 1.5 },
+    { childCapacity: undefined },
+    { capacity: 2 },
+  ])('rejects invalid split capacities or the old field %j', async (change) => {
+    await http()
+      .post('/api/v1/room-types')
+      .set(manager)
+      .send({ ...payload(), ...change })
+      .expect(400);
+  });
+  it('patches one capacity without overwriting the other and never returns the old field', async () => {
+    const path = '/api/v1/room-types/' + id;
+    const adults = await http()
+      .patch(path)
+      .set(manager)
+      .send({ adultCapacity: 3 })
+      .expect(200);
+    expect(adults.body).toMatchObject({ adultCapacity: 3, childCapacity: 0 });
+    const children = await http()
+      .patch(path)
+      .set(manager)
+      .send({ childCapacity: 2 })
+      .expect(200);
+    expect(children.body).toMatchObject({
+      adultCapacity: 3,
+      childCapacity: 2,
+      availableForBooking: true,
+    });
+    expect(children.body).not.toHaveProperty('capacity');
+    expect(
+      (await http().get(path).set(manager).expect(200)).body,
+    ).toMatchObject({ adultCapacity: 3, childCapacity: 2 });
+    const before = await types.findById(id).lean();
+    await http()
+      .patch(path)
+      .set(manager)
+      .send({ adultCapacity: 4, childCapacity: -1 })
+      .expect(400);
+    expect(await types.findById(id).lean()).toEqual(before);
+  });
   it('retains Manager edits when facility seeds run again', async () => {
     await seedAmenities(app);
     await seedRoomTypes(app);
     const sample = await types.findOne({ name: 'Standard' }).lean();
     const change = {
       description: 'UC50 manager edit',
-      capacity: 7,
+      adultCapacity: 7,
+      childCapacity: 0,
       basePrice: 1234567,
       amenities: [],
       isActive: false,
@@ -250,7 +300,8 @@ describe('UC50 write API', () => {
     const legacy = await types.collection.insertOne({
       name: prefix + 'Legacy',
       description: '',
-      capacity: 0,
+      adultCapacity: 0,
+      childCapacity: 0,
       basePrice: 0,
       amenities: [],
       isActive: false,

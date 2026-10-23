@@ -5,6 +5,11 @@ import { isMoneyVnd } from '../../../common/database/conventions.js';
 export const validBasePrice = (value: number): boolean =>
   isMoneyVnd(value) && value > 0;
 
+export const validAdultCapacity = (value: number): boolean =>
+  Number.isSafeInteger(value) && value >= 1;
+export const validChildCapacity = (value: number): boolean =>
+  Number.isSafeInteger(value) && value >= 0;
+
 @Schema({ timestamps: true, collection: 'roomtypes' })
 export class RoomType {
   @Prop({ required: true, unique: true, trim: true })
@@ -14,7 +19,10 @@ export class RoomType {
   description: string;
 
   @Prop({ required: true, min: 1, validate: Number.isSafeInteger })
-  capacity: number;
+  adultCapacity: number;
+
+  @Prop({ required: true, min: 0, validate: Number.isSafeInteger })
+  childCapacity: number;
 
   @Prop({ required: true, validate: validBasePrice })
   basePrice: number;

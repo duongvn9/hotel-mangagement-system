@@ -10,7 +10,12 @@ import { RoomTypesService } from './room-types.service.js';
 import { RoomType } from './schemas/room-type.schema.js';
 import { AmenitiesService } from '../amenities/amenities.service.js';
 
-const valid = { name: ' Standard ', capacity: 2, basePrice: 850000 };
+const valid = {
+  name: ' Standard ',
+  adultCapacity: 2,
+  childCapacity: 0,
+  basePrice: 850000,
+};
 describe('UC50 write DTO', () => {
   it('trims strings and accepts a valid create', async () => {
     const dto = plainToInstance(CreateRoomTypeDto, valid);
@@ -22,11 +27,18 @@ describe('UC50 write DTO', () => {
     { name: '  ' },
     { name: null },
     { name: 'a'.repeat(101) },
-    { capacity: undefined },
-    { capacity: 0 },
-    { capacity: -1 },
-    { capacity: 1.5 },
-    { capacity: '2' },
+    { adultCapacity: undefined },
+    { adultCapacity: 0 },
+    { adultCapacity: -1 },
+    { adultCapacity: 1.5 },
+    { adultCapacity: '2' },
+    { adultCapacity: Number.MAX_SAFE_INTEGER + 1 },
+    { childCapacity: undefined },
+    { childCapacity: null },
+    { childCapacity: -1 },
+    { childCapacity: 1.5 },
+    { childCapacity: '0' },
+    { childCapacity: Number.MAX_SAFE_INTEGER + 1 },
     { basePrice: undefined },
     { basePrice: 0 },
     { basePrice: -1 },
@@ -54,21 +66,36 @@ describe('UC50 write DTO', () => {
       await validate(plainToInstance(UpdateRoomTypeDto, { isActive: false })),
     ).toEqual([]);
     expect(
-      (await validate(plainToInstance(UpdateRoomTypeDto, { capacity: null })))
-        .length,
+      (
+        await validate(
+          plainToInstance(UpdateRoomTypeDto, { adultCapacity: null }),
+        )
+      ).length,
     ).toBeGreaterThan(0);
     const pipe = new ValidationPipe({
       transform: true,
       whitelist: true,
       forbidNonWhitelisted: true,
     });
-    for (const field of ['_id', 'createdAt', 'updatedAt', 'unknown'])
+    for (const field of [
+      '_id',
+      'createdAt',
+      'updatedAt',
+      'unknown',
+      'capacity',
+    ])
       await expect(
         pipe.transform(
           { [field]: 'x' },
           { type: 'body', metatype: UpdateRoomTypeDto },
         ),
       ).rejects.toThrow();
+    await expect(
+      pipe.transform(
+        { ...valid, capacity: 2 },
+        { type: 'body', metatype: CreateRoomTypeDto },
+      ),
+    ).rejects.toThrow();
   });
 });
 
@@ -78,7 +105,8 @@ describe('UC50 service rules', () => {
     current = {
       _id: new Types.ObjectId(id),
       name: 'Standard',
-      capacity: 2,
+      adultCapacity: 2,
+      childCapacity: 0,
       basePrice: 850000,
       isActive: true,
       amenities: [] as Types.ObjectId[],
@@ -150,7 +178,8 @@ describe('UC50 service rules', () => {
     const { service, amenities } = setup({
       _id: new Types.ObjectId(id),
       name: 'X',
-      capacity: 2,
+      adultCapacity: 2,
+      childCapacity: 0,
       basePrice: 1,
       isActive: true,
       amenities: [old],
@@ -165,7 +194,8 @@ describe('UC50 service rules', () => {
     const { service, model } = setup({
       _id: new Types.ObjectId(id),
       name: 'X',
-      capacity: 0,
+      adultCapacity: 0,
+      childCapacity: 0,
       basePrice: 0,
       isActive: false,
       amenities: [],
@@ -192,7 +222,7 @@ describe('UC50 service rules', () => {
   it('retries a changed snapshot and catches update duplicate race', async () => {
     const { service, write, model } = setup();
     write.exec.mockResolvedValueOnce(null);
-    await service.update(id, { capacity: 3 });
+    await service.update(id, { adultCapacity: 3 });
     expect(model.findOneAndUpdate).toHaveBeenCalledTimes(2);
     write.exec.mockRejectedValueOnce({ code: 11000 });
     await expect(service.update(id, { name: 'Other' })).rejects.toMatchObject({
