@@ -19,6 +19,7 @@ import { UsersModule } from './modules/users/users.module.js';
 import { BookingsModule } from './modules/bookings/bookings.module.js';
 import { InvoicesModule } from './modules/invoices/invoices.module.js';
 import { PaymentsModule } from './modules/payments/payments.module.js';
+import { PaymentsApiModule } from './modules/payments/payments-api.module.js';
 import { TasksModule } from './modules/tasks/tasks.module.js';
 import { AmenitiesModule } from './modules/amenities/amenities.module.js';
 import { RoomTypesModule } from './modules/room-types/room-types.module.js';
@@ -46,6 +47,7 @@ import { RoomTypesModule } from './modules/room-types/room-types.module.js';
     BookingsModule,
     InvoicesModule,
     PaymentsModule,
+    PaymentsApiModule,
     TasksModule,
     AmenitiesModule,
     RoomTypesModule,
