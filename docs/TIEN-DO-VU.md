@@ -18,6 +18,14 @@
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
 
+## Đồng bộ main để xử lý conflict PR #27
+
+- Theo ủy quyền, merge `origin/main@de05aff` vào `feature/vu-68-69-service-order`, không rebase/reset/force-push hoặc sửa main.
+- Chỉ conflict `backend/src/app.module.ts`: giữ cả import và đăng ký ServiceOrdersModule cùng NotificationsModule. Giữ toàn bộ cải tiến Service form và Notifications của nhóm.
+- Dependencies local cũ thiếu nodemailer khiến lần đầu typecheck/test/build lỗi; đã chạy `npm ci` theo lockfile mới từ main, không tự đổi dependency.
+- Sau đồng bộ dependencies: BE format/lint/typecheck/build PASS, 837 unit tests PASS; FE format/lint/typecheck/build PASS, 314 tests PASS. Bundle-size warning vẫn không chặn build.
+- `git diff --check` PASS; E2E được xác minh qua CI head sau push. Chỉ merge PR #27 sau khi CI xanh và GitHub xác nhận không conflict; chưa triển khai PROMPT11 trong lượt xử lý conflict.
+
 ## 16. Jira #68 / UC22 và #69 / UC23 — Customer Service Order (hiện trạng)
 
 ### Trạng thái, nguồn thật và ranh giới tích hợp

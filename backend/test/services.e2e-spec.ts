@@ -229,7 +229,7 @@ describe('UC53 Service list and H4 (real AppModule)', () => {
       timestamp: expect.any(String),
     });
   });
-  it('is read only, returns empty pages and has no mutation/detail routes', async () => {
+  it('keeps list reads read only, returns empty pages and has no DELETE route', async () => {
     const before = await services.find().sort({ _id: 1 }).lean();
     for (let i = 0; i < 3; i++)
       await get().query({ search: prefix }).expect(200);
@@ -240,16 +240,6 @@ describe('UC53 Service list and H4 (real AppModule)', () => {
       (await get().query({ search: prefix, page: 99 }).expect(200)).body,
     ).toMatchObject({ items: [], total: 6, page: 99 });
     const id = String(new Types.ObjectId());
-    await http()
-      .post('/api/v1/services')
-      .set(manager)
-      .send({ name: 'No write' })
-      .expect(404);
-    await http()
-      .patch('/api/v1/services/' + id)
-      .set(manager)
-      .send({ isActive: false })
-      .expect(404);
     await http()
       .delete('/api/v1/services/' + id)
       .set(manager)
@@ -354,7 +344,7 @@ describe('UC53 Service list and H4 (real AppModule)', () => {
     for (const row of await services.find())
       await expect(row.validate()).resolves.toBeUndefined();
   });
-  it('documents list fields/queries without extra endpoints', () => {
+  it('preserves list fields and query documentation', () => {
     const doc = SwaggerModule.createDocument(
       app,
       new DocumentBuilder().setTitle('UC53').build(),
@@ -364,8 +354,6 @@ describe('UC53 Service list and H4 (real AppModule)', () => {
       expect(doc.paths['/api/v1/services'].get?.responses).toHaveProperty(
         status,
       );
-    expect(doc.paths['/api/v1/services'].post).toBeUndefined();
-    expect(doc.paths['/api/v1/services/{id}']).toBeUndefined();
     expect(
       Object.keys(doc.components!.schemas!.ServiceResponse.properties!).sort(),
     ).toEqual([

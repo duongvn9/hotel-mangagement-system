@@ -26,3 +26,13 @@ export interface ServiceList {
 export async function listServices(query: ServiceQuery): Promise<ServiceList> {
   return (await api.get<ServiceList>('/services', { params: query })).data
 }
+export type ServiceInput = Omit<Service, 'id'>
+export async function getService(id: string): Promise<Service> {
+  return (await api.get<Service>(`/services/${id}`)).data
+}
+export async function createService(input: ServiceInput): Promise<Service> {
+  return (await api.post<Service>('/services', input)).data
+}
+export async function updateService(id: string, input: Partial<ServiceInput>): Promise<Service> {
+  return (await api.patch<Service>(`/services/${id}`, input)).data
+}

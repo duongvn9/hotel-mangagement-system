@@ -2,7 +2,10 @@
  * Cấu hình đã được kiểm tra (xem env.validation.ts), gom theo nhóm.
  * Dùng trong code: configService.get('mongo.uri', { infer: true }).
  */
+import { notificationConfiguration } from './notifications.config.js';
+
 export const configuration = () => ({
+  notifications: notificationConfiguration(process.env),
   env: process.env.NODE_ENV ?? 'development',
   port: Number(process.env.PORT ?? 3000),
   apiPrefix: process.env.API_PREFIX ?? 'api',

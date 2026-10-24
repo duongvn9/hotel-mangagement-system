@@ -27,6 +27,7 @@ import { RoomsModule } from './modules/rooms/rooms.module.js';
 import { IssuesModule } from './modules/issues/issues.module.js';
 import { ServicesModule } from './modules/services/services.module.js';
 import { ServiceOrdersModule } from './modules/service-orders/service-orders.module.js';
+import { NotificationsModule } from './modules/notifications/notifications.module.js';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { ServiceOrdersModule } from './modules/service-orders/service-orders.mod
     RoomsModule,
     ServicesModule,
     ServiceOrdersModule,
+    NotificationsModule,
     // Module nghiệp vụ thêm vào đây, xem src/modules/README.md
   ],
   // Khai báo ở đây (không dùng app.useGlobal* trong main.ts) để test e2e cũng có.
