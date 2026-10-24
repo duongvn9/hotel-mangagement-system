@@ -12,12 +12,12 @@ import {
 const MS_PER_DAY = 86_400_000;
 
 /**
- * Nguồn giá authoritative cho H7, lấy từ RoomType.basePrice của từng phòng đã đặt.
+ * Nguồn giá authoritative cho H7.
  *
- * rate = RoomType.basePrice; units = số đêm theo ngày nghiệp vụ Việt Nam
- * (businessBoundary(checkOut) - businessBoundary(checkIn)). Phòng thiếu RoomType bị bỏ
- * khỏi kết qua; InvoicesService sẽ fail-closed vì pricing không phủ đủ số phòng đã đặt.
- * Không suy đoán giá từ client totals.
+ * units = số đêm theo ngày nghiệp vụ Việt Nam. rate ưu tiên lấy từ `rateSnapshot` chốt
+ * lúc đặt phòng (để H7 tính lại kiểm chứng, không lệ thuộc giá RoomType đổi sau); nếu
+ * booking chưa có snapshot (dữ liệu cũ/seed) thì fallback về RoomType.basePrice hiện tại.
+ * Phòng thiếu giá bị bỏ khỏi kết quả; InvoicesService fail-closed vì pricing không phủ đủ.
  */
 @Injectable()
 export class RoomTypePricingAdapter extends InvoicePricingAdapter {
@@ -33,6 +33,21 @@ export class RoomTypePricingAdapter extends InvoicePricingAdapter {
         businessBoundary(booking.checkIn).getTime()) /
         MS_PER_DAY,
     );
+
+    const snapshot = new Map(
+      (booking.rateSnapshot ?? []).map((entry) => [
+        String(entry.room),
+        entry.ratePerNight,
+      ]),
+    );
+    if (booking.rooms.every((room) => snapshot.has(String(room)))) {
+      return booking.rooms.map((room) => ({
+        roomId: String(room),
+        rate: snapshot.get(String(room))!,
+        units,
+      }));
+    }
+
     const rows = await this.rooms
       .find({ _id: { $in: booking.rooms } })
       .populate<{ roomType: { basePrice: number } | null }>(

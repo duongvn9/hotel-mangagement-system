@@ -64,6 +64,19 @@ export class Booking {
   @Prop({ required: true, validate: isMoneyVnd })
   depositAmount: number;
 
+  // Đơn giá/đêm từng phòng chốt lúc đặt, để H7 tính lại kiểm chứng (không lệ thuộc giá RoomType đổi sau).
+  @Prop({
+    type: [
+      {
+        _id: false,
+        room: { type: Types.ObjectId, ref: 'Room', required: true },
+        ratePerNight: { type: Number, required: true, validate: isMoneyVnd },
+      },
+    ],
+    default: [],
+  })
+  rateSnapshot: { room: Types.ObjectId; ratePerNight: number }[];
+
   @Prop()
   checkedInAt?: Date;
 

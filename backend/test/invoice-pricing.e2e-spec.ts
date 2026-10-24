@@ -99,4 +99,41 @@ describe('Invoice pricing from RoomType (e2e)', () => {
     expect(invoice.totalAmount).toBe(4800000);
     expect(invoice.balanceDue).toBe(4800000);
   });
+
+  it('prefers the booking rate snapshot over the current room type price', async () => {
+    const snapBooking = new Types.ObjectId();
+    const snapRoom = new Types.ObjectId();
+    await rooms.create({
+      _id: snapRoom,
+      roomNumber: `PR-S-${snapRoom}`,
+      floor: 3,
+      roomType: typeId,
+      status: 'AVAILABLE',
+    });
+    // Snapshot chốt 500.000/đêm dù RoomType hiện tại là 800.000.
+    await bookings.create({
+      _id: snapBooking,
+      code: `PRICE-SNAP-${snapBooking}`,
+      rooms: [snapRoom],
+      guestName: 'Snapshot test',
+      guestEmail: 'snap@example.test',
+      guestPhone: '0900000000',
+      checkIn: new Date('2090-04-01T00:00:00+07:00'),
+      checkOut: new Date('2090-04-03T00:00:00+07:00'),
+      guests: 1,
+      status: 'CONFIRMED',
+      roomTotal: 1000000,
+      depositAmount: 300000,
+      rateSnapshot: [{ room: snapRoom, ratePerNight: 500000 }],
+    });
+    try {
+      const invoice = await service.getOrCreateForBooking(String(snapBooking));
+      // 1 phòng x 2 đêm x 500.000 (snapshot) = 1.000.000, không phải 1.600.000.
+      expect(invoice.roomTotal).toBe(1000000);
+    } finally {
+      await invoices.deleteMany({ booking: snapBooking });
+      await bookings.deleteOne({ _id: snapBooking });
+      await rooms.deleteOne({ _id: snapRoom });
+    }
+  });
 });

@@ -12,6 +12,7 @@
 - VNPay foundation + settlement persistence (compare-and-set) + endpoint thanh toán (cọc/thanh toán cuối, Return, IPN) đã merge vào `main`.
 - UC20 đặt cọc (#47) và UC21 thanh toán cuối (#52) đã có settlement + endpoint + test; nay số tiền tính từ pricing thực. Còn chờ Guest authorization và sandbox acceptance với credentials thật.
 - Create Booking (#46) đã triển khai: `POST /api/v1/bookings` tạo booking PENDING_DEPOSIT + RoomHold concurrency-safe, pricing server-side. Nối với UC20 để đặt cọc.
+- Bổ sung hoàn thiện: cọc = 30% (thay 100%), lưu snapshot đơn giá từng phòng, cho Guest đặt ẩn danh + thanh toán bằng mã booking, endpoint huỷ booking, và e2e chạy xuyên suốt create→deposit→confirm→final→paid.
 - Không tạo lại các schema hoặc enum đã có; không coi kết quả availability là bảo đảm đặt phòng thành công.
 - Không tạo lại các schema hoặc enum đã có; không coi kết quả availability là bảo đảm đặt phòng thành công.
 
@@ -24,7 +25,8 @@
 | #43 / H6 — UC05 Search Available Rooms | Overlap core, Booking/Hold queries, clock, Room adapter thật, public endpoint `GET /availability`, DTO, Swagger, e2e | — | End-to-end; đã push |
 | VNPay foundation | Config, ký URL, xác minh Return/IPN, validation, processing plan, tests | — | Đã merge main |
 | VNPay settlement + endpoints | Mongo settlement port (CAS, idempotent), initiation service, controller (deposit/final/Return/IPN), authorization Customer/staff, e2e | Guest token auth, sandbox acceptance, HTTPS IPN khi deploy | Đã merge main |
-| #46 — Create Booking | Endpoint `POST /bookings`, pricing server-side, availability recheck, hold concurrency-safe (_id tiebreaker), rollback, e2e | Guest ẩn danh, endpoint huỷ/hết hạn chủ động, đơn giá snapshot từng phòng | Đã push |
+| #46 — Create Booking | Endpoint `POST /bookings` (public, Guest/Customer), pricing + snapshot đơn giá, availability recheck, hold concurrency-safe, rollback, cọc 30%, e2e | Hết hạn hold chủ động (hiện dựa TTL) | Đã push |
+| Guest + huỷ + flow | Guest đặt ẩn danh + thanh toán bằng mã booking, `POST /bookings/:id/cancel` nhả hold, e2e create→deposit→final | Gửi mã qua email/SMS (task notification), hoàn tiền khi huỷ | Đã push |
 | #47 — UC20 Make Deposit Payment | Payment schema, H7, VNPay settlement + endpoint + test; tiền tính từ pricing thực | Guest auth, sandbox acceptance | Settlement/endpoint xong |
 | #52 — UC21 Pay Final Invoice | H7 pricing thực, VNPay settlement + endpoint theo dư nợ + test | Sandbox acceptance | Settlement/endpoint xong |
 
@@ -128,7 +130,13 @@ Nguồn: `bookings.service.ts`, `bookings.controller.ts` (`POST /api/v1/bookings
 - [x] Kiểm thử hai request cùng phòng đồng thời (đúng một thắng) và rollback kẻ thua.
 - [ ] Nối seed feedback sang booking thật khi đủ dữ liệu tham chiếu (thuộc seed của Dương).
 
-> Giả định cần SRS xác nhận: `depositAmount = roomTotal` (trả trước toàn bộ tiền phòng), cửa sổ giữ phòng 15 phút. Chưa có endpoint huỷ/hết hạn chủ động (dựa TTL của hold). Snapshot giá là `roomTotal` tổng hợp; chưa lưu đơn giá từng phòng nên đổi giá RoomType về sau có thể lệch khi H7 recompute.
+> Giả định cần SRS xác nhận: `depositAmount = 30% roomTotal` (DEPOSIT_RATE, placeholder — người dùng chưa chốt hẳn), cửa sổ giữ phòng 15 phút.
+>
+> Đã bổ sung so với bản #46 đầu:
+> - **Snapshot đơn giá từng phòng** (`Booking.rateSnapshot`): H7 `RoomTypePricingAdapter` ưu tiên snapshot (fallback RoomType.basePrice cho booking cũ/seed), tránh lệch khi giá RoomType đổi.
+> - **Guest ẩn danh**: `POST /bookings` mở public; Customer đăng nhập gắn booking, Guest/khác tạo booking không gắn customer. Mã booking là "vé"; Guest dùng mã để tự `POST /payments/deposit|final`. `authorizeBookingAccess` dùng chung cho payment + cancel. Gửi mã qua email/SMS là task notification riêng (hiện trả trong response).
+> - **Huỷ booking**: `POST /bookings/:id/cancel` (owner/nhân viên/Guest-mã), chỉ PENDING_DEPOSIT hoặc CONFIRMED, nhả RoomHold, không tự hoàn tiền.
+> - Còn lại: hết hạn hold chủ động (hiện dựa TTL Mongo), hoàn tiền khi huỷ, sandbox VNPay thật.
 
 ### D. #47 — UC20 đặt cọc
 
@@ -176,6 +184,7 @@ Không tự mở rộng sang Checkout, Service Order, frontend hoặc refund khi
 | VNPay settlement + endpoints | 340 unit pass | 57 e2e pass (gồm 4 settlement + 7 payments) | PASS (lint/typecheck/build) |
 | UC05 adapter/endpoint + pricing thật | 460 unit pass | 101 e2e pass (gồm 5 UC05 + 1 pricing) | PASS (lint/typecheck/build) |
 | #46 Create Booking | 460 unit pass | 109 e2e pass (gồm 8 create booking) | PASS (lint/typecheck/build) |
+| Snapshot/cọc 30%, Guest, huỷ, flow | 460 unit pass | +19 e2e (snapshot, 5 guest, 5 cancel, 1 flow) | PASS (lint/typecheck/format/build) |
 
 - Backend được kiểm thử trên Node 24 (lượt này Node 22); E2E dùng MongoDB 8 và database test riêng. E2E chạy ổn định với `--no-cache` để tránh phụ thuộc thứ tự suite dùng chung DB.
 - VNPay có digest đối chiếu độc lập, không chỉ tự ký rồi tự verify.
@@ -205,7 +214,8 @@ E2E chỉ chạy khi có MongoDB phù hợp; không dùng database dev/productio
 | VNPay deposit/final endpoints | `feature/hieunc-vnpay-foundation` | `f18f8df` | Đã merge main (e91521c) |
 | UC05 Room adapter + endpoint | `feature/hieunc-availability-pricing` | `91e96db` | Đã merge main (7d41711) |
 | H7 pricing từ RoomType | `feature/hieunc-availability-pricing` | `262e45e` | Đã merge main (7d41711) |
-| #46 Create Booking | `feature/hieunc-create-booking` | (xem git log) | Đã push |
+| #46 Create Booking | `feature/hieunc-create-booking` | `cf5ffec` | Đã merge main (94455ff) |
+| Hoàn thiện booking (snapshot/cọc 30%/Guest/huỷ/flow) | `feature/hieunc-booking-completion` | `8bbebcc`,`6f95dfc`,`e3488c8`,`43e2dea` | Đã push |
 
 Commit messages tương ứng:
 
@@ -219,6 +229,10 @@ feat(payment): add vnpay deposit and final payment endpoints
 feat(booking): wire room availability source and UC05 search endpoint
 feat(invoice): price invoices from room type base price
 feat(booking): add create booking with concurrency-safe room hold
+feat(booking): snapshot per-room rates and set deposit to 30 percent
+feat(booking): allow anonymous guest booking and code-based payment
+feat(booking): add cancel booking endpoint that releases the hold
+test(booking): add end-to-end booking and payment flow
 ```
 
 ## 8. Quy tắc cập nhật tài liệu

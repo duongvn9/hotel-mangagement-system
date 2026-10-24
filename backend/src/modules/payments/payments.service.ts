@@ -1,16 +1,17 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomBytes } from 'node:crypto';
 import { Model, Types } from 'mongoose';
-import type { AuthUser } from '../../common/auth/auth-user.js';
 import { BookingStatus } from '../../common/constants/booking-status.enum.js';
-import { Role } from '../../common/constants/role.enum.js';
+import {
+  authorizeBookingAccess,
+  type BookingActor,
+} from '../../common/auth/booking-access.js';
 import {
   Booking,
   type BookingDocument,
@@ -40,8 +41,6 @@ export interface IpnResponse {
   Message: string;
 }
 
-/** Nhân viên được phép khởi tạo thanh toán thay khách tại quầy. */
-const STAFF_ROLES: readonly string[] = [Role.Receptionist, Role.Manager];
 /** Thời hạn một lần thanh toán VNPay trước khi hết hiệu lực. */
 const PAYMENT_WINDOW_MS = 15 * 60 * 1000;
 
@@ -58,10 +57,10 @@ export class PaymentsService {
 
   async initiateDeposit(
     bookingId: string,
-    user: AuthUser,
+    actor: BookingActor,
     options: InitiateOptions,
   ) {
-    const booking = await this.authorizedBooking(bookingId, user);
+    const booking = await this.authorizedBooking(bookingId, actor);
     if (booking.status !== BookingStatus.PendingDeposit) {
       throw new ConflictException('Booking is not awaiting a deposit');
     }
@@ -75,10 +74,10 @@ export class PaymentsService {
 
   async initiateFinal(
     bookingId: string,
-    user: AuthUser,
+    actor: BookingActor,
     options: InitiateOptions,
   ) {
-    const booking = await this.authorizedBooking(bookingId, user);
+    const booking = await this.authorizedBooking(bookingId, actor);
     if (
       [BookingStatus.Cancelled, BookingStatus.PendingDeposit].includes(
         booking.status,
@@ -237,7 +236,7 @@ export class PaymentsService {
 
   private async authorizedBooking(
     bookingId: string,
-    user: AuthUser,
+    actor: BookingActor,
   ): Promise<BookingDocument> {
     if (!/^[a-f\d]{24}$/i.test(bookingId)) {
       throw new BadRequestException('Invalid booking ID');
@@ -246,13 +245,7 @@ export class PaymentsService {
     if (!booking || !booking.isActive) {
       throw new NotFoundException('Booking not found');
     }
-    const ownsBooking =
-      booking.customer !== undefined && String(booking.customer) === user.id;
-    if (user.role === Role.Customer) {
-      if (!ownsBooking) throw new ForbiddenException('Not your booking');
-    } else if (!STAFF_ROLES.includes(user.role)) {
-      throw new ForbiddenException('Not allowed to take payments');
-    }
+    authorizeBookingAccess(booking, actor);
     return booking;
   }
 

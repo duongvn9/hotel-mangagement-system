@@ -3,11 +3,16 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomBytes } from 'node:crypto';
 import { Model, Types } from 'mongoose';
 import type { AuthUser } from '../../common/auth/auth-user.js';
+import {
+  authorizeBookingAccess,
+  type BookingActor,
+} from '../../common/auth/booking-access.js';
 import { Role } from '../../common/constants/role.enum.js';
 import { RoomStatus } from '../../common/constants/room-status.enum.js';
 import { Room } from '../rooms/schemas/room.schema.js';
@@ -21,11 +26,16 @@ import {
 } from './availability.core.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 
-/** Nhân viên được phép đặt phòng hộ khách tại quầy. */
-const STAFF_ROLES: readonly string[] = [Role.Receptionist, Role.Manager];
 /** Thời hạn giữ phòng trước khi đặt cọc (phải khớp cửa sổ thanh toán VNPay). */
 const HOLD_WINDOW_MS = 15 * 60 * 1000;
 const MS_PER_DAY = 86_400_000;
+/** Tỷ lệ đặt cọc trên tiền phòng (placeholder, chờ SRS chốt chính thức). */
+const DEPOSIT_RATE = 0.3;
+
+interface RoomRate {
+  room: Types.ObjectId;
+  ratePerNight: number;
+}
 
 type PopulatedRoom = {
   _id: Types.ObjectId;
@@ -49,10 +59,9 @@ export class BookingsService {
     @Inject(AvailabilityClock) private readonly clock: AvailabilityClock,
   ) {}
 
-  async create(dto: CreateBookingDto, user: AuthUser) {
-    if (user.role !== Role.Customer && !STAFF_ROLES.includes(user.role)) {
-      throw new BadRequestException('This role cannot create bookings');
-    }
+  async create(dto: CreateBookingDto, user?: AuthUser) {
+    // Public: Guest (không đăng nhập) đặt được; Customer đăng nhập gắn booking vào tài
+    // khoản; vai trò khác coi như đặt hộ tại quầy (không gắn customer).
     const roomIds = dto.rooms.map((id) => new Types.ObjectId(id));
     if (new Set(dto.rooms).size !== dto.rooms.length) {
       throw new BadRequestException('Duplicate rooms in request');
@@ -66,14 +75,19 @@ export class BookingsService {
       );
     }
 
-    const { roomTotal } = await this.priceRooms(roomIds, dto.guests, stay);
+    const { roomTotal, rates } = await this.priceRooms(
+      roomIds,
+      dto.guests,
+      stay,
+    );
     const now = this.clock.now();
     await this.assertRoomsFree(roomIds, stay, now);
 
     const booking = await this.createBookingDocument(dto, roomIds, stay, {
       roomTotal,
+      rates,
       customer:
-        user.role === Role.Customer ? new Types.ObjectId(user.id) : undefined,
+        user?.role === Role.Customer ? new Types.ObjectId(user.id) : undefined,
     });
 
     let hold: RoomHoldDocument;
@@ -114,12 +128,50 @@ export class BookingsService {
     };
   }
 
+  /**
+   * Huỷ booking (chủ booking, nhân viên, hoặc Guest kèm mã): nhả RoomHold đang giữ và
+   * chuyển sang CANCELLED. Chỉ cho huỷ khi PENDING_DEPOSIT hoặc CONFIRMED (trước check-in);
+   * không tự động hoàn tiền (xử lý thủ công/ngoài phạm vi).
+   */
+  async cancel(bookingId: string, actor: BookingActor) {
+    if (!/^[a-f\d]{24}$/i.test(bookingId)) {
+      throw new BadRequestException('Invalid booking ID');
+    }
+    const booking = await this.bookings.findById(bookingId);
+    if (!booking || !booking.isActive) {
+      throw new NotFoundException('Booking not found');
+    }
+    authorizeBookingAccess(booking, actor);
+    if (
+      ![BookingStatus.PendingDeposit, BookingStatus.Confirmed].includes(
+        booking.status,
+      )
+    ) {
+      throw new ConflictException(
+        'Only a pending or confirmed booking can be cancelled',
+      );
+    }
+    booking.status = BookingStatus.Cancelled;
+    booking.cancelledAt = this.clock.now();
+    await booking.save();
+    await this.holds.updateMany(
+      { booking: booking._id, isActive: true },
+      { $set: { isActive: false } },
+    );
+    return {
+      id: String(booking._id),
+      code: booking.code,
+      status: booking.status,
+      cancelledAt: booking.cancelledAt.toISOString(),
+    };
+  }
+
   /** Giá server-side: tổng basePrice các phòng × số đêm. Cũng xác thực phòng đặt được. */
   private async priceRooms(
     roomIds: Types.ObjectId[],
     guests: number,
     stay: StayInterval,
-  ): Promise<{ roomTotal: number }> {
+  ): Promise<{ roomTotal: number; rates: RoomRate[] }> {
     const rows = await this.rooms
       .find({ _id: { $in: roomIds } })
       .populate<{ roomType: PopulatedRoom['roomType'] }>(
@@ -141,6 +193,7 @@ export class BookingsService {
 
     let capacity = 0;
     let perNight = 0;
+    const rates: RoomRate[] = [];
     for (const room of rows) {
       if (!room.isActive || room.status === RoomStatus.Maintenance) {
         throw new ConflictException(`Room ${room._id} is not bookable`);
@@ -150,13 +203,14 @@ export class BookingsService {
       }
       capacity += room.roomType.adultCapacity + room.roomType.childCapacity;
       perNight += room.roomType.basePrice;
+      rates.push({ room: room._id, ratePerNight: room.roomType.basePrice });
     }
     if (guests > capacity) {
       throw new BadRequestException(
         'Selected rooms cannot hold the party size',
       );
     }
-    return { roomTotal: perNight * nights };
+    return { roomTotal: perNight * nights, rates };
   }
 
   /** Chặn trước nếu phòng đã bị booking chắc chắn hoặc hold còn hiệu lực chiếm. */
@@ -253,8 +307,10 @@ export class BookingsService {
     dto: CreateBookingDto,
     roomIds: Types.ObjectId[],
     stay: StayInterval,
-    extra: { roomTotal: number; customer?: Types.ObjectId },
+    extra: { roomTotal: number; rates: RoomRate[]; customer?: Types.ObjectId },
   ) {
+    // Cọc = 30% tiền phòng (placeholder chờ SRS), làm tròn về VND nguyên.
+    const depositAmount = Math.round(extra.roomTotal * DEPOSIT_RATE);
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         return await this.bookings.create({
@@ -269,8 +325,8 @@ export class BookingsService {
           guests: dto.guests,
           status: BookingStatus.PendingDeposit,
           roomTotal: extra.roomTotal,
-          // Chính sách đặt cọc: trả trước toàn bộ tiền phòng để xác nhận (placeholder chờ SRS).
-          depositAmount: extra.roomTotal,
+          depositAmount,
+          rateSnapshot: extra.rates,
         });
       } catch (error) {
         if ((error as { code?: number }).code === 11000 && attempt < 4)
