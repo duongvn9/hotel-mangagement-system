@@ -12,9 +12,10 @@
 - #75 / UC29 và #79 / UC33: **MERGED**, PR #22 tại merge commit `787d1b8`. Mục 13 giữ lịch sử triển khai trước merge, không phải trạng thái pending hiện tại.
 - #76 / UC30 và #77 / UC31: **MERGED**, PR #25 tại `b5d2f2f` theo parent bàn giao; mục 14 giữ lịch sử trước merge, không phải trạng thái pending hiện tại.
 - #78 / UC32: **MERGED**, PR #26 tại merge commit `8df46e7`; đã xác minh commit là ancestor của local `origin/main`. https://github.com/duongvn9/hotel-mangagement-system/pull/26 — mục 15 giữ lịch sử trước merge, không phải trạng thái pending hiện tại.
-- #68 / UC22 và #69 / UC23: **Implemented, pending review, không Done**, nhánh `feature/vu-68-69-service-order`; contract BE/FE thực tế và bằng chứng bàn giao ở mục 16. Đã push `33f41a0` (BE), `1a56118` (FE/docs); draft PR #27: https://github.com/duongvn9/hotel-mangagement-system/pull/27 — chưa merge, chờ CI/review.
+- #68 / UC22 và #69 / UC23: **MERGED**, PR #27 tại `a9a1525`, parent đã xác minh merge; mục 16 giữ lịch sử trước merge. https://github.com/duongvn9/hotel-mangagement-system/pull/27
+- #70 / UC24 và #71 / UC25: **Implemented, pending review, không Done**, nhánh `feature/vu-70-71-service-review-billing`; contract BE/FE/H7 thực tế, bằng chứng và QA pending ở mục 17. Commit/PR chưa biết, parent bổ sung sau; không dùng PR #27 cho lượt này.
 - #80 / UC34: **Chưa triển khai**, vẫn deferred tới **PROMPT12** và phải có Task thật với nguồn `SERVICE_ORDER`; Service Order đã có nhưng chưa tạo Task nào, chưa đủ điều kiện execution reporting.
-- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET/UC38 giữ contract hiện hữu, Task completion không tự close Issue. Mục 16 là hiện trạng; mục 15 trở xuống giữ lịch sử triển khai trước merge.
+- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET/UC38 giữ contract hiện hữu, Task completion không tự close Issue. Mục 17 là hiện trạng; mục 16 trở xuống giữ lịch sử triển khai trước merge.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
 
@@ -26,7 +27,72 @@
 - Sau đồng bộ dependencies: BE format/lint/typecheck/build PASS, 837 unit tests PASS; FE format/lint/typecheck/build PASS, 314 tests PASS. Bundle-size warning vẫn không chặn build.
 - `git diff --check` PASS; E2E được xác minh qua CI head sau push. Chỉ merge PR #27 sau khi CI xanh và GitHub xác nhận không conflict; chưa triển khai PROMPT11 trong lượt xử lý conflict.
 
-## 16. Jira #68 / UC22 và #69 / UC23 — Customer Service Order (hiện trạng)
+## 17. Jira #70 / UC24 và #71 / UC25 — Service Requests / Review và Billing (hiện trạng)
+
+### Trạng thái và nguồn tích hợp thật
+
+- **Implemented, pending review, không Done**, nhánh `feature/vu-70-71-service-review-billing`. #68/#69 đã **MERGED** qua PR #27 tại `a9a1525`, parent đã xác minh; commit/PR của #70/#71 **chưa biết, parent bổ sung sau**. Không suy local PASS thành CI, approval hoặc Done.
+- Đã đối chiếu BE/FE và signatures H7 trong source hiện tại. H4 là Service catalog thật; H5 là Booking thật với ownership/active/CHECKED_IN; H7 đã sẵn Invoice/approved ledger để tích hợp qua `InvoicesModule`. Không viết trực tiếp Invoice model/collection trong Service Orders, không đổi contract H7, không tạo payment hoặc coi ghi phí là thanh toán.
+- H8 **không được dùng** trong lượt này: không import TasksModule, không tạo Task, không assignment/execution hoặc tự đổi progress. Assignment để phase sau; **#80 / UC34 vẫn deferred tới PROMPT12**, cần Task thật nguồn `SERVICE_ORDER` và context/quyền đã duyệt, không coi order ACCEPTED là Task đã tồn tại.
+
+### API Receptionist và DTO
+
+- Chỉ role chính xác **RECEPTIONIST** ở route và service; Manager/Customer/service staff/operations staff/custom permission không được thay thế. Anonymous **401**, sai role **403**; malformed ID/body/query **400**, order missing **404**, intent/lifecycle/ledger mismatch **409**.
+- `GET /api/v1/service-orders/requests`: query `reviewStatus` mặc định **PENDING_REVIEW**, hỗ trợ **PENDING_REVIEW / ACCEPTING / ACCEPTED / REJECTED**; executionStatus hiện chỉ **NOT_STARTED**; keyword trim tối đa 100 ký tự, tìm literal case-insensitive trên snapshot serviceName; page mặc định 1 (1–10000), limit mặc định 20 (1–100). Sort `createdAt DESC, _id DESC`, trả `{ items, total, page, limit }` cùng filter. Query lạ bị từ chối.
+- `GET /api/v1/service-orders/requests/:id`: detail authoritative. Staff DTO thêm Customer `{ id, fullName }`, Booking `{ code, status, checkIn, checkOut }` hoặc null, `feeRequired`, `billingStatus: NOT_REQUIRED | PENDING | BILLED`, review `{ decision, reason, reviewedBy, reviewedAt }` nếu có và `invoiceId/billedAt` nếu đã ghi phí. Không populate/raw User/Booking/contact; scope khách sạn đơn hiện tại, không giả lập hotelId.
+- `PATCH /api/v1/service-orders/:id/review`, body allowlist `{ decision: 'ACCEPT' | 'REJECT', reason? }`, thành công **200** trả staff detail. Reason string trim tối đa **2000** ký tự; **REJECT bắt buộc reason không trắng**, ACCEPT có thể bỏ/rỗng; omitted và blank chuẩn hóa thành `''`. Null, actor/status/price/time hoặc field lạ bị từ chối.
+
+### Durable review, snapshot và ghi phí
+
+- CAS từ **PENDING_REVIEW** lưu review intent/audit **trước billing**: actor xác thực `reviewedBy`, giờ server `reviewedAt`, decision/reason đã chuẩn hóa. REJECT → **REJECTED**, không charge/Invoice/Task; ACCEPT → **ACCEPTING** durable, chưa được gọi accepted. Audit đầu tiên được giữ khi retry/race, không ghi đè người/thời điểm duyệt.
+- Snapshot nguồn bất biến: service/name/unit, `unitPriceVND`, `quantity`, `amount`; review kiểm tra quantity nguyên dương an toàn, unitPriceVND/amount nguyên VND không âm an toàn và tích an toàn đúng `amount = unitPriceVND * quantity`. Không tính lại theo catalog đã đổi giá/inactive. Order nonbillable hoặc giá 0 có amount **0**: chấp nhận không ghi charge/không gọi H7, không tạo Invoice chỉ để ghi dòng 0; reject cũng không ghi phí.
+- Với amount > 0, dùng H7 hiện hữu `getOrCreateForBooking(bookingId: string): Promise<InvoiceDocument>` và `addCharge(input: AddInvoiceCharge): Promise<InvoiceDocument>`, input `{ bookingId, type: SERVICE, amount, sourceId: order.id, reason: 'Service order <id>' }`. `AddInvoiceCharge` có `sourceId?: string`; H7 đặt `approved: true`, dùng optimistic concurrency/reconcile source, không thêm signature hoặc sửa quy tắc H7.
+- Chỉ finalize **ACCEPTED** sau khi đọc lại và xác minh ledger thật: Invoice **active**, booking khớp order; đúng **một** charge có sourceId ổn định bằng order ID, type **SERVICE**, amount snapshot, reason chính xác `Service order <id>`, `approved === true`. Charge khác type/amount/reason/approval, trùng source hoặc Invoice sai association → **409**, không giả thành công. Persist `billedInvoiceId/billedAt` khi finalize. Ngoại lệ amount 0 không cần ledger.
+- Mỗi order là source riêng: repeat orders hợp lệ được ghi các charge riêng, retry cùng order không thêm charge. Không dùng service ID/requestId làm billing source; không sửa giá/order snapshot để khớp ledger sai. Đây là CAS/writes riêng trên Mongo standalone, **không** hứa transaction atomic xuyên Booking/Order/Invoice.
+
+### Retry, lỗi và recovery
+
+- Cùng **decision + reason đã trim** retry sẽ tiếp tục intent đã persist; cùng final intent trả detail an toàn, không charge lại, giữ audit đầu tiên kể cả actor retry khác. Concurrent intent không tương thích hoặc thay reason/decision sau claim → **409**; same-intent race reconcile cùng ledger và final state.
+- Trước claim ACCEPT phải kiểm tra Booking hiện thuộc Customer gốc, active, **CHECKED_IN**. Trong ACCEPTING, nếu chưa có charge khớp, kiểm tra lại điều kiện này **trước addCharge**. Nếu charge đúng đã persist nhưng order finalize lỗi, retry có thể hoàn tất sau checkout **mà không thêm charge**; H7 vẫn yêu cầu Booking active khi lookup, Invoice active và association đúng. Không mở quyền tạo charge mới sau checkout hoặc bypass H7 closed-booking policy.
+- Lỗi trước charge hoặc sau charge/trước finalize giữ **ACCEPTING** và audit durable để retry. Sau addCharge exception, đọc lại ledger; chỉ reconcile thành công nếu charge đã persist và khớp đầy đủ, không silently swallow exception hoặc trả ACCEPTED khi ledger thiếu/sai. HttpException giữ status; lỗi không phải HTTP được trả **503** với hướng dẫn retry cùng review; finalize chưa hoàn tất cũng **503**.
+- Recovery **request-driven**, người dùng thử lại cùng payload; không có background job/automatic rollback hoặc sửa intent. Pending do lỗi nguồn/ledger vĩnh viễn cần review/can thiệp, không hứa mọi 503/409 tự hết khi retry. GET list/detail chỉ đọc, không tự kích billing.
+
+### FE thực tế, Customer labels và ranh giới H10
+
+- Routes `/staff/service-orders` và `/staff/service-orders/:id` chỉ Receptionist, shared API/TanStack Query thật, cache scope user ID + role. List có filter/paging/loading/empty/error/reload; detail có context tối thiểu, snapshot tiền, audit và billing label. Không thêm link nguồn vượt quyền hoặc rewrite H10/layout.
+- Review có bước xác nhận, reason validation, pending/ref chống double submit; mutation **retry: false**, không optimistic accept. Success dùng response authoritative, settled invalidate staff scope kể cả lỗi để tải lại persisted state. Có lỗi 400/403/404/409/network/**503** và nút retry cùng nội dung.
+- Nội dung đã gửi bị khóa khi kết quả chưa rõ; **ACCEPTING** dùng decision/reason đã persist, không đổi intent; ACCEPTED/REJECTED chỉ xem. Billing **BILLED** nói đã thêm hóa đơn, **không xác nhận thanh toán**; PENDING nói chờ ghi phí, NOT_REQUIRED phân biệt free/rejected/chưa ghi phí theo state.
+- Customer list/detail đã cập nhật labels đủ PENDING_REVIEW/ACCEPTING/ACCEPTED/REJECTED; ACCEPTING nói chưa được chấp nhận, ACCEPTED không nói đã thanh toán. DTO Customer không mở review actor/reason hoặc billing metadata nội bộ. Chỉ cập nhật labels/receipt liên quan, không rewrite H10.
+
+### Bằng chứng bàn giao và QA pending
+
+Các số liệu dưới đây do **parent/agent bàn giao cho #70/#71**, không phải full suite chạy lại trong lượt chỉ sửa tài liệu; giữ cả lịch sử lỗi transient, không thay CI hoặc manual QA.
+
+| Phạm vi | Kết quả được bàn giao |
+|---|---|
+| Parent BE | format:check, lint, typecheck, build **PASS**; **838 tests / 35 files PASS** |
+| Parent FE | format:check, lint, typecheck **PASS**; `npm test` bình thường **340 tests / 23 files PASS**; build **PASS**, bundle-size warning không chặn build |
+| Agent FE lần đầu | **5 timeout ở tests cũ**, không gọi lượt này PASS hoặc giấu lỗi transient |
+| Agent FE single-worker rerun | **340 tests PASS**; không dùng kết quả single-worker để thay thế bằng chứng parent `npm test` bình thường |
+| Agent full E2E sạch | Fresh Docker/Mongo cô lập: **272 tests / 30 suites PASS**; đã gỡ toàn bộ containers của lượt chạy |
+| CI | **Pending**, chưa xác minh CI head mới |
+| Manual browser | **Chưa thực hiện**, gồm desktop/**375px**, keyboard/overflow và live authenticated flow |
+
+- QA còn phải xác nhận: accept paid/free/zero, reject reason blank/2000/2001/null/field injection; anonymous/wrong role và Customer A/B không lộ audit; list/filter/count/detail/reload, final read-only và pending/503 same-intent retry.
+- Inject lỗi **trước ghi charge**, **sau charge trước finalize**, addCharge ghi thành công rồi throw; đọc lại audit/ACCEPTING, retry sau reload, concurrent same/different intent, giữ actor/time đầu tiên; finalize recovery sau checkout chỉ khi charge đúng đã tồn tại, không tạo charge mới nếu chưa có/Booking mất eligibility.
+- Đổi catalog price/name/unit/active sau submit không đổi snapshot/billing; overflow hoặc snapshot sai phải chặn. Repeat orders mỗi order một charge; same order replay chỉ một source; free/reject không Invoice/charge/Task. Kiểm tra ledger source/type/amount/reason/approved/duplicate và Invoice active/booking association mismatch không được accepted giả.
+- Chưa seed/chạy lên shared DB; fixtures E2E không phải demo seed. Không suy clean E2E thành CI PASS/manual QA/Done. Lượt tài liệu chỉ sửa `docs/TIEN-DO-VU.md`, không chạy Git/commit/push, seed, Mongo/container hoặc full suite. Đã chạy riêng `npm run lint` và `npm run typecheck` tại backend/frontend: **tất cả PASS**; đây không phải chạy lại format/unit/build/E2E của parent/agent.
+
+### Source đã đối chiếu
+
+- BE routes/roles: `backend/src/modules/service-orders/service-orders.controller.ts:48`; DTO/query: `backend/src/modules/service-orders/dto/service-order.dto.ts:56`; snapshot/audit: `backend/src/modules/service-orders/schemas/service-order.schema.ts:11`; module H7, không H8: `backend/src/modules/service-orders/service-orders.module.ts:14`.
+- Staff DTO/list/detail: `backend/src/modules/service-orders/service-orders.service.ts:242`, `:287`, `:322`; money/ledger verification: `:332`, `:346`; review CAS/recovery/finalize: `:371–521`.
+- H7 signatures/approved source charge/concurrency/closed-booking policy: `backend/src/modules/invoices/invoices.service.ts:32`, `:53`, `:78`, `:104`; pricing/ledger/payment calculation: `:182`.
+- FE API/billing labels: `frontend/src/features/service-orders/staff-api.ts:18`, `:35`; cache/retry/refetch: `frontend/src/features/service-orders/staff-hooks.ts:31`; confirm/immutable intent: `frontend/src/features/service-orders/pages/StaffServiceOrderDetailPage.tsx:10`; Customer receipt labels: `frontend/src/features/service-orders/presentation.tsx:54`.
+
+## 16. Jira #68 / UC22 và #69 / UC23 — Customer Service Order (lịch sử trước merge)
+
+> #68/#69 đã MERGED qua PR #27 tại `a9a1525`, parent đã xác minh. Các trạng thái pending/chưa merge, giới hạn chỉ PENDING_REVIEW và review/billing deferred bên dưới giữ mốc trước merge, không phải hiện trạng; mục 17 mô tả #70/#71.
 
 ### Trạng thái, nguồn thật và ranh giới tích hợp
 

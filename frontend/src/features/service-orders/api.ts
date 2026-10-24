@@ -4,7 +4,13 @@ export const money = (value: number) =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)
 export const dateTime = (value: string) => new Date(value).toLocaleString('vi-VN')
 
-export const reviewStatuses = ['PENDING_REVIEW'] as const
+export const reviewStatuses = ['PENDING_REVIEW', 'ACCEPTING', 'ACCEPTED', 'REJECTED'] as const
+export const reviewLabels: Record<(typeof reviewStatuses)[number], string> = {
+  PENDING_REVIEW: 'Chờ duyệt',
+  ACCEPTING: 'Đang chấp nhận · chờ hoàn tất ghi phí',
+  ACCEPTED: 'Đã chấp nhận',
+  REJECTED: 'Đã từ chối',
+}
 export const executionStatuses = ['NOT_STARTED'] as const
 export interface OrderContext {
   id: string
