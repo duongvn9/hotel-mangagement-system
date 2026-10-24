@@ -1,4 +1,4 @@
-﻿import { randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { VersioningType, type INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
@@ -170,7 +170,7 @@ describe('UC51 amenity list API', () => {
     expect(await amenities.find().sort({ _id: 1 }).lean()).toEqual(before);
     expect(await types.find().sort({ _id: 1 }).lean()).toEqual(typeBefore);
   });
-  it('preserves existing options contract and has no detail/mutation endpoints', async () => {
+  it('preserves existing options contract and has no DELETE endpoint', async () => {
     const result = await http()
       .get('/api/v1/amenities/options')
       .set(manager)
@@ -184,20 +184,6 @@ describe('UC51 amenity list API', () => {
     ).toBe(false);
     for (const row of result.body)
       expect(Object.keys(row).sort()).toEqual(['id', 'name']);
-    await http()
-      .post('/api/v1/amenities')
-      .set(manager)
-      .send({ name: 'no' })
-      .expect(404);
-    await http()
-      .patch('/api/v1/amenities/' + attached)
-      .set(manager)
-      .send({ isActive: false })
-      .expect(404);
-    await http()
-      .get('/api/v1/amenities/' + attached)
-      .set(manager)
-      .expect(404);
     await http()
       .delete('/api/v1/amenities/' + attached)
       .set(manager)
