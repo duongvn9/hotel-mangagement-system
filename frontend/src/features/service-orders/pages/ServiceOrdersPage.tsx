@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { TextField } from '@/components/TextField'
 import { SelectField } from '@/components/SelectField'
 import { Button } from '@/components/Button'
-import { dateTime, money, type OrderQuery } from '../api'
+import { dateTime, money, reviewLabels, type OrderQuery } from '../api'
 import { useOrders } from '../hooks'
 import { OrderError, OrderNavigation } from '../presentation'
 
@@ -84,7 +84,7 @@ export function ServiceOrdersPage() {
                   <p>
                     {order.quantity} {order.service.unit} · {money(order.amount)}
                   </p>
-                  <p>Chờ duyệt · Chưa bắt đầu</p>
+                  <p>{reviewLabels[order.reviewStatus]} · Chưa bắt đầu</p>
                   <p className="text-sm text-stone-700">Tạo lúc: {dateTime(order.createdAt)}</p>
                 </li>
               ))}

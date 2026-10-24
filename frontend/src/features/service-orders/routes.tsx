@@ -4,7 +4,26 @@ import { NewServiceOrderPage } from './pages/NewServiceOrderPage'
 import { ServiceOrdersPage } from './pages/ServiceOrdersPage'
 import { ServiceOrderDetailPage } from './pages/ServiceOrderDetailPage'
 
+import { StaffServiceOrdersPage } from './pages/StaffServiceOrdersPage'
+import { StaffServiceOrderDetailPage } from './pages/StaffServiceOrderDetailPage'
+
 export const serviceOrderRoutes: RouteObject[] = [
+  {
+    path: '/staff/service-orders',
+    element: (
+      <RequireAuth roles={['RECEPTIONIST']}>
+        <StaffServiceOrdersPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/staff/service-orders/:id',
+    element: (
+      <RequireAuth roles={['RECEPTIONIST']}>
+        <StaffServiceOrderDetailPage />
+      </RequireAuth>
+    ),
+  },
   {
     path: '/customer/service-orders',
     element: (

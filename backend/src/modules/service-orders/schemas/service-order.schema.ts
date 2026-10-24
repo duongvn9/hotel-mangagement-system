@@ -77,6 +77,24 @@ export class ServiceOrder {
   @Prop({ immutable: true, select: false })
   requestFingerprint?: string;
 
+  @Prop({ type: Types.ObjectId, ref: 'User', select: false })
+  reviewedBy?: Types.ObjectId;
+
+  @Prop({ select: false })
+  reviewedAt?: Date;
+
+  @Prop({ type: String, enum: ['ACCEPT', 'REJECT'], select: false })
+  reviewDecision?: 'ACCEPT' | 'REJECT';
+
+  @Prop({ select: false })
+  reviewReason?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Invoice', select: false })
+  billedInvoiceId?: Types.ObjectId;
+
+  @Prop({ select: false })
+  billedAt?: Date;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -87,3 +105,4 @@ ServiceOrderSchema.index(
   { unique: true, partialFilterExpression: { requestId: { $exists: true } } },
 );
 ServiceOrderSchema.index({ customer: 1, booking: 1, createdAt: -1 });
+ServiceOrderSchema.index({ reviewStatus: 1, createdAt: -1, _id: -1 });

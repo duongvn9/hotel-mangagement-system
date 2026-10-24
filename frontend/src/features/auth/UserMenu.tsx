@@ -21,6 +21,7 @@ const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
     { to: '/staff/feedback', label: 'Phản hồi' },
   ],
   RECEPTIONIST: [
+    { to: '/staff/service-orders', label: 'Yêu cầu dịch vụ' },
     { to: '/staff/issues', label: 'Yêu cầu sự cố' },
     { to: '/staff/feedback', label: 'Phản hồi' },
   ],

@@ -4,6 +4,7 @@ import {
   IsISO8601,
   IsInt,
   IsMongoId,
+  IsIn,
   IsString,
   IsUUID,
   Max,
@@ -50,6 +51,20 @@ export class CreateServiceOrderDto {
   )
   @IsUUID()
   requestId?: string;
+}
+
+export class ReviewServiceOrderDto {
+  @IsIn(['ACCEPT', 'REJECT'])
+  decision: 'ACCEPT' | 'REJECT';
+
+  @ValidateIf(
+    (object: ReviewServiceOrderDto, value: unknown) =>
+      object.decision === 'REJECT' || value !== undefined,
+  )
+  @Transform(trim)
+  @IsString()
+  @MaxLength(2000)
+  reason?: string;
 }
 
 export class ListServiceOrdersQuery {

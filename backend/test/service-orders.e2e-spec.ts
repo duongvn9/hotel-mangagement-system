@@ -11,6 +11,8 @@ import {
 } from '../src/modules/bookings/schemas/booking.schema.js';
 import { Service } from '../src/modules/services/schemas/service.schema.js';
 import { ServiceOrder } from '../src/modules/service-orders/schemas/service-order.schema.js';
+import { InvoicesService } from '../src/modules/invoices/invoices.service.js';
+import { Invoice } from '../src/modules/invoices/schemas/invoice.schema.js';
 import { assertTestDatabase } from './test-database.js';
 
 describe('UC22/23 customer service orders', () => {
@@ -56,6 +58,7 @@ describe('UC22/23 customer service orders', () => {
       bookings.deleteMany({}),
       services.deleteMany({}),
       orders.deleteMany({}),
+      app.get<Model<Invoice>>(getModelToken(Invoice.name)).deleteMany({}),
     ]);
     const booking = await bookings.create({
       code: randomUUID(),
@@ -79,6 +82,291 @@ describe('UC22/23 customer service orders', () => {
       price: 50000,
     });
     serviceId = String(service._id);
+  });
+
+  const staff = {
+    'x-dev-role': 'RECEPTIONIST',
+    'x-dev-user-id': String(new Types.ObjectId()),
+  };
+  const review = (id: string, decision = 'ACCEPT', reason?: string) =>
+    http()
+      .patch(`/api/v1/service-orders/${id}/review`)
+      .set(staff)
+      .send({ decision, ...(reason === undefined ? {} : { reason }) });
+  const detail = (id: string) =>
+    http().get(`/api/v1/service-orders/requests/${id}`).set(staff);
+  const prepareBilling = async () => {
+    const booking = await bookings.findById(bookingId).orFail();
+    await bookings.updateOne(
+      { _id: bookingId },
+      {
+        rateSnapshot: booking.rooms.map((room) => ({
+          room,
+          ratePerNight: 100000,
+        })),
+      },
+    );
+  };
+
+  it('protects staff routes with exact role and validates review bodies', async () => {
+    const id = (await post(body())).body.id;
+    for (const role of [
+      'CUSTOMER',
+      'MANAGER',
+      'SERVICE_STAFF',
+      'OPERATIONS_STAFF',
+    ]) {
+      await http()
+        .get('/api/v1/service-orders/requests')
+        .set({ 'x-dev-role': role })
+        .expect(403);
+      await detail(id).set({ 'x-dev-role': role }).expect(403);
+      await review(id).set({ 'x-dev-role': role }).expect(403);
+    }
+    await http().get('/api/v1/service-orders/requests').expect(401);
+    await http().get(`/api/v1/service-orders/requests/${id}`).expect(401);
+    await http()
+      .patch(`/api/v1/service-orders/${id}/review`)
+      .send({ decision: 'ACCEPT' })
+      .expect(401);
+    for (const payload of [
+      { decision: 'REJECT' },
+      { decision: 'REJECT', reason: '  ' },
+      { decision: 'ACCEPT', reason: null },
+      { decision: 'OTHER' },
+      { decision: 'ACCEPT', amount: 1 },
+      { decision: 'ACCEPT', reason: 'x'.repeat(2001) },
+    ])
+      await http()
+        .patch(`/api/v1/service-orders/${id}/review`)
+        .set(staff)
+        .send(payload)
+        .expect(400);
+    await detail('bad').expect(400);
+    await detail(String(new Types.ObjectId())).expect(404);
+  });
+
+  it('lists pending latest first and provides only authorized operational metadata', async () => {
+    const a = (await post(body())).body.id;
+    const b = (await post(body())).body.id;
+    await review(a, 'REJECT', '  unavailable  ').expect(200);
+    const list = await http()
+      .get('/api/v1/service-orders/requests')
+      .set(staff)
+      .query({ keyword: 'Laundry.*', limit: 1 })
+      .expect(200);
+    expect(list.body).toMatchObject({
+      total: 1,
+      page: 1,
+      limit: 1,
+      items: [{ id: b, billingStatus: 'NOT_REQUIRED' }],
+    });
+    const rejected = (await detail(a).expect(200)).body;
+    expect(rejected).toMatchObject({
+      reviewStatus: 'REJECTED',
+      review: { decision: 'REJECT', reason: 'unavailable' },
+      booking: { code: expect.any(String) },
+    });
+    expect(JSON.stringify(rejected)).not.toMatch(
+      /guestEmail|guestPhone|requestFingerprint|firebaseUid/,
+    );
+    const customerDetail = (await get('/' + a).expect(200)).body;
+    expect(customerDetail.review).toBeUndefined();
+    expect(customerDetail.reviewedBy).toBeUndefined();
+    expect(await orders.db.collection('tasks').countDocuments()).toBe(0);
+    expect(
+      await app
+        .get<Model<Invoice>>(getModelToken(Invoice.name))
+        .countDocuments({ booking: bookingId }),
+    ).toBe(0);
+  });
+
+  it('accepts exactly once under races using original price and recalculated unpaid invoice', async () => {
+    await prepareBilling();
+    const id = (await post(body())).body.id;
+    await services.updateOne(
+      { _id: serviceId },
+      { price: 999999, billable: false, isActive: false },
+    );
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        review(id, 'ACCEPT', ' okay ').expect(200),
+      ),
+    );
+    expect(
+      new Set(results.map((result) => result.body.review.reviewedAt)).size,
+    ).toBe(1);
+    expect(results[0].body).toMatchObject({
+      amount: 100000,
+      billingStatus: 'BILLED',
+      bookingId,
+    });
+    const invoice = await app
+      .get(InvoicesService)
+      .getOrCreateForBooking(bookingId);
+    expect(invoice.charges).toHaveLength(1);
+    expect(invoice.charges[0]).toMatchObject({
+      type: 'SERVICE',
+      amount: 100000,
+      sourceId: id,
+      reason: `Service order ${id}`,
+    });
+    expect(invoice.serviceTotal).toBe(100000);
+    expect(invoice.balanceDue).toBe(invoice.totalAmount);
+    expect(results[0].body).toMatchObject({
+      reviewStatus: 'ACCEPTED',
+      billingStatus: 'BILLED',
+      invoiceId: String(invoice._id),
+    });
+    await review(id, 'REJECT', 'no').expect(409);
+    await review(id, 'ACCEPT', 'different').expect(409);
+  });
+
+  it('arbitrates competing accept/reject without billing rejected requests', async () => {
+    await prepareBilling();
+    const id = (await post(body())).body.id;
+    const results = await Promise.all([review(id), review(id, 'REJECT', 'no')]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    const result = (await detail(id)).body;
+    const invoice = await app
+      .get<Model<Invoice>>(getModelToken(Invoice.name))
+      .findOne({ booking: bookingId });
+    expect(invoice?.charges.length ?? 0).toBe(
+      result.reviewStatus === 'ACCEPTED' ? 1 : 0,
+    );
+    expect(await orders.db.collection('tasks').countDocuments()).toBe(0);
+  });
+
+  it.each([false, true])(
+    'skips charging effective zero-price orders (billable=%s)',
+    async (billable) => {
+      await services.updateOne({ _id: serviceId }, { billable, price: 0 });
+      const id = (await post(body())).body.id;
+      await services.updateOne(
+        { _id: serviceId },
+        { billable: true, price: 50000 },
+      );
+      const result = await review(id).expect(200);
+      expect(result.body).toMatchObject({
+        reviewStatus: 'ACCEPTED',
+        billingStatus: 'NOT_REQUIRED',
+        feeRequired: false,
+      });
+      expect(
+        await app
+          .get<Model<Invoice>>(getModelToken(Invoice.name))
+          .countDocuments({ booking: bookingId }),
+      ).toBe(0);
+    },
+  );
+
+  it('recovers billing failures before and after persistence without changing first audit', async () => {
+    await prepareBilling();
+    const id = (await post(body())).body.id;
+    const billing = app.get(InvoicesService);
+    const original = billing.addCharge.bind(billing);
+    const spy = vi
+      .spyOn(billing, 'addCharge')
+      .mockRejectedValueOnce(new Error('private failure'));
+    const failed = await review(id, 'ACCEPT', ' okay ').expect(503);
+    expect(JSON.stringify(failed.body)).not.toContain('private failure');
+    const pending = (await detail(id)).body;
+    expect(pending).toMatchObject({
+      reviewStatus: 'ACCEPTING',
+      billingStatus: 'PENDING',
+    });
+    expect((await get('/' + id)).body.reviewStatus).toBe('ACCEPTING');
+    await review(id, 'REJECT', 'no').expect(409);
+    await review(id, 'ACCEPT', 'different').expect(409);
+    spy.mockImplementationOnce(async (input) => {
+      await original(input);
+      throw new Error('lost acknowledgement');
+    });
+    const result = await review(id, 'ACCEPT', 'okay').expect(200);
+    expect(result.body.review).toEqual(pending.review);
+    expect(
+      (await billing.getOrCreateForBooking(bookingId)).charges,
+    ).toHaveLength(1);
+    spy.mockRestore();
+  });
+
+  it('recovers finalization failure and existing charge even after checkout', async () => {
+    await prepareBilling();
+    const id = (await post(body())).body.id;
+    const original = orders.findOneAndUpdate.bind(orders);
+    const spy = vi.spyOn(orders, 'findOneAndUpdate');
+    spy.mockImplementationOnce(original).mockImplementationOnce(() => {
+      throw new Error('write failure');
+    });
+    await review(id).expect(503);
+    spy.mockRestore();
+    const pending = (await detail(id)).body;
+    expect(pending.reviewStatus).toBe('ACCEPTING');
+    await bookings.updateOne(
+      { _id: bookingId },
+      { status: BookingStatus.CheckedOut },
+    );
+    const billingSpy = vi.spyOn(app.get(InvoicesService), 'addCharge');
+    const recovered = await review(id).expect(200);
+    expect(recovered.body.review).toEqual(pending.review);
+    expect(recovered.body.billingStatus).toBe('BILLED');
+    expect(billingSpy).not.toHaveBeenCalled();
+    billingSpy.mockRestore();
+  });
+
+  it('does not bill closed stays or trust an invoice for another booking', async () => {
+    await prepareBilling();
+    const id = (await post(body())).body.id;
+    await bookings.updateOne(
+      { _id: bookingId },
+      { status: BookingStatus.CheckedOut },
+    );
+    await review(id).expect(409);
+    expect((await detail(id)).body.reviewStatus).toBe('PENDING_REVIEW');
+    await bookings.updateOne(
+      { _id: bookingId },
+      { status: BookingStatus.CheckedIn },
+    );
+    const billing = app.get(InvoicesService);
+    const invoice = await billing.getOrCreateForBooking(bookingId);
+    invoice.booking = new Types.ObjectId();
+    const spy = vi
+      .spyOn(billing, 'getOrCreateForBooking')
+      .mockResolvedValueOnce(invoice);
+    await review(id).expect(409);
+    spy.mockRestore();
+    expect((await detail(id)).body.reviewStatus).toBe('ACCEPTING');
+    expect(
+      (await billing.getOrCreateForBooking(bookingId)).charges,
+    ).toHaveLength(0);
+    const result = await review(id)
+      .set({ 'x-dev-user-id': String(new Types.ObjectId()) })
+      .expect(200);
+    expect(result.body.review.reviewedBy).toBe(staff['x-dev-user-id']);
+  });
+
+  it('fails closed for inconsistent snapshots and conflicting existing charges', async () => {
+    await prepareBilling();
+    const id = (await post(body())).body.id;
+    await orders.collection.updateOne(
+      { _id: new Types.ObjectId(id) },
+      { $set: { amount: 1 } },
+    );
+    await review(id).expect(409);
+    expect((await detail(id)).body.reviewStatus).toBe('PENDING_REVIEW');
+    await orders.collection.updateOne(
+      { _id: new Types.ObjectId(id) },
+      { $set: { amount: 100000 } },
+    );
+    await app.get(InvoicesService).addCharge({
+      bookingId,
+      type: 'SERVICE' as never,
+      amount: 1,
+      sourceId: id,
+      reason: `Service order ${id}`,
+    });
+    await review(id).expect(409);
+    expect((await detail(id)).body.reviewStatus).toBe('ACCEPTING');
   });
 
   afterAll(async () => {
@@ -305,7 +593,7 @@ describe('UC22/23 customer service orders', () => {
       items: [expect.any(Object)],
     });
     for (const query of [
-      { reviewStatus: 'ACCEPTED' },
+      { reviewStatus: 'INVALID' },
       { executionStatus: 'COMPLETED' },
       { limit: 101 },
       { page: 0 },

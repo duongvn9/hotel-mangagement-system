@@ -1,6 +1,6 @@
 import { isAxiosError } from 'axios'
 import { Link } from 'react-router'
-import { money, dateTime, type ServiceOrder } from './api'
+import { money, dateTime, reviewLabels, type ServiceOrder } from './api'
 
 export function OrderError({ error, retry }: { error: unknown; retry?: () => void }) {
   const status = isAxiosError(error) ? error.response?.status : undefined
@@ -37,10 +37,7 @@ export function OrderReceipt({ order }: { order: ServiceOrder }) {
           ['Đơn giá ghi nhận', money(order.unitPriceVND)],
           ['Thành tiền ghi nhận từ máy chủ', money(order.amount)],
           ['Thời gian yêu cầu', dateTime(order.requestedTime)],
-          [
-            'Trạng thái duyệt',
-            order.reviewStatus === 'PENDING_REVIEW' ? 'Chờ duyệt' : order.reviewStatus,
-          ],
+          ['Trạng thái duyệt', reviewLabels[order.reviewStatus] ?? order.reviewStatus],
           [
             'Trạng thái thực hiện',
             order.executionStatus === 'NOT_STARTED' ? 'Chưa bắt đầu' : order.executionStatus,
@@ -55,7 +52,13 @@ export function OrderReceipt({ order }: { order: ServiceOrder }) {
         ))}
       </dl>
       <p className="text-sm text-stone-700">
-        Yêu cầu đang chờ duyệt, chưa được chấp nhận và chưa ghi thu phí.
+        {order.reviewStatus === 'PENDING_REVIEW'
+          ? 'Yêu cầu đang chờ duyệt, chưa được chấp nhận và chưa ghi thu phí.'
+          : order.reviewStatus === 'ACCEPTING'
+            ? 'Đang xử lý chấp nhận, chờ hoàn tất ghi phí; chưa được chấp nhận.'
+            : order.reviewStatus === 'REJECTED'
+              ? 'Yêu cầu đã bị từ chối.'
+              : 'Yêu cầu đã được chấp nhận. Trạng thái này không xác nhận đã thanh toán.'}
       </p>
     </div>
   )
