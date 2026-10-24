@@ -2,6 +2,8 @@ import { useRef, useState, type FormEvent } from 'react'
 import { isAxiosError } from 'axios'
 import { Link, useParams } from 'react-router'
 import { Button } from '@/components/Button'
+import { useAuth } from '@/features/auth/auth-context'
+import { ServiceTaskIssueReport } from '@/features/issues/ServiceTaskIssueReport'
 import type { AssignedTask, TaskProgressInput } from '../api'
 import { useAssignedTask, useUpdateTaskProgress } from '../hooks'
 import { TaskError, TaskPriorityBadge, TaskStatusBadge } from '../TaskPresentation'
@@ -115,6 +117,7 @@ function TaskProgress({ task, fetching }: { task: AssignedTask; fetching: boolea
 
 export function AssignedTaskDetailPage() {
   const { id = '' } = useParams()
+  const { me } = useAuth()
   const { data: task, isPending, isError, error, refetch, isFetching } = useAssignedTask(id)
 
   return (
@@ -155,6 +158,18 @@ export function AssignedTaskDetailPage() {
           </p>
           <TaskProgress key={task.id} task={task} fetching={isFetching} />
         </article>
+      )}
+      {me?.role === 'SERVICE_STAFF' && task && (
+        <ServiceTaskIssueReport
+          key={`${me.id}:${task.id}`}
+          taskId={task.id}
+          eligible={
+            !isError &&
+            task.sourceType === 'SERVICE_ORDER' &&
+            task.taskType === 'SERVICE_ORDER_EXECUTION' &&
+            task.status === 'IN_PROGRESS'
+          }
+        />
       )}
     </section>
   )
