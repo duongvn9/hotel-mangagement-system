@@ -12,7 +12,7 @@
 - #75 / UC29 và #79 / UC33: **MERGED**, PR #22 tại merge commit `787d1b8`. Mục 13 giữ lịch sử triển khai trước merge, không phải trạng thái pending hiện tại.
 - #76 / UC30 và #77 / UC31: **MERGED**, PR #25 tại `b5d2f2f` theo parent bàn giao; mục 14 giữ lịch sử trước merge, không phải trạng thái pending hiện tại.
 - #78 / UC32: **MERGED**, PR #26 tại merge commit `8df46e7`; đã xác minh commit là ancestor của local `origin/main`. https://github.com/duongvn9/hotel-mangagement-system/pull/26 — mục 15 giữ lịch sử trước merge, không phải trạng thái pending hiện tại.
-- #68 / UC22 và #69 / UC23: **Implemented, pending review, không Done**, nhánh `feature/vu-68-69-service-order`; contract BE/FE thực tế và bằng chứng bàn giao ở mục 16. Commit/PR: **parent bổ sung sau**, chưa có SHA/PR cho lượt này.
+- #68 / UC22 và #69 / UC23: **Implemented, pending review, không Done**, nhánh `feature/vu-68-69-service-order`; contract BE/FE thực tế và bằng chứng bàn giao ở mục 16. Đã push `33f41a0` (BE), `1a56118` (FE/docs); draft PR #27: https://github.com/duongvn9/hotel-mangagement-system/pull/27 — chưa merge, chờ CI/review.
 - #80 / UC34: **Chưa triển khai**, vẫn deferred tới **PROMPT12** và phải có Task thật với nguồn `SERVICE_ORDER`; Service Order đã có nhưng chưa tạo Task nào, chưa đủ điều kiện execution reporting.
 - Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET/UC38 giữ contract hiện hữu, Task completion không tự close Issue. Mục 16 là hiện trạng; mục 15 trở xuống giữ lịch sử triển khai trước merge.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
