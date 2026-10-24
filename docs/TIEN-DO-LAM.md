@@ -11,7 +11,8 @@ Cập nhật 24/10/2026. Đây là tài liệu tiến độ và bàn giao duy nh
 | Tách sức chứa adultCapacity/childCapacity | Đã merge main: cfb2394 |
 | Sửa import Connection của Task | Đã merge main: 7684a45; seed toàn ứng dụng pass hai lần |
 | #30 UC47 View Room List + H3 Room/RoomStatus | Đã merge main: 734ea16 |
-| #31 UC48 Create / Update Room | Đã triển khai/kiểm tra đầy đủ; feature/31-room-form + fix/31-room-form-focus, xem [bàn giao UC48](#uc48) |
+| #31 UC48 Create / Update Room | Đã merge main: 21cc5d7; xem [bàn giao UC48](#uc48) |
+| #32 UC51 View Amenity List | Đã triển khai/kiểm tra đầy đủ; PR #21, xem [bàn giao UC51](#uc51) |
 
 Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, không dùng capacity. H6 vẫn giữ hợp đồng capacity/guests riêng; chưa nối adapter Room thật. Các mục lịch sử bên dưới ghi lại đúng trạng thái từng thời điểm, kể cả blocker đã được xử lý; không dùng snapshot cũ để kết luận trạng thái hiện tại.
 
@@ -577,3 +578,43 @@ Adapter thật hiện đã ở main do Hiếu viết (`MongoAvailabilityRoomSour
 - Docker local **không chạy**, được miễn theo yêu cầu thường trực của người dùng; không báo Docker pass. Không chỉnh Jira hoặc nhánh của người khác. Không có mock production/TODO chặn chức năng UC48; không triển khai Equipment/H6 adapter/H7 pricing hoặc các task ngoài scope.
 
 Task tiếp theo được mở khóa: module lễ tân/Khoa có thể tái sử dụng Room/RoomStatus và service; #37 Equipment tham chiếu Room khi làm task riêng. Các thay đổi rule đặt phòng/giá cần Hiếu quyết định theo hợp đồng hiện có.
+
+<a id="uc51"></a>
+## #32 — UC51 View Amenity List
+
+Ngày 24/10/2026; baseline main `94455ff`. Nhánh `feature/32-amenity-list`. Tiền đề #28/#29 đã có: Amenity/RoomType schema, RoomType.amenities ref Amenity, seed và GET /amenities/options. Đã kế thừa mẫu bảng/bộ lọc/phân trang của room-types/rooms, guard và component hiện có; không thay layout H10.
+
+### API, schema và cách tích hợp
+
+- Thêm `GET /api/v1/amenities`, quyền Manager OR facility:manage, Swagger đầy đủ; lỗi chuẩn từ filter toàn cục. Giữ nguyên `GET /api/v1/amenities/options`: chỉ tiện nghi active, response `{ id, name }[]` cho form UC50.
+- `ListAmenitiesQuery`: search tên literal không phân biệt hoa thường (escape regex, tối đa 100 ký tự); isActive true/false, mặc định tất cả; page >=1 mặc định 1; limit 1–100 mặc định 10; sortBy name/createdAt, sortOrder asc/desc, mặc định name asc và `_id asc` làm tiêu chí phụ. Dùng validation/whitelist/forbidNonWhitelisted/transform hiện có.
+- `AmenityListResponse` `{ items, total, page, limit }`; item `{ id, name, description, isActive, roomTypes: [{ id, name, isActive }], roomTypeCount }`. RoomTypes sort name rồi _id; hiển thị cả Amenity/RoomType inactive. Chưa gắn thì mảng rỗng/count=0; tham chiếu Amenity mồ côi trong RoomType bị bỏ qua, không tự dọn dữ liệu.
+- `AmenitiesService.list(query)` lấy trang + count bằng hai truy vấn Amenity, sau đó **một truy vấn RoomType** với `amenities: { $in: pageIds }`, select name/isActive/amenities, gom nhóm trong service. Tổng 3 query cho trang có dữ liệu, 2 query nếu trang rỗng; không N+1. Dedupe ID lặp trong cùng RoomType để count phản ánh số loại phòng.
+- Thay đổi schema duy nhất: `RoomTypeSchema.index({ amenities: 1 })`, Mongo tự tạo multikey cho mảng. Amenity schema và quan hệ một chiều RoomType.amenities giữ nguyên; không thêm Amenity–Room, không sửa Room. Production autoIndex=false nên khi triển khai cần tạo index tương ứng (`db.roomtypes.createIndex({ amenities: 1 })`); phiên này không chạy lệnh trên production.
+- AmenitiesModule đăng ký lại **chính RoomTypeSchema hiện có** qua MongooseModule.forFeature để inject model dùng đọc, không tạo schema thay thế và không import RoomTypesModule gây vòng phụ thuộc (RoomTypesModule đang import AmenitiesModule). Export/options/validateNew tiếp tục tương thích.
+- Không có POST/PATCH/GET :id/DELETE Amenity. Không thay đổi bookings/availability/invoices/payments/rooms, auth/users/roles hoặc các nhánh của người khác; không chỉnh Jira.
+
+### Frontend
+
+- `features/amenities/`: api.ts, hooks.ts, components/RoomTypeChips.tsx, pages/AmenitiesPage.tsx, routes.tsx. Gắn `/manager/amenities` dưới PublicLayout và thêm menu Manager “Tiện nghi”. RequireAuth cùng quyền OR như backend; custom role có facility:manage được dùng route.
+- Một H1, tìm tên debounce 300ms, lọc Tất cả/Đang hoạt động/Ngừng; đổi filter reset page, đổi page giữ filter. Bảng tên, mô tả, Room Type gắn, số loại phòng căn phải, trạng thái có chữ. Mô tả truncate với title/aria-label/focus; tối đa ba chip và native details `+N loại phòng` để mở phần còn lại, có nhãn `(ngừng)`; chưa gắn ghi rõ “Chưa gắn Room Type nào”.
+- Đủ loading, lỗi backend + thử lại, rỗng catalog/rỗng do lọc. Không có nút ghi hoặc mock production. Token/component chung, không Lucide/hex; bảng cuộn trong container trên 375px, summary/nút/control vùng chạm >=44px, focus/hover và reduced motion theo design system.
+
+### Seed và giới hạn nghiệp vụ
+
+- Giữ ba mẫu Wi-Fi/Điều hòa/Bồn tắm và liên kết RoomType seed hiện tại (gồm Suite inactive). Bổ sung “Máy sấy tóc” active chưa gắn và “Điện thoại bàn” inactive chưa gắn. Không tự gắn thêm tiện nghi vào Room Type người dùng đã sửa.
+- Seed Amenity dùng $setOnInsert/upsert, timestamps:false cùng createdAt/updatedAt chỉ khi insert, để chạy lại không thay đổi bất kỳ field/timestamp đã chỉnh. Registry giữ roles → users → amenities → room-types → rooms → bookings → feedback.
+- Giả định đã áp dụng đúng prompt: danh sách hiển thị dữ liệu gắn thực tế kể cả inactive; BR-FAC-06 về gắn mới thuộc UC52, không tự đưa rule ngừng/xóa hoặc đổi unique name vào UC51.
+- Điểm mở rộng #33/UC52: tái sử dụng schema/module, list query/key `amenities`, response, route/guard/UI hiện tại; bổ sung DTO/service/controller ghi và editor riêng, invalidate list/options sau mutation. Chưa triển khai #33, không coi read API là đủ CRUD.
+
+### Kiểm tra và xuất bản UC51
+
+- Code: `a00b9c0` (backend), `3233696` (frontend). Đã tích hợp main mới `04f752c` (hoàn thiện booking của Hiếu) tại `d0c3481`; không sửa logic của Hiếu. Bàn giao qua PR [#21](https://github.com/duongvn9/hotel-mangagement-system/pull/21), tên `feat(amenities): UC51 view amenity list (#32)`.
+- Baseline main `94455ff`: backend lint/typecheck và **506/506** unit pass; frontend lint/typecheck và **139/139** test pass.
+- Backend cục bộ: lint, format:check, typecheck, **525/525** unit (23 files), build pass. Lượt full e2e cục bộ trên baseline cũ đã dừng khi main có phần booking completion mới; không báo lượt bị dừng là pass.
+- Bản tích hợp mới được kiểm tra thật trên GitHub Actions run [40061147570](https://github.com/duongvn9/hotel-mangagement-system/actions/runs/40061147570): backend lint/format/typecheck, **525/525 unit**, **166/166 e2e** (23 files), build đều pass. Bao gồm các suite room-types/rooms/bookings và luồng booking/payment mới, không skip để che lỗi.
+- Frontend cục bộ: lint, format:check, typecheck, **151/151** test (14 files), build pass; CI frontend cũng pass. Lượt dùng fork có 148 test pass nhưng suite LoginPage cũ timeout khởi tạo worker trên Windows; chạy lại toàn bộ bằng `--pool=threads` đã pass 151/151, không đổi cấu hình CI/production. Build còn cảnh báo bundle lớn >500kB như ứng dụng hiện có.
+- Unit UC51 xác minh query literal/false, phân trang/sort, reverse references/count/inactive/unattached/orphan, dedupe và đúng một RoomType query với 1/10/100 amenities. E2e dùng DB riêng mỗi invocation và chỉ dọn fixture tự tạo; có 401/403, 400 query sai, read-only snapshot, options nguyên vẹn, không có endpoint ghi/detail và seed hai lần giữ sửa đổi/timestamps.
+- `npm run seed` thật **hai lần** trên `hms_uc51_seed_test`: có 5 amenities, fixture nhiều loại phòng/loại ngừng/chưa gắn/tiện nghi ngừng; sau lần một sửa Wi-Fi description/isActive/updatedAt, snapshot toàn bộ Amenity giữ nguyên sau lần hai. Thêm hai RoomType fixture chỉ trong database kiểm thử để kiểm tra UI `+N`, không đưa fixture vào production code.
+- Swagger chạy thật `/api/docs-json` có GET amenities và options đúng schema. Node API đã build + MongoDB thật + Vite + Edge: viewport/document **375px**, container bảng **341px**, table **800px**, một H1, menu đúng route; mở `+2`, nhãn Suite (ngừng), mô tả focus/title/aria, tìm/lọc và rỗng do lọc đều pass. Network chỉ GET và CORS OPTIONS; response catalog trước/sau giữ nguyên. Ảnh đã xem trực tiếp. Artifact ignored: `.task29-validation/uc51-browser-result.json`, `uc51-mobile-375.png`, `uc51-seed-result.json`, `uc51-ci-backend.log`.
+- Docker cục bộ **không chạy**, tiếp tục được miễn theo yêu cầu người dùng. Job build image tự động của PR đã pass; phân biệt kết quả CI với việc không chạy Compose cục bộ. Không có TODO/stub/mock production chặn UC51.
