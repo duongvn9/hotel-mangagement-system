@@ -8,7 +8,10 @@ import { getErrorMessage } from '@/lib/api-client'
 import type { AmenityQuery } from '../api'
 import { useAmenities } from '../hooks'
 import { RoomTypeChips } from '../components/RoomTypeChips'
+import { AmenityEditor } from '../components/AmenityForm'
 export function AmenitiesPage() {
+  const [editor, setEditor] = useState<{ id: string | null } | null>(null)
+  const [success, setSuccess] = useState(false)
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState<AmenityQuery>({ page: 1, limit: 10 })
   useEffect(() => {
@@ -37,6 +40,25 @@ export function AmenitiesPage() {
           Thông tin tiện nghi và các loại phòng đang gắn.
         </p>
       </div>
+      <Button
+        onClick={() => {
+          setSuccess(false)
+          setEditor({ id: null })
+        }}
+      >
+        Thêm tiện nghi
+      </Button>
+      {success && <Alert tone="success">Đã lưu tiện nghi.</Alert>}
+      {editor && (
+        <AmenityEditor
+          id={editor.id}
+          onClose={() => setEditor(null)}
+          onSuccess={() => {
+            setEditor(null)
+            setSuccess(true)
+          }}
+        />
+      )}
       <div role="search" aria-label="Lọc tiện nghi" className="grid gap-4 md:grid-cols-2">
         <TextField
           label="Tìm theo tên"
@@ -97,17 +119,22 @@ export function AmenitiesPage() {
                 <caption className="sr-only">Danh sách tiện nghi</caption>
                 <thead className="bg-stone-200 text-xs text-stone-700 uppercase">
                   <tr>
-                    {['Tên', 'Mô tả', 'Gắn vào Room Type', 'Số loại phòng', 'Trạng thái'].map(
-                      (name, index) => (
-                        <th
-                          scope="col"
-                          key={name}
-                          className={`px-4 py-4 ${index === 3 ? 'text-right' : ''}`}
-                        >
-                          {name}
-                        </th>
-                      ),
-                    )}
+                    {[
+                      'Tên',
+                      'Mô tả',
+                      'Gắn vào Room Type',
+                      'Số loại phòng',
+                      'Trạng thái',
+                      'Thao tác',
+                    ].map((name, index) => (
+                      <th
+                        scope="col"
+                        key={name}
+                        className={`px-4 py-4 ${index === 3 ? 'text-right' : ''}`}
+                      >
+                        {name}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -134,6 +161,18 @@ export function AmenitiesPage() {
                         <Badge tone={amenity.isActive ? 'success' : 'neutral'}>
                           {amenity.isActive ? 'Đang hoạt động' : 'Ngừng'}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-4">
+                        <Button
+                          variant="secondary"
+                          aria-label={`Sửa tiện nghi ${amenity.name}`}
+                          onClick={() => {
+                            setSuccess(false)
+                            setEditor({ id: amenity.id })
+                          }}
+                        >
+                          Sửa
+                        </Button>
                       </td>
                     </tr>
                   ))}

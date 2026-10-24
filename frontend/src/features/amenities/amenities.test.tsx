@@ -1,4 +1,4 @@
-﻿import { fireEvent, screen, waitFor, within, configure } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within, configure } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { UserMenu } from '@/features/auth/UserMenu'
@@ -27,7 +27,7 @@ describe('UC51 AmenitiesPage', () => {
   beforeAll(() => configure({ asyncUtilTimeout: 5000 }))
   afterAll(() => configure({ asyncUtilTimeout: 1000 }))
   afterEach(() => vi.restoreAllMocks())
-  it('renders columns, inactive labels, reverse type chips, accessible descriptions and no write actions', async () => {
+  it('renders columns, inactive labels, reverse type chips, accessible descriptions and management actions', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(response())
     renderPage()
     const table = await screen.findByRole('table', { name: 'Danh sách tiện nghi' })
@@ -49,7 +49,9 @@ describe('UC51 AmenitiesPage', () => {
     expect(screen.getByText('Type 4')).toBeVisible()
     expect(within(table).getByRole('cell', { name: '5' })).toHaveClass('text-right')
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(screen.queryByRole('button', { name: /Thêm|Sửa|Vô hiệu|Xóa/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Thêm tiện nghi' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Sửa tiện nghi Wi-Fi' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: /Xóa/ })).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: /Danh sách tiện nghi/ })).toHaveClass(
       'overflow-x-auto',
     )
