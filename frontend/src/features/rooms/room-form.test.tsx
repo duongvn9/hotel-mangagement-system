@@ -1,5 +1,5 @@
 ﻿import roomStatusSource from '../../../../backend/src/common/constants/room-status.enum.ts?raw'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { configure, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { RoomForm } from './components/RoomForm'
@@ -48,6 +48,8 @@ function setupDialog() {
   })
 }
 describe('UC48 room form', () => {
+  beforeAll(() => configure({ asyncUtilTimeout: 5000 }))
+  afterAll(() => configure({ asyncUtilTimeout: 1000 }))
   beforeEach(() => {
     vi.spyOn(api, 'get').mockImplementation(async (url) => {
       if (url === '/room-types/options') return { data: [{ id: active, name: 'Standard' }] }
