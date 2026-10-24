@@ -4,6 +4,7 @@ export const statusLabels = {
   CONCLUDED: 'Đã kết luận',
   ASSIGNING: 'Đang phân công',
   ASSIGNED: 'Đã phân công',
+  CLOSED: 'Đã đóng',
 } as const
 
 export const priorityLabels = {

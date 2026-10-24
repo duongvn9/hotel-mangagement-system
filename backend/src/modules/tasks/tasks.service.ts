@@ -141,6 +141,7 @@ export class TasksService {
         sourceId: new Types.ObjectId(issueId),
         taskType: 'ISSUE_RESOLUTION',
       })
+      .sort({ assignedAt: -1, _id: -1 })
       .lean();
   }
 

@@ -10,12 +10,59 @@
 - #65: **MERGED**, PR #19 tại merge commit `4213c8d`. Mục 11 giữ lịch sử triển khai trước merge, không còn là trạng thái pending hiện tại.
 - #74 / UC28: **MERGED**, PR #20 tại merge commit `266e40b`; parent đã xác minh merge. https://github.com/duongvn9/hotel-mangagement-system/pull/20 — mục 12 giữ bằng chứng triển khai trước merge, không phải trạng thái pending hiện tại.
 - #75 / UC29 và #79 / UC33: **MERGED**, PR #22 tại merge commit `787d1b8`. Mục 13 giữ lịch sử triển khai trước merge, không phải trạng thái pending hiện tại.
-- #76 / UC30 và #77 / UC31: **Implemented, pending review, không Done** trên `feature/vu-76-77-issue-review-assignment`; đã push `c4288cd` (BE), `94b39e6` (FE/E2E); draft PR #25: https://github.com/duongvn9/hotel-mangagement-system/pull/25 — CI pending, chưa merge hoặc có approval scope/contract/manual browser QA 375px. Xem mục 14.
-- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET giữ nguyên, UC38 đã có PATCH tiến độ và form detail. Mục 14 là hiện trạng review/assignment; mục 13 lưu lịch sử Issue list/detail; mục 12 lưu lịch sử UC28; mục 11 lưu lịch sử #65; mục 10 lưu bằng chứng #67 trước merge; mục 9 lưu lịch sử UC37 trước merge; mục 8 lưu mốc #64 trước merge; mục 4–7 là lịch sử.
+- #76 / UC30 và #77 / UC31: **MERGED**, PR #25 tại `b5d2f2f` theo parent bàn giao; mục 14 giữ lịch sử trước merge, không phải trạng thái pending hiện tại.
+- #78 / UC32: **Implemented, pending review, không Done** trên `feature/vu-78-close-issue`; đã push `daf0314` (BE), `588a389` (FE/docs); draft PR #26: https://github.com/duongvn9/hotel-mangagement-system/pull/26 — chưa merge, CI và manual browser QA còn pending. Xem mục 15.
+- #80 / UC34: **Chưa triển khai**, deferred sau **PROMPT10–12** khi có nguồn `SERVICE_ORDER` thật; H4 Service đã có schema/module nhưng không thay thế Service Order.
+- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET/UC38 giữ contract hiện hữu, Task completion không tự close Issue. Mục 15 là hiện trạng; mục 14 trở xuống giữ lịch sử triển khai trước merge.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
 
-## 14. Jira #76 / UC30 và #77 / UC31 — Review Issue / Assign Resolution Task (hiện trạng)
+## 15. Jira #78 / UC32 — Close Issue (hiện trạng)
+
+### Trạng thái, nguồn thật và phạm vi
+
+- **Implemented, pending review, không Done**, nhánh `feature/vu-78-close-issue`; #76/#77 đã MERGED qua PR #25 (`b5d2f2f`, parent bàn giao). Commit/PR #78 còn pending parent xử lý sau; không suy ra approval hoặc CI PASS từ kết quả local.
+- Đã đọc SRS ngoài repo `SRS - HMS.docx.md:809–820` (UC32), BR-ISS-07/08/09 và code BE/FE thực tế: Receptionist/Manager thực hiện bước close cuối sau khi công việc hoàn thành hoặc được kết luận hợp lệ; execution staff không trực tiếp close.
+- H4 đã hiện diện trong baseline main tích hợp hiện tại: collection `services`, schema có `price: number | null` (VND nguyên không âm an toàn; bắt buộc khi billable và active), `unit`, `isActive`; `ServicesModule` đăng ký trong AppModule, export **MongooseModule và ServicesService**. Đây là Service catalog, không phải nguồn `SERVICE_ORDER`: chưa có ServiceOrder module trong `backend/src/modules`.
+- **#80 / UC34 chưa triển khai**, deferred sau **PROMPT10–12** có nguồn Service Order thật và contract quyền/context; không coi H4 hay mapping collection `serviceorders` là đã có nghiệp vụ Service Order. Không thêm/chạy seed, không thêm user-facing contract ngoài close hoặc breaking change vào Task/source API.
+
+### API, quyền và điều kiện server
+
+- `POST /api/v1/issues/:id/close` (shared client `POST /issues/:id/close`), body duy nhất `{ conclusion }`: string trim **1–2000** ký tự; từ chối field lạ/actor/status/time, service cũng validate allowlist. Thành công **201**, trả **IssueDetail** authoritative, không raw Issue/Task.
+- Chỉ role chính xác **RECEPTIONIST hoặc MANAGER**, cả AuthGuard/RolesGuard và `IssuesService.close` đều kiểm tra; không permission/custom-role fallback. Review/assignees/assignment vẫn **chỉ RECEPTIONIST**. Giữ read scope Customer theo Booking active hiện thuộc user và scope khách sạn đơn của Receptionist/Manager, không mở quyền Task OWN hoặc nguồn khác.
+- Server cho close một trong hai nhánh: **CONCLUDED**, `needsStaffAction === false`, không linkedTask, review metadata hợp lệ (ObjectId reviewer, ngày review hợp lệ, classification/priority enum), concludedAt hợp lệ và không trước reviewedAt; **hoặc ASSIGNED**, `needsStaffAction === true`, review metadata hợp lệ, linkedTask ObjectId khớp Task thật có source ISSUE + đúng Issue ID + `ISSUE_RESOLUTION`, status **COMPLETED**, completedAt hợp lệ và workResult string trim **1–2000** ký tự. FE chỉ dự đoán eligibility từ summary, không có workResult; quyết định luôn ở server.
+- CAS so snapshot status/link/needsStaffAction/classification/priority/review metadata/concludedAt, kể cả field vắng, và yêu cầu chưa có cả ba closure fields. Chỉ ghi Issue thành **CLOSED**, `closedAt` giờ server, `closedBy` actor xác thực, `closureConclusion` đã trim; giữ lịch sử review/assignment/linked Task. Không ghi Task, không transaction/snapshot atomic xuyên collection; completion vẫn không tự close. Lifecycle chưa hợp lệ, Task mismatch/incomplete, close lại hoặc race → **409**; input sai 400, anonymous 401, role sai 403, ID sai/missing 404.
+- Staff detail có audit `closedAt`, `closedBy`, `closureConclusion`. Customer chỉ thấy closedAt/status; redact closedBy/conclusion cùng reviewNotes/reviewer và assignment nội bộ, `linkedTasks: []`, `linkedTasksAvailable: false`, không query Task cho Customer. Staff linked summary vẫn allowlist, không lộ workResult/contact hoặc populate nguồn.
+
+### FE và contract additive
+
+- Receptionist/Manager có bước xác nhận với kết luận trim, khóa controls khi pending/ref chống double submit, mutation `retry: false`; success dùng detail response, cả success/error invalidate scope user/role để refetch authoritative state. Có lỗi 400/403/404/409/network; không optimistic close. Role routes và form review/assign Receptionist-only giữ nguyên.
+- `TasksService.findIssueResolutionWork(issueId)` vẫn lookup nội bộ source ISSUE + ID + ISSUE_RESOLUTION không lọc status, bổ sung sort **assignedAt DESC, _id DESC** để deterministic; không phải HTTP/source read API mới. `create(input, identity?)` và caller một argument giữ tương thích; extension additive không thay lifecycle/transition/source contract. Eligibility được server kiểm tra lại, không dựa nút FE.
+
+### Bằng chứng bàn giao và pending
+
+Kết quả dưới đây do **parent/agent bàn giao cho #78**, không phải suite được chạy lại trong lượt chỉ sửa tài liệu; không thay thế CI hoặc browser QA.
+
+| Phạm vi | Kết quả được bàn giao |
+|---|---|
+| Parent BE | format:check, lint, typecheck, build **PASS**; **731 tests / 29 files PASS** |
+| Parent FE | format:check, lint, typecheck, build **PASS**; **258 tests / 20 files PASS**; bundle/chunk-size warning không chặn build |
+| Agent full E2E sạch | MongoDB **8 mới, cô lập**, full **229 tests / 27 suites PASS**; container đã gỡ sau chạy |
+| Các lượt E2E trước | Lỗi cấu hình ban đầu và lượt tái dùng DB **không phải clean run**; không gộp hoặc mô tả các lượt này là full E2E sạch PASS |
+| CI / manual QA | **CI pending**; manual browser desktop/**375px**, keyboard/overflow và live authenticated API **chưa thực hiện** |
+
+- Còn review scope/contract, xác nhận kết luận không staff action, Task completed/missing/mismatch/workResult không hợp lệ, race/re-close và privacy Customer; local E2E sạch không đồng nghĩa CI/QA hay #78 Done. Không có seed bổ sung; commit/PR để parent thực hiện sau.
+- Lượt này chỉ sửa `docs/TIEN-DO-VU.md`, không chạy Git, seed, Mongo/container hoặc full suite. Đã chạy riêng `npm run lint` và `npm run typecheck` tại cả backend/frontend: **tất cả PASS**; không nhập nhằng với bằng chứng parent/agent bàn giao.
+
+### Source tham chiếu
+
+- BE route/roles: `backend/src/modules/issues/issues.controller.ts:67`; DTO: `backend/src/modules/issues/dto/review-issue.dto.ts:33`; close/eligibility/CAS: `backend/src/modules/issues/issues.service.ts:492`; privacy: `:219`.
+- Task lookup sorted: `backend/src/modules/tasks/tasks.service.ts:137`; H4: `backend/src/modules/services/schemas/service.schema.ts:50`, `backend/src/modules/services/services.module.ts:6`; AppModule: `backend/src/app.module.ts:59`.
+- FE eligibility/client: `frontend/src/features/issues/api.ts:81`; confirm/pending/errors/refetch: `frontend/src/features/issues/IssueClosure.tsx:21`.
+
+## 14. Jira #76 / UC30 và #77 / UC31 — Review Issue / Assign Resolution Task (lịch sử trước merge)
+
+> #76/#77 đã MERGED qua PR #25 tại `b5d2f2f` theo parent bàn giao. Các trạng thái pending, UC32 deferred và bằng chứng dưới đây giữ mốc trước merge; mục 15 mô tả hiện trạng #78, không viết lại lịch sử QA.
 
 ### Trạng thái và API thực tế
 
@@ -450,11 +497,11 @@ Tests dùng mock persistence theo H8, schema/index Mongoose thật in-memory, co
 | 73 | UC27 View Service History | Chưa làm | Chưa có |
 | 74 | UC28 Report Issue | MERGED; đã xác minh merge; lịch sử QA ở mục 12 | PR #20 / merge `266e40b` |
 | 75 | UC29 View Issue List | MERGED; lịch sử QA ở mục 13 | PR #22 / merge `787d1b8` |
-| 76 | UC30 Review Issue Request | Implemented, pending review; không Done; CI/manual QA pending | `feature/vu-76-77-issue-review-assignment`; xem mục 14 |
-| 77 | UC31 Assign Issue Resolution Task | Implemented, pending review; không Done; recovery blocker cần review | `feature/vu-76-77-issue-review-assignment`; xem mục 14 |
-| 78 | UC32 Close Issue | Chưa làm | Chưa có |
+| 76 | UC30 Review Issue Request | MERGED; lịch sử ở mục 14 | PR #25 / merge `b5d2f2f` |
+| 77 | UC31 Assign Issue Resolution Task | MERGED; lịch sử và recovery blocker ở mục 14 | PR #25 / merge `b5d2f2f` |
+| 78 | UC32 Close Issue | Implemented, pending review; không Done; xem mục 15 | `feature/vu-78-close-issue`; commit/PR pending parent |
 | 79 | UC33 View Issue Detail | MERGED; lịch sử QA ở mục 13 | PR #22 / merge `787d1b8` |
-| 80 | UC34 Report Service Issue | Chưa làm | Chưa có |
+| 80 | UC34 Report Service Issue | Chưa triển khai; deferred sau PROMPT10–12 có nguồn SERVICE_ORDER thật | Chưa có; xem mục 15 |
 
 ## 2. Contract dùng lại
 

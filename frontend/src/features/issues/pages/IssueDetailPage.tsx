@@ -3,6 +3,7 @@ import { useIssue } from '../hooks'
 import { IssueBadges, IssueError } from '../IssuePresentation'
 import { issueDate, issueViews, handlingLabels, type IssueRole } from '../presentation'
 import { IssueHandling } from '../IssueHandling'
+import { IssueClosure } from '../IssueClosure'
 
 export function IssueDetailPage({ role }: { role: IssueRole }) {
   const { id = '' } = useParams()
@@ -61,8 +62,20 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
                 <dd>{issueDate(issue.concludedAt)}</dd>
               </div>
             )}
+            {issue.closedAt && (
+              <div>
+                <dt className="font-semibold">Ngày đóng</dt>
+                <dd>{issueDate(issue.closedAt)}</dd>
+              </div>
+            )}
             {role !== 'CUSTOMER' && (
               <>
+                {issue.closedBy && (
+                  <div>
+                    <dt className="font-semibold">Người đóng (mã tham chiếu)</dt>
+                    <dd className="break-all">{issue.closedBy}</dd>
+                  </div>
+                )}
                 {issue.reviewedBy && (
                   <div>
                     <dt className="font-semibold">Người xem xét</dt>
@@ -126,7 +139,16 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
               <p className="break-words whitespace-pre-wrap">{issue.reviewNotes}</p>
             </div>
           )}
+          {role !== 'CUSTOMER' && issue.closureConclusion && (
+            <div>
+              <h3 className="font-semibold">Kết luận đóng sự cố</h3>
+              <p className="break-words whitespace-pre-wrap">{issue.closureConclusion}</p>
+            </div>
+          )}
           {role === 'RECEPTIONIST' && <IssueHandling key={issue.id} issue={issue} />}
+          {(role === 'RECEPTIONIST' || role === 'MANAGER') && (
+            <IssueClosure key={`close-${issue.id}`} issue={issue} />
+          )}
           <section
             className="space-y-3 rounded-lg bg-cream-50 p-4"
             aria-label="Công việc liên quan"
