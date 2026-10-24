@@ -29,6 +29,7 @@ import {
   UpdateRoomTypeDto,
 } from './dto/write-room-type.dto.js';
 import { RoomTypeResponse } from './dto/room-type-response.dto.js';
+import { RoomTypeOptionResponse } from './dto/room-type-option.dto.js';
 
 @ApiTags('room-types')
 @Controller('room-types')
@@ -38,6 +39,15 @@ import { RoomTypeResponse } from './dto/room-type-response.dto.js';
 @ApiForbiddenResponse()
 export class RoomTypesController {
   constructor(private readonly roomTypes: RoomTypesService) {}
+
+  @Get('options')
+  @ApiOperation({
+    summary: 'UC48 — All active RoomType options, sorted by name',
+  })
+  @ApiOkResponse({ type: [RoomTypeOptionResponse] })
+  options() {
+    return this.roomTypes.options();
+  }
 
   @Post()
   @ApiOperation({ summary: 'UC50 — Create room type' })

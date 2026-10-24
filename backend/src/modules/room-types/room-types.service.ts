@@ -32,6 +32,16 @@ export class RoomTypesService {
       throw new BadRequestException('Room type id không hợp lệ');
   }
 
+  async options() {
+    const rows = await this.roomTypes
+      .find({ isActive: true })
+      .select('name')
+      .sort({ name: 1, _id: 1 })
+      .lean()
+      .exec();
+    return rows.map((row) => ({ id: String(row._id), name: row.name }));
+  }
+
   private async uniqueName(name: string, except?: string) {
     const duplicate = await this.roomTypes.exists({
       name,
