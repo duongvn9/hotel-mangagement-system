@@ -1,4 +1,4 @@
-﻿# Tiến độ Trần Bảo Lâm — Grand Emily HMS
+# Tiến độ Trần Bảo Lâm — Grand Emily HMS
 
 Cập nhật 24/10/2026. Đây là tài liệu tiến độ và bàn giao duy nhất của Lâm; các task sau tiếp tục cập nhật vào file này. File CLAUDE-CONTEXT-TRAN-BAO-LAM.md giữ vai trò context dự án, không phải một file tiến độ theo UC.
 
@@ -577,4 +577,3 @@ Adapter thật hiện đã ở main do Hiếu viết (`MongoAvailabilityRoomSour
 - Docker local **không chạy**, được miễn theo yêu cầu thường trực của người dùng; không báo Docker pass. Không chỉnh Jira hoặc nhánh của người khác. Không có mock production/TODO chặn chức năng UC48; không triển khai Equipment/H6 adapter/H7 pricing hoặc các task ngoài scope.
 
 Task tiếp theo được mở khóa: module lễ tân/Khoa có thể tái sử dụng Room/RoomStatus và service; #37 Equipment tham chiếu Room khi làm task riêng. Các thay đổi rule đặt phòng/giá cần Hiếu quyết định theo hợp đồng hiện có.
-
