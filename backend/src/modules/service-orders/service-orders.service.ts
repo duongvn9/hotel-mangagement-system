@@ -18,7 +18,10 @@ import { Booking, BookingStatus } from '../bookings/schemas/booking.schema.js';
 import { Service } from '../services/schemas/service.schema.js';
 import { User } from '../users/schemas/user.schema.js';
 import { InvoicesService } from '../invoices/invoices.service.js';
-import type { InvoiceDocument } from '../invoices/schemas/invoice.schema.js';
+import {
+  Invoice,
+  type InvoiceDocument,
+} from '../invoices/schemas/invoice.schema.js';
 import { InvoiceChargeType } from '../invoices/schemas/invoice-charge.schema.js';
 import {
   ServiceOrderExecutionStatus,
@@ -54,6 +57,7 @@ export class ServiceOrdersService implements OnModuleInit {
     private readonly invoices: InvoicesService,
     @InjectModel(User.name) private readonly users: Model<User>,
     private readonly tasks: TasksService,
+    @InjectModel(Invoice.name) private readonly invoiceRecords: Model<Invoice>,
   ) {}
 
   async onModuleInit() {
@@ -595,9 +599,9 @@ export class ServiceOrdersService implements OnModuleInit {
     if (row.amount > 0) {
       if (!row.billedInvoiceId || !row.billedAt)
         throw new ConflictException('Service order billing is not confirmed');
-      const invoice = await this.invoices.findPersistedById(
-        row.billedInvoiceId,
-      );
+      const invoice = await this.invoiceRecords
+        .findById(row.billedInvoiceId)
+        .exec();
       if (!invoice || !this.matchingCharge(invoice, row))
         throw new ConflictException('Persisted service charge is missing');
     }

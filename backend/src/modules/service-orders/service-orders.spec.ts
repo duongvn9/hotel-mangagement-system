@@ -98,8 +98,50 @@ describe('service orders contract', () => {
     ).toHaveLength(0);
   });
 
+  it('verifies persisted billing through the Invoice model without invoking H7 writes or creation', async () => {
+    const billedInvoiceId = new Types.ObjectId();
+    const row = {
+      _id: new Types.ObjectId(),
+      booking: new Types.ObjectId(),
+      reviewStatus: 'ACCEPTED',
+      executionStatus: 'NOT_STARTED',
+      quantity: 1,
+      unitPriceVND: 100,
+      amount: 100,
+      billedInvoiceId,
+      billedAt: new Date(),
+    };
+    const getOrCreateForBooking = vi.fn();
+    const addCharge = vi.fn();
+    const findById = vi.fn().mockReturnValue({ exec: async () => null });
+    const service = new ServiceOrdersService(
+      {
+        findById: () => ({ select: () => ({ exec: async () => row }) }),
+      } as never,
+      {} as never,
+      {} as never,
+      { getOrCreateForBooking, addCharge } as never,
+      {} as never,
+      {} as never,
+      { findById } as never,
+    );
+    const receptionist = { ...user, role: 'RECEPTIONIST' };
+    await expect(
+      service.assignees(String(row._id), receptionist),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      service.assign(String(row._id), { assigneeId: user.id }, receptionist),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(findById).toHaveBeenCalledTimes(2);
+    expect(findById).toHaveBeenCalledWith(billedInvoiceId);
+    expect(getOrCreateForBooking).not.toHaveBeenCalled();
+    expect(addCharge).not.toHaveBeenCalled();
+  });
+
   it('enforces Customer inside service independently of HTTP guards', async () => {
     const service = new ServiceOrdersService(
+      {} as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -116,6 +158,8 @@ describe('service orders contract', () => {
 
   it('enforces exact Receptionist inside every staff service entry point', async () => {
     const service = new ServiceOrdersService(
+      {} as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -152,6 +196,8 @@ describe('service orders contract', () => {
         { create } as never,
         model({ isActive: true, status: 'CHECKED_IN' }) as never,
         model({ isActive: true, billable: true, price }) as never,
+        {} as never,
+        {} as never,
         {} as never,
         {} as never,
       );
