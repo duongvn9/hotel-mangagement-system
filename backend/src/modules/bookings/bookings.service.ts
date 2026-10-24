@@ -3,11 +3,16 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomBytes } from 'node:crypto';
 import { Model, Types } from 'mongoose';
 import type { AuthUser } from '../../common/auth/auth-user.js';
+import {
+  authorizeBookingAccess,
+  type BookingActor,
+} from '../../common/auth/booking-access.js';
 import { Role } from '../../common/constants/role.enum.js';
 import { RoomStatus } from '../../common/constants/room-status.enum.js';
 import { Room } from '../rooms/schemas/room.schema.js';
@@ -120,6 +125,44 @@ export class BookingsService {
       roomTotal: booking.roomTotal,
       depositAmount: booking.depositAmount,
       holdExpiresAt: hold.expiresAt.toISOString(),
+    };
+  }
+
+  /**
+   * Huỷ booking (chủ booking, nhân viên, hoặc Guest kèm mã): nhả RoomHold đang giữ và
+   * chuyển sang CANCELLED. Chỉ cho huỷ khi PENDING_DEPOSIT hoặc CONFIRMED (trước check-in);
+   * không tự động hoàn tiền (xử lý thủ công/ngoài phạm vi).
+   */
+  async cancel(bookingId: string, actor: BookingActor) {
+    if (!/^[a-f\d]{24}$/i.test(bookingId)) {
+      throw new BadRequestException('Invalid booking ID');
+    }
+    const booking = await this.bookings.findById(bookingId);
+    if (!booking || !booking.isActive) {
+      throw new NotFoundException('Booking not found');
+    }
+    authorizeBookingAccess(booking, actor);
+    if (
+      ![BookingStatus.PendingDeposit, BookingStatus.Confirmed].includes(
+        booking.status,
+      )
+    ) {
+      throw new ConflictException(
+        'Only a pending or confirmed booking can be cancelled',
+      );
+    }
+    booking.status = BookingStatus.Cancelled;
+    booking.cancelledAt = this.clock.now();
+    await booking.save();
+    await this.holds.updateMany(
+      { booking: booking._id, isActive: true },
+      { $set: { isActive: false } },
+    );
+    return {
+      id: String(booking._id),
+      code: booking.code,
+      status: booking.status,
+      cancelledAt: booking.cancelledAt.toISOString(),
     };
   }
 

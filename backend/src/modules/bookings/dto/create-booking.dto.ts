@@ -5,6 +5,7 @@ import {
   IsEmail,
   IsInt,
   IsMongoId,
+  IsOptional,
   IsString,
   Matches,
   MaxLength,
@@ -47,6 +48,17 @@ export class CreateBookingDto {
   @ApiProperty({ description: 'Số điện thoại liên hệ' })
   @Matches(/^[0-9+\-\s]{6,20}$/, { message: 'guestPhone is invalid' })
   guestPhone: string;
+}
+
+export class CancelBookingDto {
+  @ApiProperty({
+    required: false,
+    description: 'Mã booking (vé) cho Guest chưa đăng nhập',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  code?: string;
 }
 
 export class BookingResponse {
