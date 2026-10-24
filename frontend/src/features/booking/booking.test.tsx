@@ -67,30 +67,9 @@ describe('booking storage', () => {
   })
 })
 
-const roomTypesResponse = {
-  data: {
-    items: [
-      {
-        id: 'type1',
-        name: 'Deluxe',
-        description: 'Phòng rộng',
-        adultCapacity: 2,
-        childCapacity: 1,
-        basePrice: 1_000_000,
-        amenities: [],
-        isActive: true,
-        availableForBooking: true,
-      },
-    ],
-    total: 1,
-    page: 1,
-    limit: 100,
-  },
-}
-
 const availableRooms: AvailableRoom[] = [
-  { id: 'r1', roomTypeId: 'type1', capacity: 3 },
-  { id: 'r2', roomTypeId: 'type1', capacity: 3 },
+  { id: 'r1', roomTypeId: 'type1', roomTypeName: 'Deluxe', pricePerNight: 1_000_000, capacity: 3 },
+  { id: 'r2', roomTypeId: 'type1', roomTypeName: 'Deluxe', pricePerNight: 1_000_000, capacity: 3 },
 ]
 
 describe('SearchRoomsPage', () => {
@@ -99,7 +78,6 @@ describe('SearchRoomsPage', () => {
   it('lists available rooms by type and lets the guest proceed', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
       if (url === '/availability') return { data: availableRooms }
-      if (url === '/room-types') return roomTypesResponse
       throw new Error(`unexpected GET ${url}`)
     })
 

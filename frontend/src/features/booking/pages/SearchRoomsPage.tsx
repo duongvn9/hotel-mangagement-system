@@ -6,9 +6,8 @@ import { Button } from '@/components/Button'
 import { SelectField } from '@/components/SelectField'
 import { TextField } from '@/components/TextField'
 import { getErrorMessage } from '@/lib/api-client'
-import type { RoomType } from '@/features/room-types/api'
 import type { AvailableRoom, SearchAvailabilityParams } from '../api'
-import { useAvailability, useBookableRoomTypes } from '../hooks'
+import { useAvailability } from '../hooks'
 import { money, nightsBetween, todayISO } from '../utils'
 
 /** Đọc tiêu chí hợp lệ từ URL để chạy UC05; trả null khi chưa đủ/không hợp lệ. */
@@ -16,7 +15,6 @@ function readCriteria(params: URLSearchParams): SearchAvailabilityParams | null 
   const checkIn = params.get('checkIn') ?? ''
   const checkOut = params.get('checkOut') ?? ''
   const guests = Number(params.get('guests'))
-  const roomTypeId = params.get('roomTypeId') || undefined
   const valid =
     /^\d{4}-\d{2}-\d{2}$/.test(checkIn) &&
     /^\d{4}-\d{2}-\d{2}$/.test(checkOut) &&
@@ -24,12 +22,14 @@ function readCriteria(params: URLSearchParams): SearchAvailabilityParams | null 
     Number.isInteger(guests) &&
     guests >= 1
   if (!valid) return null
-  return { checkIn, checkOut, guests, ...(roomTypeId ? { roomTypeId } : {}) }
+  return { checkIn, checkOut, guests }
 }
 
 interface TypeGroup {
-  type: RoomType | undefined
   roomTypeId: string
+  name: string
+  pricePerNight: number
+  capacity: number
   rooms: AvailableRoom[]
 }
 
@@ -43,20 +43,13 @@ export function SearchRoomsPage() {
   const [checkIn, setCheckIn] = useState(params.get('checkIn') ?? '')
   const [checkOut, setCheckOut] = useState(params.get('checkOut') ?? '')
   const [guests, setGuests] = useState(params.get('guests') ?? '2')
-  const [roomTypeId, setRoomTypeId] = useState(params.get('roomTypeId') ?? '')
   const [formError, setFormError] = useState('')
 
   // Số phòng đã chọn theo loại, dùng để sang bước tạo booking.
   const [selection, setSelection] = useState<Record<string, number>>({})
 
-  const types = useBookableRoomTypes()
   const availability = useAvailability(criteria)
   const nights = criteria ? nightsBetween(criteria.checkIn, criteria.checkOut) : 0
-
-  const typeMap = useMemo(
-    () => new Map((types.data ?? []).map((type) => [type.id, type])),
-    [types.data],
-  )
 
   const groups = useMemo<TypeGroup[]>(() => {
     const byType = new Map<string, AvailableRoom[]>()
@@ -66,14 +59,20 @@ export function SearchRoomsPage() {
       byType.set(room.roomTypeId, list)
     }
     return [...byType.entries()]
-      .map(([id, rooms]) => ({ roomTypeId: id, rooms, type: typeMap.get(id) }))
-      .sort((a, b) => (a.type?.name ?? '').localeCompare(b.type?.name ?? ''))
-  }, [availability.data, typeMap])
+      .map(([id, rooms]) => ({
+        roomTypeId: id,
+        name: rooms[0]?.roomTypeName ?? 'Phòng',
+        pricePerNight: rooms[0]?.pricePerNight ?? 0,
+        capacity: rooms[0]?.capacity ?? 0,
+        rooms,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [availability.data])
 
   const selectedRoomIds = useMemo(
     () =>
       groups.flatMap((group) =>
-        group.rooms.slice(0, selection[group.roomTypeId] ?? 0).map((r) => r.id),
+        group.rooms.slice(0, selection[group.roomTypeId] ?? 0).map((room) => room.id),
       ),
     [groups, selection],
   )
@@ -81,8 +80,7 @@ export function SearchRoomsPage() {
   const estimatedTotal = useMemo(
     () =>
       groups.reduce(
-        (sum, group) =>
-          sum + (selection[group.roomTypeId] ?? 0) * (group.type?.basePrice ?? 0) * nights,
+        (sum, group) => sum + (selection[group.roomTypeId] ?? 0) * group.pricePerNight * nights,
         0,
       ),
     [groups, selection, nights],
@@ -100,9 +98,7 @@ export function SearchRoomsPage() {
       return
     }
     setSelection({})
-    const next: Record<string, string> = { checkIn, checkOut, guests: String(Number(guests)) }
-    if (roomTypeId) next.roomTypeId = roomTypeId
-    setParams(next)
+    setParams({ checkIn, checkOut, guests: String(Number(guests)) })
   }
 
   function proceed() {
@@ -156,17 +152,10 @@ export function SearchRoomsPage() {
           value={guests}
           onChange={(event) => setGuests(event.target.value)}
         />
-        <SelectField
-          label="Loại phòng"
-          value={roomTypeId}
-          options={[
-            { value: '', label: 'Tất cả' },
-            ...(types.data ?? []).map((type) => ({ value: type.id, label: type.name })),
-          ]}
-          onChange={(event) => setRoomTypeId(event.target.value)}
-        />
-        <div className="md:col-span-4">
-          <Button type="submit">Tìm phòng</Button>
+        <div className="flex items-end">
+          <Button type="submit" className="w-full">
+            Tìm phòng
+          </Button>
         </div>
       </form>
 
@@ -203,20 +192,17 @@ export function SearchRoomsPage() {
                 <div className="min-w-56 space-y-1">
                   <div className="flex items-center gap-2">
                     <h2 className="font-display text-xl font-semibold text-pearl-900">
-                      {group.type?.name ?? 'Phòng'}
+                      {group.name}
                     </h2>
                     <Badge tone="success">Còn {max} phòng</Badge>
                   </div>
-                  {group.type?.description && (
-                    <p className="max-w-prose text-sm text-stone-700">{group.type.description}</p>
-                  )}
                   <p className="text-sm text-stone-700">
-                    Sức chứa tối đa {group.rooms[0]?.capacity} khách/phòng
+                    Sức chứa tối đa {group.capacity} khách/phòng
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="font-display text-lg font-semibold text-pearl-900">
-                    {group.type ? money.format(group.type.basePrice) : '—'}
+                    {group.pricePerNight ? money.format(group.pricePerNight) : '—'}
                   </p>
                   <p className="text-xs text-stone-700">mỗi đêm</p>
                 </div>

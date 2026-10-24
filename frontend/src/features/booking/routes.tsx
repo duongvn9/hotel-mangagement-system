@@ -14,5 +14,5 @@ export const bookingRoutes: RouteObject[] = [
   { path: 'booking/new', element: <CreateBookingPage /> },
   { path: 'booking/:id', element: <BookingDetailPage /> },
   { path: 'my-bookings', element: <MyBookingsPage /> },
-  { path: 'payment/return', element: <PaymentReturnPage /> },
+  { path: 'payment/vnpay-return', element: <PaymentReturnPage /> },
 ]

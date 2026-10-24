@@ -1,5 +1,4 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { listRoomTypes, type RoomType } from '@/features/room-types/api'
 import {
   cancelBooking,
   createBooking,
@@ -16,21 +15,6 @@ export function useAvailability(params: SearchAvailabilityParams | null) {
     queryKey: ['availability', params],
     queryFn: () => searchAvailability(params as SearchAvailabilityParams),
     enabled: params !== null,
-  })
-}
-
-/** Loại phòng đang mở đặt, để làm giàu kết quả UC05 (tên, giá, sức chứa). */
-export function useBookableRoomTypes() {
-  return useQuery({
-    queryKey: ['room-types', 'bookable'],
-    queryFn: async (): Promise<RoomType[]> => {
-      const first = await listRoomTypes({ page: 1, limit: 100 })
-      const items = [...first.items]
-      for (let page = 2; page <= Math.ceil(first.total / first.limit); page++) {
-        items.push(...(await listRoomTypes({ page, limit: 100 })).items)
-      }
-      return items
-    },
   })
 }
 

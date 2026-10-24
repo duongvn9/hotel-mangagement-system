@@ -8,7 +8,7 @@ import { useVerifyReturn } from '../hooks'
 import { lookupPaymentRef, patchStoredBooking } from '../storage'
 
 /**
- * Đích VNPay redirect về sau khi thanh toán (cấu hình VNPAY_RETURN_URL trỏ tới /payment/return).
+ * Đích VNPay redirect về sau khi thanh toán (khớp VNPAY_RETURN_URL = /payment/vnpay-return).
  * Chỉ để hiển thị kết quả — việc chốt thanh toán thật do IPN của backend xử lý.
  */
 export function PaymentReturnPage() {

@@ -16,10 +16,17 @@ export function formatDateTime(value: string): string {
   return Number.isNaN(date.getTime()) ? value : dateTimeFmt.format(date)
 }
 
-/** Số đêm giữa hai ngày YYYY-MM-DD (tối thiểu 0). */
+/** Mốc thời gian của một giá trị ngày: YYYY-MM-DD hiểu theo giờ VN, còn lại parse trực tiếp ISO. */
+function instantOf(value: string): number {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? Date.parse(`${value}T00:00:00+07:00`)
+    : Date.parse(value)
+}
+
+/** Số đêm giữa hai ngày (nhận cả YYYY-MM-DD lẫn ISO datetime từ backend; tối thiểu 0). */
 export function nightsBetween(checkIn: string, checkOut: string): number {
-  const start = Date.parse(`${checkIn}T00:00:00+07:00`)
-  const end = Date.parse(`${checkOut}T00:00:00+07:00`)
+  const start = instantOf(checkIn)
+  const end = instantOf(checkOut)
   if (Number.isNaN(start) || Number.isNaN(end)) return 0
   return Math.max(0, Math.round((end - start) / 86_400_000))
 }

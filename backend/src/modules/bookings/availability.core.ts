@@ -16,6 +16,10 @@ export interface AvailableRoom {
   id: string;
   roomTypeId: string;
   capacity: number;
+  /** Tên loại phòng, để hiển thị cho khách (có khi nguồn phòng cung cấp). */
+  roomTypeName?: string;
+  /** Đơn giá mỗi đêm của loại phòng (VND). */
+  pricePerNight?: number;
 }
 export interface AvailabilityRoom extends AvailableRoom {
   isActive: boolean;
@@ -136,5 +140,16 @@ export function calculateAvailability(
         !blocked.has(room.id)
       );
     })
-    .map(({ id, roomTypeId, capacity }) => ({ id, roomTypeId, capacity }));
+    .map((room) => ({
+      id: room.id,
+      roomTypeId: room.roomTypeId,
+      capacity: room.capacity,
+      // Chỉ kèm khi nguồn phòng cung cấp, giữ nguyên shape tối thiểu cho các stub/test.
+      ...(room.roomTypeName !== undefined
+        ? { roomTypeName: room.roomTypeName }
+        : {}),
+      ...(room.pricePerNight !== undefined
+        ? { pricePerNight: room.pricePerNight }
+        : {}),
+    }));
 }

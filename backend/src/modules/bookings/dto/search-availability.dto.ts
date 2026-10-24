@@ -31,6 +31,12 @@ export class AvailableRoomResponse {
   @ApiProperty()
   roomTypeId: string;
 
+  @ApiPropertyOptional({ description: 'Tên loại phòng để hiển thị' })
+  roomTypeName?: string;
+
+  @ApiPropertyOptional({ description: 'Đơn giá mỗi đêm (VND)' })
+  pricePerNight?: number;
+
   @ApiProperty({ description: 'Sức chứa tối đa (người lớn + trẻ em)' })
   capacity: number;
 }

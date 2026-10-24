@@ -11,6 +11,10 @@ export interface AvailableRoom {
   id: string
   roomTypeId: string
   capacity: number
+  /** Tên loại phòng (UC05 công khai trả kèm để hiển thị). */
+  roomTypeName?: string
+  /** Đơn giá mỗi đêm của loại phòng (VND). */
+  pricePerNight?: number
 }
 
 export interface SearchAvailabilityParams {
