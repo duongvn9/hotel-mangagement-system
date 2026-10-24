@@ -16,6 +16,12 @@ export function PublicLayout() {
             <Link to="/" className="hover:text-primary">
               Trang chủ
             </Link>
+            <Link to="/search" className="hover:text-primary">
+              Đặt phòng
+            </Link>
+            <Link to="/my-bookings" className="hover:text-primary">
+              Booking của tôi
+            </Link>
             <UserMenu />
           </nav>
         </div>
