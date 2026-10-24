@@ -57,6 +57,10 @@ export function ServiceHistoryPage() {
   const history = useServiceHistory(query)
   function search(event: FormEvent) {
     event.preventDefault()
+    if (keyword.trim().length > 100) {
+      setValidation('Từ khóa dịch vụ tối đa 100 ký tự.')
+      return
+    }
     const start = from ? new Date(`${from}T00:00:00`) : undefined
     const end = to ? new Date(`${to}T23:59:59.999`) : undefined
     if (
@@ -96,7 +100,7 @@ export function ServiceHistoryPage() {
             className="min-h-11 w-full rounded border border-stone-300 p-2"
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
-            maxLength={200}
+            maxLength={100}
           />
         </label>
         <label>
