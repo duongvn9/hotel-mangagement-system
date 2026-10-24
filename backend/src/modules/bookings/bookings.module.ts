@@ -5,7 +5,10 @@ import { Booking, BookingSchema } from './schemas/booking.schema.js';
 import { RoomHold, RoomHoldSchema } from './schemas/room-hold.schema.js';
 import { AvailabilityController } from './availability.controller.js';
 import { AvailabilityService } from './availability.service.js';
-import { AvailabilityClock, AvailabilityRoomSource } from './availability.adapters.js';
+import {
+  AvailabilityClock,
+  AvailabilityRoomSource,
+} from './availability.adapters.js';
 import { MongoAvailabilityRoomSource } from './mongo-availability-room-source.js';
 
 @Module({

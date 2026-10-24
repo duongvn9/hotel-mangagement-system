@@ -44,9 +44,7 @@ export class RoomTypePricingAdapter extends InvoicePricingAdapter {
 
     return rows.flatMap((row) => {
       if (!row.roomType) return [];
-      return [
-        { roomId: String(row._id), rate: row.roomType.basePrice, units },
-      ];
+      return [{ roomId: String(row._id), rate: row.roomType.basePrice, units }];
     });
   }
 }
