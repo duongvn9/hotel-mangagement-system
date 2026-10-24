@@ -8,7 +8,7 @@ import { Room } from './schemas/room.schema.js';
 export const seedRooms: Seed = async (app) => {
   const rooms = app.get<Model<Room>>(getModelToken(Room.name));
   const types = app.get<Model<RoomType>>(getModelToken(RoomType.name));
-  // On a fresh DB the first active room matches seedBookings' CHECKED_IN example.
+  // Phòng 101 (OCCUPIED) dùng cho booking SEED-CHECKED-IN-001 trong seedBookings.
   const samples = [
     {
       roomNumber: '101',
