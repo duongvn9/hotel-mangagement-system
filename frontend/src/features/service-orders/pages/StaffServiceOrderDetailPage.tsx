@@ -1,11 +1,13 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import { Button } from '@/components/Button'
+import { useAuth } from '@/features/auth/auth-context'
 import { OrderReceipt } from '../presentation'
 import { dateTime, money } from '../api'
 import { useReviewStaffOrder, useStaffOrder } from '../staff-hooks'
 import { billingLabel, type ReviewInput, type StaffServiceOrder } from '../staff-api'
 import { StaffOrderError } from '../staff-presentation'
+import { ServiceAssignment } from '../ServiceAssignment'
 
 function ReviewForm({ order, refreshing }: { order: StaffServiceOrder; refreshing: boolean }) {
   const mutation = useReviewStaffOrder(order.id)
@@ -149,6 +151,7 @@ function ReviewForm({ order, refreshing }: { order: StaffServiceOrder; refreshin
 }
 export function StaffServiceOrderDetailPage() {
   const { id = '' } = useParams()
+  const { me } = useAuth()
   const order = useStaffOrder(id)
   return (
     <section className="mx-auto max-w-container space-y-6 px-4 py-8">
@@ -206,6 +209,11 @@ export function StaffServiceOrderDetailPage() {
             )}
           </div>
           <ReviewForm key={order.data.id} order={order.data} refreshing={order.isFetching} />
+          <ServiceAssignment
+            key={`assignment-${me?.id}-${me?.role}-${order.data.id}`}
+            order={order.data}
+            refreshing={order.isFetching}
+          />
         </>
       )}
     </section>

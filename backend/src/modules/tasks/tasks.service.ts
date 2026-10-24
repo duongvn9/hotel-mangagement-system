@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
@@ -20,6 +21,7 @@ import {
 } from './dto/assigned-task.dto.js';
 import { ListAssignedTasksQuery } from './dto/list-assigned-tasks.dto.js';
 import {
+  SERVICE_ORDER_EXECUTION_TASK_TYPE,
   canTransitionTaskStatus,
   TaskSourceType,
   TaskStatus,
@@ -134,6 +136,129 @@ export class TasksService {
     };
   }
 
+  async findServiceOrderExecutionWork(orderId: string, taskId: Types.ObjectId) {
+    return this.tasks
+      .findOne({
+        _id: taskId,
+        sourceType: TaskSourceType.ServiceOrder,
+        sourceId: new Types.ObjectId(orderId),
+        taskType: SERVICE_ORDER_EXECUTION_TASK_TYPE,
+      })
+      .lean();
+  }
+
+  async listCompletedServiceWork(
+    actorId: string,
+    query: {
+      page: number;
+      limit: number;
+      keyword?: string;
+      from?: string;
+      to?: string;
+    },
+    orderId?: Types.ObjectId,
+  ) {
+    const completedAt = {
+      $type: 'date',
+      ...(query.from ? { $gte: new Date(query.from) } : {}),
+      ...(query.to ? { $lte: new Date(query.to) } : {}),
+    };
+    const [result] = await this.tasks.aggregate<{
+      items: (Task & { _id: Types.ObjectId; order: Record<string, unknown> })[];
+      count: { total: number }[];
+    }>([
+      {
+        $match: {
+          assignedTo: this.assignedActorId(actorId),
+          sourceType: TaskSourceType.ServiceOrder,
+          taskType: SERVICE_ORDER_EXECUTION_TASK_TYPE,
+          status: TaskStatus.Completed,
+          completedAt,
+          workResult: { $type: 'string', $regex: /\S/ },
+          ...(orderId ? { sourceId: orderId } : {}),
+        },
+      },
+      {
+        $match: {
+          $expr: {
+            $lte: [
+              {
+                $strLenCP: {
+                  $cond: [
+                    { $eq: [{ $type: '$workResult' }, 'string'] },
+                    '$workResult',
+                    '',
+                  ],
+                },
+              },
+              2000,
+            ],
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: TASK_SOURCE_COLLECTIONS[TaskSourceType.ServiceOrder],
+          localField: 'sourceId',
+          foreignField: '_id',
+          as: 'order',
+        },
+      },
+      { $unwind: '$order' },
+      {
+        $match: {
+          'order.reviewStatus': 'ACCEPTED',
+          $expr: { $eq: ['$order.linkedTask', '$_id'] },
+          ...(query.keyword
+            ? {
+                'order.serviceName': {
+                  $regex: query.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+                  $options: 'i',
+                },
+              }
+            : {}),
+        },
+      },
+      { $sort: { completedAt: -1, _id: -1 } },
+      {
+        $facet: {
+          items: [
+            { $skip: (query.page - 1) * query.limit },
+            { $limit: query.limit },
+          ],
+          count: [{ $count: 'total' }],
+        },
+      },
+    ]);
+    return { items: result?.items ?? [], total: result?.count[0]?.total ?? 0 };
+  }
+
+  private readonly logger = new Logger(TasksService.name);
+
+  async repairServiceOrderExecution(task: Task & { _id: Types.ObjectId }) {
+    if (
+      task.sourceType !== TaskSourceType.ServiceOrder ||
+      task.taskType !== SERVICE_ORDER_EXECUTION_TASK_TYPE
+    )
+      return;
+    const predecessors = {
+      [TaskStatus.Assigned]: ['ASSIGNED'],
+      [TaskStatus.InProgress]: ['ASSIGNED', 'IN_PROGRESS'],
+      [TaskStatus.Completed]: ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'],
+    };
+    await this.connection
+      .collection(TASK_SOURCE_COLLECTIONS[TaskSourceType.ServiceOrder])
+      .updateOne(
+        {
+          _id: task.sourceId,
+          linkedTask: task._id,
+          reviewStatus: 'ACCEPTED',
+          executionStatus: { $in: predecessors[task.status] },
+        },
+        { $set: { executionStatus: task.status } },
+      );
+  }
+
   async findIssueResolutionWork(issueId: string) {
     return this.tasks
       .findOne({
@@ -145,7 +270,11 @@ export class TasksService {
       .lean();
   }
 
-  async create(input: CreateTaskDto, identity?: Types.ObjectId) {
+  async create(
+    input: CreateTaskDto,
+    identity?: Types.ObjectId,
+    assignedAt?: Date,
+  ) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) {
       throw new BadRequestException('Invalid task input');
     }
@@ -176,7 +305,7 @@ export class TasksService {
         sourceType: dto.sourceType,
         sourceId,
         assignedTo: new Types.ObjectId(dto.assigneeId),
-        assignedAt: new Date(),
+        assignedAt: assignedAt ?? new Date(),
         status: TaskStatus.Assigned,
         ...(dto.dueAt === undefined ? {} : { dueAt: new Date(dto.dueAt) }),
       });
@@ -339,6 +468,13 @@ export class TasksService {
     );
     if (!updated)
       throw new ConflictException('Task assignment or status changed');
+    try {
+      await this.repairServiceOrderExecution(updated);
+    } catch {
+      this.logger.warn(
+        'Service order progress projection pending; source reads repair from Task truth',
+      );
+    }
     return updated;
   }
 }

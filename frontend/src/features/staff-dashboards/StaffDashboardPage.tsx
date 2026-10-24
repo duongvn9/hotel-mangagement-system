@@ -45,6 +45,11 @@ function StaffDashboardPage({ operations }: { operations: boolean }) {
           <Link className={linkClass} to="/staff/tasks">
             Xem công việc được giao
           </Link>
+          {!operations && me?.role === 'SERVICE_STAFF' && (
+            <Link className={linkClass} to="/staff/service-history">
+              Lịch sử thực hiện dịch vụ
+            </Link>
+          )}
           <Link className={linkClass} to="/profile">
             Cập nhật hồ sơ
           </Link>

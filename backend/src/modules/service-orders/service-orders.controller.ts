@@ -13,6 +13,8 @@ import { Role } from '../../common/constants/role.enum.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import {
+  AssignServiceOrderDto,
+  ServiceHistoryQuery,
   CreateServiceOrderDto,
   ListServiceOrdersQuery,
   ReviewServiceOrderDto,
@@ -68,6 +70,34 @@ export class ServiceOrdersController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.orders.review(id, dto, user);
+  }
+
+  @Post(':id/assignment')
+  @Roles(Role.Receptionist)
+  assign(
+    @Param('id') id: string,
+    @Body() dto: AssignServiceOrderDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.orders.assign(id, dto, user);
+  }
+
+  @Get(':id/assignees')
+  @Roles(Role.Receptionist)
+  assignees(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.orders.assignees(id, user);
+  }
+
+  @Get('history/me')
+  @Roles(Role.ServiceStaff)
+  history(@Query() query: ServiceHistoryQuery, @CurrentUser() user: AuthUser) {
+    return this.orders.history(query, user);
+  }
+
+  @Get('history/:id')
+  @Roles(Role.ServiceStaff)
+  historyDetail(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.orders.history(new ServiceHistoryQuery(), user, id);
   }
 
   @Get(':id')

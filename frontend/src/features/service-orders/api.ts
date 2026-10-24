@@ -11,7 +11,20 @@ export const reviewLabels: Record<(typeof reviewStatuses)[number], string> = {
   ACCEPTED: 'Đã chấp nhận',
   REJECTED: 'Đã từ chối',
 }
-export const executionStatuses = ['NOT_STARTED'] as const
+export const executionStatuses = [
+  'NOT_STARTED',
+  'ASSIGNING',
+  'ASSIGNED',
+  'IN_PROGRESS',
+  'COMPLETED',
+] as const
+export const executionLabels: Record<(typeof executionStatuses)[number], string> = {
+  NOT_STARTED: 'Chưa bắt đầu',
+  ASSIGNING: 'Đang phân công',
+  ASSIGNED: 'Đã phân công',
+  IN_PROGRESS: 'Đang thực hiện',
+  COMPLETED: 'Đã hoàn thành',
+}
 export interface OrderContext {
   id: string
   code: string
