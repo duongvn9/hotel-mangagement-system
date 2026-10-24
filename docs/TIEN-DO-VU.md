@@ -13,9 +13,10 @@
 - #76 / UC30 và #77 / UC31: **MERGED**, PR #25 tại `b5d2f2f` theo parent bàn giao; mục 14 giữ lịch sử trước merge, không phải trạng thái pending hiện tại.
 - #78 / UC32: **MERGED**, PR #26 tại merge commit `8df46e7`; đã xác minh commit là ancestor của local `origin/main`. https://github.com/duongvn9/hotel-mangagement-system/pull/26 — mục 15 giữ lịch sử trước merge, không phải trạng thái pending hiện tại.
 - #68 / UC22 và #69 / UC23: **MERGED**, PR #27 tại `a9a1525`, parent đã xác minh merge; mục 16 giữ lịch sử trước merge. https://github.com/duongvn9/hotel-mangagement-system/pull/27
-- #70 / UC24 và #71 / UC25: **Implemented, pending review, không Done**, nhánh `feature/vu-70-71-service-review-billing`; contract BE/FE/H7 thực tế, bằng chứng và QA pending ở mục 17. Đã push `41dc344` (BE), `dd3c1b4` (FE/docs); draft PR #30: https://github.com/duongvn9/hotel-mangagement-system/pull/30 — chờ CI/review, chưa merge.
-- #80 / UC34: **Chưa triển khai**, vẫn deferred tới **PROMPT12** và phải có Task thật với nguồn `SERVICE_ORDER`; Service Order đã có nhưng chưa tạo Task nào, chưa đủ điều kiện execution reporting.
-- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET/UC38 giữ contract hiện hữu, Task completion không tự close Issue. Mục 17 là hiện trạng; mục 16 trở xuống giữ lịch sử triển khai trước merge.
+- #70 / UC24 và #71 / UC25: **MERGED**, PR #30 tại `e568713`, parent đã xác minh merge; mục 17 giữ lịch sử trước merge. https://github.com/duongvn9/hotel-mangagement-system/pull/30
+- #72 / UC26 và #73 / UC27: **Implemented, pending review, không Done**, nhánh `feature/vu-72-73-service-assignment-history`; API/Task/projection/history, bằng chứng và QA pending ở mục 18. Commit/PR chưa biết, parent bổ sung sau.
+- #80 / UC34: **Chưa triển khai**, chờ **PROMPT09B**. Đã có Task thật nguồn `SERVICE_ORDER` và context Service Order thật; không suy assignment/history thành execution reporting đã triển khai.
+- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET/UC38 giữ contract hiện hữu, Task completion không tự close Issue. Mục 18 là hiện trạng; mục 17 trở xuống giữ lịch sử triển khai trước merge.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
 
@@ -27,7 +28,80 @@
 - Sau đồng bộ dependencies: BE format/lint/typecheck/build PASS, 837 unit tests PASS; FE format/lint/typecheck/build PASS, 314 tests PASS. Bundle-size warning vẫn không chặn build.
 - `git diff --check` PASS; E2E được xác minh qua CI head sau push. Chỉ merge PR #27 sau khi CI xanh và GitHub xác nhận không conflict; chưa triển khai PROMPT11 trong lượt xử lý conflict.
 
-## 17. Jira #70 / UC24 và #71 / UC25 — Service Requests / Review và Billing (hiện trạng)
+## 18. Jira #72 / UC26 và #73 / UC27 — Service Assignment / Own Execution History (hiện trạng)
+
+### Trạng thái và phạm vi
+
+- **Implemented, pending review, không Done**, nhánh `feature/vu-72-73-service-assignment-history`. #70/#71 đã **MERGED** qua PR #30 tại `e568713`, parent đã xác minh. Commit/PR của #72/#73 **chưa biết, parent bổ sung sau**; final CI/review còn pending, không suy local PASS thành approval hoặc Done.
+- Đã đối chiếu BE/FE và tài liệu bàn giao hiện hữu. Tái sử dụng H8 `TasksService.create`, không clone Task core/lifecycle; nguồn thật `sourceType: SERVICE_ORDER`, `sourceId` là Service Order đã persist trong collection **`serviceorders`**, canonical `taskType: SERVICE_ORDER_EXECUTION`.
+- **#80 / UC34 chưa triển khai, chờ PROMPT09B**: nguồn Task/context Service Order thật hiện đã có, nhưng assignment/history không phải execution reporting. Invoice charging vẫn thuộc review H7 hiện hữu, không chuyển sang assignment/completion.
+
+### API assignment Receptionist và billing gate
+
+- Prefix BE `/api/v1`; shared FE client dùng `/service-orders`. `POST /api/v1/service-orders/:id/assignment`, body allowlist **`{ assigneeId, dueAt? }`**: assigneeId MongoId, dueAt ISO8601 strict optional, không nhận null hoặc client taskId/source/status/actor. Service validate lại allowlist. Thành công **201**, trả staff detail authoritative, không raw Task.
+- `GET /api/v1/service-orders/:id/assignees`: chỉ khi order **ACCEPTED** và execution **NOT_STARTED hoặc ASSIGNING**; trả `{ items: [{ id, displayName, role }] }` từ User thật **active, đúng SERVICE_STAFF**, sort fullName ASC rồi ID ASC, không contact/raw User.
+- Hai endpoint chỉ role chính xác **RECEPTIONIST**, cả controller và service; không Manager/Operations/Customer/custom permission fallback. Anonymous **401**, sai role **403**, ID/body sai **400**, order missing **404**, lifecycle/intent/ledger mismatch **409**; assignee không active SERVICE_STAFF **400**. Lỗi không phải HTTP trong bước tạo/finalize Task → **503**, yêu cầu retry cùng assignment.
+- Server bắt buộc **ACCEPTED**, validate snapshot tiền. Paid order phải có **billedInvoiceId + billedAt đã persist**, đọc Invoice thật qua model đã export bởi InvoicesModule (read-only; không thêm API công khai H7) và xác minh active/đúng Booking, đúng một charge source order ID, type SERVICE, amount snapshot, reason `Service order <id>`, approved true. **PENDING không đủ điều kiện**; free/zero amount hợp lệ không cần charge/Invoice. Không dựa riêng label FE hoặc chỉ thấy ACCEPTED.
+- Assignment không gọi addCharge/getOrCreateForBooking, không tạo hóa đơn/thu phí/thanh toán hoặc sửa giá; cần kiểm tra ledger trước/sau assignment, retry và completion để xác nhận không thêm charge. Policy review/billing và payment H7 giữ nguyên.
+
+### Durable intent, retry và chống Task trùng
+
+- CAS **NOT_STARTED → ASSIGNING** lưu trước khi create: assignee, dueAt nếu có, requestedBy/requestedAt từ server, title snapshot và **assignmentTaskId sinh một lần**. Create dùng ID/time đã persist; priority NORMAL, source/type thật như trên. Finalize CAS ghi linkedTask và executionStatus từ Task thật.
+- Trong **ASSIGNING**, chỉ retry **cùng assignee + cùng dueAt theo instant hoặc cùng omitted**; khác intent/incomplete intent → **409**. Lookup bằng deterministic Task ID + source/order/type, **không lọc status**, reconcile trước create và sau create exception; kiểm tra assignee/dueAt/title/priority/assignedAt khớp intent.
+- Nếu Task đã persist nhưng finalize order lỗi, retry phải nối lại **cùng Task**, kể cả Task đã **COMPLETED**; không tạo Task thứ hai khi active-work index không còn giữ completed work. Race cùng intent không duplicate; response có thể 409 nếu request khác đã finalize. **Replay sau finalized trả 409**, yêu cầu reload, không hứa success replay như review.
+- Lỗi partial giữ durable ASSIGNING, không tự rollback/đổi người hoặc tạo identity mới. Assignee inactive/xóa/đổi role trước create hoặc nguồn/ledger sai có thể là blocker cần can thiệp được duyệt; không hứa mọi retry tự khỏi. Không có background recovery hay transaction atomic xuyên Order/Task/User/Invoice.
+- Staff DTO chỉ thêm **`assignmentIntent: { assigneeId, dueAt? }` khi ASSIGNING**, lấy từ field thật đã lưu, không suy từ UI/mock hoặc dựng intent giả. FE reload lấy lại intent này để retry an toàn; nếu thiếu thì chặn gửi mới và yêu cầu tải lại/hỗ trợ. Không expose requestedBy/requestedAt/title/task identity nội bộ; Customer DTO không có assignmentIntent, assignee, audit hoặc workResult.
+
+### Execution projection và contract additive
+
+- **Task là nguồn authoritative cho progress**. UC38 vẫn cập nhật Task bằng own-assignment/status CAS trước; sau commit gọi `repairServiceOrderExecution` để đồng bộ projection Service Order, không triển khai lifecycle thứ hai.
+- Projection dùng collection-level **CAS/idempotent update** trên `serviceorders`: đúng source/type, order ID + linkedTask + ACCEPTED và predecessor status hợp lệ; không lùi COMPLETED về IN_PROGRESS/ASSIGNED. Không import ServiceOrdersModule ngược vào TasksModule, không Nest dependency cycle.
+- Nếu update projection lỗi sau Task commit, `logger.warn` ghi cảnh báo, **giữ Task đã commit và trả kết quả Task**, không giả rollback hoặc trả thất bại như Task chưa lưu. List/detail/history đọc lại Task và repair projection; list repair trước execution filter/count. Read repair cũng có thể lỗi khi DB chưa hồi phục, không hứa mọi GET luôn thành công.
+- Đây là **eventual consistency**, có cửa sổ transient Order.executionStatus chưa theo Task; không fake atomic cross-document. GET history chỉ đọc về nghiệp vụ (không transition Task/assignment/charge), nhưng có thể ghi sửa projection. **Không dùng raw DB writes để vận hành/chữa status/intent**, không sửa Task/ledger thủ công hoặc bypass service/CAS; collection write nội bộ projection có guard là cơ chế đã triển khai, không API ghi tùy ý cho caller.
+- Contract additive: `create(input: CreateTaskDto, identity?: Types.ObjectId, assignedAt?: Date)` thêm thời điểm deterministic optional; caller `create(input)` và `create(input, identity)` cũ vẫn hợp lệ. Không phá Task DTO, transition signature, UC37/UC38 hoặc H7. Helper lookup/history/repair là nội bộ, không mở Task/source HTTP API chung. Cần parent xác nhận thông báo/review nhóm, không coi tài liệu là approval.
+- **Bàn giao Lâm Maintenance giữ nguyên**: Maintenance import TasksModule một chiều, inject TasksService, kiểm tra quyền/scope/nguồn persisted và active OPERATIONS_STAFF trước create; không clone core hoặc import ngược Maintenance vào Tasks. Không đổi contract/source policy Maintenance trong lượt này.
+
+### History own-only, read-only
+
+- Chỉ role chính xác **SERVICE_STAFF**: `GET /api/v1/service-orders/history/me` và `GET /api/v1/service-orders/history/:id`; **`:id` là orderId, không phải taskId**. Không thêm quyền Manager/Operations/custom permission. Anonymous 401, sai role 403; malformed ID/query 400, detail missing/foreign/nonfinalized 404.
+- History chỉ own Task `assignedTo === current user`, source SERVICE_ORDER + SERVICE_ORDER_EXECUTION, status **COMPLETED**, completedAt là date, workResult string không trắng tối đa 2000; lookup phải có **Service Order thật ACCEPTED và linkedTask đúng Task**. ASSIGNING chưa finalized, dangling/mismatched link, work chưa completed hoặc staff khác không lọt list/count/detail.
+- List query allowlist **keyword, from, to, page, limit**: keyword trim tối đa **100** ký tự, literal case-insensitive trên serviceName snapshot; from/to ISO8601 strict, inclusive theo completedAt, from > to → 400; page mặc định 1 (1–10000), limit mặc định 20 (1–100). Sort completedAt DESC, _id DESC; trả `{ items, total, page, limit }` cùng scope/filter. Không có query orderId; orderId filter nằm ở detail path.
+- DTO snapshot order + task `{ id, status, assignedAt, dueAt?, completedAt, workResult }`; **workResult chỉ trả own history/own Task**, staff request summary không lộ workResult. Không raw Task/User/Booking, Customer audit/contact hoặc write/report action trên history.
+
+### FE thực tế, links và cache
+
+- Receptionist detail giữ review/billing và thêm assignment confirm hai bước, active service-staff choices có loading/empty/error/reload, dueAt optional → ISO; pending/ref chặn double submit, mutation **retry: false**, không optimistic assignment. Sau gửi khóa intent; lỗi/network/503 hoặc reload ASSIGNING chỉ thử lại nội dung thật đã persist; 409 yêu cầu đọc lại finalized state.
+- Routes **`/staff/service-history`** và **`/staff/service-history/:id`** chỉ SERVICE_STAFF; list có keyword/date/page-size/pagination/loading/empty/error/retry, detail read-only có snapshot/kết quả/thời gian. Date UI chuyển local đầu/cuối ngày sang ISO; BE keyword cap 100 vẫn authoritative (input hiện maxLength 200, vượt 100 sẽ bị API từ chối).
+- History list mở detail bằng orderId; detail link **`/staff/tasks/:taskId`** là own Task route thật, back `/staff/service-history` và `/staff/service/dashboard` hợp lệ. Không link service staff vào Receptionist request detail, không mở rộng H10/layout/role policy. Dashboard/menu link history **nay đã có đích thật**, không còn placeholder/deferred.
+- Cache history scope user ID + role + query/order ID. Assignment settled invalidate staff order scope và assigned-tasks trong **QueryClient hiện tại**; Task progress/completion khi success (hoặc lỗi 409) invalidate own Task detail/list và own history; không invalidate dashboard/Receptionist order cache từ hook này. Không gọi invalidation local là realtime giữa Receptionist và service staff: người dùng khác phải refetch/reload/focus theo query policy; không WebSocket/broadcast multiuser claim.
+
+### Bằng chứng bàn giao và QA pending
+
+Các số liệu sau do **parent/agent bàn giao cho #72/#73**, không phải chạy lại full suite trong lượt chỉ sửa tài liệu. Không trộn baseline full E2E với targeted rerun sau thay đổi intent.
+
+| Phạm vi | Kết quả được bàn giao |
+|---|---|
+| Parent BE | format:check, lint, typecheck, build **PASS**; **840 tests / 35 files PASS** sau regression test xác minh assignment không gọi API tạo invoice/charge |
+| Parent FE | format:check, lint, typecheck, build **PASS**; **366 tests / 24 files PASS**; bundle-size warning không chặn build |
+| Agent full E2E cô lập | **277 tests PASS**, môi trường Mongo cô lập |
+| Agent sau cập nhật assignmentIntent | **27 Service Order E2E PASS**; targeted rerun, **không tuyên bố đã rerun full 277** sau thay đổi này |
+| Final CI / review | **Pending**, parent bổ sung commit/PR và xác minh head sau |
+| Manual browser | **Chưa QA**, gồm desktop/**375px**, keyboard/overflow và live authenticated flow |
+
+- QA pending: exact-role/IDOR; ACCEPTED paid ledger confirmed vs PENDING/missing/mismatch/duplicate charge, free/zero; choices active/inactive/wrong role, invalid/null/unknown field; same/different intent race, reload ASSIGNING, partial create/finalize failure và recovery với Task đã COMPLETED, final replay 409, không duplicate Task/charge.
+- Inject projection failure sau Task commit: Task vẫn committed, có logger.warn, transient order status được sửa khi đọc lại; filter/count không giữ stale projection khi repair thành công. Xác minh own completed/finalized history, foreign/dangling/unfinalized exclusion, keyword literal/date inclusive/paging/count, workResult không rò sang Customer hoặc request summary; links/cache refresh trên own session, không giả realtime multiuser.
+- **Không chạy seed/shared DB** trong lượt này; IDs dùng cho QA phải lấy từ record thật hoặc fixture cô lập, không bịa shared IDs. E2E fixtures không phải demo seed hay bằng chứng dữ liệu sẵn trên môi trường dùng chung. Không suy local E2E thành manual QA/CI/Done.
+- Lượt này chỉ sửa `docs/TIEN-DO-VU.md`, không Git/commit/push, không seed/Mongo/container hoặc rerun full unit/build/E2E; bằng chứng parent/agent giữ attribution riêng. Đã chạy riêng `npm run lint` và `npm run typecheck` tại backend/frontend: **tất cả PASS**, không phải rerun format/unit/build/E2E.
+
+### Source đã đối chiếu
+
+- BE routes/roles: `backend/src/modules/service-orders/service-orders.controller.ts:75`; assignment/history DTO: `backend/src/modules/service-orders/dto/service-order.dto.ts:70`; staff intent DTO: `backend/src/modules/service-orders/service-orders.service.ts:284`; ledger gate/assignment CAS/retry: `:591–762`; history: `:788`; read repair: `:94–120`.
+- Task source mapping/lookup/history: `backend/src/modules/tasks/tasks.service.ts:30`, `:139`, `:150`; projection CAS: `:238`; additive create: `:273`; committed progress + warn: `:457–478`. Invoice matching giữ nguyên tại `backend/src/modules/service-orders/service-orders.service.ts:402`.
+- FE confirmation/reload intent: `frontend/src/features/service-orders/ServiceAssignment.tsx:15`; assignment cache: `frontend/src/features/service-orders/staff-hooks.ts:48`; history own query/cache: `frontend/src/features/service-orders/history.ts:29`; history filters/source link: `frontend/src/features/service-orders/pages/ServiceHistoryPage.tsx:31`; routes: `frontend/src/features/service-orders/routes.tsx:14`; dashboard link: `frontend/src/features/staff-dashboards/StaffDashboardPage.tsx:49`; Task invalidation: `frontend/src/features/tasks/hooks.ts:36`.
+
+## 17. Jira #70 / UC24 và #71 / UC25 — Service Requests / Review và Billing (lịch sử trước merge)
+
+> #70/#71 đã MERGED qua PR #30 tại `e568713`, parent đã xác minh. Các trạng thái pending/chưa merge, H8 chưa dùng và #80 chờ PROMPT12 bên dưới giữ mốc trước merge, không phải hiện trạng; mục 18 mô tả #72/#73 và #80 chờ PROMPT09B.
 
 ### Trạng thái và nguồn tích hợp thật
 

@@ -3,7 +3,15 @@ import { Link } from 'react-router'
 import { Button } from '@/components/Button'
 import { SelectField } from '@/components/SelectField'
 import { TextField } from '@/components/TextField'
-import { dateTime, money, reviewLabels, reviewStatuses, type OrderQuery } from '../api'
+import {
+  dateTime,
+  money,
+  reviewLabels,
+  reviewStatuses,
+  executionLabels,
+  executionStatuses,
+  type OrderQuery,
+} from '../api'
 import { useStaffOrders } from '../staff-hooks'
 import { billingLabel } from '../staff-api'
 import { StaffOrderError } from '../staff-presentation'
@@ -47,13 +55,13 @@ export function StaffServiceOrdersPage() {
           value={query.executionStatus ?? ''}
           options={[
             { value: '', label: 'Tất cả' },
-            { value: 'NOT_STARTED', label: 'Chưa bắt đầu' },
+            ...executionStatuses.map((value) => ({ value, label: executionLabels[value] })),
           ]}
           onChange={(event) =>
             setQuery({
               ...query,
               page: 1,
-              executionStatus: event.target.value === 'NOT_STARTED' ? 'NOT_STARTED' : undefined,
+              executionStatus: (event.target.value || undefined) as OrderQuery['executionStatus'],
             })
           }
         />
@@ -91,7 +99,9 @@ export function StaffServiceOrdersPage() {
                   <p>
                     {order.quantity} {order.service.unit} · {money(order.amount)}
                   </p>
-                  <p>{reviewLabels[order.reviewStatus]} · Chưa bắt đầu</p>
+                  <p>
+                    {reviewLabels[order.reviewStatus]} · {executionLabels[order.executionStatus]}
+                  </p>
                   <p>{billingLabel(order)}</p>
                   <p>Thời gian yêu cầu: {dateTime(order.requestedTime)}</p>
                 </li>

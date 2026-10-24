@@ -3,7 +3,14 @@ import { Link } from 'react-router'
 import { TextField } from '@/components/TextField'
 import { SelectField } from '@/components/SelectField'
 import { Button } from '@/components/Button'
-import { dateTime, money, reviewLabels, type OrderQuery } from '../api'
+import {
+  dateTime,
+  money,
+  reviewLabels,
+  executionLabels,
+  executionStatuses,
+  type OrderQuery,
+} from '../api'
 import { useOrders } from '../hooks'
 import { OrderError, OrderNavigation } from '../presentation'
 
@@ -48,12 +55,12 @@ export function ServiceOrdersPage() {
             setQuery({
               ...query,
               page: 1,
-              executionStatus: event.target.value === 'NOT_STARTED' ? 'NOT_STARTED' : undefined,
+              executionStatus: (event.target.value || undefined) as OrderQuery['executionStatus'],
             })
           }
           options={[
             { value: '', label: 'Tất cả' },
-            { value: 'NOT_STARTED', label: 'Chưa bắt đầu' },
+            ...executionStatuses.map((value) => ({ value, label: executionLabels[value] })),
           ]}
         />
         <Button type="submit" className="self-end">
@@ -84,7 +91,9 @@ export function ServiceOrdersPage() {
                   <p>
                     {order.quantity} {order.service.unit} · {money(order.amount)}
                   </p>
-                  <p>{reviewLabels[order.reviewStatus]} · Chưa bắt đầu</p>
+                  <p>
+                    {reviewLabels[order.reviewStatus]} · {executionLabels[order.executionStatus]}
+                  </p>
                   <p className="text-sm text-stone-700">Tạo lúc: {dateTime(order.createdAt)}</p>
                 </li>
               ))}

@@ -98,7 +98,10 @@ it.each([
       '/staff/tasks',
     )
     expect(screen.getByRole('link', { name: 'Cập nhật hồ sơ' })).toHaveAttribute('href', '/profile')
-    expect(screen.getAllByRole('link')).toHaveLength(4)
+    expect(screen.getAllByRole('link')).toHaveLength(role === 'SERVICE_STAFF' ? 5 : 4)
+    expect(Boolean(screen.queryByRole('link', { name: 'Lịch sử thực hiện dịch vụ' }))).toBe(
+      role === 'SERVICE_STAFF',
+    )
     expect(
       get.mock.calls.filter(([, config]) => paramsOf(config?.params).limit === 1),
     ).toHaveLength(3)
@@ -172,7 +175,11 @@ it('shows accessible loading then empty metrics, without pretending missing rout
     '0',
     '0',
   ])
-  expect(screen.getAllByRole('link')).toHaveLength(2)
+  expect(screen.getAllByRole('link')).toHaveLength(3)
+  expect(screen.getByRole('link', { name: 'Lịch sử thực hiện dịch vụ' })).toHaveAttribute(
+    'href',
+    '/staff/service-history',
+  )
 })
 
 it.each([403, 404])('shows API %s without automatic retry or stale metrics', async (status) => {

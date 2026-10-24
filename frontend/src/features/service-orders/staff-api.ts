@@ -14,6 +14,40 @@ export interface StaffServiceOrder extends ServiceOrder {
   }
   invoiceId?: string
   billedAt?: string
+  assignmentIntent?: AssignmentInput
+  task?: {
+    id: string
+    status: string
+    assigneeId: string
+    assignedAt: string
+    dueAt?: string
+    completedAt?: string
+  } | null
+}
+export interface AssignmentInput {
+  assigneeId: string
+  dueAt?: string
+}
+export interface ServiceAssignee {
+  id: string
+  displayName: string
+  role: string
+}
+export async function getServiceAssignees(id: string) {
+  return (
+    await api.get<{ items: ServiceAssignee[] }>(
+      `/service-orders/${encodeURIComponent(id)}/assignees`,
+    )
+  ).data
+}
+export async function assignServiceOrder(id: string, input: AssignmentInput) {
+  const body: AssignmentInput = {
+    assigneeId: input.assigneeId,
+    ...(input.dueAt !== undefined ? { dueAt: input.dueAt } : {}),
+  }
+  return (
+    await api.post<StaffServiceOrder>(`/service-orders/${encodeURIComponent(id)}/assignment`, body)
+  ).data
 }
 export function billingLabel(order: StaffServiceOrder) {
   if (order.billingStatus === 'BILLED') return 'Đã ghi vào hóa đơn · không xác nhận thanh toán'
