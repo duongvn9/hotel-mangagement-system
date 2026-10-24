@@ -11,13 +11,91 @@
 - #74 / UC28: **MERGED**, PR #20 tại merge commit `266e40b`; parent đã xác minh merge. https://github.com/duongvn9/hotel-mangagement-system/pull/20 — mục 12 giữ bằng chứng triển khai trước merge, không phải trạng thái pending hiện tại.
 - #75 / UC29 và #79 / UC33: **MERGED**, PR #22 tại merge commit `787d1b8`. Mục 13 giữ lịch sử triển khai trước merge, không phải trạng thái pending hiện tại.
 - #76 / UC30 và #77 / UC31: **MERGED**, PR #25 tại `b5d2f2f` theo parent bàn giao; mục 14 giữ lịch sử trước merge, không phải trạng thái pending hiện tại.
-- #78 / UC32: **Implemented, pending review, không Done** trên `feature/vu-78-close-issue`; đã push `daf0314` (BE), `588a389` (FE/docs); draft PR #26: https://github.com/duongvn9/hotel-mangagement-system/pull/26 — chưa merge, CI và manual browser QA còn pending. Xem mục 15.
-- #80 / UC34: **Chưa triển khai**, deferred sau **PROMPT10–12** khi có nguồn `SERVICE_ORDER` thật; H4 Service đã có schema/module nhưng không thay thế Service Order.
-- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET/UC38 giữ contract hiện hữu, Task completion không tự close Issue. Mục 15 là hiện trạng; mục 14 trở xuống giữ lịch sử triển khai trước merge.
+- #78 / UC32: **MERGED**, PR #26 tại merge commit `8df46e7`; đã xác minh commit là ancestor của local `origin/main`. https://github.com/duongvn9/hotel-mangagement-system/pull/26 — mục 15 giữ lịch sử trước merge, không phải trạng thái pending hiện tại.
+- #68 / UC22 và #69 / UC23: **Implemented, pending review, không Done**, nhánh `feature/vu-68-69-service-order`; contract BE/FE thực tế và bằng chứng bàn giao ở mục 16. Đã push `33f41a0` (BE), `1a56118` (FE/docs); draft PR #27: https://github.com/duongvn9/hotel-mangagement-system/pull/27 — chưa merge, chờ CI/review.
+- #80 / UC34: **Chưa triển khai**, vẫn deferred tới **PROMPT12** và phải có Task thật với nguồn `SERVICE_ORDER`; Service Order đã có nhưng chưa tạo Task nào, chưa đủ điều kiện execution reporting.
+- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET/UC38 giữ contract hiện hữu, Task completion không tự close Issue. Mục 16 là hiện trạng; mục 15 trở xuống giữ lịch sử triển khai trước merge.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
 
-## 15. Jira #78 / UC32 — Close Issue (hiện trạng)
+## Đồng bộ main để xử lý conflict PR #27
+
+- Theo ủy quyền, merge `origin/main@de05aff` vào `feature/vu-68-69-service-order`, không rebase/reset/force-push hoặc sửa main.
+- Chỉ conflict `backend/src/app.module.ts`: giữ cả import và đăng ký ServiceOrdersModule cùng NotificationsModule. Giữ toàn bộ cải tiến Service form và Notifications của nhóm.
+- Dependencies local cũ thiếu nodemailer khiến lần đầu typecheck/test/build lỗi; đã chạy `npm ci` theo lockfile mới từ main, không tự đổi dependency.
+- Sau đồng bộ dependencies: BE format/lint/typecheck/build PASS, 837 unit tests PASS; FE format/lint/typecheck/build PASS, 314 tests PASS. Bundle-size warning vẫn không chặn build.
+- `git diff --check` PASS; E2E được xác minh qua CI head sau push. Chỉ merge PR #27 sau khi CI xanh và GitHub xác nhận không conflict; chưa triển khai PROMPT11 trong lượt xử lý conflict.
+
+## 16. Jira #68 / UC22 và #69 / UC23 — Customer Service Order (hiện trạng)
+
+### Trạng thái, nguồn thật và ranh giới tích hợp
+
+- **Implemented, pending review, không Done** trên `feature/vu-68-69-service-order`. #78 đã MERGED qua PR #26 tại `8df46e7`, xác minh bằng local Git refs (ancestor của `origin/main`), không suy ra remote mới nhất hoặc browser QA. Commit BE/FE và PR #68/#69: **parent bổ sung sau**, không dùng PR #26 làm PR cho lượt này.
+- H4 dùng model `Service` thật, collection `services`: `isActive`, `price` VND nguyên không âm an toàn hoặc null theo policy, `unit` mặc định chuỗi rỗng, `billable`. **Không có field `available`**, không tự thêm availability policy hoặc bắt buộc unit khác rỗng. Billable active cần giá hợp lệ; nonbillable có đơn giá hiệu lực **0**.
+- H5 dùng model `Booking` thật: `booking.customer` phải là current authenticated Customer; create và replay yêu cầu `isActive === true` và status **CHECKED_IN**. Import `BookingsModule`/`ServicesModule`, dùng exported Mongoose models hiện hữu; **không đổi exports ServicesModule, H4 contract, Booking API hoặc suy ownership từ email/phone**.
+- H7 đã có Invoice/pricing thật (`InvoicesService`, `InvoicePricingAdapter`, approved charges và `addCharge`); phase này **không tạo Invoice, không addCharge, không ghi thu phí**. Amount của Service Order là snapshot yêu cầu, không phải charge đã được chấp nhận.
+- H8 giữ nguyên contract/lifecycle Task: module Service Order không import TasksModule, **không gọi Task create**, không giao việc hoặc tự đồng bộ progress. Collection nguồn thật là `serviceorders`, nhưng existence không thay thế eligibility/authorization cho workflow sau.
+- **#80 / UC34 vẫn deferred tới PROMPT12**: cần actual Task nguồn `SERVICE_ORDER` và contract execution context được duyệt; chưa có Task nào được tạo trong phase này. Review/accept/reject, assignment, execution và charge là dependency tương lai, không phải đã triển khai.
+
+### API tạo, snapshot tiền và retry
+
+- Prefix thật `/api/v1`; shared FE client dùng `/service-orders`. Tất cả endpoint dưới đây chỉ đúng role **CUSTOMER**, qua auth/role guards và service role check; không Manager/staff/custom-permission fallback.
+- `POST /api/v1/service-orders`, body allowlist `{ bookingId, serviceId, quantity, requestedTime?, notes?, requestId? }`: IDs MongoId; quantity là JSON number nguyên dương an toàn `1..Number.MAX_SAFE_INTEGER` (không cap 1000); requestedTime nếu có là ISO8601 strict; notes trim tối đa 2000 ký tự, rỗng được bỏ; requestId UUID optional, chuẩn hóa lowercase. Optional không có nghĩa nhận null. Field lạ hoặc client price/amount/customer/status/name/unit bị 400.
+- `requestedTime` **không bắt buộc**, bỏ trống dùng thời điểm server lúc tạo. Không thêm điều kiện phải tương lai, nằm trong ngày lưu trú hoặc giới hạn giờ chưa được contract quy định; đây là semantics cần reviewer xác nhận, không phải rule SRS đã chốt.
+- Server xác minh Booking own/active/CHECKED_IN, Service tồn tại và `isActive === true`; lấy snapshot `serviceName`, `unit`, `unitPriceVND`, `quantity`, `amount = unitPriceVND * quantity`. Giá billable và tích phải là safe integer VND không âm; nonbillable luôn **0**, không tin estimate/giá từ client. Không đọc lại catalog để tính giá các order cũ.
+- Response **201**, DTO allowlist `{ id, bookingId, serviceId, service: { name, unit }, quantity, unitPriceVND, amount, requestedTime, reviewStatus, executionStatus, notes?, createdAt }`; dates serialize ISO. Khởi tạo **PENDING_REVIEW / NOT_STARTED**, đây là hai status duy nhất hiện có; chưa accepted, chưa execution. Không trả raw document/customer/requestId/fingerprint hay Booking/guest PII.
+- Idempotency optional: partial **unique index `(customer, requestId)`** bảo đảm atomic uniqueness khi concurrent insert; duplicate-key reconcile order đã persist. SHA-256 fingerprint gồm booking/service/quantity, requestedTime chuẩn hóa instant (omitted là null) và notes trim. Cùng key + cùng payload trả cùng order **201**, giữ snapshot giá/tên/unit/thời gian đầu tiên kể cả catalog đổi giá/inactive; khác payload → **409**. Replay vẫn kiểm tra Booking hiện own/active/CHECKED_IN, không bypass ownership/eligibility.
+- Không key: hai yêu cầu giống nhau vẫn hợp lệ và tạo **hai order**; không dedupe nội dung hay cấm repeat order. Unique index không có nghĩa transaction snapshot xuyên Booking/Service/Order; eligibility/pricing được đọc trước insert, không hứa atomic với thay đổi nguồn.
+- Anonymous **401**, sai role **403**; malformed ID/body/query **400**, Booking foreign/missing hoặc Service missing **404**; Booking không active/CHECKED_IN hoặc Service inactive **409**; giá/tích không hợp lệ **400**, key mismatch **409**.
+
+### API đọc, context và chống IDOR
+
+- `GET /api/v1/service-orders/me`: query `reviewStatus=PENDING_REVIEW`, `executionStatus=NOT_STARTED`, `keyword?` trim tối đa 100 ký tự (literal case-insensitive trên snapshot serviceName, escape regex), `page` mặc định 1 trong 1–10000, `limit` mặc định 20 trong 1–100. Field lạ/status chưa hỗ trợ bị 400. Sort `createdAt DESC, _id DESC`; trả `{ items, total, page, limit }` cùng filter/scope.
+- `GET /api/v1/service-orders/:id`: cùng DTO snapshot; malformed ID **400**, missing/foreign/out-of-scope **404**. List/detail yêu cầu **đồng thời order.customer là Customer gốc VÀ Booking hiện thuộc current user**. Booking đổi chủ: chủ cũ không đọc được, chủ mới cũng không được thừa hưởng order của người khác; Booking missing không đọc được. Read không yêu cầu Booking còn active/CHECKED_IN như create/replay. Không populate nguồn hoặc mở API của Booking/Task theo ID.
+- `GET /api/v1/service-orders/order-contexts`: chỉ Booking own + active + CHECKED_IN, sort checkIn DESC rồi ID ASC; `{ items: [{ id, code, checkIn, checkOut }] }`, không guest/contact.
+- `GET /api/v1/service-orders/catalog`: chỉ Service active, billable có giá safe không âm hoặc nonbillable; sort name ASC rồi ID ASC; `{ items: [{ id, name, description, unit, billable, unitPriceVND }] }`, nonbillable giá 0. Đây là **API Customer-scoped mới** vì GET `/services` hiện hữu là Manager/facility-management contract, không mở rộng quyền GET H4 hoặc tạo model catalog giả.
+
+### Routes và UX thực tế
+
+| Customer route | Chức năng |
+|---|---|
+| `/customer/service-orders/new` | Form chọn own checked-in booking và active catalog thật |
+| `/customer/service-orders` | List/filter/pagination yêu cầu của mình |
+| `/customer/service-orders/:id` | Detail snapshot authoritative |
+
+- `RequireAuth` đúng CUSTOMER, menu/router tích hợp tối thiểu; shared Axios/TanStack Query, cache scope gồm user ID + role. Form có loading/empty/error/reload choices, quantity/amount safe checks, notes, datetime-local → ISO; bookingId/serviceId query chỉ prefill khi nằm trong choices, vẫn được server kiểm tra.
+- FE chỉ hiển thị estimate; receipt/detail dùng giá và amount server, nói rõ chờ duyệt/chưa thu phí. Pending controls + ref chống double submit, mutation **retry: false**, crypto.randomUUID dùng lại cho cùng nội dung khi thử lại sau lỗi; sửa nội dung/tạo mới sinh key mới. Key chỉ giữ trong memory: **reload/remount không bảo toàn key**, không hứa exactly-once sau reload; cần kiểm tra list trước gửi lại khi kết quả mạng không chắc chắn.
+- Success cập nhật detail cache và invalidate scope hiện tại; list/detail có loading/empty/error/retry, lỗi 400/403/404/409/network, back/list/new links thật. Return/reload đọc persisted order từ API, không mock production; chưa có nút review/accept/assign/charge hoặc Task execution.
+
+### Bằng chứng bàn giao và giới hạn QA
+
+Các kết quả full suite sau do **parent/agent bàn giao cho #68/#69**, không phải chạy lại trong lượt chỉ sửa tài liệu; không thay thế CI hoặc manual browser QA.
+
+| Phạm vi | Kết quả được bàn giao |
+|---|---|
+| Parent BE | format:check, lint, typecheck, build **PASS**; **738 tests / 30 files PASS** |
+| Parent FE | format:check, lint, typecheck, build **PASS**; **291 tests / 21 files PASS** |
+| Agent full Mongo E2E | **239 tests PASS**, Mongo cô lập/disposable; tài nguyên đã gỡ sau chạy |
+| CI | **Pending**, chưa xác minh CI head của lượt này |
+| Manual browser | **Chưa chạy**, không có bằng chứng desktop/**375px**, keyboard/overflow hoặc live authenticated browser flow |
+
+- Không thêm/chạy seed lên shared DB. E2E dùng persisted fixture qua **model Booking/Service thật**, Booking CHECKED_IN và own customer; DB tên UUID riêng sau safety check, cleanup/drop chỉ disposable DB riêng. Fixture không phải seed hoặc bằng chứng đã có dữ liệu demo trên môi trường dùng chung.
+- Lượt tài liệu chỉ sửa `docs/TIEN-DO-VU.md`; đã chạy riêng `npm run lint` và `npm run typecheck` tại backend/frontend: **tất cả PASS**. Không chạy lại format/build/unit/E2E, không seed/Mongo/container, không commit/push; giữ nguyên thay đổi code của parent.
+- Manual QA còn pending: anonymous/wrong role; quantity 0/âm/lẻ/string/overflow, null/date/field injection; own/foreign/missing/inactive/not-checked-in Booking; inactive/missing/invalid-price Service, nonbillable/zero/empty-unit; tiền server không bị client override, giá catalog đổi không sửa snapshot.
+- Kiểm tra same-key retry/race cùng payload, key mismatch 409, omitted-time ổn định, repeat không key hợp lệ; Customer A/B, đổi owner chặn cả hai theo policy; filter literal/paging/count, reload/return/list/detail, choices stale và reload an toàn, network ambiguity và key mất khi remount; không Task/Invoice/charge side effect. Browser desktop/375px, keyboard/loading/empty/errors/overflow phải có bằng chứng thật trước khi chốt.
+- Cần review/approve requestedTime optional/default semantics, ownership/read policy và API context/catalog additive; review/accept rồi assignment/Task nguồn thật và charge theo phase sau, **không thu phí lúc submit hiện tại**. Không suy local PASS thành CI PASS, approval hoặc Done.
+
+### Source đã đối chiếu
+
+- BE routes: `backend/src/modules/service-orders/service-orders.controller.ts:14`; DTO/query: `backend/src/modules/service-orders/dto/service-order.dto.ts:25`; status: `backend/src/modules/service-orders/service-order-status.ts:1`; persistence/index: `backend/src/modules/service-orders/schemas/service-order.schema.ts:11`.
+- BE create/retry/money: `backend/src/modules/service-orders/service-orders.service.ts:87`; read scope: `:174`; contexts/catalog: `:223`; imports/exports: `backend/src/modules/service-orders/service-orders.module.ts:12`.
+- H4 schema/exports/GET: `backend/src/modules/services/schemas/service.schema.ts:50`, `backend/src/modules/services/services.module.ts:12`, `backend/src/modules/services/services.controller.ts:19`; H5 exports: `backend/src/modules/bookings/bookings.module.ts:34`; H7 charge/pricing: `backend/src/modules/invoices/invoices.service.ts:78`, `:182`.
+- FE API: `frontend/src/features/service-orders/api.ts:67`; scope/retry/cache: `frontend/src/features/service-orders/hooks.ts:13`; routes: `frontend/src/features/service-orders/routes.tsx:7`; form/key/receipt: `frontend/src/features/service-orders/pages/NewServiceOrderPage.tsx:48`; list/detail: `frontend/src/features/service-orders/pages/ServiceOrdersPage.tsx:10`, `frontend/src/features/service-orders/pages/ServiceOrderDetailPage.tsx:5`.
+- Tests: `backend/src/modules/service-orders/service-orders.spec.ts:26`, `backend/test/service-orders.e2e-spec.ts:36`, `frontend/src/features/service-orders/service-orders.test.tsx`.
+
+## 15. Jira #78 / UC32 — Close Issue (lịch sử trước merge)
+
+> #78 đã MERGED qua PR #26 tại `8df46e7`, đã xác minh ancestor của local `origin/main`. Các trạng thái pending/chưa merge và QA dưới đây giữ mốc trước merge, không phải hiện trạng; mục 16 mô tả #68/#69.
 
 ### Trạng thái, nguồn thật và phạm vi
 

@@ -8,6 +8,7 @@ import { roomTypeRoutes } from '@/features/room-types/routes'
 import { roomRoutes } from '@/features/rooms/routes'
 import { amenityRoutes } from '@/features/amenities/routes'
 import { serviceRoutes } from '@/features/services/routes'
+import { serviceOrderRoutes } from '@/features/service-orders/routes'
 import { taskRoutes } from '@/features/tasks/routes'
 import { staffDashboardRoutes } from '@/features/staff-dashboards/routes'
 
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
       ...roomRoutes,
       ...amenityRoutes,
       ...serviceRoutes,
+      ...serviceOrderRoutes,
       ...feedbackRoutes,
       ...issueRoutes,
       ...taskRoutes,
