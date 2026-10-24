@@ -10,6 +10,15 @@ import { Roles } from '../../common/decorators/roles.decorator.js';
 import { Permissions } from '../../common/decorators/permissions.decorator.js';
 import { Role } from '../../common/constants/role.enum.js';
 import { AmenitiesService } from './amenities.service.js';
+import { Body, Param, Patch, Post } from '@nestjs/common';
+import {
+  ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
+} from '@nestjs/swagger';
+import { CreateAmenityDto, UpdateAmenityDto } from './dto/write-amenity.dto.js';
+import { AmenityResponse } from './dto/amenity-response.dto.js';
 import { Query } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiOperation } from '@nestjs/swagger';
 import { ListAmenitiesQuery } from './dto/list-amenities.dto.js';
@@ -33,6 +42,56 @@ export class AmenitiesController {
   @ApiForbiddenResponse()
   options() {
     return this.amenities.options();
+  }
+
+  @Post()
+  @ApiOperation({
+    summary:
+      'UC52 — Create amenity and RoomType assignments; compensates failed assignment writes',
+  })
+  @ApiCreatedResponse({ type: AmenityResponse })
+  @ApiBadRequestResponse()
+  @ApiConflictResponse()
+  @ApiServiceUnavailableResponse({
+    description:
+      'Assignment creation failed; compensation status is described in the error',
+  })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  create(@Body() dto: CreateAmenityDto) {
+    return this.amenities.create(dto);
+  }
+
+  @Get(':id')
+  @ApiOperation({
+    summary: 'UC52 — Amenity details including current RoomType assignments',
+  })
+  @ApiOkResponse({ type: AmenityResponse })
+  @ApiBadRequestResponse()
+  @ApiNotFoundResponse()
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  detail(@Param('id') id: string) {
+    return this.amenities.detail(id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({
+    summary:
+      'UC52 — Partial update; roomTypeIds is the target assignment set, omission preserves assignments',
+  })
+  @ApiOkResponse({ type: AmenityResponse })
+  @ApiBadRequestResponse()
+  @ApiNotFoundResponse()
+  @ApiConflictResponse()
+  @ApiServiceUnavailableResponse({
+    description:
+      'Partial assignment write may require replaying the same request',
+  })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  update(@Param('id') id: string, @Body() dto: UpdateAmenityDto) {
+    return this.amenities.update(id, dto);
   }
 
   @Get()
