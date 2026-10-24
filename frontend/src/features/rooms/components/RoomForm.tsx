@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, type FormEvent } from 'react'
+﻿import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { Alert } from '@/components/Alert'
@@ -33,7 +33,7 @@ export function RoomEditor({
     queryFn: () => getRoom(id!),
     enabled: id !== null,
   })
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = dialog.current!
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
     element.showModal()
