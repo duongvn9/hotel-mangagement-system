@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router'
 import { accountRoutes } from '@/features/accounts/routes'
 import { authRoutes } from '@/features/auth/routes'
 import { feedbackRoutes } from '@/features/feedback/routes'
+import { issueRoutes } from '@/features/issues/routes'
 import { roleRoutes } from '@/features/roles/routes'
 import { roomTypeRoutes } from '@/features/room-types/routes'
 import { roomRoutes } from '@/features/rooms/routes'
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
       ...roomRoutes,
       ...amenityRoutes,
       ...feedbackRoutes,
+      ...issueRoutes,
       ...taskRoutes,
       // TODO(#18): Move staff dashboards into the H10 role layout when available.
       ...staffDashboardRoutes,
