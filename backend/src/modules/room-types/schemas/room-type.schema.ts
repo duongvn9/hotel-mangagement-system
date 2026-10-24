@@ -40,3 +40,4 @@ export class RoomType {
 }
 
 export const RoomTypeSchema = SchemaFactory.createForClass(RoomType);
+RoomTypeSchema.index({ amenities: 1 });
