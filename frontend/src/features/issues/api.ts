@@ -8,25 +8,90 @@ export interface IssueInput {
   roomId?: string
 }
 
+export const issueStatuses = [
+  'PENDING_REVIEW',
+  'REVIEWED',
+  'CONCLUDED',
+  'ASSIGNING',
+  'ASSIGNED',
+] as const
+export const issuePriorities = ['LOW', 'NORMAL', 'HIGH', 'URGENT'] as const
+export type IssueStatus = (typeof issueStatuses)[number]
+export type IssuePriority = (typeof issuePriorities)[number]
+export type HandlingCategory = 'SERVICE' | 'OPERATIONS'
+
 export interface IssueReceipt extends IssueInput {
   id: string
-  priority: 'NORMAL'
-  status: 'PENDING_REVIEW'
+  priority: IssuePriority
+  status: IssueStatus
   reportedAt: string
 }
 
 export interface IssueRead extends IssueReceipt {
-  closedAt?: string
+  handlingCategory?: HandlingCategory
+  needsStaffAction?: boolean
+  reviewedAt?: string
+  concludedAt?: string
+  reviewedBy?: string
+  reviewNotes?: string
+  assignmentRequestedBy?: string
+  assignmentRequestedAt?: string
+  assigneeId?: string
+  dueAt?: string
+  assignedAt?: string
+}
+
+export interface LinkedIssueTask {
+  id: string
+  title: string
+  taskType: string
+  priority: string
+  status: string
+  assigneeId: string
+  assignedAt: string
+  dueAt?: string
+  completedAt?: string
 }
 
 export interface IssueDetail extends IssueRead {
-  linkedTasks: unknown[]
-  linkedTasksAvailable: false
+  linkedTasks: LinkedIssueTask[]
+  linkedTasksAvailable: boolean
+}
+
+export interface ReviewIssueInput {
+  handlingCategory: HandlingCategory
+  priority: IssuePriority
+  needsStaffAction: boolean
+  notes?: string
+}
+
+export interface AssignmentInput {
+  assigneeId: string
+  dueAt?: string
+}
+
+export interface IssueAssignee {
+  id: string
+  displayName: string
+  role: string
+}
+
+export async function reviewIssue(id: string, input: ReviewIssueInput): Promise<IssueDetail> {
+  return (await api.patch<IssueDetail>(`/issues/${encodeURIComponent(id)}/review`, input)).data
+}
+
+export async function getIssueAssignees(id: string): Promise<{ items: IssueAssignee[] }> {
+  return (await api.get<{ items: IssueAssignee[] }>(`/issues/${encodeURIComponent(id)}/assignees`))
+    .data
+}
+
+export async function assignIssue(id: string, input: AssignmentInput): Promise<IssueDetail> {
+  return (await api.post<IssueDetail>(`/issues/${encodeURIComponent(id)}/assignment`, input)).data
 }
 
 export interface IssueQuery {
-  status?: 'PENDING_REVIEW'
-  priority?: 'NORMAL'
+  status?: IssueStatus
+  priority?: IssuePriority
   category?: string
   keyword?: string
   page: number
@@ -44,8 +109,10 @@ export function normalizeIssueQuery(query: IssueQuery): IssueQuery {
   return {
     page: Number.isInteger(query.page) ? Math.min(10000, Math.max(1, query.page)) : 1,
     limit: Number.isInteger(query.limit) ? Math.min(100, Math.max(1, query.limit)) : 20,
-    ...(query.status === 'PENDING_REVIEW' ? { status: query.status } : {}),
-    ...(query.priority === 'NORMAL' ? { priority: query.priority } : {}),
+    ...(query.status && issueStatuses.includes(query.status) ? { status: query.status } : {}),
+    ...(query.priority && issuePriorities.includes(query.priority)
+      ? { priority: query.priority }
+      : {}),
     ...(query.category ? { category: query.category } : {}),
     ...(query.keyword ? { keyword: query.keyword } : {}),
   }
