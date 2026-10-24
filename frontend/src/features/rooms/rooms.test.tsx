@@ -4,6 +4,7 @@ import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { UserMenu } from '@/features/auth/UserMenu'
 import { roomRoutes } from './routes'
 import { roomTypeOptions, type Room } from './api'
+import * as roomApi from './api'
 
 const note =
   'Ghi chú đầy đủ cho phòng, cần hiển thị nội dung này bằng nhãn hoặc tooltip khi bị rút gọn.'
@@ -68,6 +69,11 @@ function renderPage(role = 'MANAGER', permissions: string[] = []) {
 }
 
 describe('UC47 RoomsPage', () => {
+  beforeEach(() =>
+    vi
+      .spyOn(roomApi, 'activeRoomTypeOptions')
+      .mockResolvedValue([{ id: 'type1', name: 'Standard' }]),
+  )
   afterEach(() => vi.restoreAllMocks())
   it('shows all columns, Vietnamese statuses, inactive room/type and missing reference safely', async () => {
     mockApi()
@@ -98,7 +104,8 @@ describe('UC47 RoomsPage', () => {
     expect(screen.getByTitle(note)).toHaveAccessibleName(note)
     expect(screen.getByRole('option', { name: 'Suite (ngừng)' })).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(screen.queryByRole('button', { name: /Thêm|Sửa|Vô hiệu/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Thêm phòng' })).toBeEnabled()
+    expect(screen.getAllByRole('button', { name: /^Sửa phòng/ })).toHaveLength(4)
   })
   it('shows loading while rooms are pending independently from type options', () => {
     vi.spyOn(api, 'get').mockImplementation((url) =>

@@ -3,6 +3,33 @@ import { listRoomTypes } from '@/features/room-types/api'
 
 export const ROOM_STATUSES = ['AVAILABLE', 'OCCUPIED', 'CLEANING', 'MAINTENANCE'] as const
 export type RoomStatus = (typeof ROOM_STATUSES)[number]
+export const ROOM_STATUS_DISPLAY = {
+  AVAILABLE: { label: 'Trống', tone: 'success' },
+  OCCUPIED: { label: 'Có khách', tone: 'info' },
+  CLEANING: { label: 'Đang dọn', tone: 'warning' },
+  MAINTENANCE: { label: 'Bảo trì', tone: 'danger' },
+} as const
+
+export interface RoomInput {
+  roomNumber: string
+  floor: number
+  roomType: string
+  status?: RoomStatus
+  notes?: string
+  isActive?: boolean
+}
+export async function getRoom(id: string): Promise<Room> {
+  return (await api.get<Room>(`/rooms/${id}`)).data
+}
+export async function createRoom(input: RoomInput): Promise<Room> {
+  return (await api.post<Room>('/rooms', input)).data
+}
+export async function updateRoom(id: string, input: Partial<RoomInput>): Promise<Room> {
+  return (await api.patch<Room>(`/rooms/${id}`, input)).data
+}
+export async function activeRoomTypeOptions(): Promise<Pick<RoomTypeOption, 'id' | 'name'>[]> {
+  return (await api.get<Pick<RoomTypeOption, 'id' | 'name'>[]>('/room-types/options')).data
+}
 export interface RoomTypeOption {
   id: string
   name: string

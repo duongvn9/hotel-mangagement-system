@@ -5,17 +5,18 @@ import { Button } from '@/components/Button'
 import { SelectField } from '@/components/SelectField'
 import { TextField } from '@/components/TextField'
 import { getErrorMessage } from '@/lib/api-client'
-import { ROOM_STATUSES, type RoomQuery, type RoomStatus } from '../api'
-import { useRooms, useRoomTypeOptions } from '../hooks'
-
-const statusDisplay = {
-  AVAILABLE: { label: 'Trống', tone: 'success' },
-  OCCUPIED: { label: 'Có khách', tone: 'info' },
-  CLEANING: { label: 'Đang dọn', tone: 'warning' },
-  MAINTENANCE: { label: 'Bảo trì', tone: 'danger' },
-} as const
+import {
+  ROOM_STATUSES,
+  ROOM_STATUS_DISPLAY as statusDisplay,
+  type RoomQuery,
+  type RoomStatus,
+} from '../api'
+import { useRooms, useRoomTypeOptions, useActiveRoomTypeOptions } from '../hooks'
+import { RoomEditor } from '../components/RoomForm'
 
 export function RoomsPage() {
+  const [editor, setEditor] = useState<{ id: string | null } | null>(null)
+  const [success, setSuccess] = useState(false)
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState<RoomQuery>({ page: 1, limit: 10 })
   useEffect(() => {
@@ -32,6 +33,7 @@ export function RoomsPage() {
   }, [search])
   const rooms = useRooms(query)
   const types = useRoomTypeOptions()
+  const activeTypes = useActiveRoomTypeOptions()
   const filtered = Boolean(
     query.search ||
     query.roomTypeId ||
@@ -53,6 +55,49 @@ export function RoomsPage() {
           Danh sách phòng và trạng thái vận hành đã ghi nhận.
         </p>
       </div>
+      {success && <Alert tone="success">Đã lưu phòng. Danh sách đã được cập nhật.</Alert>}
+      <Button
+        disabled={!activeTypes.data?.length || activeTypes.isError || activeTypes.isPending}
+        onClick={() => {
+          setSuccess(false)
+          setEditor({ id: null })
+        }}
+      >
+        Thêm phòng
+      </Button>
+      {activeTypes.isPending && <p role="status">Đang kiểm tra loại phòng khả dụng…</p>}
+      {activeTypes.isError && (
+        <div className="space-y-3">
+          <Alert tone="danger">
+            Không tải được loại phòng khả dụng: {getErrorMessage(activeTypes.error)}
+          </Alert>
+          <Button
+            variant="secondary"
+            disabled={activeTypes.isFetching}
+            onClick={() => void activeTypes.refetch()}
+          >
+            Thử lại loại phòng khả dụng
+          </Button>
+        </div>
+      )}
+      {activeTypes.isSuccess && !activeTypes.data.length && (
+        <Alert tone="warning">
+          Chưa có loại phòng hoạt động nên chưa thể thêm phòng.{' '}
+          <a href="/manager/room-types" className="underline">
+            Quản lý loại phòng
+          </a>
+        </Alert>
+      )}
+      {editor && (
+        <RoomEditor
+          id={editor.id}
+          onClose={() => setEditor(null)}
+          onSuccess={() => {
+            setEditor(null)
+            setSuccess(true)
+          }}
+        />
+      )}
       <div
         role="search"
         aria-label="Lọc danh sách phòng"
@@ -169,6 +214,7 @@ export function RoomsPage() {
                       'Trạng thái vận hành',
                       'Ghi chú',
                       'Hoạt động',
+                      'Thao tác',
                     ].map((name, index) => (
                       <th
                         scope="col"
@@ -220,6 +266,18 @@ export function RoomsPage() {
                         <Badge tone={room.isActive ? 'success' : 'neutral'}>
                           {room.isActive ? 'Đang hoạt động' : 'Ngừng'}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-4">
+                        <Button
+                          variant="secondary"
+                          aria-label={`Sửa phòng ${room.roomNumber}`}
+                          onClick={() => {
+                            setSuccess(false)
+                            setEditor({ id: room.id })
+                          }}
+                        >
+                          Sửa
+                        </Button>
                       </td>
                     </tr>
                   ))}
