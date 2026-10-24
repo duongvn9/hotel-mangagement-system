@@ -737,3 +737,79 @@ Ngày 24/10/2026; baseline main `8df46e7` (UC53 đã merge, có thêm Issue hand
 - Node API build + MongoDB + Vite + Edge thật: `/api/docs` trả 200, docs-json có đủ POST/GET :id/PATCH services, không có DELETE. UI tạo giá 0 → sửa giá 150.000 → ngừng giữ giá/bản ghi → bật lại; trùng tên 409 giữ draft, tạo bản nháp billable không giá, chặn reactivation thiếu giá rồi lưu price=0 + active thành công. Giữ filter, 4 confirm, client error focus, native Tab trap/Esc trả focus đều pass. Viewport/document **375px**, modal **343px**, scrollWidth **341px**, ảnh đã mở xem. Artifact ignored: `.task29-validation/uc54-browser-result.json`, `uc54-form-mobile-375.png`, `uc54-seed-result.json`. Đã dọn các tiến trình API/Vite/Edge tạm, giữ MongoDB đang có.
 - Mọi check cục bộ bắt buộc đã pass, trừ Docker được miễn theo yêu cầu thường trực; không báo Compose pass. Chỉ merge PR sau khi CI của commit cuối xanh rồi pull main; giữ tiêu đề merge `Merge pull request #…` theo yêu cầu người dùng.
 - Bàn giao qua PR [#28](https://github.com/duongvn9/hotel-mangagement-system/pull/28), tên `feat(services): UC54 create/update service (#35)`; trạng thái merge/check cuối xem trực tiếp tại PR. H4 đã có model/schema/provider và helper active để Vũ/Hiếu tích hợp ở các task riêng; UC54 không triển khai ServiceOrder hoặc phí hóa đơn.
+
+<a id="h9"></a>
+## #36 — H9 Gmail Notifications (24/10/2026)
+
+- Nhánh: `feature/36-gmail-notification`, từ main `66ab813`. Chỉ backend: không controller, frontend, collection hay tích hợp vào nghiệp vụ của Hiếu/Khoa.
+- `NotificationsModule` chỉ import `ConfigModule`, export `NotificationsService`; AppModule đăng ký module này. Không import module booking/payment. Dùng lại `BookingStatus` và `PaymentPurpose` sẵn có.
+- Hợp đồng: `send(input: NotificationInput): Promise<NotificationResult>`, kết quả `{ accepted: boolean; reason?: string }`. `accepted: true` chỉ nghĩa đã nhận vào hàng đợi, không xác nhận SMTP/inbox. Validation sai → `invalid_input`; đầy → `queue_full`; tắt ứng dụng → `shutting_down`. Không throw/reject; gửi/retry chạy nền.
+- `NotificationTemplate` là union 3 template; `NotificationInput` discriminated union. Kiểu export trong `backend/src/modules/notifications/notification.types.ts`.
+
+| Template | Data bắt buộc |
+|---|---|
+| `BOOKING_CONFIRMATION` | bookingCode, guestName, checkIn, checkOut, roomsSummary, roomTotal, depositAmount, bookingStatus (`BookingStatus.PendingDeposit` hoặc `.Confirmed`) |
+| `PAYMENT_SUCCESS` | bookingCode, guestName, amount, purpose (`PaymentPurpose.Deposit` hoặc `.Final`), paidAt, transactionRef |
+| `BOOKING_CANCELLATION` | bookingCode, guestName, checkIn, checkOut, cancelledAt |
+
+Các field này là **đề xuất cần Hiếu/Khoa xác nhận**, chưa phải business rule được nhóm duyệt. Ngày nhận `Date` instant hoặc business date `YYYY-MM-DD` có thật, hiển thị `dd/MM/yyyy` tại `Asia/Ho_Chi_Minh`; không nhận ISO instant dưới dạng string. Tiền là số nguyên VND không âm theo `isMoneyVnd`. Có subject, HTML escape toàn bộ giá trị động và text; mã booking chứa CR/LF/NUL bị từ chối.
+
+### Cấu hình và vận hành
+
+Cập nhật `backend/src/config/configuration.ts`, `notifications.config.ts`, `env.validation.ts`, `backend/.env.example`, `.env.example`, danh sách environment production Compose. Dev Compose đã đọc `.env` ở root qua `env_file`, không cần lặp thêm biến. Các biến `MAIL_*` cũ giữ tương thích cấu hình, **H9 chỉ đọc các biến mới**:
+
+| Biến | Mặc định / ràng buộc |
+|---|---|
+| `NOTIFICATIONS_ENABLED` | false; bật true mới chọn Gmail SMTP |
+| `GMAIL_USER` | bắt buộc email khi bật; dùng làm from address |
+| `GMAIL_APP_PASSWORD` | bắt buộc khi bật; bỏ toàn bộ whitespace, không log/commit |
+| `NOTIFICATIONS_FROM_NAME` | Grand Emily Hotel; không CR/LF/NUL, tối đa 200 ký tự |
+| `NOTIFICATIONS_MAX_ATTEMPTS` | 3; 1–10 tổng số lần gửi |
+| `NOTIFICATIONS_RETRY_BASE_DELAY_MS` | 1000; 1–60000 ms |
+| `NOTIFICATIONS_SEND_TIMEOUT_MS` | 10000; 1–120000 ms mỗi lần |
+| `NOTIFICATIONS_QUEUE_CAPACITY` | 100; 1–10000, gồm active + queued + đang retry |
+| `NOTIFICATIONS_SHUTDOWN_TIMEOUT_MS` | 15000; 1–120000 ms |
+
+Mặc định dev/test/production đều tắt, không tạo SMTP transport/kết nối; mỗi thông báo chỉ log debug template + email che (`a***@domain`). Production tắt thì cảnh báo một lần khi khởi động. Bật mà thiếu Gmail config thì Joi từ chối khởi động.
+
+Gửi tuần tự, retry mặc định 3 lần tổng cộng, delay 1000 → 2000 ms. Chỉ lỗi mạng/kết nối/timeout/SMTP 4xx được retry. SMTP 5xx và lỗi không xác định dừng ngay; 535/EAUTH log gợi ý kiểm tra Gmail App Password và xác minh 2 bước. Mỗi thất bại warn, thất bại cuối error; chỉ log mã lỗi đã chọn an toàn, template, người nhận che, attempt, category. Không đưa raw exception/body/password/email đầy đủ vào log.
+
+Shutdown ngừng nhận mới, chờ drain tối đa grace; quá hạn log số dropped, abort socket TLS đang sở hữu và hủy delay/timeout/retry còn lại. SMTP đã nhận trước khi timeout có thể vẫn phát mail: **không bảo đảm exactly-once**, retry có thể trùng. Queue/retry chỉ ở bộ nhớ, mất khi crash/restart; Nest Logger không thay thế kho lưu lịch sử thông báo. Lưu bền/replay cần nhóm chốt thay đổi schema/hạ tầng riêng.
+
+### Cách gọi H9 sau commit (Hiếu/Khoa tự tích hợp)
+
+Import `NotificationsModule` trong module người gọi, inject `NotificationsService`. Chỉ gọi sau khi booking/payment đã commit thành công:
+
+```ts
+const booking = await commitBooking(); // nghiệp vụ đã commit
+await notifications.send({
+  to: guest.email,
+  template: 'BOOKING_CONFIRMATION',
+  data: {
+    bookingCode: booking.code, guestName: guest.name,
+    checkIn: booking.checkIn, checkOut: booking.checkOut,
+    roomsSummary: '1 phòng Deluxe', roomTotal: booking.roomTotal,
+    depositAmount: booking.depositAmount,
+    bookingStatus: BookingStatus.PendingDeposit,
+  },
+});
+return booking; // accepted:false cũng không đảo ngược nghiệp vụ
+```
+
+Không đặt `send()` trong transaction hay nhánh quyết định thành bại của booking/payment. Không tự thêm lời gọi vào module của Hiếu/Khoa trong #36.
+
+### Người dùng tự kiểm tra Gmail thật sau này
+
+1. Bật [Google 2-Step Verification và tạo App Password](https://support.google.com/mail/answer/185833?hl=en). Dán App Password vào `backend/.env` cục bộ; dùng tài khoản Gmail tương ứng cho `GMAIL_USER`, bật `NOTIFICATIONS_ENABLED=true`. `.env` đã bị gitignore; không đưa secret vào commit/PR/log.
+2. Trong `backend/`: `npm run build`, sau đó chủ động chạy `npm run notify:test -- dia-chi-nhan@example.com`. Script dùng chính NotificationsService, buộc đúng một người nhận và enabled/config hợp lệ, chờ drain rồi đóng application context (không kết nối Mongo). Schema env chung vẫn yêu cầu MONGODB_URI hợp lệ. Mẫu gửi là booking cancellation có mã `H9-TEST-KHONG-PHAI-BOOKING-THAT`, chỉ phục vụ thử cấu hình.
+3. Xem log đã che và hộp thư người nhận; script thông báo queue drained không có nghĩa thư đã tới inbox. Có thể bị Gmail chặn/quota/spam. [Nodemailer Gmail guide](https://nodemailer.com/guides/using-gmail) mô tả giới hạn gửi và các nguyên nhân bị chặn; quota tùy loại tài khoản, không hard-code trong H9.
+
+**Không chạy script/gửi Gmail thật trong quá trình #36, test hoặc CI.** Tất cả test dùng fake/jsonTransport không mạng. Local Docker được miễn theo yêu cầu thường trực của người dùng; không tuyên bố đã chạy Docker tại máy.
+
+### Kiểm chứng và dependency
+
+Baseline main: backend lint/typecheck, 779 unit tests pass. Audit production trước thay đổi có 3 high trong chuỗi NestJS → multer (audit cả dev thêm @nestjs/testing, tổng 4 high có sẵn); không sửa dependency ngoài scope.
+Pin chính xác Nodemailer **10.2.1** (22/10/2026) và @types/nodemailer **8.0.2** (15/09/2026). Người dùng đã chấp thuận dùng 10.2.1 đã vá và miễn điều kiện tuổi phiên bản >2 tuần cho Nodemailer: bản 10.0.16 đáp ứng tuổi nhưng có 3 advisory parser, bản vá đầu tiên 10.1.4 mới phát hành 18/10. Không chạy audit fix/force. Kết quả audit cuối ghi bên dưới.
+
+Audit cuối (10.2.1): **0 finding cho Nodemailer/dependency mới**; audit toàn cây vẫn exit 1 vì 4 high có sẵn (`@nestjs/core`, `@nestjs/platform-express`, `@nestjs/testing`, `multer`), không phát sinh vulnerability mới. Kiểm tra cuối: lint không warning, format:check, typecheck, build pass; 51 H9 unit test pass; e2e AppModule thật **252/252** (29 file) pass. Script `notify:test` đã build ra entry point nhưng tuyệt đối không chạy; Gmail thật chưa kiểm chứng. Bộ unit toàn backend trên code cuối với cache tắt: **830/830 pass** (34 file). Commit code `e864bab`, test `d04b848`.
+PR: [#29 — H9 Gmail notification](https://github.com/duongvn9/hotel-mangagement-system/pull/29). Quy trình xuất bản: chỉ merge bằng merge commit sau khi Backend, Frontend và Docker Images trên head cuối xanh; tiêu đề merge dùng "Merge pull request #29 from duongvn9/feature/36-gmail-notification". Xem PR để biết trạng thái CI/merge thực tế.
