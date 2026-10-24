@@ -57,7 +57,7 @@ export function MyBookingsPage() {
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-display text-lg font-semibold text-pearl-900">
+                      <span className="text-base font-semibold tracking-wide text-pearl-900">
                         {booking.code}
                       </span>
                       <Badge tone={display.tone}>{display.label}</Badge>
@@ -69,7 +69,7 @@ export function MyBookingsPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs tracking-wider text-stone-700 uppercase">Tiền cọc</p>
-                    <p className="font-semibold text-primary">
+                    <p className="font-semibold text-primary tabular-nums">
                       {money.format(booking.depositAmount)}
                     </p>
                   </div>

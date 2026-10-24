@@ -6,6 +6,7 @@ import { Button } from '@/components/Button'
 import { SelectField } from '@/components/SelectField'
 import { TextField } from '@/components/TextField'
 import { getErrorMessage } from '@/lib/api-client'
+import { env } from '@/lib/env'
 import type { AvailableRoom, SearchAvailabilityParams } from '../api'
 import { useAvailability } from '../hooks'
 import { money, nightsBetween, todayISO } from '../utils'
@@ -115,10 +116,12 @@ export function SearchRoomsPage() {
   return (
     <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
       <div>
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">Đặt phòng</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">Tìm phòng trống</h1>
+        <p className="text-xs font-semibold tracking-widest text-primary uppercase">
+          {env.appName}
+        </p>
+        <h1 className="font-display text-4xl font-semibold text-pearl-900">Đặt phòng</h1>
         <p className="mt-2 text-sm text-stone-700">
-          Chọn ngày nhận – trả phòng và số khách để xem các phòng còn trống.
+          Chọn ngày nhận – trả phòng và số khách để xem các loại phòng còn trống tại khách sạn.
         </p>
       </div>
 
@@ -175,11 +178,23 @@ export function SearchRoomsPage() {
 
       {criteria && availability.data && (
         <div className="space-y-4">
-          <p className="text-sm text-stone-700" aria-live="polite">
-            {availability.data.length === 0
-              ? 'Không có phòng trống phù hợp. Vui lòng đổi ngày hoặc số khách.'
-              : `${nights} đêm · ${availability.data.length} phòng trống phù hợp.`}
-          </p>
+          {availability.data.length === 0 ? (
+            <p
+              className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700"
+              aria-live="polite"
+            >
+              Không có phòng trống phù hợp. Vui lòng đổi ngày hoặc số khách.
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-end justify-between gap-2 border-b border-stone-300 pb-2">
+              <h2 className="font-display text-2xl font-semibold text-pearl-900">
+                Loại phòng còn trống
+              </h2>
+              <p className="text-sm text-stone-700" aria-live="polite">
+                {nights} đêm · {availability.data.length} phòng phù hợp
+              </p>
+            </div>
+          )}
 
           {groups.map((group) => {
             const qty = selection[group.roomTypeId] ?? 0
@@ -190,10 +205,13 @@ export function SearchRoomsPage() {
                 className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-stone-300 bg-white p-5"
               >
                 <div className="min-w-56 space-y-1">
+                  <p className="text-[11px] font-semibold tracking-widest text-primary uppercase">
+                    Loại phòng
+                  </p>
                   <div className="flex items-center gap-2">
-                    <h2 className="font-display text-xl font-semibold text-pearl-900">
+                    <h3 className="font-display text-xl font-semibold text-pearl-900">
                       {group.name}
-                    </h2>
+                    </h3>
                     <Badge tone="success">Còn {max} phòng</Badge>
                   </div>
                   <p className="text-sm text-stone-700">
@@ -201,7 +219,7 @@ export function SearchRoomsPage() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-display text-lg font-semibold text-pearl-900">
+                  <p className="text-lg font-semibold text-pearl-900 tabular-nums">
                     {group.pricePerNight ? money.format(group.pricePerNight) : '—'}
                   </p>
                   <p className="text-xs text-stone-700">mỗi đêm</p>
@@ -231,7 +249,7 @@ export function SearchRoomsPage() {
                 <p className="text-sm text-stone-700">
                   Đã chọn {selectedRoomIds.length} phòng · {nights} đêm
                 </p>
-                <p className="font-display text-xl font-semibold text-pearl-900">
+                <p className="text-xl font-semibold text-pearl-900 tabular-nums">
                   Tạm tính {money.format(estimatedTotal)}
                 </p>
                 <p className="text-xs text-stone-700">
