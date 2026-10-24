@@ -86,7 +86,7 @@ describe('SearchRoomsPage', () => {
     })
 
     expect(await screen.findByRole('heading', { name: 'Deluxe' })).toBeInTheDocument()
-    expect(screen.getByText('2 đêm · 2 phòng trống phù hợp.')).toBeInTheDocument()
+    expect(screen.getByText('2 đêm · 2 phòng phù hợp')).toBeInTheDocument()
 
     // Chọn 1 phòng -> hiện thanh tiếp tục.
     fireEvent.change(screen.getByLabelText('Số phòng'), { target: { value: '1' } })

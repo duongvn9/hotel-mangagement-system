@@ -93,14 +93,16 @@ export function BookingDetailPage() {
     <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
       <div>
         <p className="text-xs font-semibold tracking-widest text-primary uppercase">Đặt phòng</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">
-          {booking ? `Booking ${booking.code}` : 'Chi tiết booking'}
-        </h1>
-        {statusDisplay && (
-          <div className="mt-2">
-            <Badge tone={statusDisplay.tone}>{statusDisplay.label}</Badge>
-          </div>
-        )}
+        <h1 className="font-display text-4xl font-semibold text-pearl-900">Chi tiết đặt phòng</h1>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          {booking && (
+            <span className="text-sm text-stone-700">
+              Mã booking{' '}
+              <span className="font-semibold tracking-wide text-pearl-900">{booking.code}</span>
+            </span>
+          )}
+          {statusDisplay && <Badge tone={statusDisplay.tone}>{statusDisplay.label}</Badge>}
+        </div>
       </div>
 
       {!booking && (
@@ -147,11 +149,11 @@ export function BookingDetailPage() {
             </div>
             <div>
               <dt className="text-xs tracking-wider text-stone-700 uppercase">Tiền phòng</dt>
-              <dd className="mt-1 font-semibold">{money.format(booking.roomTotal)}</dd>
+              <dd className="mt-1 font-semibold tabular-nums">{money.format(booking.roomTotal)}</dd>
             </div>
             <div>
               <dt className="text-xs tracking-wider text-stone-700 uppercase">Tiền cọc</dt>
-              <dd className="mt-1 font-semibold text-primary">
+              <dd className="mt-1 font-semibold text-primary tabular-nums">
                 {money.format(booking.depositAmount)}
               </dd>
             </div>
