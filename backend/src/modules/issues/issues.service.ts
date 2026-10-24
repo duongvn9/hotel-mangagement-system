@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -12,7 +14,18 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateIssueDto } from './dto/create-issue.dto.js';
 import { IssueContextAdapter } from './issue-context.adapter.js';
-import { Issue, IssuePriority, IssueStatus } from './schemas/issue.schema.js';
+import {
+  HandlingCategory,
+  Issue,
+  IssuePriority,
+  IssueStatus,
+} from './schemas/issue.schema.js';
+import { User } from '../users/schemas/user.schema.js';
+import { TasksService } from '../tasks/tasks.service.js';
+import { TaskSourceType } from '../tasks/task-contract.js';
+import { AssignIssueDto, ReviewIssueDto } from './dto/review-issue.dto.js';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 
 export interface IssueResponse {
   id: string;
@@ -29,6 +42,17 @@ export interface IssueResponse {
 export interface IssueRead extends Omit<IssueResponse, 'reportedAt'> {
   reportedAt: string;
   closedAt?: string;
+  handlingCategory?: HandlingCategory;
+  needsStaffAction?: boolean;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNotes?: string;
+  concludedAt?: string;
+  assignmentRequestedBy?: string;
+  assignmentRequestedAt?: string;
+  assigneeId?: string;
+  dueAt?: string;
+  assignedAt?: string;
 }
 
 export interface IssuesPage {
@@ -39,8 +63,18 @@ export interface IssuesPage {
 }
 
 export interface IssueDetail extends IssueRead {
-  linkedTasks: [];
-  linkedTasksAvailable: false;
+  linkedTasks: {
+    id: string;
+    title: string;
+    taskType: string;
+    priority: string;
+    status: string;
+    assigneeId: string;
+    assignedAt: string;
+    dueAt?: string;
+    completedAt?: string;
+  }[];
+  linkedTasksAvailable: boolean;
 }
 
 @Injectable()
@@ -49,6 +83,8 @@ export class IssuesService {
     @InjectModel(Issue.name) private readonly issues: Model<Issue>,
     private readonly contexts: IssueContextAdapter,
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
+    @InjectModel(User.name) private readonly users: Model<User>,
+    private readonly tasks: TasksService,
   ) {}
 
   private readonly readProjection = {
@@ -62,6 +98,18 @@ export class IssuesService {
     closedAt: 1,
     booking: 1,
     room: 1,
+    handlingCategory: 1,
+    needsStaffAction: 1,
+    reviewedBy: 1,
+    reviewedAt: 1,
+    reviewNotes: 1,
+    concludedAt: 1,
+    assignmentRequestedBy: 1,
+    assignmentRequestedAt: 1,
+    assignmentAssignee: 1,
+    assignmentDueAt: 1,
+    assignedAt: 1,
+    linkedTask: 1,
   };
 
   private assertReader(user: AuthUser): void {
@@ -114,7 +162,7 @@ export class IssuesService {
       this.issues.countDocuments(filter),
     ]);
     return {
-      items: items.map((issue) => this.readResponse(issue)),
+      items: items.map((issue) => this.readResponse(issue, user)),
       total,
       page: query.page,
       limit: query.limit,
@@ -131,14 +179,39 @@ export class IssuesService {
       .select(this.readProjection)
       .lean();
     if (!issue) throw new NotFoundException('Issue not found');
+    const staff = user.role !== Role.Customer;
+    const task =
+      staff && issue.linkedTask
+        ? await this.tasks.findIssueResolutionWork(id)
+        : null;
     return {
-      ...this.readResponse(issue),
-      linkedTasks: [],
-      linkedTasksAvailable: false,
+      ...this.readResponse(issue, user),
+      linkedTasks:
+        task && String(task._id) === String(issue.linkedTask)
+          ? [
+              {
+                id: String(task._id),
+                title: task.title,
+                taskType: task.taskType,
+                priority: task.priority,
+                status: task.status,
+                assigneeId: String(task.assignedTo),
+                assignedAt: task.assignedAt.toISOString(),
+                ...(task.dueAt ? { dueAt: task.dueAt.toISOString() } : {}),
+                ...(task.completedAt
+                  ? { completedAt: task.completedAt.toISOString() }
+                  : {}),
+              },
+            ]
+          : [],
+      linkedTasksAvailable: staff && Boolean(issue.linkedTask),
     };
   }
 
-  private readResponse(issue: Issue & { _id: Types.ObjectId }): IssueRead {
+  private readResponse(
+    issue: Issue & { _id: Types.ObjectId },
+    user: AuthUser,
+  ): IssueRead {
     return {
       id: String(issue._id),
       title: issue.title,
@@ -150,7 +223,258 @@ export class IssuesService {
       bookingId: String(issue.booking),
       ...(issue.room ? { roomId: String(issue.room) } : {}),
       ...(issue.closedAt ? { closedAt: issue.closedAt.toISOString() } : {}),
+      ...(issue.handlingCategory
+        ? { handlingCategory: issue.handlingCategory }
+        : {}),
+      ...(issue.needsStaffAction === undefined
+        ? {}
+        : { needsStaffAction: issue.needsStaffAction }),
+      ...(issue.reviewedAt
+        ? { reviewedAt: issue.reviewedAt.toISOString() }
+        : {}),
+      ...(issue.concludedAt
+        ? { concludedAt: issue.concludedAt.toISOString() }
+        : {}),
+      ...(user.role === Role.Customer
+        ? {}
+        : {
+            ...(issue.reviewedBy
+              ? { reviewedBy: String(issue.reviewedBy) }
+              : {}),
+            ...(issue.reviewNotes === undefined
+              ? {}
+              : { reviewNotes: issue.reviewNotes }),
+            ...(issue.assignmentRequestedBy
+              ? { assignmentRequestedBy: String(issue.assignmentRequestedBy) }
+              : {}),
+            ...(issue.assignmentRequestedAt
+              ? {
+                  assignmentRequestedAt:
+                    issue.assignmentRequestedAt.toISOString(),
+                }
+              : {}),
+            ...(issue.assignmentAssignee
+              ? { assigneeId: String(issue.assignmentAssignee) }
+              : {}),
+            ...(issue.assignmentDueAt
+              ? { dueAt: issue.assignmentDueAt.toISOString() }
+              : {}),
+            ...(issue.assignedAt
+              ? { assignedAt: issue.assignedAt.toISOString() }
+              : {}),
+          }),
     };
+  }
+
+  private assertReceptionist(user: AuthUser) {
+    if (!user || !/^[a-fA-F0-9]{24}$/.test(user.id))
+      throw new UnauthorizedException();
+    if (user.role !== Role.Receptionist) throw new ForbiddenException();
+  }
+
+  private async validateInput<T extends object>(
+    type: new () => T,
+    input: T,
+  ): Promise<T> {
+    if (!input || typeof input !== 'object' || Array.isArray(input))
+      throw new BadRequestException('Invalid input');
+    const dto = plainToInstance(type, input);
+    if (
+      (await validate(dto, { whitelist: true, forbidNonWhitelisted: true }))
+        .length
+    )
+      throw new BadRequestException('Invalid input');
+    return dto;
+  }
+
+  private async operationalIssue(id: string) {
+    if (!/^[a-fA-F0-9]{24}$/.test(id))
+      throw new NotFoundException('Issue not found');
+    const issue = await this.issues.findById(id).lean();
+    if (!issue) throw new NotFoundException('Issue not found');
+    return issue;
+  }
+
+  async review(
+    id: string,
+    input: ReviewIssueDto,
+    user: AuthUser,
+  ): Promise<IssueDetail> {
+    this.assertReceptionist(user);
+    const dto = await this.validateInput(ReviewIssueDto, input);
+    await this.operationalIssue(id);
+    const now = new Date();
+    const issue = await this.issues.findOneAndUpdate(
+      {
+        _id: new Types.ObjectId(id),
+        status: IssueStatus.PendingReview,
+        linkedTask: { $exists: false },
+      },
+      {
+        $set: {
+          handlingCategory: dto.handlingCategory,
+          priority: dto.priority,
+          needsStaffAction: dto.needsStaffAction,
+          reviewedBy: new Types.ObjectId(user.id),
+          reviewedAt: now,
+          ...(dto.notes === undefined ? {} : { reviewNotes: dto.notes }),
+          status: dto.needsStaffAction
+            ? IssueStatus.Reviewed
+            : IssueStatus.Concluded,
+          ...(dto.needsStaffAction ? {} : { concludedAt: now }),
+        },
+      },
+      { new: true, runValidators: true },
+    );
+    if (!issue)
+      throw new ConflictException('Issue is no longer pending review');
+    return this.findOne(id, user);
+  }
+
+  private handlingRole(category?: HandlingCategory) {
+    if (category === HandlingCategory.Service) return Role.ServiceStaff;
+    if (category === HandlingCategory.Operations) return Role.OperationsStaff;
+    throw new ConflictException('Issue requires a handling classification');
+  }
+
+  async assignees(id: string, user: AuthUser) {
+    this.assertReceptionist(user);
+    const issue = await this.operationalIssue(id);
+    if (
+      ![IssueStatus.Reviewed, IssueStatus.Assigning].includes(issue.status) ||
+      issue.needsStaffAction !== true
+    )
+      throw new ConflictException('Issue is not eligible for assignment');
+    const items = await this.users
+      .find({ isActive: true, role: this.handlingRole(issue.handlingCategory) })
+      .select({ _id: 1, fullName: 1, role: 1 })
+      .sort({ fullName: 1, _id: 1 })
+      .lean();
+    return {
+      items: items.map((staff) => ({
+        id: String(staff._id),
+        displayName: staff.fullName,
+        role: staff.role,
+      })),
+    };
+  }
+
+  async assign(
+    id: string,
+    input: AssignIssueDto,
+    user: AuthUser,
+  ): Promise<IssueDetail> {
+    this.assertReceptionist(user);
+    const dto = await this.validateInput(AssignIssueDto, input);
+    const dueAt = dto.dueAt === undefined ? undefined : new Date(dto.dueAt);
+    if (dueAt && !Number.isFinite(dueAt.getTime()))
+      throw new BadRequestException('Invalid dueAt');
+    let issue = await this.operationalIssue(id);
+    if (
+      issue.status === IssueStatus.Reviewed &&
+      issue.needsStaffAction === true
+    ) {
+      const staff = await this.users
+        .findOne({
+          _id: new Types.ObjectId(dto.assigneeId),
+          isActive: true,
+          role: this.handlingRole(issue.handlingCategory),
+        })
+        .lean();
+      if (!staff)
+        throw new BadRequestException(
+          'Assignee must be active staff matching handlingCategory',
+        );
+      const locked = await this.issues
+        .findOneAndUpdate(
+          {
+            _id: issue._id,
+            status: IssueStatus.Reviewed,
+            needsStaffAction: true,
+            linkedTask: { $exists: false },
+          },
+          {
+            $set: {
+              status: IssueStatus.Assigning,
+              assignmentAssignee: staff._id,
+              assignmentRequestedBy: new Types.ObjectId(user.id),
+              assignmentRequestedAt: new Date(),
+              assignmentTitle: issue.title,
+              assignmentTaskId: new Types.ObjectId(),
+              ...(dueAt ? { assignmentDueAt: dueAt } : {}),
+            },
+          },
+          { new: true, runValidators: true },
+        )
+        .lean();
+      if (!locked)
+        throw new ConflictException(
+          'Assignment changed; retry the same intent',
+        );
+      issue = locked;
+    } else if (issue.status !== IssueStatus.Assigning) {
+      throw new ConflictException('Issue is not eligible for assignment');
+    }
+    if (
+      String(issue.assignmentAssignee) !==
+        String(new Types.ObjectId(dto.assigneeId)) ||
+      issue.assignmentDueAt?.getTime() !== dueAt?.getTime()
+    )
+      throw new ConflictException(
+        'A different assignment intent is already pending',
+      );
+    if (!issue.assignmentTaskId || !issue.assignmentTitle)
+      throw new ConflictException('Assignment intent is incomplete');
+    let task = await this.tasks.findIssueResolutionWork(id);
+    if (!task) {
+      try {
+        task = await this.tasks.create(
+          {
+            title: issue.assignmentTitle,
+            taskType: 'ISSUE_RESOLUTION',
+            priority: issue.priority,
+            sourceType: TaskSourceType.Issue,
+            sourceId: id,
+            assigneeId: String(issue.assignmentAssignee),
+            ...(issue.assignmentDueAt
+              ? { dueAt: issue.assignmentDueAt.toISOString() }
+              : {}),
+          },
+          issue.assignmentTaskId,
+        );
+      } catch (error) {
+        task = await this.tasks.findIssueResolutionWork(id);
+        if (!task) throw error;
+      }
+    }
+    if (
+      String(task._id) !== String(issue.assignmentTaskId) ||
+      String(task.assignedTo) !== String(issue.assignmentAssignee) ||
+      task.dueAt?.getTime() !== issue.assignmentDueAt?.getTime() ||
+      task.title !== issue.assignmentTitle ||
+      task.priority !== issue.priority
+    )
+      throw new ConflictException(
+        'Existing source work does not match assignment intent',
+      );
+    const finished = await this.issues.findOneAndUpdate(
+      {
+        _id: issue._id,
+        status: IssueStatus.Assigning,
+        assignmentTaskId: issue.assignmentTaskId,
+      },
+      {
+        $set: {
+          status: IssueStatus.Assigned,
+          linkedTask: task._id,
+          assignedAt: task.assignedAt,
+        },
+      },
+      { new: true, runValidators: true },
+    );
+    if (!finished)
+      throw new ConflictException('Assignment already finalized; reload issue');
+    return this.findOne(id, user);
   }
 
   async create(dto: CreateIssueDto, userId: string): Promise<IssueResponse> {

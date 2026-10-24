@@ -3,10 +3,16 @@ import { Link } from 'react-router'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { SelectField } from '@/components/SelectField'
-import type { IssueQuery } from '../api'
+import { issueStatuses, issuePriorities, type IssueQuery } from '../api'
 import { useIssues } from '../hooks'
 import { IssueBadges, IssueError } from '../IssuePresentation'
-import { issueDate, issueViews, type IssueRole } from '../presentation'
+import {
+  issueDate,
+  issueViews,
+  statusLabels,
+  priorityLabels,
+  type IssueRole,
+} from '../presentation'
 
 export function IssueListPage({ role }: { role: IssueRole }) {
   const view = issueViews[role]
@@ -46,11 +52,11 @@ export function IssueListPage({ role }: { role: IssueRole }) {
           value={query.status ?? ''}
           options={[
             { value: '', label: 'Tất cả' },
-            { value: 'PENDING_REVIEW', label: 'Chờ xem xét' },
+            ...issueStatuses.map((value) => ({ value, label: statusLabels[value] })),
           ]}
           onChange={(event) =>
             update({
-              status: event.target.value === 'PENDING_REVIEW' ? 'PENDING_REVIEW' : undefined,
+              status: (event.target.value || undefined) as IssueQuery['status'],
             })
           }
         />
@@ -59,10 +65,10 @@ export function IssueListPage({ role }: { role: IssueRole }) {
           value={query.priority ?? ''}
           options={[
             { value: '', label: 'Tất cả' },
-            { value: 'NORMAL', label: 'Bình thường' },
+            ...issuePriorities.map((value) => ({ value, label: priorityLabels[value] })),
           ]}
           onChange={(event) =>
-            update({ priority: event.target.value === 'NORMAL' ? 'NORMAL' : undefined })
+            update({ priority: (event.target.value || undefined) as IssueQuery['priority'] })
           }
         />
         <SelectField
@@ -96,7 +102,7 @@ export function IssueListPage({ role }: { role: IssueRole }) {
                   >
                     {issue.title}
                   </Link>
-                  <IssueBadges />
+                  <IssueBadges issue={issue} />
                   <p className="break-words text-sm text-stone-700">Nhóm sự cố: {issue.category}</p>
                   <p className="text-sm text-stone-700">Ngày báo: {issueDate(issue.reportedAt)}</p>
                 </li>

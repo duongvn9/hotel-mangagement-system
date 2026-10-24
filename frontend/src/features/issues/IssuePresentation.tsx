@@ -1,11 +1,20 @@
 import { isAxiosError } from 'axios'
 import { Badge } from '@/components/Badge'
 
-export function IssueBadges() {
+import type { IssueRead } from './api'
+import { priorityLabels, statusLabels } from './presentation'
+
+export function IssueBadges({ issue }: { issue: IssueRead }) {
   return (
     <span className="inline-flex flex-wrap gap-2">
-      <Badge tone="warning">Chờ xem xét</Badge>
-      <Badge tone="neutral">Ưu tiên: Bình thường</Badge>
+      <Badge
+        tone={
+          issue.status === 'PENDING_REVIEW' || issue.status === 'ASSIGNING' ? 'warning' : 'neutral'
+        }
+      >
+        {statusLabels[issue.status]}
+      </Badge>
+      <Badge tone="neutral">Ưu tiên: {priorityLabels[issue.priority]}</Badge>
     </span>
   )
 }

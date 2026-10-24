@@ -9,12 +9,102 @@
 - #67 / UC38: **MERGED**, PR #18 tại merge commit `341f87f`; đã xác minh commit là ancestor của local `origin/main` khi triển khai #65. Commit triển khai `3712665`; các bằng chứng pending trong mục 10 được giữ như lịch sử trước merge.
 - #65: **MERGED**, PR #19 tại merge commit `4213c8d`. Mục 11 giữ lịch sử triển khai trước merge, không còn là trạng thái pending hiện tại.
 - #74 / UC28: **MERGED**, PR #20 tại merge commit `266e40b`; parent đã xác minh merge. https://github.com/duongvn9/hotel-mangagement-system/pull/20 — mục 12 giữ bằng chứng triển khai trước merge, không phải trạng thái pending hiện tại.
-- #75 / UC29 và #79 / UC33: **Implemented, pending review, không Done** trên nhánh hiện tại `feature/vu-75-79-issue-list-detail`; đã push `a01bdc7` (BE), `a2d11ba` (FE). Draft PR #22: https://github.com/duongvn9/hotel-mangagement-system/pull/22 — chưa merge. Xem mục 13.
-- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET giữ nguyên, UC38 đã có PATCH tiến độ và form detail. Mục 13 là hiện trạng Issue list/detail; mục 12 lưu lịch sử UC28; mục 11 lưu lịch sử #65; mục 10 lưu bằng chứng #67 trước merge; mục 9 lưu lịch sử UC37 trước merge; mục 8 lưu mốc #64 trước merge; mục 4–7 là lịch sử.
+- #75 / UC29 và #79 / UC33: **MERGED**, PR #22 tại merge commit `787d1b8`. Mục 13 giữ lịch sử triển khai trước merge, không phải trạng thái pending hiện tại.
+- #76 / UC30 và #77 / UC31: **Implemented, pending review, không Done** trên `feature/vu-76-77-issue-review-assignment`; đã push `c4288cd` (BE), `94b39e6` (FE/E2E); draft PR #25: https://github.com/duongvn9/hotel-mangagement-system/pull/25 — CI pending, chưa merge hoặc có approval scope/contract/manual browser QA 375px. Xem mục 14.
+- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET giữ nguyên, UC38 đã có PATCH tiến độ và form detail. Mục 14 là hiện trạng review/assignment; mục 13 lưu lịch sử Issue list/detail; mục 12 lưu lịch sử UC28; mục 11 lưu lịch sử #65; mục 10 lưu bằng chứng #67 trước merge; mục 9 lưu lịch sử UC37 trước merge; mục 8 lưu mốc #64 trước merge; mục 4–7 là lịch sử.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
 
-## 13. Jira #75 / UC29 và #79 / UC33 — Issue List / Detail (hiện trạng)
+## 14. Jira #76 / UC30 và #77 / UC31 — Review Issue / Assign Resolution Task (hiện trạng)
+
+### Trạng thái và API thực tế
+
+- **Implemented, pending review, không Done**, nhánh `feature/vu-76-77-issue-review-assignment`, dựa trên #75/#79 đã MERGED qua PR #22 (`787d1b8`). CI còn pending parent push; không tự ghi SHA/PR mới hoặc coi tài liệu là approval scope/contract.
+- `PATCH /api/v1/issues/:id/review`: body `{ handlingCategory, priority, needsStaffAction, notes? }`. `handlingCategory` chính xác `SERVICE | OPERATIONS`; priority `LOW | NORMAL | HIGH | URGENT`; `needsStaffAction` boolean bắt buộc; notes string trim tối đa 2000 ký tự. Không nhận actor/status/time hoặc field lạ. CAS chỉ review `PENDING_REVIEW` chưa linked Task; lưu `reviewedBy` từ actor xác thực, `reviewedAt` server, `reviewNotes`, classification, priority và quyết định.
+- `needsStaffAction: true` → **REVIEWED** để giao việc; `false` → **CONCLUDED** với `concludedAt`, là kết luận hợp lệ không cần staff action, không phải reject và **không phải CLOSED**. Không tạo Task khi review. Enum có CLOSED nhưng UC32 close chưa triển khai; không gọi CONCLUDED là close.
+- `GET /api/v1/issues/:id/assignees`: chỉ Issue REVIEWED/ASSIGNING có `needsStaffAction === true`; SERVICE → SERVICE_STAFF, OPERATIONS → OPERATIONS_STAFF. Query User thật `isActive === true`, đúng role chính xác, sort fullName rồi ID; trả `{ items: [{ id, displayName, role }] }`, không email/phone/contact hay raw User. Không custom-role/permission fallback.
+- `POST /api/v1/issues/:id/assignment`: body `{ assigneeId, dueAt? }`, MongoId và ISO8601 strict; dueAt không bắt buộc, không nhận null/actor/taskId/source/status. Trả Issue detail authoritative, không raw Task. Anonymous 401; role sai 403; malformed/missing Issue 404; input hoặc assignee sai 400; lifecycle/race/khác intent 409. Service validate lại DTO allowlist, không chỉ dựa ValidationPipe.
+- Cả ba endpoint chỉ **RECEPTIONIST**, kiểm tra AuthGuard/RolesGuard và `IssuesService.assertReceptionist`; Manager chỉ đọc, Customer/staff/admin/custom role không được review/assign dù có permission. Scope khách sạn đơn hiện tại, không có hotelId/multi-hotel authorization giả. Read Customer vẫn theo Booking active hiện thuộc current user; Receptionist/Manager đọc trong scope khách sạn đơn.
+
+### Durable assignment intent, retry và blocker
+
+- CAS REVIEWED → **ASSIGNING** persist intent trước tạo Task: assignee, dueAt, requestedBy/requestedAt, title snapshot và `assignmentTaskId` ObjectId sinh một lần. Intent bất biến trong workflow hiện tại; retry chỉ cùng assignee và cùng dueAt theo instant (hoặc cùng không hạn), không đổi người/hạn, không rollback ngầm. Incomplete hoặc mismatched intent/work → 409.
+- Tạo Task thật với `sourceType: ISSUE`, sourceId Issue persisted, canonical `taskType: 'ISSUE_RESOLUTION'`, title/priority từ intent/Issue, assignee và dueAt đã lưu; finalize CAS ASSIGNING → **ASSIGNED**, ghi linkedTask và assignedAt từ Task. Không giả Task trong response hoặc chỉ ghi memory.
+- `TasksService.findIssueResolutionWork(issueId)` tìm source ISSUE + sourceId + ISSUE_RESOLUTION **không lọc status**, nên tìm cả COMPLETED. Trước create và sau lỗi create đều reconcile work có sẵn, kiểm tra ID/assignee/dueAt/title/priority khớp intent. Nếu Task đã tạo, thậm chí đã COMPLETED, nhưng finalize Issue thất bại, retry phải nối lại **cùng Task**, không tạo Task mới. Active-work partial unique index một mình không đủ bảo đảm trường hợp completed này; persisted deterministic Task ID giữ identity khi retry/race.
+- **Blocker cần manual intervention:** nếu sau khi persist intent nhưng trước khi tạo Task, assignee bị inactive/xóa/đổi role vĩnh viễn, core create sẽ từ chối; Issue có thể giữ ASSIGNING và cùng-intent retry không tự chữa được. Chưa có API recovery/đổi intent được duyệt, không có automatic rollback/reassignment hoặc background recovery. Cần quy trình xử lý thủ công được review; không mô tả đây là lỗi transient chắc chắn retry thành công.
+- Không giả định transaction xuyên Issue/Task/User; hoạt động được thiết kế cho MongoDB standalone bằng writes/CAS/index riêng. Eligibility là snapshot, không atomic với thay đổi User. Task staff cập nhật tiến độ qua UC38 như cũ, completion **không đóng Issue hoặc ghi nguồn**; UC32 vẫn deferred.
+
+### Thông báo contract additive và bàn giao Lâm Maintenance
+
+- **Cần thông báo nhóm/Lâm:** signature hiện tại là `create(input: CreateTaskDto, identity?: Types.ObjectId)`; argument thứ hai là Task ID deterministic nội bộ, **optional và additive**, mọi caller `create(input)` cũ vẫn hợp lệ. Không sửa DTO để nhận client taskId, không đổi lifecycle/status/source/transition signature hiện hữu. `findIssueResolutionWork(issueId: string)` là helper nội bộ mới, không phải HTTP Task/source read API dùng chung.
+- Chỉ dùng optional deterministic ID khi caller có **persisted durable intent** và cần retry cùng identity; không truyền ID tùy ý từ client, không sinh ID mới mỗi retry. Core create không tự biến mọi duplicate thành success: caller phải reconcile và kiểm tra work khớp intent. Việc ghi thông báo ở đây **không chứng minh nhóm đã được notify/approve**, cần parent/reviewer xác nhận contract và scope.
+- Lâm: module Maintenance import `TasksModule`, inject `TasksService`, không import ngược Maintenance vào Tasks. Caller kiểm tra quyền/scope/điều kiện Maintenance trước gọi; `sourceMaintenance` phải là record đã persist, `staffOps` là User thật active đúng OPERATIONS_STAFF, không Firebase UID hoặc fake/dangling ID. Mapping `maintenances` vẫn cần chủ nguồn xác nhận, existence check không thay thế nghiệp vụ nguồn.
+
+```ts
+import { Injectable, Module } from '@nestjs/common';
+import { TasksModule } from './modules/tasks/tasks.module.js';
+import { TasksService } from './modules/tasks/tasks.service.js';
+import { TaskSourceType } from './modules/tasks/task-contract.js';
+
+@Injectable()
+class MaintenanceTaskConsumer {
+  constructor(private readonly tasks: TasksService) {}
+
+  assign(
+    sourceMaintenance: { _id: { toString(): string } },
+    staffOps: { _id: { toString(): string } },
+    canonicalTaskType: string,
+  ) {
+    return this.tasks.create({
+      title: 'Thực hiện bảo trì',
+      taskType: canonicalTaskType,
+      priority: 'NORMAL',
+      sourceType: TaskSourceType.Maintenance,
+      sourceId: sourceMaintenance._id.toString(),
+      assigneeId: staffOps._id.toString(),
+    });
+  }
+}
+
+@Module({ imports: [TasksModule], providers: [MaintenanceTaskConsumer] })
+class MaintenanceConsumerModule {}
+```
+
+- Đường dẫn ví dụ tính từ `src`; giữ suffix **`.js`** cho ESM imports. `canonicalTaskType` phải do nghiệp vụ thống nhất và ổn định cho cùng công việc, không title/ID ngẫu nhiên để né uniqueness. Một-argument create trên đây là đủ cho caller thông thường; không áp đặt durable-intent extension của Issue lên Maintenance chưa có contract. Không thêm/chạy seed mới.
+
+### Privacy và FE đã đối chiếu
+
+- Customer không nhận reviewNotes/reviewedBy, assignment actor/assignee/dueAt/assignedAt, linked Task metadata; `linkedTasks: []`, `linkedTasksAvailable: false`, không query Task cho Customer. Customer vẫn thấy classification/needsStaffAction/reviewedAt/concludedAt theo DTO. Receptionist/Manager được summary allowlist của Task đã linked và khớp ID, không populate User/Booking/Room hoặc trả workResult/contact. Task sourceSummary vẫn null, không mở quyền Task OWN hay nguồn liên quan.
+- Shared FE client gọi PATCH review, GET assignees, POST assignment thật. Chỉ Receptionist có form trên detail; có xác nhận trước gửi, pending disable controls, không optimistic update và mutation `retry: false`; success cập nhật detail response rồi invalidate scope theo user/role, error cũng refetch authoritative state.
+- ASSIGNING hiển thị intent đã lưu, khóa đổi assignee/hạn, chỉ nút thử lại cùng payload và xác nhận; lỗi 400/403/404/409/network có thông báo. Reviewed có danh sách staff/loading/empty/error/reload, datetime-local chuyển ISO UTC. Không sửa H10/layout, không thêm route nguồn chưa được authorize. UI same-intent retry không phải công cụ giải quyết permanent-invalid-assignee blocker.
+
+### Bằng chứng kiểm chứng và phần còn pending
+
+Các kết quả sau do **parent/BE agent bàn giao khi triển khai**, không phải toàn suite được chạy lại trong lượt chỉ sửa tài liệu, không thay thế CI hay browser QA.
+
+| Phạm vi | Kết quả được bàn giao |
+|---|---|
+| Parent BE | format:check, lint, typecheck, build PASS; `npm test` PASS **653 tests / 28 files** |
+| Parent FE, lần đầu full run | 8 failures: 7 timeout không liên quan và 1 test mới có async chưa await đúng; giữ lịch sử lỗi, không gọi lần này PASS |
+| Parent FE sau sửa async test | Dùng `act`/await đúng cho test; `npm test` bình thường PASS **217/217 / 18 files**; chạy `--maxWorkers=2` cũng PASS cùng số lượng, không act warnings |
+| Parent FE checks | format:check, lint, typecheck, build PASS; chunk-size warnings không chặn build |
+| BE agent isolated MongoDB 8 | Issues/Tasks E2E **34 tests PASS**; container cô lập đã được gỡ, không dùng shared DB |
+| BE full E2E | **Không green**: booking/payment mismatch `02` so với `00` và timeout; focused 34 tests không chứng minh full-suite/CI PASS |
+| CI | **Pending parent push**, chưa có kết quả CI cho head mới |
+
+- Chưa manual browser QA desktop/**375px**, keyboard/overflow hoặc live authenticated API. Cần review scope/contract, xác nhận notify nhóm, manual test review cần/không cần staff, đúng chuyên môn/active role, race cùng/khác intent, retry sau finalize failure kể cả Task completed, permanent-invalid-assignee blocker và privacy hai Customer trước khi chốt; #76/#77 chưa Done.
+- Lượt tài liệu chỉ sửa file này, không sửa async test/code, không seed, không chạy Git/Mongo/container/full suite. Đã chạy lại `npm run lint` và `npm run typecheck` tại cả backend/frontend: **tất cả PASS**; đây là kiểm chứng riêng lượt tài liệu, không nhập nhằng với bằng chứng parent.
+
+### Source tham chiếu
+
+- BE routes/guards: `backend/src/modules/issues/issues.controller.ts:37`; DTO: `backend/src/modules/issues/dto/review-issue.dto.ts:13`; status/intent schema: `backend/src/modules/issues/schemas/issue.schema.ts:4`.
+- Service review/eligibility/intent/finalization: `backend/src/modules/issues/issues.service.ts:298`, `:340`, `:362`; Customer projection/linked-task privacy: `:172`, `:211`.
+- Task lookup và additive create: `backend/src/modules/tasks/tasks.service.ts:137`, `:147`; active-work index: `:194`; eligibility: `:224`.
+- FE confirm/pending/same-intent retry: `frontend/src/features/issues/IssueHandling.tsx:33`; metadata/linked Task: `frontend/src/features/issues/pages/IssueDetailPage.tsx:40`.
+
+## 13. Jira #75 / UC29 và #79 / UC33 — Issue List / Detail (lịch sử trước merge)
+
+> #75/#79 đã MERGED qua PR #22 tại `787d1b8`. Các phát biểu pending/chưa merge/deferred review-assignment và kết quả QA dưới đây giữ mốc trước merge, không phải hiện trạng; mục 14 mô tả #76/#77 và contract hiện tại.
 
 ### Trạng thái, SRS và cách chia PR
 
@@ -359,16 +449,18 @@ Tests dùng mock persistence theo H8, schema/index Mongoose thật in-memory, co
 | 72 | UC26 Assign Service Order Task | Chưa làm | Chưa có |
 | 73 | UC27 View Service History | Chưa làm | Chưa có |
 | 74 | UC28 Report Issue | MERGED; đã xác minh merge; lịch sử QA ở mục 12 | PR #20 / merge `266e40b` |
-| 75 | UC29 View Issue List | Implemented, pending review; không Done; e2e/CI/manual QA pending | `feature/vu-75-79-issue-list-detail`; commit/PR để parent bổ sung sau |
-| 76 | UC30 Review Issue Request | Chưa làm | Chưa có |
-| 77 | UC31 Assign Issue Resolution Task | Chưa làm | Chưa có |
+| 75 | UC29 View Issue List | MERGED; lịch sử QA ở mục 13 | PR #22 / merge `787d1b8` |
+| 76 | UC30 Review Issue Request | Implemented, pending review; không Done; CI/manual QA pending | `feature/vu-76-77-issue-review-assignment`; xem mục 14 |
+| 77 | UC31 Assign Issue Resolution Task | Implemented, pending review; không Done; recovery blocker cần review | `feature/vu-76-77-issue-review-assignment`; xem mục 14 |
 | 78 | UC32 Close Issue | Chưa làm | Chưa có |
-| 79 | UC33 View Issue Detail | Implemented, pending review; không Done; e2e/CI/manual QA pending | `feature/vu-75-79-issue-list-detail`; commit/PR để parent bổ sung sau |
+| 79 | UC33 View Issue Detail | MERGED; lịch sử QA ở mục 13 | PR #22 / merge `787d1b8` |
 | 80 | UC34 Report Service Issue | Chưa làm | Chưa có |
 
 ## 2. Contract dùng lại
 
 Import `TasksModule` từ `modules/tasks/tasks.module.js` trong module gọi; inject `TasksService` từ `modules/tasks/tasks.service.js`. AppModule đã đăng ký TasksModule; không import ngược module nguồn nên không có vòng phụ thuộc.
+
+Contract hiện tại: `create(input: CreateTaskDto, identity?: Types.ObjectId)` giữ tương thích mọi lời gọi một argument. Argument ID optional chỉ dành cho trusted caller có persisted durable intent; helper mới `findIssueResolutionWork(issueId: string)` reconcile Issue work kể cả COMPLETED. Xem mục 14 về idempotency, thông báo nhóm và ví dụ DI Maintenance cho Lâm; mục 8 là signature lịch sử trước extension additive.
 
 `TaskStatus` / `TaskSourceType` export tại `modules/tasks/task-contract.js` và re-export từ schema:
 
@@ -399,10 +491,10 @@ const task = await tasksService.create({
 
 ## 3. Phụ thuộc và giới hạn
 
-- Khi **create**, assignee phải tồn tại và `isActive === true`: SERVICE_ORDER chỉ SERVICE_STAFF (UC26/BR-SER-07), ISSUE nhận SERVICE_STAFF hoặc OPERATIONS_STAFF (UC31/BR-ISS-06), MAINTENANCE chỉ OPERATIONS_STAFF (actor UC35/36). Không suy diễn chuyên môn từ permission `task:execute`; create vẫn từ chối custom roles bảo thủ. Transition #67 khác policy core lịch sử: custom role active có `task:execute` được thực hiện task OWN, built-in vẫn kiểm tra specialization; cần thông báo nhóm, chưa xác nhận approval (mục 10). ISSUE còn cần caller xác nhận chuyên môn theo tính chất issue/taskType vì chưa có taxonomy/schema nguồn.
+- Khi **create**, assignee phải tồn tại và `isActive === true`: SERVICE_ORDER chỉ SERVICE_STAFF (UC26/BR-SER-07), ISSUE nhận SERVICE_STAFF hoặc OPERATIONS_STAFF (UC31/BR-ISS-06), MAINTENANCE chỉ OPERATIONS_STAFF (actor UC35/36). Không suy diễn chuyên môn từ permission `task:execute`; create vẫn từ chối custom roles bảo thủ. Transition #67 khác policy core lịch sử: custom role active có `task:execute` được thực hiện task OWN, built-in vẫn kiểm tra specialization; cần thông báo nhóm, chưa xác nhận approval (mục 10). ISSUE tại #76/#77 đã có schema và caller kiểm tra handlingCategory SERVICE/OPERATIONS theo role chính xác (mục 14); core vẫn chỉ kiểm tra specialization rộng theo nguồn.
 - Service nội bộ không xác thực người tạo task. Caller tương lai chịu trách nhiệm quyền tạo/giao việc và scope nguồn; `AuthUser.id` là User ID, không dùng Firebase UID làm assigneeId.
 - Validation hình dạng ID **khác** kiểm tra tồn tại: sau validation, service query DB thật bằng injected Connection với `_id` và projection `_id`.
-- Mapping collection explicit trong `TASK_SOURCE_COLLECTIONS`: SERVICE_ORDER → `serviceorders`, ISSUE → `issues`, MAINTENANCE → `maintenances`. #74 đã có schema Issue thật tại collection `issues`, khớp mapping hiện hữu; không còn coi Issue schema là chưa tồn tại. Mapping/tích hợp Service Order và Maintenance vẫn cần chủ module xác nhận; Issue còn thiếu contract review/quyền đọc/soft-delete/source summary và giao task (mục 12). Không nhận tên collection từ caller. Nguồn/collection không tồn tại → từ chối tạo; lỗi DB truyền ra, không persist giả.
+- Mapping collection explicit trong `TASK_SOURCE_COLLECTIONS`: SERVICE_ORDER → `serviceorders`, ISSUE → `issues`, MAINTENANCE → `maintenances`. #74 đã có schema Issue thật tại collection `issues`, khớp mapping hiện hữu; không còn coi Issue schema là chưa tồn tại. Mapping/tích hợp Service Order và Maintenance vẫn cần chủ module xác nhận; Issue đã triển khai review/giao Task và quyền đọc summary linked Task theo role ở mục 14, pending review; soft-delete/sourceSummary của Task và contract nguồn rộng hơn vẫn chưa được chốt. Không nhận tên collection từ caller. Nguồn/collection không tồn tại → từ chối tạo; lỗi DB truyền ra, không persist giả.
 - Không kiểm tra trạng thái duyệt/quyền xem/soft-delete của nguồn khi chưa có schema nguồn; caller nghiệp vụ phải bổ sung khi tích hợp. Kiểm tra tồn tại tại thời điểm tạo không thay thế transaction hoặc chính sách cấm xóa nguồn sau này.
 - **Hoãn seed Task/Issue**: có schema Issue không đồng nghĩa đã có context seed hợp lệ. Chờ User/Booking/Room và nguồn thật hợp lệ theo thứ tự phụ thuộc, môi trường cô lập được phép và cùng validation; không thêm ID bịa, sửa seed người khác hoặc ghi DB dùng chung.
 - Core #64 đã có `transitionAssignedTask` kiểm tra assignedTo + trạng thái cũ bằng CAS; #67 bổ sung UC38 HTTP với ownership precheck 404 và response DTO (mục 10). Task hoàn thành không đồng nghĩa tự đóng Issue, không ghi nguồn.

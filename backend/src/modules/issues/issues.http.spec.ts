@@ -18,6 +18,7 @@ import { IssuesController } from './issues.controller.js';
 import { IssuesService } from './issues.service.js';
 import { Issue } from './schemas/issue.schema.js';
 import { Booking } from '../bookings/schemas/booking.schema.js';
+import { TasksService } from '../tasks/tasks.service.js';
 
 describe('Report issue HTTP', () => {
   let app: INestApplication;
@@ -68,6 +69,7 @@ describe('Report issue HTTP', () => {
       controllers: [IssuesController],
       providers: [
         IssuesService,
+        { provide: TasksService, useValue: {} },
         { provide: getModelToken(Role.name), useValue: {} },
         { provide: IssueContextAdapter, useValue: { resolve } },
         {
@@ -252,8 +254,8 @@ describe('Report issue HTTP', () => {
     'limit=0',
     'limit=101',
     'limit=abc',
-    'status=CLOSED',
-    'priority=HIGH',
+    'status=INVALID',
+    'priority=CRITICAL',
     'category=',
     'keyword=',
     'keyword=a&keyword=b',

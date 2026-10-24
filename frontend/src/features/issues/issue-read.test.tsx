@@ -20,7 +20,7 @@ const detail: IssueDetail = {
   priority: 'NORMAL',
   status: 'PENDING_REVIEW',
   reportedAt: '2026-10-24T10:00:00Z',
-  closedAt: '2026-10-25T10:00:00Z',
+  concludedAt: '2026-10-25T10:00:00Z',
   linkedTasks: [],
   linkedTasksAvailable: false,
 }
@@ -48,10 +48,13 @@ test.each(views)('%s sees exact role title, list and detail', async (role, path,
   fireEvent.click(await screen.findByRole('link', { name: detail.title }))
   expect(await screen.findByRole('heading', { level: 2 })).toHaveTextContent(detail.title)
   expect(screen.getByText(/Điều này không có nghĩa/)).toBeInTheDocument()
-  expect(screen.getByText('Ngày đóng')).toBeInTheDocument()
+  expect(screen.getByText('Ngày kết luận')).toBeInTheDocument()
   expect(screen.getByText(detail.bookingId)).toBeInTheDocument()
   expect(screen.queryByRole('link', { name: detail.bookingId })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /Đóng|Phân công|Xem xét/ })).not.toBeInTheDocument()
+  if (role === 'RECEPTIONIST')
+    expect(screen.getByRole('button', { name: 'Xem xét' })).toBeInTheDocument()
+  else
+    expect(screen.queryByRole('button', { name: /Đóng|Phân công|Xem xét/ })).not.toBeInTheDocument()
   expect(result.router.state.location.pathname).toBe(`${path}/${detail.id}`)
 })
 
@@ -156,7 +159,7 @@ test('API whitelists query fields and bounds pagination without actor parameters
     priority: 'HIGH',
   } as unknown as IssueQuery)
   expect(get).toHaveBeenLastCalledWith('/issues', {
-    params: { page: 10000, limit: 100, keyword: '.*', category: 'exact' },
+    params: { page: 10000, limit: 100, keyword: '.*', category: 'exact', priority: 'HIGH' },
   })
   await listIssues({ page: 0, limit: Number.NaN })
   expect(get).toHaveBeenLastCalledWith('/issues', { params: { page: 1, limit: 20 } })

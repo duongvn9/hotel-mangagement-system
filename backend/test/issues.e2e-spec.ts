@@ -253,8 +253,8 @@ describe('Report issue (e2e)', () => {
     for (const query of [
       'page=0',
       'limit=101',
-      'status=CLOSED',
-      'priority=HIGH',
+      'status=INVALID',
+      'priority=CRITICAL',
       'keyword=',
       'reporter=x',
     ]) {

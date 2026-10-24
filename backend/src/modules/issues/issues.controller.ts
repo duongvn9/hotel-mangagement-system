@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { AssignIssueDto, ReviewIssueDto } from './dto/review-issue.dto.js';
 import { ListIssuesQuery } from './dto/list-issues.dto.js';
 import { ApiTags } from '@nestjs/swagger';
 import type { AuthUser } from '../../common/auth/auth-user.js';
@@ -23,6 +32,32 @@ export class IssuesController {
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.issues.findOne(id, user);
+  }
+
+  @Roles(Role.Receptionist)
+  @Patch(':id/review')
+  review(
+    @Param('id') id: string,
+    @Body() dto: ReviewIssueDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.issues.review(id, dto, user);
+  }
+
+  @Roles(Role.Receptionist)
+  @Get(':id/assignees')
+  assignees(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.issues.assignees(id, user);
+  }
+
+  @Roles(Role.Receptionist)
+  @Post(':id/assignment')
+  assign(
+    @Param('id') id: string,
+    @Body() dto: AssignIssueDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.issues.assign(id, dto, user);
   }
 
   @Roles(Role.Customer)
