@@ -15,6 +15,50 @@ export interface IssueReceipt extends IssueInput {
   reportedAt: string
 }
 
+export interface IssueRead extends IssueReceipt {
+  closedAt?: string
+}
+
+export interface IssueDetail extends IssueRead {
+  linkedTasks: unknown[]
+  linkedTasksAvailable: false
+}
+
+export interface IssueQuery {
+  status?: 'PENDING_REVIEW'
+  priority?: 'NORMAL'
+  category?: string
+  keyword?: string
+  page: number
+  limit: number
+}
+
+export interface IssueList {
+  items: IssueRead[]
+  total: number
+  page: number
+  limit: number
+}
+
+export function normalizeIssueQuery(query: IssueQuery): IssueQuery {
+  return {
+    page: Number.isInteger(query.page) ? Math.min(10000, Math.max(1, query.page)) : 1,
+    limit: Number.isInteger(query.limit) ? Math.min(100, Math.max(1, query.limit)) : 20,
+    ...(query.status === 'PENDING_REVIEW' ? { status: query.status } : {}),
+    ...(query.priority === 'NORMAL' ? { priority: query.priority } : {}),
+    ...(query.category ? { category: query.category } : {}),
+    ...(query.keyword ? { keyword: query.keyword } : {}),
+  }
+}
+
+export async function listIssues(query: IssueQuery): Promise<IssueList> {
+  return (await api.get<IssueList>('/issues', { params: normalizeIssueQuery(query) })).data
+}
+
+export async function getIssue(id: string): Promise<IssueDetail> {
+  return (await api.get<IssueDetail>(`/issues/${encodeURIComponent(id)}`)).data
+}
+
 export type IssueErrors = Partial<Record<keyof IssueInput, string>>
 
 export function validateIssue(input: IssueInput): IssueErrors {
