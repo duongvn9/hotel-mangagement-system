@@ -13,7 +13,7 @@
 - #76 / UC30 và #77 / UC31: **MERGED**, PR #25 tại `b5d2f2f` theo parent bàn giao; mục 14 giữ lịch sử trước merge, không phải trạng thái pending hiện tại.
 - #78 / UC32: **MERGED**, PR #26 tại merge commit `8df46e7`; đã xác minh commit là ancestor của local `origin/main`. https://github.com/duongvn9/hotel-mangagement-system/pull/26 — mục 15 giữ lịch sử trước merge, không phải trạng thái pending hiện tại.
 - #68 / UC22 và #69 / UC23: **MERGED**, PR #27 tại `a9a1525`, parent đã xác minh merge; mục 16 giữ lịch sử trước merge. https://github.com/duongvn9/hotel-mangagement-system/pull/27
-- #70 / UC24 và #71 / UC25: **Implemented, pending review, không Done**, nhánh `feature/vu-70-71-service-review-billing`; contract BE/FE/H7 thực tế, bằng chứng và QA pending ở mục 17. Commit/PR chưa biết, parent bổ sung sau; không dùng PR #27 cho lượt này.
+- #70 / UC24 và #71 / UC25: **Implemented, pending review, không Done**, nhánh `feature/vu-70-71-service-review-billing`; contract BE/FE/H7 thực tế, bằng chứng và QA pending ở mục 17. Đã push `41dc344` (BE), `dd3c1b4` (FE/docs); draft PR #30: https://github.com/duongvn9/hotel-mangagement-system/pull/30 — chờ CI/review, chưa merge.
 - #80 / UC34: **Chưa triển khai**, vẫn deferred tới **PROMPT12** và phải có Task thật với nguồn `SERVICE_ORDER`; Service Order đã có nhưng chưa tạo Task nào, chưa đủ điều kiện execution reporting.
 - Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET/UC38 giữ contract hiện hữu, Task completion không tự close Issue. Mục 17 là hiện trạng; mục 16 trở xuống giữ lịch sử triển khai trước merge.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
