@@ -30,7 +30,7 @@ import { CreateBookingDto } from './dto/create-booking.dto.js';
 const HOLD_WINDOW_MS = 15 * 60 * 1000;
 const MS_PER_DAY = 86_400_000;
 /** Tỷ lệ đặt cọc trên tiền phòng (placeholder, chờ SRS chốt chính thức). */
-const DEPOSIT_RATE = 0.3;
+export const DEPOSIT_RATE = 0.3;
 
 interface RoomRate {
   room: Types.ObjectId;

@@ -118,7 +118,7 @@ Thứ tự dưới đây đã tính phụ thuộc. Số `#` là số task trong 
 
 **Đã xong (23/10), đã ở `main`:** H1, H2, #13–#17, #19–#27, Firebase project `hrm-wdp`. Xem [`TIEN-DO-DUONG.md`](TIEN-DO-DUONG.md).
 
-- Còn lại: seed booking `CHECKED_IN` mẫu (#14), làm ngay khi Hiếu merge schema `Booking` (H5).
+- Booking mẫu `SEED-CHECKED-IN-001` (phòng 101) và 3 booking `CHECKED_OUT` đã có trong `npm run seed` (#14, 24/10).
 - Việc tiếp: review PR hợp đồng H3–H10 của cả nhóm, hỗ trợ ai bị chặn vì auth/seed.
 
 ### Trần Bảo Lâm (dữ liệu gốc, nhiều người chờ)

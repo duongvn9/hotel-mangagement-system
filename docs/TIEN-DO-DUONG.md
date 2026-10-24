@@ -1,6 +1,6 @@
 # Tiến độ phần việc của Vũ Ngọc Dương
 
-> Viết cho thành viên và AI agent của các thành viên khác đọc trước khi code. Cập nhật 23/10/2026: đã nối Firebase project `hrm-wdp`.
+> Viết cho thành viên và AI agent của các thành viên khác đọc trước khi code. Cập nhật 24/10/2026: đã có booking mẫu trong seed (#14 xong).
 > Phân công gốc: [README mục 7](../README.md#7-kế-hoạch-sprint-1-và-phân-công), cách phối hợp: [HUONG-DAN-TRIEN-KHAI.md](HUONG-DAN-TRIEN-KHAI.md).
 
 ## Đọc nhanh
@@ -8,8 +8,8 @@
 - Đăng nhập, phân quyền, tài khoản, vai trò, phản hồi (UC01–04, UC40–46) **đã xong và đã ở `main`**.
 - **Mọi endpoint mặc định cần đăng nhập.** Endpoint cho khách vãng lai phải gắn `@Public()`, giới hạn vai trò bằng `@Roles()`.
 - Chưa có Firebase vẫn test được theo vai trò: header `x-dev-role` / `x-dev-user-id` (backend) và màn đăng nhập dev (frontend).
-- `npm run seed` tạo 5 vai trò, 15 permission, 5 tài khoản mẫu, 3 phản hồi mẫu. Module của bạn thêm seed vào `SEEDS`.
-- Còn chờ người khác: schema `Booking` của Hiếu (để seed booking `CHECKED_IN`), layout theo role của Khoa (H10).
+- `npm run seed` tạo 5 vai trò, 15 permission, 5 tài khoản mẫu, booking mẫu của `customer@hms.local` (1 `CHECKED_IN`, 3 `CHECKED_OUT`) và 3 phản hồi gắn vào booking đã trả phòng. Module của bạn thêm seed vào `SEEDS`.
+- Còn chờ người khác: layout theo role của Khoa (H10).
 
 ## 1. Trạng thái task
 
@@ -18,7 +18,7 @@
 | H1 | Quy ước dữ liệu chung | Xong | #1 |
 | H2 | `@CurrentUser()`, header giả lập role, schema `User` | Xong | #1 |
 | 13 | Repo, khung BE/FE, CI, convention | Xong | — |
-| 14 | DB + seed | Xong phần của Dương (User, Role, Permission, seed tổng). **Thiếu booking `CHECKED_IN` mẫu: chờ schema `Booking` (Hiếu)** | #2 |
+| 14 | DB + seed | Xong: User, Role, Permission, seed tổng, booking mẫu `CHECKED_IN`/`CHECKED_OUT` (mục 2.2) | #2, PR booking mẫu |
 | 15 | Xác thực Firebase + RBAC | Xong, thêm `@Permissions()` ở #9 | #3, #9 |
 | 16, 17 | UC02 Login, UC03 Logout | Xong | #4 |
 | 19, 20 | UC01 Register, UC04 Update Profile | Xong | #5, #9 |
@@ -63,6 +63,11 @@ handler(@CurrentUser() user: AuthUser) {}   // user = { id, email, role }; undef
 - **`Role`, `Permission`** (`modules/roles/schemas/`): `Role.permissions` là mảng mã permission.
 - **Quy ước chung** (`common/database/conventions.ts`): `@Schema({ timestamps: true })`, xoá mềm bằng `isActive`, tiền là số nguyên VND (`isMoneyVnd()`), ngày nghiệp vụ theo giờ Việt Nam bằng `toBusinessDate()` (chuỗi `YYYY-MM-DD`).
 - **Seed** (`src/database/seed.ts`): mỗi module viết `modules/<tên>/seed.ts` export hàm kiểu `Seed`, ghi bằng `updateOne(filter, { $setOnInsert }, { upsert: true })`, rồi thêm vào `SEEDS` theo thứ tự phụ thuộc (hiện là `roles` → `users` → `feedback`). Tài khoản mẫu: `customer@`, `receptionist@`, `service@`, `operations@`, `manager@` + `hms.local`.
+- **Booking mẫu** (`modules/bookings/seed.ts`, chạy sau `rooms`), đều của `customer@hms.local`:
+  - `SEED-CHECKED-IN-001`: phòng 101 (OCCUPIED), nhận phòng hôm chạy seed, ở 2 đêm. Dùng thử Service Order, Report Issue, check-out mà không cần chờ Check-in.
+  - `SEED-CHECKED-OUT-001..003`: phòng 102 và 301, đã trả phòng trong tháng 9–10/2026. 3 phản hồi mẫu (UC40, UC41) gắn vào các booking này.
+  - Tiền phòng = giá RoomType × số đêm, cọc 30% (`DEPOSIT_RATE` của Hiếu), có `rateSnapshot`. Phòng thiếu hoặc bị khoá thì bỏ qua booking đó, không tạo phòng giả.
+  - DB đã seed bản cũ: chạy lại `npm run seed` là phản hồi mẫu tự chuyển từ id booking giả sang booking thật (giữ câu trả lời). Booking `CHECKED_IN` cũ (nếu có) giữ nguyên ngày cũ vì seed không ghi đè; muốn ngày mới thì xoá booking đó rồi seed lại.
 - `ValidationPipe` toàn cục bật `whitelist` + `forbidNonWhitelisted`: field không khai báo trong DTO sẽ bị 400.
 
 ### 2.3 API đã có (prefix `/api/v1`)
@@ -99,7 +104,6 @@ handler(@CurrentUser() user: AuthUser) {}   // user = { id, email, role }; undef
 
 | Ai | Việc | Ghi chú |
 |---|---|---|
-| Hiếu | Schema `Booking` (H5) + seed `bookings` có ít nhất một booking `CHECKED_IN` | Thêm `bookings` vào `SEEDS` sau `users`. Sau đó đổi id booking cố định trong `modules/feedback/seed.ts` sang booking thật (`TODO(#46)`) |
 | Khoa | Review schema `Feedback` (`modules/feedback/schemas/feedback.schema.ts`) | Hợp đồng chung với UC39. Unique index `{ customer, booking }` = một phản hồi cho mỗi booking (BR-FB-03); đổi chính sách thì sửa index này |
 | Khoa | UC39 Submit Feedback | Thêm `POST /feedback` (`@Roles(Role.Customer)`) vào `FeedbackController`, kiểm tra booking thuộc khách và đã `CHECKED_OUT` |
 | Khoa | Layout theo role (H10) | Chuyển `ROLE_LINKS` của `UserMenu` vào menu layout; có thể bọc `RequireAuth` ở route cha |
