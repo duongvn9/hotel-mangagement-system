@@ -5,6 +5,8 @@ import { useAuth } from './auth-context'
 // shortcut: menu tạm theo role, chuyển vào layout theo role khi có H10 (Khoa).
 const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
   CUSTOMER: [
+    { to: '/customer/service-orders', label: 'Dịch vụ của tôi' },
+    { to: '/customer/service-orders/new', label: 'Yêu cầu dịch vụ' },
     { to: '/customer/issues', label: 'Sự cố của tôi' },
     { to: '/customer/issues/report', label: 'Báo sự cố' },
   ],
