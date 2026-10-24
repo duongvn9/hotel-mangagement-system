@@ -10,7 +10,7 @@
 - #65: **MERGED**, PR #19 tại merge commit `4213c8d`. Mục 11 giữ lịch sử triển khai trước merge, không còn là trạng thái pending hiện tại.
 - #74 / UC28: **MERGED**, PR #20 tại merge commit `266e40b`; parent đã xác minh merge. https://github.com/duongvn9/hotel-mangagement-system/pull/20 — mục 12 giữ bằng chứng triển khai trước merge, không phải trạng thái pending hiện tại.
 - #75 / UC29 và #79 / UC33: **MERGED**, PR #22 tại merge commit `787d1b8`. Mục 13 giữ lịch sử triển khai trước merge, không phải trạng thái pending hiện tại.
-- #76 / UC30 và #77 / UC31: **Implemented, pending review, không Done** trên `feature/vu-76-77-issue-review-assignment`; CI pending parent push, chưa có approval scope/contract hoặc manual browser QA 375px. Xem mục 14.
+- #76 / UC30 và #77 / UC31: **Implemented, pending review, không Done** trên `feature/vu-76-77-issue-review-assignment`; đã push `c4288cd` (BE), `94b39e6` (FE/E2E); draft PR #25: https://github.com/duongvn9/hotel-mangagement-system/pull/25 — CI pending, chưa merge hoặc có approval scope/contract/manual browser QA 375px. Xem mục 14.
 - Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET giữ nguyên, UC38 đã có PATCH tiến độ và form detail. Mục 14 là hiện trạng review/assignment; mục 13 lưu lịch sử Issue list/detail; mục 12 lưu lịch sử UC28; mục 11 lưu lịch sử #65; mục 10 lưu bằng chứng #67 trước merge; mục 9 lưu lịch sử UC37 trước merge; mục 8 lưu mốc #64 trước merge; mục 4–7 là lịch sử.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
