@@ -1,4 +1,4 @@
-# Tiến độ Trần Bảo Lâm — Grand Emily HMS
+﻿# Tiến độ Trần Bảo Lâm — Grand Emily HMS
 
 Cập nhật 24/10/2026. Đây là tài liệu tiến độ và bàn giao duy nhất của Lâm; các task sau tiếp tục cập nhật vào file này. File CLAUDE-CONTEXT-TRAN-BAO-LAM.md giữ vai trò context dự án, không phải một file tiến độ theo UC.
 
@@ -10,7 +10,8 @@ Cập nhật 24/10/2026. Đây là tài liệu tiến độ và bàn giao duy nh
 | #29 UC50 | Đã merge main: e49794c |
 | Tách sức chứa adultCapacity/childCapacity | Đã merge main: cfb2394 |
 | Sửa import Connection của Task | Đã merge main: 7684a45; seed toàn ứng dụng pass hai lần |
-| #30 UC47 View Room List + H3 Room/RoomStatus | Đã triển khai và kiểm tra đầy đủ; feature/30-room-list + fix/30-room-status-schema, baseline main 7684a45 |
+| #30 UC47 View Room List + H3 Room/RoomStatus | Đã merge main: 734ea16 |
+| #31 UC48 Create / Update Room | Đã triển khai/kiểm tra đầy đủ; feature/31-room-form + fix/31-room-form-focus, xem [bàn giao UC48](#uc48) |
 
 Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, không dùng capacity. H6 vẫn giữ hợp đồng capacity/guests riêng; chưa nối adapter Room thật. Các mục lịch sử bên dưới ghi lại đúng trạng thái từng thời điểm, kể cả blocker đã được xử lý; không dùng snapshot cũ để kết luận trạng thái hiện tại.
 
@@ -518,3 +519,62 @@ Lượt cuối: **78/78 e2e pass, 14 file**, trên DB mới `hms_task29_connecti
 - Thay guard đặc thù task bằng `assertTestDatabase`: kiểm tra protocol MongoDB và chính tên database theo mẫu `hms_*test`, nhận `hms_test` của CI. Không kiểm tra substring toàn URI; host, credentials hoặc query chứa tên test không thể vượt guard. URI lỗi không bị đưa vào thông báo để tránh lộ thông tin đăng nhập.
 - Bổ sung 12 ca kiểm thử guard, gồm database CI/task hợp lệ và database development/production/backup, protocol sai, URI thiếu/sai. Không bỏ qua test hay thay đổi workflow Docker; Docker cục bộ vẫn được miễn theo yêu cầu.
 - Xác minh cục bộ: backend lint, format, typecheck, build pass; 460/460 unit tests pass. Chạy đúng lệnh e2e mặc định với database `hms_test` trên MongoDB cục bộ pass 95/95. Không chạy Docker cục bộ.
+
+<a id="uc48"></a>
+## #31 — UC48 Create / Update Room và bàn giao H3 hoàn chỉnh
+
+Ngày: 24/10/2026. Baseline main `7d41711` đã có #28/#29/#30 và adapter availability/pricing của Hiếu; đã đọc code và git history thay vì dùng snapshot cũ. Nhánh `feature/31-room-form`: `bbcead4` (API/DTO/service/tests), `2000da3` (form/hành động/tests). Nhánh `fix/31-room-form-focus`: `0dd23dd` sửa focus modal, tích hợp main định dạng tại `4f12359`.
+
+### Phạm vi và API
+
+- Giữ nguyên schema `Room`, collection `rooms`, enum `RoomStatus` bốn giá trị AVAILABLE/OCCUPIED/CLEANING/MAINTENANCE; không thêm field, không thêm DELETE.
+- `POST /api/v1/rooms` → 201; `GET /api/v1/rooms/:id` → 200; `PATCH /api/v1/rooms/:id` → 200. Cùng response công khai như list: id, roomNumber, floor, roomType `{ id, name, isActive } | null`, status, notes, isActive.
+- `CreateRoomDto`: roomNumber string bắt buộc/trim/không rỗng; floor bắt buộc là số nguyên an toàn (cho phép âm/0, không thêm giới hạn tầng); roomType bắt buộc ObjectId canonical lowercase; status tùy chọn mặc định AVAILABLE; notes tùy chọn/trim mặc định rỗng; isActive boolean tùy chọn mặc định true. DTO không nhận null, mảng, field lạ, _id/timestamps. `UpdateRoomDto` partial, tối thiểu một field; body rỗng → 400.
+- `GET /api/v1/room-types/options` → tất cả `{ id, name }` có isActive=true, sort name rồi _id, không phân trang/không giới hạn 100; khai báo trước route `:id`. Bộ lọc UC47 vẫn lấy mọi loại phòng gồm inactive theo các trang list cũ; form lấy options active riêng.
+- Tất cả endpoint quản lý dùng `@Roles(Role.Manager)` OR `@Permissions('facility:manage')`, kế thừa guard toàn cục. FE tiếp tục RequireAuth cùng điều kiện. Lỗi theo filter chuẩn `{ statusCode, message, error, path, timestamp }`; Swagger có DTO/response và 400/401/403/404/409 phù hợp.
+
+### Quy tắc service và điểm nối cho module khác
+
+`RoomsModule` tiếp tục export `RoomsService` và MongooseModule; module khác import RoomsModule, inject RoomsService hoặc model qua `getModelToken(Room.name)`. RoomType model lấy từ RoomTypesModule có sẵn, không tạo schema/provider thay thế.
+
+- `RoomsService.create(dto: CreateRoomDto)`: cần ít nhất một RoomType active, loại được chọn phải tồn tại/active; kiểm tra trùng roomNumber và bắt E11000 từ unique index → 409 “Số phòng đã tồn tại”. Unique giữ nguyên **phân biệt hoa thường**, không thêm collation vào index/query kiểm tra trùng.
+- `RoomsService.detail(id)` kiểm tra canonical ObjectId → 400; phòng không tồn tại → 404; trả cùng projection như list, chịu được missing RoomType.
+- `RoomsService.update(id, dto: UpdateRoomDto)`: chỉ `$set` field được gửi, `findOneAndUpdate` với `runValidators: true`, `returnDocument: 'after'`. So sánh snapshot roomType/isActive trong filter atomic, đọc lại và kiểm tra lại nếu có writer Room xen kẽ, tối đa 5 lượt; contention → 409 yêu cầu thử lại. Không ghi đè các field không gửi.
+- Đổi sang RoomType khác yêu cầu loại mới active. Chỉ sửa roomNumber/floor/notes/status, hoặc ngừng phòng với loại hiện tại đã inactive, vẫn được phép. Kích hoạt false → true yêu cầu loại hiện tại còn active hoặc gửi cùng roomType mới active trong PATCH đó; sai → 400, không lưu thay đổi nào.
+- BR-FAC-05: vô hiệu hóa chỉ `isActive=false`, idempotent 200; giữ bản ghi, ID và các tham chiếu Booking.rooms/RoomHold/Equipment. Không query, sửa hoặc xóa Booking/Invoice/availability trong RoomsService, không chặn vì phòng đang có reservation. Không có endpoint/hành động xóa vật lý.
+- Manager được đổi tự do giữa cả 4 trạng thái; không thêm ma trận chuyển trạng thái, không chặn đổi loại vì booking. **Cần báo Hiếu:** đổi RoomType của phòng có booking có thể ảnh hưởng H7 đang lấy giá RoomType hiện tại; UC48 không tạo snapshot giá hoặc sửa pricing.
+- Kiểm tra loại phòng là snapshot read trước write Room, không phải transaction xuyên RoomType/Room; không tuyên bố giải quyết race khi module khác ngừng RoomType đồng thời.
+
+Hợp đồng dữ liệu cho adapter H6:
+
+| Field adapter | Nguồn H3 |
+|---|---|
+| id | String(Room._id), tương ứng id trong response |
+| roomTypeId | String(Room.roomType), tương ứng response.roomType.id khi còn ref |
+| isActive | Room.isActive; false nghĩa không nhận đặt mới |
+| status | Room.status, enum RoomStatus dùng chung |
+| roomTypeActive | RoomType được populate tồn tại và isActive=true; thiếu ref → false |
+
+Adapter thật hiện đã ở main do Hiếu viết (`MongoAvailabilityRoomSource`), lọc Room.isActive và đọc RoomType; UC48 không sửa adapter, thuật toán availability hoặc chính sách operationallyAvailable. Không dùng snapshot H6 cũ để ghi đè ánh xạ của Hiếu.
+
+### Frontend
+
+- Mở rộng `/manager/rooms` hiện có: Thêm phòng, Sửa mỗi dòng; modal `RoomEditor`/`RoomForm` theo mẫu UC50 (native dialog, tải chi tiết trước khi sửa, loading/error/retry). Thiếu RoomType active thì khóa thêm và có liên kết `/manager/room-types`; lỗi/tải options không làm hỏng bảng/bộ lọc.
+- Form đủ số phòng, tầng, loại phòng, bốn nhãn Trống/Có khách/Đang dọn/Bảo trì, textarea ghi chú và hoạt động. ROOM_STATUSES/ROOM_STATUS_DISPLAY dùng chung với bảng; test đọc enum BE để đối chiếu đủ 4 giá trị. Hiển thị loại hiện tại đã ngừng, cho sửa thông tin khác và buộc đổi loại khi bật lại.
+- Hành động Ngừng nhận đặt phòng/Kích hoạt lại phòng có xác nhận riêng; đổi checkbox hoạt động khi lưu cũng xác nhận. Ngừng riêng chỉ PATCH isActive=false, không bị chặn bởi dữ liệu nháp chưa hợp lệ. Nội dung nêu phòng được giữ lại, reservation đang hoạt động vẫn hợp lệ và không nhận đặt phòng mới.
+- Validation client + lỗi server liên kết aria-describedby, focus lỗi đầu tiên; 409 trùng số phòng vào ô số phòng, lỗi loại vào ô loại phòng, lỗi chung dùng getErrorMessage/Alert. Lock ref + Button loading chống submit lặp; giữ dữ liệu khi lỗi. Thành công invalidate list/detail, thông báo và đóng modal, giữ filter/trang.
+- Sửa lỗi focus bằng useLayoutEffect cho modal: chụp focus nút mở trước khi form lấy focus; Esc trả focus đúng trigger, native dialog giữ Tab bên trong. Component/token dùng chung, không Lucide/hex, vùng chạm 44px, modal cuộn dọc trên 375px, không tràn document.
+
+### Seed, baseline và kiểm tra thực tế
+
+- Không đổi seed/registry: roles → users → amenities → room-types → rooms → bookings → feedback; giữ `$setOnInsert` và timestamps của phòng Manager đã sửa.
+- Baseline main: backend lint/typecheck và 460/460 unit pass. Frontend lint/typecheck pass; lượt baseline 96 test pass nhưng worker suite staff-dashboard timeout trong Windows sandbox; chạy riêng lại ngoài sandbox pass 25/25 (tổng 121 test baseline).
+- Main mới có 4 lỗi Prettier ngoài UC48. Người dùng đã **cho phép sửa chỉ định dạng, giữ nguyên logic**. Nhánh `fix/31-format-baseline`, commit `cb25d1b`, merge main `98b1355`: bookings.module.ts, room-type-pricing.adapter.ts, availability-search.e2e-spec.ts, invoice-pricing.e2e-spec.ts. Đối chiếu AST cả 4 file không thay đổi, format check toàn backend pass; không sửa schema/logic booking/invoice.
+- Backend: lint, format:check, typecheck, test **506/506** (22 files), test:e2e **133/133** (18 files), build pass. E2e đầy đủ trên `hms_uc48_full_test` cục bộ; suite UC48 dùng DB riêng mỗi invocation, chỉ dọn fixture tự tạo, không xóa collection module khác. Có 401/403 toàn endpoint mới, validation/defaults, unique/race, partial update, reactivation, Booking/RoomHold nguyên vẹn khi ngừng, DELETE 404, options >100, Swagger và seed idempotent. Các suite booking/availability/invoice hiện có đều pass.
+- Frontend: lint, format:check, typecheck, test **139/139** (13 files), build pass. Có test client/server errors, pending chống bấm lặp, create/edit, inactive type, thiếu options, confirm ngừng/bật lại, giữ filter/trang, focus/Esc và guard các vai trò. Mock chỉ ở tầng API trong test. Build còn cảnh báo bundle >500kB của ứng dụng, không phải lỗi build.
+- `npm run seed` thật hai lần trên `hms_uc48_seed_test`: sau lần một sửa phòng 101 (floor=-2, notes, isActive=false, updatedAt), lần hai snapshot toàn bộ rooms giữ nguyên cả timestamps. Ban đầu Windows chặn unlink artifact cũ trong backend/dist và frontend/dist; đã chuyển artifact sang backup trong `.task29-validation/` rồi chạy lại thành công, không sửa cấu hình build hoặc env người dùng.
+- API Node đã build + Vite + Edge headless thật: Swagger `/api/docs-json` đủ POST/GET :id/PATCH rooms và room-types/options; UI tạo → sửa → ngừng → bật lại gọi API/MongoDB thật, có 2 xác nhận, giữ filter. Viewport/document đều 375px, modal 343px; Tab không thoát modal, Esc trả focus trigger, focus lỗi client đúng. Artifact cục bộ ignored: `.task29-validation/uc48-browser-result.json`, `uc48-form-mobile-375.png`, `uc48-seed-result.json`.
+- Docker local **không chạy**, được miễn theo yêu cầu thường trực của người dùng; không báo Docker pass. Không chỉnh Jira hoặc nhánh của người khác. Không có mock production/TODO chặn chức năng UC48; không triển khai Equipment/H6 adapter/H7 pricing hoặc các task ngoài scope.
+
+Task tiếp theo được mở khóa: module lễ tân/Khoa có thể tái sử dụng Room/RoomStatus và service; #37 Equipment tham chiếu Room khi làm task riêng. Các thay đổi rule đặt phòng/giá cần Hiếu quyết định theo hợp đồng hiện có.
+
