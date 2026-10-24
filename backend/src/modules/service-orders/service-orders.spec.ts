@@ -2,6 +2,8 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { Types } from 'mongoose';
 import {
+  AssignServiceOrderDto,
+  ServiceHistoryQuery,
   CreateServiceOrderDto,
   ListServiceOrdersQuery,
 } from './dto/service-order.dto.js';
@@ -24,6 +26,37 @@ const model = (value: unknown) => ({
 });
 
 describe('service orders contract', () => {
+  it('validates assignment and history contracts without nullable or foreign fields', async () => {
+    for (const payload of [
+      { assigneeId: user.id, dueAt: null },
+      { assigneeId: 'bad' },
+      { assigneeId: user.id, title: 'override' },
+      { assigneeId: user.id, dueAt: 'not-a-date' },
+    ])
+      expect(
+        (
+          await validate(plainToInstance(AssignServiceOrderDto, payload), {
+            whitelist: true,
+            forbidNonWhitelisted: true,
+          })
+        ).length,
+      ).toBeGreaterThan(0);
+    expect(
+      await validate(
+        plainToInstance(AssignServiceOrderDto, { assigneeId: user.id }),
+      ),
+    ).toHaveLength(0);
+    for (const payload of [
+      { page: 0 },
+      { limit: 101 },
+      { from: null },
+      { to: 'bad' },
+    ])
+      expect(
+        (await validate(plainToInstance(ServiceHistoryQuery, payload))).length,
+      ).toBeGreaterThan(0);
+  });
+
   it('uses the Task source collection and real partial customer/key unique index', () => {
     expect(ServiceOrderSchema.get('collection')).toBe('serviceorders');
     expect(ServiceOrderSchema.indexes()).toEqual(

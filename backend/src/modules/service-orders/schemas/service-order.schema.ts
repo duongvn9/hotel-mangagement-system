@@ -95,6 +95,27 @@ export class ServiceOrder {
   @Prop({ select: false })
   billedAt?: Date;
 
+  @Prop({ type: Types.ObjectId, ref: 'User', select: false })
+  assignmentAssignee?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', select: false })
+  assignmentRequestedBy?: Types.ObjectId;
+
+  @Prop({ select: false })
+  assignmentRequestedAt?: Date;
+
+  @Prop({ select: false })
+  assignmentDueAt?: Date;
+
+  @Prop({ select: false })
+  assignmentTitle?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Task' })
+  assignmentTaskId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Task' })
+  linkedTask?: Types.ObjectId;
+
   createdAt: Date;
   updatedAt: Date;
 }

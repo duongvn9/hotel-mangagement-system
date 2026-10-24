@@ -1,3 +1,4 @@
+import { TasksModule } from '../tasks/tasks.module.js';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BookingsModule } from '../bookings/bookings.module.js';
@@ -17,6 +18,7 @@ import { ServiceOrdersService } from './service-orders.service.js';
     ServicesModule,
     UsersModule,
     InvoicesModule,
+    TasksModule,
     MongooseModule.forFeature([
       { name: ServiceOrder.name, schema: ServiceOrderSchema },
     ]),

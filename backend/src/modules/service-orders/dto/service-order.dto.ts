@@ -67,6 +67,43 @@ export class ReviewServiceOrderDto {
   reason?: string;
 }
 
+export class AssignServiceOrderDto {
+  @IsMongoId()
+  assigneeId: string;
+
+  @ValidateIf(optional)
+  @IsISO8601({ strict: true, strictSeparator: true })
+  dueAt?: string;
+}
+
+export class ServiceHistoryQuery {
+  @ValidateIf(optional)
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  keyword?: string;
+
+  @ValidateIf(optional)
+  @IsISO8601({ strict: true, strictSeparator: true })
+  from?: string;
+
+  @ValidateIf(optional)
+  @IsISO8601({ strict: true, strictSeparator: true })
+  to?: string;
+
+  @Transform(integer)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  page = 1;
+
+  @Transform(integer)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit = 20;
+}
+
 export class ListServiceOrdersQuery {
   @ValidateIf(optional)
   @IsEnum(ServiceOrderReviewStatus)

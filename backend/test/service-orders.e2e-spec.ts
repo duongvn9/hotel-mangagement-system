@@ -12,6 +12,9 @@ import {
 import { Service } from '../src/modules/services/schemas/service.schema.js';
 import { ServiceOrder } from '../src/modules/service-orders/schemas/service-order.schema.js';
 import { InvoicesService } from '../src/modules/invoices/invoices.service.js';
+import { TasksService } from '../src/modules/tasks/tasks.service.js';
+import { Task } from '../src/modules/tasks/schemas/task.schema.js';
+import { User } from '../src/modules/users/schemas/user.schema.js';
 import { Invoice } from '../src/modules/invoices/schemas/invoice.schema.js';
 import { assertTestDatabase } from './test-database.js';
 
@@ -58,6 +61,8 @@ describe('UC22/23 customer service orders', () => {
       bookings.deleteMany({}),
       services.deleteMany({}),
       orders.deleteMany({}),
+      app.get<Model<Task>>(getModelToken(Task.name)).deleteMany({}),
+      app.get<Model<User>>(getModelToken(User.name)).deleteMany({}),
       app.get<Model<Invoice>>(getModelToken(Invoice.name)).deleteMany({}),
     ]);
     const booking = await bookings.create({
@@ -107,6 +112,368 @@ describe('UC22/23 customer service orders', () => {
       },
     );
   };
+
+  const assignment = (id: string, assigneeId: string, extra = {}) =>
+    http()
+      .post(`/api/v1/service-orders/${id}/assignment`)
+      .set(staff)
+      .send({ assigneeId, ...extra });
+  const worker = (id: string) => ({
+    'x-dev-role': 'SERVICE_STAFF',
+    'x-dev-user-id': id,
+  });
+  const history = (id: string, suffix = '/me') =>
+    http()
+      .get('/api/v1/service-orders/history' + suffix)
+      .set(worker(id));
+  const createWorker = async (role = 'SERVICE_STAFF', isActive = true) => {
+    const user = await app.get<Model<User>>(getModelToken(User.name)).create({
+      email: `${randomUUID()}@example.com`,
+      fullName: 'Worker',
+      role,
+      isActive,
+    });
+    return String(user._id);
+  };
+
+  it('UC26 gates exact roles, accepted state, persisted billing and eligible staff', async () => {
+    const assignee = await createWorker();
+    const id = (await post(body())).body.id;
+    await assignment(id, assignee).expect(409);
+    await prepareBilling();
+    await review(id).expect(200);
+    for (const role of [
+      'CUSTOMER',
+      'MANAGER',
+      'SERVICE_STAFF',
+      'OPERATIONS_STAFF',
+    ]) {
+      await assignment(id, assignee).set({ 'x-dev-role': role }).expect(403);
+      await http()
+        .get(`/api/v1/service-orders/${id}/assignees`)
+        .set({ 'x-dev-role': role })
+        .expect(403);
+    }
+    for (const invalid of [
+      await createWorker('OPERATIONS_STAFF'),
+      await createWorker('SERVICE_STAFF', false),
+    ])
+      await assignment(id, invalid).expect(400);
+    const candidates = await http()
+      .get(`/api/v1/service-orders/${id}/assignees`)
+      .set(staff)
+      .expect(200);
+    expect(candidates.body.items).toEqual([
+      { id: assignee, displayName: 'Worker', role: 'SERVICE_STAFF' },
+    ]);
+    const invoices = app.get<Model<Invoice>>(getModelToken(Invoice.name));
+    await invoices.collection.updateOne(
+      { booking: new Types.ObjectId(bookingId) },
+      { $set: { charges: [] } },
+    );
+    await assignment(id, assignee).expect(409);
+    expect(
+      await app.get<Model<Task>>(getModelToken(Task.name)).countDocuments(),
+    ).toBe(0);
+    expect(
+      (
+        await invoices
+          .findOne({ booking: new Types.ObjectId(bookingId) })
+          .orFail()
+      ).charges,
+    ).toHaveLength(0);
+    expect((await orders.findById(id).orFail()).executionStatus).toBe(
+      'NOT_STARTED',
+    );
+  });
+
+  it('UC26 races create one canonical task; UC38 progress feeds private UC27 history', async () => {
+    await prepareBilling();
+    const assignee = await createWorker();
+    const stranger = await createWorker();
+    const id = (await post(body())).body.id;
+    await review(id).expect(200);
+    const dueAt = '2026-12-01T10:00:00.000Z';
+    const results = await Promise.all(
+      Array.from({ length: 6 }, () => assignment(id, assignee, { dueAt })),
+    );
+    expect(results.every((r) => [201, 409].includes(r.status))).toBe(true);
+    expect(results.some((r) => r.status === 201)).toBe(true);
+    const tasks = app.get<Model<Task>>(getModelToken(Task.name));
+    expect(await tasks.countDocuments()).toBe(1);
+    const task = await tasks.findOne().orFail();
+    expect(task).toMatchObject({
+      taskType: 'SERVICE_ORDER_EXECUTION',
+      sourceType: 'SERVICE_ORDER',
+      status: 'ASSIGNED',
+    });
+    expect(String(task.sourceId)).toBe(id);
+    await assignment(id, assignee, { dueAt }).expect(409);
+    expect((await history(assignee).expect(200)).body.total).toBe(0);
+    const progress = (status: string, workResult?: string) =>
+      http()
+        .patch(`/api/v1/tasks/${task._id}/progress`)
+        .set(worker(assignee))
+        .send({ status, ...(workResult ? { workResult } : {}) });
+    await progress('IN_PROGRESS').expect(200);
+    expect((await get('/' + id).expect(200)).body.executionStatus).toBe(
+      'IN_PROGRESS',
+    );
+    await progress('COMPLETED', 'Laundry delivered').expect(200);
+    expect((await orders.findById(id).orFail()).executionStatus).toBe(
+      'COMPLETED',
+    );
+    const own = await history(assignee)
+      .query({ keyword: 'Laundry.*', from: '2020-01-01', to: '2030-01-01' })
+      .expect(200);
+    expect(own.body).toMatchObject({
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [
+        {
+          id,
+          executionStatus: 'COMPLETED',
+          task: {
+            id: String(task._id),
+            status: 'COMPLETED',
+            workResult: 'Laundry delivered',
+            dueAt,
+          },
+        },
+      ],
+    });
+    await history(assignee, '/' + id).expect(200);
+    expect((await history(stranger).expect(200)).body.total).toBe(0);
+    await history(stranger, '/' + id).expect(404);
+    for (const role of [
+      'CUSTOMER',
+      'RECEPTIONIST',
+      'MANAGER',
+      'OPERATIONS_STAFF',
+    ])
+      await history(assignee).set({ 'x-dev-role': role }).expect(403);
+    expect(
+      JSON.stringify((await get('/' + id).expect(200)).body),
+    ).not.toContain('Laundry delivered');
+    expect(JSON.stringify((await detail(id).expect(200)).body)).not.toContain(
+      'Laundry delivered',
+    );
+    await history(assignee)
+      .query({ from: '2030-01-01', to: '2020-01-01' })
+      .expect(400);
+    await history(assignee).query({ limit: 101 }).expect(400);
+    await orders.updateOne(
+      { _id: id },
+      { $set: { linkedTask: new Types.ObjectId() } },
+    );
+    expect((await history(assignee).expect(200)).body.total).toBe(0);
+  });
+
+  it('recovers completed pending intent after link failure without another Task and repairs failed projections on reads', async () => {
+    await services.updateOne({ _id: serviceId }, { billable: false });
+    const assignee = await createWorker();
+    const id = (await post(body())).body.id;
+    await review(id).expect(200);
+    const original = orders.findOneAndUpdate.bind(orders);
+    const spy = vi
+      .spyOn(orders, 'findOneAndUpdate')
+      .mockImplementation(
+        (...args: Parameters<typeof orders.findOneAndUpdate>) => {
+          if (
+            (args[0] as { executionStatus?: string }).executionStatus ===
+            'ASSIGNING'
+          )
+            throw new Error('link unavailable');
+          return original(...args);
+        },
+      );
+    await assignment(id, assignee).expect(503);
+    spy.mockRestore();
+    const task = await app
+      .get<Model<Task>>(getModelToken(Task.name))
+      .findOne()
+      .orFail();
+    const core = app.get(TasksService);
+    await core.updateAssignedProgress(assignee, String(task._id), {
+      status: 'IN_PROGRESS' as never,
+    });
+    await core.updateAssignedProgress(assignee, String(task._id), {
+      status: 'COMPLETED' as never,
+      workResult: 'Done',
+    });
+    expect((await history(assignee).expect(200)).body.total).toBe(0);
+    await assignment(id, await createWorker()).expect(409);
+    const recovered = await assignment(id, assignee).expect(201);
+    expect(recovered.body.executionStatus).toBe('COMPLETED');
+    expect(
+      await app.get<Model<Task>>(getModelToken(Task.name)).countDocuments(),
+    ).toBe(1);
+    await orders.updateOne(
+      { _id: id },
+      { $set: { executionStatus: 'ASSIGNED' } },
+    );
+    expect(
+      (await get('/me').query({ executionStatus: 'COMPLETED' }).expect(200))
+        .body.total,
+    ).toBe(1);
+    expect((await orders.findById(id).orFail()).executionStatus).toBe(
+      'COMPLETED',
+    );
+  });
+
+  it('recovers Task-create failures with stable intent and returns committed progress even if projection fails', async () => {
+    await services.updateOne({ _id: serviceId }, { billable: false });
+    const assignee = await createWorker();
+    const id = (await post(body())).body.id;
+    await review(id).expect(200);
+    const core = app.get(TasksService);
+    const createFailure = vi
+      .spyOn(core, 'create')
+      .mockRejectedValueOnce(new Error('create unavailable'));
+    await assignment(id, assignee).expect(503);
+    createFailure.mockRestore();
+    const pending = await orders
+      .findById(id)
+      .select('+assignmentRequestedAt +assignmentTitle')
+      .orFail();
+    expect(pending.executionStatus).toBe('ASSIGNING');
+    await assignment(id, assignee, { dueAt: '2026-12-02T10:00:00Z' }).expect(
+      409,
+    );
+    await assignment(id, assignee).expect(201);
+    const task = await app
+      .get<Model<Task>>(getModelToken(Task.name))
+      .findOne()
+      .orFail();
+    expect(String(task._id)).toBe(String(pending.assignmentTaskId));
+    expect(task.assignedAt).toEqual(pending.assignmentRequestedAt);
+    const progress = (status: string, workResult?: string) =>
+      http()
+        .patch(`/api/v1/tasks/${task._id}/progress`)
+        .set(worker(assignee))
+        .send({ status, ...(workResult ? { workResult } : {}) });
+    await progress('IN_PROGRESS').expect(200);
+    const projectionFailure = vi
+      .spyOn(core, 'repairServiceOrderExecution')
+      .mockRejectedValueOnce(new Error('projection unavailable'));
+    await progress('COMPLETED', 'Delivered safely').expect(200);
+    projectionFailure.mockRestore();
+    expect((await orders.findById(id).orFail()).executionStatus).toBe(
+      'IN_PROGRESS',
+    );
+    await progress('COMPLETED', 'Delivered safely').expect(409);
+    expect((await detail(id).expect(200)).body).toMatchObject({
+      executionStatus: 'COMPLETED',
+      task: { status: 'COMPLETED' },
+    });
+    expect((await history(assignee).expect(200)).body.total).toBe(1);
+    const dashboard = await http()
+      .get('/api/v1/tasks/me')
+      .set(worker(assignee))
+      .query({ status: 'COMPLETED' })
+      .expect(200);
+    expect(dashboard.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: String(task._id), status: 'COMPLETED' }),
+      ]),
+    );
+  });
+
+  it.each([undefined, '2026-12-02T12:30:00+07:00'])(
+    'projects only persisted pending assignment intent and recovers after reload (dueAt=%s)',
+    async (dueAt) => {
+      await services.updateOne({ _id: serviceId }, { billable: false });
+      const assigneeId = await createWorker();
+      const id = (await post(body())).body.id;
+      expect((await detail(id).expect(200)).body).not.toHaveProperty(
+        'assignmentIntent',
+      );
+      await review(id).expect(200);
+      expect((await detail(id).expect(200)).body).not.toHaveProperty(
+        'assignmentIntent',
+      );
+      const core = app.get(TasksService);
+      const failure = vi
+        .spyOn(core, 'create')
+        .mockRejectedValueOnce(new Error('create unavailable'));
+      await assignment(id, assigneeId, dueAt ? { dueAt } : {}).expect(503);
+      failure.mockRestore();
+      const expected = {
+        assigneeId,
+        ...(dueAt ? { dueAt: new Date(dueAt).toISOString() } : {}),
+      };
+      const reloaded = (await detail(id).expect(200)).body;
+      expect(reloaded.executionStatus).toBe('ASSIGNING');
+      expect(reloaded.assignmentIntent).toEqual(expected);
+      const list = await http()
+        .get('/api/v1/service-orders/requests')
+        .set(staff)
+        .query({ reviewStatus: 'ACCEPTED', executionStatus: 'ASSIGNING' })
+        .expect(200);
+      expect(list.body.items[0].assignmentIntent).toEqual(expected);
+      const customerDetail = (await get('/' + id).expect(200)).body;
+      const customerList = (await get('/me').expect(200)).body.items[0];
+      for (const row of [customerDetail, customerList]) {
+        expect(row).not.toHaveProperty('assignmentIntent');
+        expect(row).not.toHaveProperty('assignmentAssignee');
+        expect(row).not.toHaveProperty('assignmentDueAt');
+      }
+      const recovered = await http()
+        .post(`/api/v1/service-orders/${id}/assignment`)
+        .set(staff)
+        .send(reloaded.assignmentIntent)
+        .expect(201);
+      expect(recovered.body.executionStatus).toBe('ASSIGNED');
+      expect(recovered.body).not.toHaveProperty('assignmentIntent');
+      expect((await detail(id).expect(200)).body).not.toHaveProperty(
+        'assignmentIntent',
+      );
+      expect(
+        await app.get<Model<Task>>(getModelToken(Task.name)).countDocuments(),
+      ).toBe(1);
+      const task = await app
+        .get<Model<Task>>(getModelToken(Task.name))
+        .findOne()
+        .orFail();
+      expect(String(task.assignedTo)).toBe(assigneeId);
+      expect(task.dueAt?.toISOString()).toBe(expected.dueAt);
+    },
+  );
+
+  it('requires an existing billed invoice and refuses mismatched ledger snapshots without recreating it', async () => {
+    await prepareBilling();
+    const assignee = await createWorker();
+    const id = (await post(body())).body.id;
+    await review(id).expect(200);
+    const invoices = app.get<Model<Invoice>>(getModelToken(Invoice.name));
+    const invoice = await invoices
+      .findOne({ booking: new Types.ObjectId(bookingId) })
+      .orFail();
+    for (const patch of [
+      { 'charges.0.amount': 1 },
+      { 'charges.0.reason': 'Other' },
+      { 'charges.0.type': 'OTHER' },
+      { 'charges.0.approved': false },
+      { booking: new Types.ObjectId() },
+    ]) {
+      await invoices.collection.updateOne(
+        { _id: invoice._id },
+        { $set: patch },
+      );
+      await assignment(id, assignee).expect(409);
+      await invoices.collection.replaceOne(
+        { _id: invoice._id },
+        invoice.toObject(),
+      );
+    }
+    await invoices.deleteMany({});
+    await assignment(id, assignee).expect(409);
+    expect(await invoices.countDocuments()).toBe(0);
+    expect(
+      await app.get<Model<Task>>(getModelToken(Task.name)).countDocuments(),
+    ).toBe(0);
+  });
 
   it('protects staff routes with exact role and validates review bodies', async () => {
     const id = (await post(body())).body.id;
@@ -594,7 +961,7 @@ describe('UC22/23 customer service orders', () => {
     });
     for (const query of [
       { reviewStatus: 'INVALID' },
-      { executionStatus: 'COMPLETED' },
+      { executionStatus: 'INVALID' },
       { limit: 101 },
       { page: 0 },
       { extra: 'x' },
