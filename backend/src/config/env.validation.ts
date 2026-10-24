@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import { notificationConfigFields } from './notifications.config.js';
 import { vnpayConfigFields } from './vnpay.config.js';
 
 /**
@@ -7,6 +8,7 @@ import { vnpayConfigFields } from './vnpay.config.js';
  * Thêm biến mới: khai báo ở đây + configuration.ts + .env.example.
  */
 export const envValidationSchema = Joi.object({
+  ...notificationConfigFields,
   NODE_ENV: Joi.string()
     .valid('development', 'production', 'test')
     .default('development'),
