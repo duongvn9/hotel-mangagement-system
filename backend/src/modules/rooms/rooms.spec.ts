@@ -6,6 +6,7 @@ import { RoomStatus } from '../../common/constants/room-status.enum.js';
 import { Room, RoomSchema } from './schemas/room.schema.js';
 import { ListRoomsQuery } from './dto/list-rooms.dto.js';
 import { RoomsService } from './rooms.service.js';
+import type { RoomType } from '../room-types/schemas/room-type.schema.js';
 
 const roomType = new Types.ObjectId();
 const valid = { roomNumber: ' 101 ', floor: 1, roomType };
@@ -134,7 +135,10 @@ describe('UC47 RoomsService', () => {
       countDocuments: vi.fn().mockReturnValue(count),
     };
     return {
-      service: new RoomsService(roomModel as unknown as Model<Room>),
+      service: new RoomsService(
+        roomModel as unknown as Model<Room>,
+        {} as Model<RoomType>,
+      ),
       chain,
       count,
       roomModel,

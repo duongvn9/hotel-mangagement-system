@@ -199,7 +199,7 @@ describe('UC47 rooms read API', () => {
     ).toEqual(before);
     expect(await types.findById(activeType).lean()).toEqual(typeBefore);
   });
-  it('enforces the unique room number index in Mongo and has no mutation endpoints', async () => {
+  it('enforces the unique room number index and has no DELETE endpoint', async () => {
     await expect(
       rooms.create({
         roomNumber: prefix + '20',
@@ -207,12 +207,12 @@ describe('UC47 rooms read API', () => {
         roomType: activeType,
       }),
     ).rejects.toMatchObject({ code: 11000 });
-    await http().post('/api/v1/rooms').set(manager).send({}).expect(404);
+    await http().post('/api/v1/rooms').set(manager).send({}).expect(400);
     await http()
       .patch('/api/v1/rooms/' + new Types.ObjectId())
       .set(manager)
       .send({})
-      .expect(404);
+      .expect(400);
     await http()
       .delete('/api/v1/rooms/' + new Types.ObjectId())
       .set(manager)
