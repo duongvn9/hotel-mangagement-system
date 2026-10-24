@@ -258,6 +258,25 @@ describe('history', () => {
     )
     expect(screen.queryByText(/Private name/)).not.toBeInTheDocument()
   })
+  it('limits history keywords to the API contract and rejects oversized input before requesting', async () => {
+    page('/staff/service-history', 'SERVICE_STAFF')
+    await screen.findByRole('link', { name: 'Giặt ủi' })
+    const keyword = screen.getByLabelText('Từ khóa dịch vụ')
+    expect(keyword).toHaveAttribute('maxlength', '100')
+    fireEvent.change(keyword, { target: { value: 'a'.repeat(101) } })
+    const calls = vi.mocked(api.get).mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: 'Tìm kiếm' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Từ khóa dịch vụ tối đa 100 ký tự.')
+    expect(api.get).toHaveBeenCalledTimes(calls)
+    fireEvent.change(keyword, { target: { value: 'a'.repeat(100) } })
+    fireEvent.click(screen.getByRole('button', { name: 'Tìm kiếm' }))
+    await waitFor(() =>
+      expect(api.get).toHaveBeenLastCalledWith('/service-orders/history/me', {
+        params: { page: 1, limit: 20, keyword: 'a'.repeat(100) },
+      }),
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
   it('loads detail by order ID, renders result as text, links own source and stays read only', async () => {
     page('/staff/service-history/order-1', 'SERVICE_STAFF')
     expect(await screen.findByText(task.workResult)).toBeInTheDocument()
