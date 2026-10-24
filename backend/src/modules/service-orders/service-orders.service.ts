@@ -7,6 +7,8 @@ import {
   NotFoundException,
   OnModuleInit,
   UnauthorizedException,
+  HttpException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -14,9 +16,15 @@ import type { AuthUser } from '../../common/auth/auth-user.js';
 import { Role } from '../../common/constants/role.enum.js';
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema.js';
 import { Service } from '../services/schemas/service.schema.js';
+import { User } from '../users/schemas/user.schema.js';
+import { InvoicesService } from '../invoices/invoices.service.js';
+import type { InvoiceDocument } from '../invoices/schemas/invoice.schema.js';
+import { InvoiceChargeType } from '../invoices/schemas/invoice-charge.schema.js';
+import { ServiceOrderReviewStatus } from './service-order-status.js';
 import {
   CreateServiceOrderDto,
   ListServiceOrdersQuery,
+  ReviewServiceOrderDto,
 } from './dto/service-order.dto.js';
 import {
   ServiceOrder,
@@ -30,6 +38,8 @@ export class ServiceOrdersService implements OnModuleInit {
     private readonly orders: Model<ServiceOrder>,
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
     @InjectModel(Service.name) private readonly services: Model<Service>,
+    private readonly invoices: InvoicesService,
+    @InjectModel(User.name) private readonly users: Model<User>,
   ) {}
 
   async onModuleInit() {
@@ -218,6 +228,296 @@ export class ServiceOrdersService implements OnModuleInit {
     if (!row) throw new NotFoundException('Service order not found');
     await this.ownedBooking(row.booking, customer);
     return this.response(row);
+  }
+
+  private receptionist(user: AuthUser) {
+    if (!user) throw new UnauthorizedException();
+    if (user.role !== Role.Receptionist) throw new ForbiddenException();
+    return this.id(user.id);
+  }
+
+  private staffSelection =
+    '+reviewedBy +reviewedAt +reviewDecision +reviewReason +billedInvoiceId +billedAt';
+
+  private async staffResponse(row: ServiceOrderDocument) {
+    const [booking, customer] = await Promise.all([
+      this.bookings
+        .findById(row.booking)
+        .select('code status checkIn checkOut')
+        .exec(),
+      this.users.findById(row.customer).select('fullName').exec(),
+    ]);
+    return {
+      ...this.response(row),
+      customer: {
+        id: String(row.customer),
+        fullName: customer?.fullName ?? null,
+      },
+      booking: booking
+        ? {
+            code: booking.code,
+            status: booking.status,
+            checkIn: booking.checkIn,
+            checkOut: booking.checkOut,
+          }
+        : null,
+      feeRequired: row.amount > 0,
+      billingStatus:
+        row.billedInvoiceId && row.billedAt
+          ? 'BILLED'
+          : row.amount > 0 && row.reviewDecision === 'ACCEPT'
+            ? 'PENDING'
+            : 'NOT_REQUIRED',
+      ...(row.reviewDecision
+        ? {
+            review: {
+              decision: row.reviewDecision,
+              reason: row.reviewReason ?? '',
+              reviewedBy: String(row.reviewedBy),
+              reviewedAt: row.reviewedAt,
+            },
+          }
+        : {}),
+      ...(row.billedInvoiceId
+        ? { invoiceId: String(row.billedInvoiceId), billedAt: row.billedAt }
+        : {}),
+    };
+  }
+
+  async requests(query: ListServiceOrdersQuery, user: AuthUser) {
+    this.receptionist(user);
+    const filter = {
+      reviewStatus:
+        query.reviewStatus ?? ServiceOrderReviewStatus.PendingReview,
+      ...(query.executionStatus
+        ? { executionStatus: query.executionStatus }
+        : {}),
+      ...(query.keyword
+        ? {
+            serviceName: {
+              $regex: query.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+              $options: 'i',
+            },
+          }
+        : {}),
+    };
+    const [rows, total] = await Promise.all([
+      this.orders
+        .find(filter)
+        .select(this.staffSelection)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((query.page - 1) * query.limit)
+        .limit(query.limit)
+        .exec(),
+      this.orders.countDocuments(filter).exec(),
+    ]);
+    return {
+      items: await Promise.all(rows.map((row) => this.staffResponse(row))),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
+  }
+
+  async requestDetail(id: string, user: AuthUser) {
+    this.receptionist(user);
+    const row = await this.orders
+      .findById(this.id(id))
+      .select(this.staffSelection)
+      .exec();
+    if (!row) throw new NotFoundException('Service order not found');
+    return this.staffResponse(row);
+  }
+
+  private validateAmount(row: ServiceOrderDocument) {
+    if (
+      !Number.isSafeInteger(row.quantity) ||
+      row.quantity < 1 ||
+      !Number.isSafeInteger(row.unitPriceVND) ||
+      row.unitPriceVND < 0 ||
+      !Number.isSafeInteger(row.amount) ||
+      row.amount < 0 ||
+      !Number.isSafeInteger(row.unitPriceVND * row.quantity) ||
+      row.amount !== row.unitPriceVND * row.quantity
+    )
+      throw new ConflictException('Invalid service order price snapshot');
+  }
+
+  private matchingCharge(invoice: InvoiceDocument, row: ServiceOrderDocument) {
+    if (!invoice.isActive || String(invoice.booking) !== String(row.booking))
+      throw new ConflictException(
+        'Invoice does not match service order booking',
+      );
+    const charges = invoice.charges.filter(
+      (charge) => charge.sourceId === String(row._id),
+    );
+    if (charges.length === 0) return false;
+    if (
+      charges.length !== 1 ||
+      charges.some(
+        (charge) =>
+          charge.type !== InvoiceChargeType.Service ||
+          charge.amount !== row.amount ||
+          charge.reason !== `Service order ${row._id}` ||
+          charge.approved !== true,
+      )
+    )
+      throw new ConflictException(
+        'Invoice charge conflicts with service order',
+      );
+    return true;
+  }
+
+  async review(id: string, dto: ReviewServiceOrderDto, user: AuthUser) {
+    try {
+      return await this.reviewOrder(id, dto, user);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new ServiceUnavailableException(
+        'Review temporarily unavailable; retry the same review',
+      );
+    }
+  }
+
+  private async reviewOrder(
+    id: string,
+    dto: ReviewServiceOrderDto,
+    user: AuthUser,
+  ) {
+    const reviewer = this.receptionist(user);
+    const orderId = this.id(id);
+    if (
+      !['ACCEPT', 'REJECT'].includes(dto.decision) ||
+      (dto.reason !== undefined && typeof dto.reason !== 'string')
+    )
+      throw new BadRequestException('Invalid review decision or reason');
+    const reason = dto.reason?.trim() ?? '';
+    if (reason.length > 2000 || (dto.decision === 'REJECT' && !reason))
+      throw new BadRequestException(
+        'Rejection requires a nonblank reason of at most 2000 characters',
+      );
+    let row = await this.orders
+      .findById(orderId)
+      .select(this.staffSelection)
+      .exec();
+    if (!row) throw new NotFoundException('Service order not found');
+    if (row.reviewStatus === ServiceOrderReviewStatus.PendingReview) {
+      this.validateAmount(row);
+      if (dto.decision === 'ACCEPT')
+        await this.ownedBooking(row.booking, row.customer, true);
+      const claimed = await this.orders
+        .findOneAndUpdate(
+          {
+            _id: orderId,
+            reviewStatus: ServiceOrderReviewStatus.PendingReview,
+          },
+          {
+            $set: {
+              reviewStatus:
+                dto.decision === 'REJECT'
+                  ? ServiceOrderReviewStatus.Rejected
+                  : ServiceOrderReviewStatus.Accepting,
+              reviewedBy: reviewer,
+              reviewedAt: new Date(),
+              reviewDecision: dto.decision,
+              reviewReason: reason,
+            },
+          },
+          { new: true, runValidators: true },
+        )
+        .select(this.staffSelection)
+        .exec();
+      row =
+        claimed ??
+        (await this.orders
+          .findById(orderId)
+          .select(this.staffSelection)
+          .exec());
+      if (!row) throw new NotFoundException('Service order not found');
+    }
+    if (
+      row.reviewDecision !== dto.decision ||
+      (row.reviewReason ?? '') !== reason
+    )
+      throw new ConflictException(
+        'Service order already has a different review intent',
+      );
+    if (
+      row.reviewStatus === ServiceOrderReviewStatus.Rejected ||
+      row.reviewStatus === ServiceOrderReviewStatus.Accepted
+    )
+      return this.staffResponse(row);
+    if (row.reviewStatus !== ServiceOrderReviewStatus.Accepting)
+      throw new ConflictException('Service order is no longer pending');
+    this.validateAmount(row);
+    try {
+      let invoice: InvoiceDocument | undefined;
+      if (row.amount > 0) {
+        invoice = await this.invoices.getOrCreateForBooking(
+          String(row.booking),
+        );
+        if (!this.matchingCharge(invoice, row)) {
+          await this.ownedBooking(row.booking, row.customer, true);
+          try {
+            await this.invoices.addCharge({
+              bookingId: String(row.booking),
+              type: InvoiceChargeType.Service,
+              amount: row.amount,
+              sourceId: String(row._id),
+              reason: `Service order ${row._id}`,
+            });
+          } catch (error) {
+            const persisted = await this.invoices.getOrCreateForBooking(
+              String(row.booking),
+            );
+            if (!this.matchingCharge(persisted, row)) throw error;
+          }
+          invoice = await this.invoices.getOrCreateForBooking(
+            String(row.booking),
+          );
+          if (!this.matchingCharge(invoice, row))
+            throw new ServiceUnavailableException(
+              'Billing not persisted; retry the same review',
+            );
+        }
+      }
+      const finalized = await this.orders
+        .findOneAndUpdate(
+          {
+            _id: orderId,
+            reviewStatus: ServiceOrderReviewStatus.Accepting,
+            reviewDecision: 'ACCEPT',
+            reviewReason: reason,
+          },
+          {
+            $set: {
+              reviewStatus: ServiceOrderReviewStatus.Accepted,
+              ...(invoice
+                ? { billedInvoiceId: invoice._id, billedAt: new Date() }
+                : {}),
+            },
+          },
+          { new: true, runValidators: true },
+        )
+        .select(this.staffSelection)
+        .exec();
+      const result =
+        finalized ??
+        (await this.orders
+          .findById(orderId)
+          .select(this.staffSelection)
+          .exec());
+      if (!result || result.reviewStatus !== ServiceOrderReviewStatus.Accepted)
+        throw new ServiceUnavailableException(
+          'Review finalization pending; retry the same review',
+        );
+      return this.staffResponse(result);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new ServiceUnavailableException(
+        'Review temporarily unavailable; retry the same review',
+      );
+    }
   }
 
   async orderContexts(user: AuthUser) {

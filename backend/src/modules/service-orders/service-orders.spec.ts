@@ -70,6 +70,8 @@ describe('service orders contract', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
+      {} as never,
     );
     await expect(
       service.create(dto, { ...user, role: 'MANAGER' }),
@@ -77,6 +79,36 @@ describe('service orders contract', () => {
     await expect(service.create(dto, undefined as never)).rejects.toMatchObject(
       { status: 401 },
     );
+  });
+
+  it('enforces exact Receptionist inside every staff service entry point', async () => {
+    const service = new ServiceOrdersService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    for (const role of [
+      'CUSTOMER',
+      'MANAGER',
+      'SERVICE_STAFF',
+      'OPERATIONS_STAFF',
+    ]) {
+      const staff = { ...user, role };
+      await expect(
+        service.requests(new ListServiceOrdersQuery(), staff),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        service.requestDetail(dto.bookingId, staff),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        service.review(dto.bookingId, { decision: 'ACCEPT' }, staff),
+      ).rejects.toMatchObject({ status: 403 });
+    }
+    await expect(
+      service.review(dto.bookingId, { decision: 'ACCEPT' }, undefined as never),
+    ).rejects.toMatchObject({ status: 401 });
   });
 
   it.each([null, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
@@ -87,6 +119,8 @@ describe('service orders contract', () => {
         { create } as never,
         model({ isActive: true, status: 'CHECKED_IN' }) as never,
         model({ isActive: true, billable: true, price }) as never,
+        {} as never,
+        {} as never,
       );
       await expect(service.create(dto, user)).rejects.toMatchObject({
         status: 400,
