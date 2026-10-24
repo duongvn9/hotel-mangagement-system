@@ -58,7 +58,7 @@ describe('UC53 ServicesPage', () => {
   beforeAll(() => configure({ asyncUtilTimeout: 5000 }))
   afterAll(() => configure({ asyncUtilTimeout: 1000 }))
   afterEach(() => vi.restoreAllMocks())
-  it('renders columns, VND/unit, zero vs absent price, textual badges, accessible descriptions and no write actions', async () => {
+  it('renders columns, VND/unit, zero vs absent price, textual badges, accessible descriptions and management actions', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(response())
     renderPage()
     const table = await screen.findByRole('table', { name: 'Danh sách dịch vụ' })
@@ -82,9 +82,9 @@ describe('UC53 ServicesPage', () => {
     expect(tooltip).toHaveAttribute('tabindex', '0')
     expect(tooltip).toHaveAccessibleName(description)
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(
-      screen.queryByRole('button', { name: /Thêm|Sửa|Vô hiệu|Ngừng|Xóa/ }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Thêm dịch vụ' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Sửa dịch vụ Giặt ủi' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: /Xóa/ })).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: /Danh sách dịch vụ/ })).toHaveClass('overflow-x-auto')
     expect(table).toHaveClass('min-w-[800px]')
     for (const label of ['Tìm theo tên', 'Tính phí', 'Trạng thái'])
