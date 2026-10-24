@@ -173,7 +173,7 @@ Các số liệu agent/parent dưới đây là bàn giao, không phải chạy 
 | Final local FE | format/lint/typecheck/build PASS; 392 tests / 26 files PASS; bundle 713.11 kB warning |
 | Final post-enum full E2E | **323/324**, 31/32 files PASS; H5 seed isolation FAIL, Vu workflows 8/8 PASS |
 | Baseline isolation diagnosis | Không chạy suite Vũ: seed suite PASS nhưng để lại booking mẫu; chạy H5 sau đó tái hiện expected0/actual1 tại test/h5-schemas.e2e-spec.ts:142. Full exclude Vu 316/316 PASS khi H5 chạy trước. Lỗi thứ tự suite có sẵn, không coi rerun pass là đã sửa |
-| Final PR/CI/review | Chưa có evidence kết quả final; #32 merged không đồng nghĩa QA branch đã có final PR/CI PASS |
+| Final PR/CI/review | Commit `4cfbab6` đã push; draft PR #34: https://github.com/duongvn9/hotel-mangagement-system/pull/34. Run `40118700775` đúng head này PASS backend (gồm E2E), frontend, Docker. Chưa review/merge; CI pass không xóa lỗi seed/H5 order-dependent đã tái hiện local |
 | Compose smoke | Chưa chạy/chưa có evidence availability; không claim PASS |
 
 Workflow test thật kiểm tra persist/charge/Task counts, own/foreign scope, concurrent create/review/assign/report, completion và explicit close. Recovery tạo **real pricing failure** bằng broken Room→RoomType ref trong fixture rồi phục hồi, thấy ACCEPTING và retry chỉ một charge; không mock InvoicesService để giả workflow success. Security gồm 401, exact-role 403, IDOR 404, malformed IDs, inactive catalog/Booking/User; mã lỗi phụ thuộc route (ví dụ malformed order 400, Issue/Task 404; inactive progress 400, UC34 403), không gộp mọi lỗi thành một status.
