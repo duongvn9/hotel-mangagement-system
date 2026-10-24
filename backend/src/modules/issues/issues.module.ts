@@ -1,4 +1,12 @@
 import { Module } from '@nestjs/common';
+import { ServiceTaskIssuesController } from './service-task-issues.controller.js';
+import { Task, TaskSchema } from '../tasks/schemas/task.schema.js';
+import {
+  ServiceOrder,
+  ServiceOrderSchema,
+} from '../service-orders/schemas/service-order.schema.js';
+import { Service, ServiceSchema } from '../services/schemas/service.schema.js';
+import { ServiceTaskIssuesService } from './service-task-issues.service.js';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BookingsModule } from '../bookings/bookings.module.js';
 import { RoomsModule } from '../rooms/rooms.module.js';
@@ -16,10 +24,13 @@ import { Issue, IssueSchema } from './schemas/issue.schema.js';
     TasksModule,
     MongooseModule.forFeature([
       { name: Issue.name, schema: IssueSchema },
+      { name: Task.name, schema: TaskSchema },
+      { name: ServiceOrder.name, schema: ServiceOrderSchema },
+      { name: Service.name, schema: ServiceSchema },
       { name: User.name, schema: UserSchema },
     ]),
   ],
-  controllers: [IssuesController],
-  providers: [IssuesService, IssueContextAdapter],
+  controllers: [ServiceTaskIssuesController, IssuesController],
+  providers: [IssuesService, IssueContextAdapter, ServiceTaskIssuesService],
 })
 export class IssuesModule {}
