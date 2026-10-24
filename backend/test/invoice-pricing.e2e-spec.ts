@@ -25,7 +25,9 @@ describe('Invoice pricing from RoomType (e2e)', () => {
   const bookingId = new Types.ObjectId();
 
   beforeAll(async () => {
-    const module = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const module = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
     app = module.createNestApplication();
     await app.init();
     service = app.get(InvoicesService);
@@ -34,7 +36,13 @@ describe('Invoice pricing from RoomType (e2e)', () => {
     bookings = app.get(getModelToken(Booking.name));
     invoices = app.get(getModelToken(Invoice.name));
     payments = app.get(getModelToken(PaymentTransaction.name));
-    await Promise.all([rooms.init(), roomTypes.init(), bookings.init(), invoices.init(), payments.init()]);
+    await Promise.all([
+      rooms.init(),
+      roomTypes.init(),
+      bookings.init(),
+      invoices.init(),
+      payments.init(),
+    ]);
 
     await roomTypes.create({
       _id: typeId,
@@ -44,8 +52,20 @@ describe('Invoice pricing from RoomType (e2e)', () => {
       basePrice: 800000,
     });
     await rooms.create([
-      { _id: roomA, roomNumber: `PR-A-${roomA}`, floor: 2, roomType: typeId, status: 'AVAILABLE' },
-      { _id: roomB, roomNumber: `PR-B-${roomB}`, floor: 2, roomType: typeId, status: 'AVAILABLE' },
+      {
+        _id: roomA,
+        roomNumber: `PR-A-${roomA}`,
+        floor: 2,
+        roomType: typeId,
+        status: 'AVAILABLE',
+      },
+      {
+        _id: roomB,
+        roomNumber: `PR-B-${roomB}`,
+        floor: 2,
+        roomType: typeId,
+        status: 'AVAILABLE',
+      },
     ]);
     await bookings.create({
       _id: bookingId,

@@ -23,7 +23,9 @@ describe('UC05 search available rooms (e2e)', () => {
   const http = () => request(app.getHttpServer());
 
   beforeAll(async () => {
-    const module = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const module = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
     app = module.createNestApplication();
     app.setGlobalPrefix('api');
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
@@ -50,10 +52,34 @@ describe('UC05 search available rooms (e2e)', () => {
       },
     ]);
     await rooms.create([
-      { _id: roomAvailable, roomNumber: `U5-A-${roomAvailable}`, floor: 1, roomType: typeId, status: 'AVAILABLE' },
-      { _id: roomBooked, roomNumber: `U5-B-${roomBooked}`, floor: 1, roomType: typeId, status: 'AVAILABLE' },
-      { _id: roomMaintenance, roomNumber: `U5-M-${roomMaintenance}`, floor: 1, roomType: typeId, status: 'MAINTENANCE' },
-      { _id: roomSmall, roomNumber: `U5-S-${roomSmall}`, floor: 1, roomType: smallTypeId, status: 'AVAILABLE' },
+      {
+        _id: roomAvailable,
+        roomNumber: `U5-A-${roomAvailable}`,
+        floor: 1,
+        roomType: typeId,
+        status: 'AVAILABLE',
+      },
+      {
+        _id: roomBooked,
+        roomNumber: `U5-B-${roomBooked}`,
+        floor: 1,
+        roomType: typeId,
+        status: 'AVAILABLE',
+      },
+      {
+        _id: roomMaintenance,
+        roomNumber: `U5-M-${roomMaintenance}`,
+        floor: 1,
+        roomType: typeId,
+        status: 'MAINTENANCE',
+      },
+      {
+        _id: roomSmall,
+        roomNumber: `U5-S-${roomSmall}`,
+        floor: 1,
+        roomType: smallTypeId,
+        status: 'AVAILABLE',
+      },
     ]);
     // Một booking CONFIRMED chiếm roomBooked trong khoảng tìm kiếm.
     await bookings.create({
@@ -73,7 +99,9 @@ describe('UC05 search available rooms (e2e)', () => {
 
   afterAll(async () => {
     await bookings.deleteMany({ rooms: { $in: [roomBooked] } });
-    await rooms.deleteMany({ _id: { $in: [roomAvailable, roomBooked, roomMaintenance, roomSmall] } });
+    await rooms.deleteMany({
+      _id: { $in: [roomAvailable, roomBooked, roomMaintenance, roomSmall] },
+    });
     await roomTypes.deleteMany({ _id: { $in: [typeId, smallTypeId] } });
     await app.close();
   });
@@ -81,19 +109,32 @@ describe('UC05 search available rooms (e2e)', () => {
   it('returns the free room, excluding the booked and the maintenance room', async () => {
     const response = await http()
       .get('/api/v1/availability')
-      .query({ checkIn: '2090-01-11', checkOut: '2090-01-13', guests: 2, roomTypeId: String(typeId) })
+      .query({
+        checkIn: '2090-01-11',
+        checkOut: '2090-01-13',
+        guests: 2,
+        roomTypeId: String(typeId),
+      })
       .expect(200);
     const ids = (response.body as { id: string }[]).map((room) => room.id);
     expect(ids).toContain(String(roomAvailable));
     expect(ids).not.toContain(String(roomBooked));
     expect(ids).not.toContain(String(roomMaintenance));
-    expect(response.body[0]).toMatchObject({ roomTypeId: String(typeId), capacity: 3 });
+    expect(response.body[0]).toMatchObject({
+      roomTypeId: String(typeId),
+      capacity: 3,
+    });
   });
 
   it('frees the room for a non-overlapping stay', async () => {
     const response = await http()
       .get('/api/v1/availability')
-      .query({ checkIn: '2090-02-01', checkOut: '2090-02-03', guests: 2, roomTypeId: String(typeId) })
+      .query({
+        checkIn: '2090-02-01',
+        checkOut: '2090-02-03',
+        guests: 2,
+        roomTypeId: String(typeId),
+      })
       .expect(200);
     const ids = (response.body as { id: string }[]).map((room) => room.id);
     expect(ids).toContain(String(roomAvailable));
