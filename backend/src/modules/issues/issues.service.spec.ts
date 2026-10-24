@@ -5,6 +5,8 @@ import { IssueContextAdapter } from './issue-context.adapter.js';
 import { Issue, IssuePriority, IssueStatus } from './schemas/issue.schema.js';
 import { Booking } from '../bookings/schemas/booking.schema.js';
 import { ListIssuesQuery } from './dto/list-issues.dto.js';
+import { User } from '../users/schemas/user.schema.js';
+import { TasksService } from '../tasks/tasks.service.js';
 
 describe('Issue read service authorization', () => {
   const owner = new Types.ObjectId();
@@ -50,6 +52,8 @@ describe('Issue read service authorization', () => {
     issues as unknown as Model<Issue>,
     {} as IssueContextAdapter,
     bookings as unknown as Model<Booking>,
+    {} as Model<User>,
+    {} as TasksService,
   );
   const actor = {
     id: String(owner),

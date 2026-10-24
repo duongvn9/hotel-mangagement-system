@@ -3,10 +3,23 @@ import { Types } from 'mongoose';
 
 export enum IssueStatus {
   PendingReview = 'PENDING_REVIEW',
+  Reviewed = 'REVIEWED',
+  Assigning = 'ASSIGNING',
+  Assigned = 'ASSIGNED',
+  Concluded = 'CONCLUDED',
+  Closed = 'CLOSED',
+}
+
+export enum HandlingCategory {
+  Service = 'SERVICE',
+  Operations = 'OPERATIONS',
 }
 
 export enum IssuePriority {
+  Low = 'LOW',
   Normal = 'NORMAL',
+  High = 'HIGH',
+  Urgent = 'URGENT',
 }
 
 @Schema({ timestamps: true, collection: 'issues' })
@@ -41,6 +54,48 @@ export class Issue {
 
   @Prop()
   closedAt?: Date;
+
+  @Prop({ type: String, enum: HandlingCategory })
+  handlingCategory?: HandlingCategory;
+
+  @Prop()
+  needsStaffAction?: boolean;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  reviewedBy?: Types.ObjectId;
+
+  @Prop()
+  reviewedAt?: Date;
+
+  @Prop({ maxlength: 2000 })
+  reviewNotes?: string;
+
+  @Prop()
+  concludedAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  assignmentRequestedBy?: Types.ObjectId;
+
+  @Prop()
+  assignmentRequestedAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  assignmentAssignee?: Types.ObjectId;
+
+  @Prop()
+  assignmentDueAt?: Date;
+
+  @Prop()
+  assignmentTitle?: string;
+
+  @Prop({ type: Types.ObjectId })
+  assignmentTaskId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Task' })
+  linkedTask?: Types.ObjectId;
+
+  @Prop()
+  assignedAt?: Date;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   reporter: Types.ObjectId;

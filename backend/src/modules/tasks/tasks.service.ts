@@ -134,7 +134,17 @@ export class TasksService {
     };
   }
 
-  async create(input: CreateTaskDto) {
+  async findIssueResolutionWork(issueId: string) {
+    return this.tasks
+      .findOne({
+        sourceType: TaskSourceType.Issue,
+        sourceId: new Types.ObjectId(issueId),
+        taskType: 'ISSUE_RESOLUTION',
+      })
+      .lean();
+  }
+
+  async create(input: CreateTaskDto, identity?: Types.ObjectId) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) {
       throw new BadRequestException('Invalid task input');
     }
@@ -158,6 +168,7 @@ export class TasksService {
     await this.ensureWorkIndex();
     try {
       return await this.tasks.create({
+        ...(identity ? { _id: identity } : {}),
         title: dto.title.trim(),
         taskType: dto.taskType.trim(),
         priority: dto.priority.trim(),
