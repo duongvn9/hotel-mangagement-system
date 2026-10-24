@@ -24,6 +24,7 @@ import { TasksModule } from './modules/tasks/tasks.module.js';
 import { AmenitiesModule } from './modules/amenities/amenities.module.js';
 import { RoomTypesModule } from './modules/room-types/room-types.module.js';
 import { RoomsModule } from './modules/rooms/rooms.module.js';
+import { IssuesModule } from './modules/issues/issues.module.js';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { RoomsModule } from './modules/rooms/rooms.module.js';
     RolesModule,
     AuthModule,
     FeedbackModule,
+    IssuesModule,
     BookingsModule,
     InvoicesModule,
     PaymentsModule,
