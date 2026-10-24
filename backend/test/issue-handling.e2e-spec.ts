@@ -64,6 +64,15 @@ describe('Issue review and assignment Mongo protocol (e2e)', () => {
     request(app.getHttpServer())
       .get(`/api/v1/issues/${id}`)
       .set(headers(role, actor));
+  const close = (
+    id: string,
+    body: object = { conclusion: ' Confirmed resolved ' },
+    role = 'RECEPTIONIST',
+  ) =>
+    request(app.getHttpServer())
+      .post(`/api/v1/issues/${id}/close`)
+      .set(headers(role))
+      .send(body);
   const report = async () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/issues')
@@ -143,6 +152,143 @@ describe('Issue review and assignment Mongo protocol (e2e)', () => {
     });
     await bookings.deleteOne({ _id: bookingId });
     await app.close();
+  });
+
+  it.each(['RECEPTIONIST', 'MANAGER'])(
+    'closes valid concluded work as %s, preserves history and hides staff audit from customer',
+    async (role) => {
+      const id = await report();
+      await close(id).expect(409);
+      await review(id, { ...reviewBody, needsStaffAction: false }).expect(200);
+      const before = await issues.findById(id).lean();
+      const result = await close(
+        id,
+        { conclusion: ' Private closure explanation ' },
+        role,
+      ).expect(201);
+      expect(result.body).toMatchObject({
+        status: 'CLOSED',
+        closedBy: String(receptionistId),
+        closureConclusion: 'Private closure explanation',
+        reviewNotes: reviewBody.notes,
+      });
+      expect(result.body.closedAt).toBeDefined();
+      const saved = await issues.findById(id).lean();
+      expect(saved?.reviewedAt).toEqual(before?.reviewedAt);
+      expect(saved?.concludedAt).toEqual(before?.concludedAt);
+      expect(saved?.reporter).toEqual(before?.reporter);
+      await close(id, { conclusion: 'Overwrite' }).expect(409);
+      expect((await issues.findById(id).lean())?.closedAt).toEqual(
+        saved?.closedAt,
+      );
+      const customer = await get(id, 'CUSTOMER', customerId).expect(200);
+      expect(customer.body.status).toBe('CLOSED');
+      expect(customer.body.closedAt).toBe(result.body.closedAt);
+      for (const key of ['closedBy', 'closureConclusion', 'reviewNotes'])
+        expect(customer.body).not.toHaveProperty(key);
+      const page = await request(app.getHttpServer())
+        .get('/api/v1/issues?status=CLOSED')
+        .set(headers('CUSTOMER', customerId))
+        .expect(200);
+      const item = page.body.items.find((entry: any) => entry.id === id);
+      expect(item).toBeDefined();
+      expect(item).not.toHaveProperty('closureConclusion');
+      expect(item).not.toHaveProperty('closedBy');
+      expect(await tasks.countDocuments({ sourceId: id })).toBe(0);
+    },
+  );
+
+  it('requires completion through task core, then closes only once concurrently without task changes', async () => {
+    const id = await report();
+    await review(id).expect(200);
+    await close(id).expect(409);
+    const assigned = await assign(id).expect(201);
+    const taskId = assigned.body.linkedTasks[0].id;
+    await close(id).expect(409);
+    await taskService.transitionAssignedTask(
+      taskId,
+      String(serviceId),
+      'ASSIGNED' as any,
+      'IN_PROGRESS' as any,
+    );
+    await close(id).expect(409);
+    await taskService.transitionAssignedTask(
+      taskId,
+      String(serviceId),
+      'IN_PROGRESS' as any,
+      'COMPLETED' as any,
+      'Repaired lamp',
+    );
+    const before = await tasks.findById(taskId).lean();
+    expect((await get(id).expect(200)).body.status).toBe('ASSIGNED');
+    const results = await Promise.all(
+      Array.from({ length: 6 }, () => close(id)),
+    );
+    expect(results.map((response) => response.status).sort()).toEqual([
+      201, 409, 409, 409, 409, 409,
+    ]);
+    expect(await tasks.findById(taskId).lean()).toEqual(before);
+    expect((await get(id).expect(200)).body.linkedTasks[0].id).toBe(taskId);
+  });
+
+  it('rejects close when review snapshot changes during persisted work lookup', async () => {
+    const id = await report();
+    await review(id).expect(200);
+    const assigned = await assign(id).expect(201);
+    const taskId = assigned.body.linkedTasks[0].id;
+    await taskService.transitionAssignedTask(
+      taskId,
+      String(serviceId),
+      'ASSIGNED' as any,
+      'IN_PROGRESS' as any,
+    );
+    await taskService.transitionAssignedTask(
+      taskId,
+      String(serviceId),
+      'IN_PROGRESS' as any,
+      'COMPLETED' as any,
+      'Repaired',
+    );
+    const original = taskService.findIssueResolutionWork.bind(taskService);
+    vi.spyOn(taskService, 'findIssueResolutionWork').mockImplementationOnce(
+      async (sourceId) => {
+        const task = await original(sourceId);
+        await issues.updateOne(
+          { _id: id },
+          { $set: { reviewNotes: 'Concurrent review correction' } },
+        );
+        return task;
+      },
+    );
+    await close(id).expect(409);
+    expect((await issues.findById(id).lean())?.closedAt).toBeUndefined();
+  });
+
+  it('denies unauthorized close and rejects client-controlled fields', async () => {
+    const id = await report();
+    for (const role of ['CUSTOMER', 'SERVICE_STAFF', 'OPERATIONS_STAFF'])
+      await close(id, { conclusion: 'Done' }, role).expect(403);
+    await close(id, { conclusion: 'Done' }, 'CUSTOM_ROLE').expect(400);
+    await request(app.getHttpServer())
+      .post(`/api/v1/issues/${id}/close`)
+      .send({ conclusion: 'Done' })
+      .expect(401);
+    for (const body of [
+      {},
+      { conclusion: null },
+      { conclusion: '' },
+      { conclusion: ' ' },
+      { conclusion: 1 },
+      { conclusion: 'x'.repeat(2001) },
+      { conclusion: 'Done', status: 'COMPLETED' },
+      { conclusion: 'Done', closedAt: new Date().toISOString() },
+      { conclusion: 'Done', closedBy: String(receptionistId) },
+      { conclusion: 'Done', needsStaffAction: false },
+    ])
+      await close(id, body).expect(400);
+    await close('bad').expect(404);
+    await close(String(new Types.ObjectId())).expect(404);
+    expect((await issues.findById(id).lean())?.status).toBe('PENDING_REVIEW');
   });
 
   it('atomically accepts one racing review and never rereviews or assigns a conclusion', async () => {
@@ -269,6 +415,7 @@ describe('Issue review and assignment Mongo protocol (e2e)', () => {
       'COMPLETED' as any,
       'Internal work result',
     );
+    await close(id).expect(409);
     const createSpy = vi.spyOn(taskService, 'create');
     await assign(id, { ...assignment, dueAt: '2031-01-01T00:00:00Z' }).expect(
       409,

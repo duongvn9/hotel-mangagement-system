@@ -7,7 +7,11 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { AssignIssueDto, ReviewIssueDto } from './dto/review-issue.dto.js';
+import {
+  AssignIssueDto,
+  CloseIssueDto,
+  ReviewIssueDto,
+} from './dto/review-issue.dto.js';
 import { ListIssuesQuery } from './dto/list-issues.dto.js';
 import { ApiTags } from '@nestjs/swagger';
 import type { AuthUser } from '../../common/auth/auth-user.js';
@@ -58,6 +62,16 @@ export class IssuesController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.issues.assign(id, dto, user);
+  }
+
+  @Roles(Role.Receptionist, Role.Manager)
+  @Post(':id/close')
+  close(
+    @Param('id') id: string,
+    @Body() dto: CloseIssueDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.issues.close(id, dto, user);
   }
 
   @Roles(Role.Customer)

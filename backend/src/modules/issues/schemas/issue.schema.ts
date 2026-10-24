@@ -55,6 +55,12 @@ export class Issue {
   @Prop()
   closedAt?: Date;
 
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  closedBy?: Types.ObjectId;
+
+  @Prop({ trim: true, minlength: 1, maxlength: 2000 })
+  closureConclusion?: string;
+
   @Prop({ type: String, enum: HandlingCategory })
   handlingCategory?: HandlingCategory;
 

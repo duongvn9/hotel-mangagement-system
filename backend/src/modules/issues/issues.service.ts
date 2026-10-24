@@ -22,8 +22,12 @@ import {
 } from './schemas/issue.schema.js';
 import { User } from '../users/schemas/user.schema.js';
 import { TasksService } from '../tasks/tasks.service.js';
-import { TaskSourceType } from '../tasks/task-contract.js';
-import { AssignIssueDto, ReviewIssueDto } from './dto/review-issue.dto.js';
+import { TaskSourceType, TaskStatus } from '../tasks/task-contract.js';
+import {
+  AssignIssueDto,
+  CloseIssueDto,
+  ReviewIssueDto,
+} from './dto/review-issue.dto.js';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 
@@ -42,6 +46,8 @@ export interface IssueResponse {
 export interface IssueRead extends Omit<IssueResponse, 'reportedAt'> {
   reportedAt: string;
   closedAt?: string;
+  closedBy?: string;
+  closureConclusion?: string;
   handlingCategory?: HandlingCategory;
   needsStaffAction?: boolean;
   reviewedBy?: string;
@@ -96,6 +102,8 @@ export class IssuesService {
     status: 1,
     reportedAt: 1,
     closedAt: 1,
+    closedBy: 1,
+    closureConclusion: 1,
     booking: 1,
     room: 1,
     handlingCategory: 1,
@@ -238,6 +246,10 @@ export class IssuesService {
       ...(user.role === Role.Customer
         ? {}
         : {
+            ...(issue.closedBy ? { closedBy: String(issue.closedBy) } : {}),
+            ...(issue.closureConclusion === undefined
+              ? {}
+              : { closureConclusion: issue.closureConclusion }),
             ...(issue.reviewedBy
               ? { reviewedBy: String(issue.reviewedBy) }
               : {}),
@@ -474,6 +486,99 @@ export class IssuesService {
     );
     if (!finished)
       throw new ConflictException('Assignment already finalized; reload issue');
+    return this.findOne(id, user);
+  }
+
+  async close(
+    id: string,
+    input: CloseIssueDto,
+    user: AuthUser,
+  ): Promise<IssueDetail> {
+    if (!user || !/^[a-fA-F0-9]{24}$/.test(user.id))
+      throw new UnauthorizedException();
+    if (user.role !== Role.Receptionist && user.role !== Role.Manager)
+      throw new ForbiddenException();
+    const dto = await this.validateInput(CloseIssueDto, input);
+    const issue = await this.operationalIssue(id);
+    const validDate = (value: unknown): value is Date =>
+      value instanceof Date && Number.isFinite(value.getTime());
+    const reviewed =
+      issue.reviewedBy instanceof Types.ObjectId &&
+      validDate(issue.reviewedAt) &&
+      Object.values(HandlingCategory).includes(issue.handlingCategory!) &&
+      Object.values(IssuePriority).includes(issue.priority);
+    const concluded =
+      issue.status === IssueStatus.Concluded &&
+      issue.needsStaffAction === false &&
+      reviewed &&
+      validDate(issue.concludedAt) &&
+      issue.concludedAt.getTime() >= issue.reviewedAt!.getTime() &&
+      issue.linkedTask === undefined;
+    if (!concluded) {
+      if (
+        issue.status !== IssueStatus.Assigned ||
+        issue.needsStaffAction !== true ||
+        !reviewed ||
+        !(issue.linkedTask instanceof Types.ObjectId)
+      )
+        throw new ConflictException(
+          'Issue resolution is not ready for closure',
+        );
+      const task = await this.tasks.findIssueResolutionWork(id);
+      if (
+        !task ||
+        String(task._id) !== String(issue.linkedTask) ||
+        task.sourceType !== TaskSourceType.Issue ||
+        String(task.sourceId) !== String(issue._id) ||
+        task.taskType !== 'ISSUE_RESOLUTION' ||
+        task.status !== TaskStatus.Completed ||
+        !validDate(task.completedAt) ||
+        typeof task.workResult !== 'string' ||
+        !task.workResult.trim() ||
+        task.workResult.trim().length > 2000
+      )
+        throw new ConflictException(
+          'Linked issue resolution work is not completed',
+        );
+    }
+    const snapshot = Object.fromEntries(
+      (
+        [
+          'status',
+          'linkedTask',
+          'needsStaffAction',
+          'handlingCategory',
+          'priority',
+          'reviewedBy',
+          'reviewedAt',
+          'reviewNotes',
+          'concludedAt',
+        ] as const
+      ).map((field) => [
+        field,
+        issue[field] === undefined ? { $exists: false } : issue[field],
+      ]),
+    );
+    const closed = await this.issues.findOneAndUpdate(
+      {
+        _id: issue._id,
+        ...snapshot,
+        closedAt: { $exists: false },
+        closedBy: { $exists: false },
+        closureConclusion: { $exists: false },
+      },
+      {
+        $set: {
+          status: IssueStatus.Closed,
+          closedAt: new Date(),
+          closedBy: new Types.ObjectId(user.id),
+          closureConclusion: dto.conclusion,
+        },
+      },
+      { new: true, runValidators: true },
+    );
+    if (!closed)
+      throw new ConflictException('Issue changed; reload before closing');
     return this.findOne(id, user);
   }
 

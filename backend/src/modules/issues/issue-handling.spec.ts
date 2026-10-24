@@ -108,6 +108,160 @@ describe('Issue review and durable assignment', () => {
     users.findOne.mockImplementation(() => chain({ _id: assignee }));
   });
 
+  it.each(['RECEPTIONIST', 'MANAGER'])(
+    'closes concluded work once as %s with immutable audit',
+    async (role) => {
+      await service.review(
+        String(id),
+        { ...review, needsStaffAction: false },
+        actor,
+      );
+      const result = await service.close(
+        String(id),
+        { conclusion: ' Resolved privately ' },
+        { ...actor, role },
+      );
+      expect(result).toMatchObject({
+        status: 'CLOSED',
+        closedBy: actor.id,
+        closureConclusion: 'Resolved privately',
+        reviewNotes: 'Private note',
+      });
+      expect(result.closedAt).toBeDefined();
+      const audit = { ...issue };
+      await expect(
+        service.close(String(id), { conclusion: 'Overwrite' }, actor),
+      ).rejects.toThrow();
+      expect(issue).toEqual(audit);
+      expect(tasks.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    'CUSTOMER',
+    'SERVICE_STAFF',
+    'OPERATIONS_STAFF',
+    'CUSTOM_ROLE',
+    'manager',
+  ])('denies closing service role %s', async (role) => {
+    await expect(
+      service.close(String(id), { conclusion: 'Done' }, { ...actor, role }),
+    ).rejects.toThrow();
+    expect(issues.findById).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {},
+    { conclusion: '' },
+    { conclusion: '   ' },
+    { conclusion: null },
+    { conclusion: 1 },
+    { conclusion: 'x'.repeat(2001) },
+    { conclusion: 'Done', status: 'COMPLETED' },
+    { conclusion: 'Done', closedBy: actor.id },
+  ])('rejects closing input %j', async (input) => {
+    await expect(
+      service.close(String(id), input as any, actor),
+    ).rejects.toThrow('Invalid input');
+    expect(issues.findById).not.toHaveBeenCalled();
+  });
+
+  const completed = async () => {
+    await service.review(String(id), review, actor);
+    await service.assign(String(id), assignment, actor);
+    Object.assign(savedTask!, {
+      sourceType: 'ISSUE',
+      sourceId: id,
+      status: 'COMPLETED',
+      completedAt: new Date(),
+      workResult: 'Repaired',
+    });
+  };
+
+  it('requires persisted exact completed source work and never writes tasks', async () => {
+    await completed();
+    tasks.create.mockClear();
+    const result = await service.close(
+      String(id),
+      { conclusion: 'Confirmed repaired' },
+      actor,
+    );
+    expect(result.status).toBe('CLOSED');
+    expect(result.linkedTasks[0].status).toBe('COMPLETED');
+    expect(tasks.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: 'ASSIGNED' },
+    { status: 'IN_PROGRESS' },
+    { completedAt: undefined },
+    { completedAt: new Date(NaN) },
+    { workResult: undefined },
+    { workResult: ' ' },
+    { workResult: 'x'.repeat(2001) },
+    { sourceType: 'SERVICE_ORDER' },
+    { sourceId: new Types.ObjectId() },
+    { taskType: 'OTHER' },
+    { _id: new Types.ObjectId() },
+  ])('rejects invalid linked task %j', async (change) => {
+    await completed();
+    Object.assign(savedTask!, change);
+    await expect(
+      service.close(String(id), { conclusion: 'Done' }, actor),
+    ).rejects.toThrow();
+    expect(issue.closedAt).toBeUndefined();
+  });
+
+  it('rejects missing linked work and incomplete review metadata', async () => {
+    await completed();
+    savedTask = null;
+    await expect(
+      service.close(String(id), { conclusion: 'Done' }, actor),
+    ).rejects.toThrow();
+    delete issue.linkedTask;
+    await expect(
+      service.close(String(id), { conclusion: 'Done' }, actor),
+    ).rejects.toThrow();
+    issue.status = IssueStatus.Concluded;
+    issue.needsStaffAction = false;
+    issue.concludedAt = new Date();
+    delete issue.reviewedBy;
+    await expect(
+      service.close(String(id), { conclusion: 'Done' }, actor),
+    ).rejects.toThrow();
+  });
+
+  it('rejects stale CAS and races with exactly one winner', async () => {
+    await service.review(
+      String(id),
+      { ...review, needsStaffAction: false },
+      actor,
+    );
+    issues.findOneAndUpdate.mockImplementationOnce(() =>
+      Object.assign(Promise.resolve(null), chain(null)),
+    );
+    await expect(
+      service.close(String(id), { conclusion: 'Done' }, actor),
+    ).rejects.toThrow('Issue changed');
+    const calls = await Promise.allSettled([
+      service.close(String(id), { conclusion: 'First' }, actor),
+      service.close(String(id), { conclusion: 'Second' }, actor),
+    ]);
+    expect(calls.filter((call) => call.status === 'fulfilled')).toHaveLength(1);
+    expect(issues.findOneAndUpdate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: 'CONCLUDED',
+        needsStaffAction: false,
+        linkedTask: { $exists: false },
+        reviewedBy: expect.any(Types.ObjectId),
+        reviewedAt: expect.any(Date),
+        concludedAt: expect.any(Date),
+      }),
+      expect.anything(),
+      { new: true, runValidators: true },
+    );
+  });
+
   it('reviews once atomically, preserves reporting category and records audit', async () => {
     const result = await service.review(String(id), review, actor);
     expect(result).toMatchObject({

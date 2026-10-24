@@ -195,6 +195,21 @@ describe('Report issue HTTP', () => {
     },
   );
 
+  it.each([
+    'CUSTOMER',
+    'SERVICE_STAFF',
+    'OPERATIONS_STAFF',
+    'CUSTOM_ROLE',
+    'manager',
+  ])('denies close HTTP role %s without permission fallback', async (role) => {
+    await request(app.getHttpServer())
+      .post(`/api/v1/issues/${issueId}/close`)
+      .set('Authorization', `Bearer ${role}`)
+      .send({ conclusion: 'Done' })
+      .expect(403);
+    expect(findOne).not.toHaveBeenCalled();
+  });
+
   it('requires auth for both reads', async () => {
     await request(app.getHttpServer()).get('/api/v1/issues').expect(401);
     await request(app.getHttpServer())

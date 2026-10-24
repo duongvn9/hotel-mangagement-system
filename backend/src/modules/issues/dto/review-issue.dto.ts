@@ -6,6 +6,7 @@ import {
   IsMongoId,
   IsString,
   MaxLength,
+  MinLength,
   ValidateIf,
 } from 'class-validator';
 import { HandlingCategory, IssuePriority } from '../schemas/issue.schema.js';
@@ -27,6 +28,16 @@ export class ReviewIssueDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+}
+
+export class CloseIssueDto {
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  conclusion: string;
 }
 
 export class AssignIssueDto {
