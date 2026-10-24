@@ -8,8 +8,11 @@ import { getErrorMessage } from '@/lib/api-client'
 import type { ServiceQuery } from '../api'
 import { useServices } from '../hooks'
 import { ServicePrice } from '../components/ServicePrice'
+import { ServiceEditor } from '../components/ServiceForm'
 
 export function ServicesPage() {
+  const [editor, setEditor] = useState<{ id: string | null } | null>(null)
+  const [success, setSuccess] = useState(false)
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState<ServiceQuery>({ page: 1, limit: 10 })
   useEffect(() => {
@@ -47,6 +50,25 @@ export function ServicesPage() {
           Thông tin, thiết lập tính phí và trạng thái dịch vụ.
         </p>
       </div>
+      <Button
+        onClick={() => {
+          setSuccess(false)
+          setEditor({ id: null })
+        }}
+      >
+        Thêm dịch vụ
+      </Button>
+      {success && <Alert tone="success">Đã lưu dịch vụ.</Alert>}
+      {editor && (
+        <ServiceEditor
+          id={editor.id}
+          onClose={() => setEditor(null)}
+          onSuccess={() => {
+            setEditor(null)
+            setSuccess(true)
+          }}
+        />
+      )}
       <div role="search" aria-label="Lọc dịch vụ" className="grid gap-4 md:grid-cols-3">
         <TextField
           label="Tìm theo tên"
@@ -110,15 +132,17 @@ export function ServicesPage() {
                 <caption className="sr-only">Danh sách dịch vụ</caption>
                 <thead className="bg-stone-200 text-xs text-stone-700 uppercase">
                   <tr>
-                    {['Tên', 'Mô tả', 'Tính phí', 'Giá', 'Trạng thái'].map((name, index) => (
-                      <th
-                        scope="col"
-                        key={name}
-                        className={`px-4 py-4 ${index === 3 ? 'text-right' : ''}`}
-                      >
-                        {name}
-                      </th>
-                    ))}
+                    {['Tên', 'Mô tả', 'Tính phí', 'Giá', 'Trạng thái', 'Thao tác'].map(
+                      (name, index) => (
+                        <th
+                          scope="col"
+                          key={name}
+                          className={`px-4 py-4 ${index === 3 ? 'text-right' : ''}`}
+                        >
+                          {name}
+                        </th>
+                      ),
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -149,6 +173,18 @@ export function ServicesPage() {
                         <Badge tone={service.isActive ? 'success' : 'neutral'}>
                           {service.isActive ? 'Đang hoạt động' : 'Ngừng'}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-4">
+                        <Button
+                          variant="secondary"
+                          aria-label={`Sửa dịch vụ ${service.name}`}
+                          onClick={() => {
+                            setSuccess(false)
+                            setEditor({ id: service.id })
+                          }}
+                        >
+                          Sửa
+                        </Button>
                       </td>
                     </tr>
                   ))}
