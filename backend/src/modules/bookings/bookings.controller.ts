@@ -4,10 +4,10 @@ import {
   ApiCreatedResponse,
   ApiOperation,
   ApiTags,
-  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { AuthUser } from '../../common/auth/auth-user.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 import { BookingResponse, CreateBookingDto } from './dto/create-booking.dto.js';
 import { BookingsService } from './bookings.service.js';
 
@@ -17,13 +17,13 @@ export class BookingsController {
   constructor(private readonly bookings: BookingsService) {}
 
   @Post()
+  @Public()
   @ApiOperation({
-    summary: 'UC — Create a booking (holds rooms until deposit)',
+    summary: 'UC46 — Create a booking (Guest or Customer; holds rooms)',
   })
   @ApiCreatedResponse({ type: BookingResponse })
-  @ApiUnauthorizedResponse()
   @ApiConflictResponse({ description: 'Rooms are unavailable or just taken' })
-  create(@Body() dto: CreateBookingDto, @CurrentUser() user: AuthUser) {
+  create(@Body() dto: CreateBookingDto, @CurrentUser() user?: AuthUser) {
     return this.bookings.create(dto, user);
   }
 }

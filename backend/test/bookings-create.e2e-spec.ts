@@ -113,11 +113,13 @@ describe('Create booking (e2e)', () => {
     await app.close();
   });
 
-  it('requires authentication', async () => {
-    await http()
+  it('allows an anonymous guest to create a booking without a customer', async () => {
+    const response = await http()
       .post('/api/v1/bookings')
       .send(body([roomA], '2091-01-10', '2091-01-12'))
-      .expect(401);
+      .expect(201);
+    const saved = await bookings.findById(response.body.id).lean();
+    expect(saved?.customer).toBeUndefined();
   });
 
   it('creates a pending-deposit booking, holds the room and prices it server-side', async () => {

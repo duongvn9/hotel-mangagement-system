@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsMongoId, IsOptional, Matches } from 'class-validator';
+import {
+  IsIn,
+  IsMongoId,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 
 export class InitiatePaymentDto {
   @ApiProperty({ description: 'ObjectId của booking cần thanh toán' })
@@ -18,6 +25,14 @@ export class InitiatePaymentDto {
   @IsOptional()
   @Matches(/^[A-Za-z0-9]{3,20}$/)
   bankCode?: string;
+
+  @ApiPropertyOptional({
+    description: 'Mã booking (vé) cho Guest chưa đăng nhập tự thanh toán',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  code?: string;
 }
 
 export class PaymentInitiationResponse {

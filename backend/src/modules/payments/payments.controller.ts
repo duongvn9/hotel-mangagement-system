@@ -23,33 +23,41 @@ export class PaymentsController {
   constructor(private readonly payments: PaymentsService) {}
 
   @Post('deposit')
-  @ApiOperation({ summary: 'UC20 — Initiate a VNPay deposit payment' })
+  @Public()
+  @ApiOperation({
+    summary:
+      'UC20 — Initiate a VNPay deposit (owner, staff, or Guest with code)',
+  })
   @ApiCreatedResponse({ type: PaymentInitiationResponse })
   @ApiUnauthorizedResponse()
   initiateDeposit(
     @Body() dto: InitiatePaymentDto,
-    @CurrentUser() user: AuthUser,
+    @CurrentUser() user: AuthUser | undefined,
     @Req() req: Request,
   ) {
     return this.payments.initiateDeposit(
       dto.bookingId,
-      user,
+      this.actor(dto, user),
       this.options(dto, req),
     );
   }
 
   @Post('final')
-  @ApiOperation({ summary: 'UC21 — Initiate a VNPay final invoice payment' })
+  @Public()
+  @ApiOperation({
+    summary:
+      'UC21 — Initiate a VNPay final payment (owner, staff, or Guest code)',
+  })
   @ApiCreatedResponse({ type: PaymentInitiationResponse })
   @ApiUnauthorizedResponse()
   initiateFinal(
     @Body() dto: InitiatePaymentDto,
-    @CurrentUser() user: AuthUser,
+    @CurrentUser() user: AuthUser | undefined,
     @Req() req: Request,
   ) {
     return this.payments.initiateFinal(
       dto.bookingId,
-      user,
+      this.actor(dto, user),
       this.options(dto, req),
     );
   }
@@ -67,6 +75,13 @@ export class PaymentsController {
   @ApiOperation({ summary: 'VNPay IPN callback (durable settlement)' })
   processIpn(@Req() req: Request) {
     return this.payments.processIpn(this.rawQuery(req));
+  }
+
+  private actor(dto: InitiatePaymentDto, user: AuthUser | undefined) {
+    return {
+      ...(user ? { user } : {}),
+      ...(dto.code === undefined ? {} : { code: dto.code }),
+    };
   }
 
   private options(dto: InitiatePaymentDto, req: Request): InitiateOptions {

@@ -21,8 +21,6 @@ import {
 } from './availability.core.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 
-/** Nhân viên được phép đặt phòng hộ khách tại quầy. */
-const STAFF_ROLES: readonly string[] = [Role.Receptionist, Role.Manager];
 /** Thời hạn giữ phòng trước khi đặt cọc (phải khớp cửa sổ thanh toán VNPay). */
 const HOLD_WINDOW_MS = 15 * 60 * 1000;
 const MS_PER_DAY = 86_400_000;
@@ -56,10 +54,9 @@ export class BookingsService {
     @Inject(AvailabilityClock) private readonly clock: AvailabilityClock,
   ) {}
 
-  async create(dto: CreateBookingDto, user: AuthUser) {
-    if (user.role !== Role.Customer && !STAFF_ROLES.includes(user.role)) {
-      throw new BadRequestException('This role cannot create bookings');
-    }
+  async create(dto: CreateBookingDto, user?: AuthUser) {
+    // Public: Guest (không đăng nhập) đặt được; Customer đăng nhập gắn booking vào tài
+    // khoản; vai trò khác coi như đặt hộ tại quầy (không gắn customer).
     const roomIds = dto.rooms.map((id) => new Types.ObjectId(id));
     if (new Set(dto.rooms).size !== dto.rooms.length) {
       throw new BadRequestException('Duplicate rooms in request');
@@ -85,7 +82,7 @@ export class BookingsService {
       roomTotal,
       rates,
       customer:
-        user.role === Role.Customer ? new Types.ObjectId(user.id) : undefined,
+        user?.role === Role.Customer ? new Types.ObjectId(user.id) : undefined,
     });
 
     let hold: RoomHoldDocument;
