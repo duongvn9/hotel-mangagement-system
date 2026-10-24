@@ -8,12 +8,72 @@
 - #66 / PROMPT03 / UC37: **MERGED**, PR #17 tại merge commit `53401ad`; đã xác minh merge. https://github.com/duongvn9/hotel-mangagement-system/pull/17
 - #67 / UC38: **MERGED**, PR #18 tại merge commit `341f87f`; đã xác minh commit là ancestor của local `origin/main` khi triển khai #65. Commit triển khai `3712665`; các bằng chứng pending trong mục 10 được giữ như lịch sử trước merge.
 - #65: **MERGED**, PR #19 tại merge commit `4213c8d`. Mục 11 giữ lịch sử triển khai trước merge, không còn là trạng thái pending hiện tại.
-- #74 / UC28: **Implemented, pending review, không Done**; nhánh lúc bắt đầu và hiện tại `feature/vu-74-report-issue`. Commit `270dd73` đã push; draft PR #20: https://github.com/duongvn9/hotel-mangagement-system/pull/20 — chưa merge; CI và manual browser QA còn pending. Xem mục 12.
-- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET giữ nguyên, UC38 đã có PATCH tiến độ và form detail. Mục 12 là hiện trạng UC28; mục 11 lưu lịch sử #65; mục 10 lưu bằng chứng #67 trước merge; mục 9 lưu lịch sử UC37 trước merge; mục 8 lưu mốc #64 trước merge; mục 4–7 là lịch sử.
+- #74 / UC28: **MERGED**, PR #20 tại merge commit `266e40b`; parent đã xác minh merge. https://github.com/duongvn9/hotel-mangagement-system/pull/20 — mục 12 giữ bằng chứng triển khai trước merge, không phải trạng thái pending hiện tại.
+- #75 / UC29 và #79 / UC33: **Implemented, pending review, không Done** trên nhánh hiện tại `feature/vu-75-79-issue-list-detail`; đã push `a01bdc7` (BE), `a2d11ba` (FE). Draft PR #22: https://github.com/duongvn9/hotel-mangagement-system/pull/22 — chưa merge. Xem mục 13.
+- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET giữ nguyên, UC38 đã có PATCH tiến độ và form detail. Mục 13 là hiện trạng Issue list/detail; mục 12 lưu lịch sử UC28; mục 11 lưu lịch sử #65; mục 10 lưu bằng chứng #67 trước merge; mục 9 lưu lịch sử UC37 trước merge; mục 8 lưu mốc #64 trước merge; mục 4–7 là lịch sử.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
 
-## 12. Jira #74 / UC28 — Report Issue (hiện trạng)
+## 13. Jira #75 / UC29 và #79 / UC33 — Issue List / Detail (hiện trạng)
+
+### Trạng thái, SRS và cách chia PR
+
+- **Implemented, pending review, không Done** trên `feature/vu-75-79-issue-list-detail`. Chưa ghi SHA/PR cho #75/#79; parent bổ sung sau, không dùng PR #20 của #74 làm PR cho lượt này.
+- Đã đọc SRS ngoài repo `D:/FULearning/Fall26/WDP301/docs/SRS - HMS.docx.md:766–775` (UC29: Customer theo stay/service của mình, Receptionist xem Issue Requests, Manager theo management scope) và `:826–835` (UC33: Manager xem detail đúng scope, không sửa dữ liệu). Detail Customer/Receptionist phục vụ điều hướng list trong cùng quyền đọc; không diễn giải UC33 thành quyền sửa hoặc quyền đọc nguồn mở rộng.
+- Đã tách **hai commit BE `a01bdc7` rồi FE `a2d11ba` trong draft PR #22**, FE phụ thuộc contract GET của BE và cả hai dựa trên #74 đã merge. Diff lớn chủ yếu do bộ test; chưa merge, chờ CI/review.
+
+### Kết quả CI và sửa fixture E2E
+
+- Run `40064582714` cho head `171822f`: FE PASS, BE fail tại E2E `denies issue reads to CUSTOM_READER` (expected403, actual400). Nguyên nhân fixture gửi custom role qua dev header nhưng DevAuthMiddleware chỉ chấp nhận built-in Role enum; request chưa tới guard. Không phải lỗi mở quyền hoặc lỗi base.
+- Tách test built-in staff denied403 khỏi test custom dev header invalid400; giữ kiểm tra custom role bị service/HTTP guard từ chối trong unit suite. Không sửa Auth/RBAC, không bỏ assertion ownership hoặc tắt test.
+- Sau sửa: backend format/lint/typecheck/603 unit tests/build PASS. Chờ chạy lại E2E trên CI đúng head mới; không tuyên bố pass trước khi xác minh.
+
+### API, scope và privacy đã đối chiếu source
+
+- `GET /api/v1/issues` (shared client: `GET /issues`) nhận `page` mặc định 1, giới hạn 1–10000; `limit` mặc định 20, giới hạn 1–100; filter `status`, `priority` theo enum hiện hữu (**PENDING_REVIEW**, **NORMAL**), `category` khớp chính xác, `keyword` tìm literal trên title không phân biệt hoa thường, escape regex. Category/keyword trim 1–100 ký tự; query lạ bị 400. Sort `reportedAt DESC, _id DESC`; response `{ items, total, page, limit }`, items và total cùng filter/scope.
+- `GET /api/v1/issues/:id` (shared client: `GET /issues/:id`) trả detail trong cùng scope. ID sai/missing/foreign/out-of-scope cùng 404; anonymous 401, role không được phép 403. Guards xác thực/role và `IssuesService.assertReader` đều kiểm tra; không chỉ dựa vào FE hoặc decorator.
+- Customer: đọc các Issue liên kết tới Booking **hiện thuộc `booking.customer` của current user và `isActive === true`**, không dùng reporter, email hay phone. Booking đổi chủ/mất owner/inactive/missing không còn trong scope. Read không thêm điều kiện status khác Cancelled như create UC28; không nhầm policy tạo báo cáo với policy đọc. Đây là snapshot ownership khi đọc Booking rồi query Issue, không hứa transaction/atomic snapshot xuyên collection.
+- Receptionist và Manager: chỉ đúng role **RECEPTIONIST / MANAGER**, scope toàn khách sạn đơn hiện tại; service trả scope `{}` cho hai role này. Không có `hotelId` trong model/scope để giả lập multi-hotel; không thêm field hoặc custom permission fallback. Customer, service/operations staff, admin hay custom role không được nâng quyền chỉ vì có permission.
+- Projection/DTO allowlist: `id`, `title`, `category`, `description`, `priority`, `status`, `reportedAt` ISO, `bookingId`, `roomId?`, `closedAt?`. Chỉ trả ID nguồn để trace, không populate Booking/Room, reporter/contact/email/phone hay guest PII từ nguồn; ID không phải quyền mở nguồn và không tạo link nguồn chưa được ủy quyền.
+- Detail giữ `linkedTasks: []`, **`linkedTasksAvailable: false`**: mở rộng Task deferred do chưa có contract quyền đọc nguồn/task. Không query Task hoặc kết luận “không có task”; FE nói rõ chưa cung cấp thông tin không đồng nghĩa Issue chưa có công việc. Task core/status hiện hữu giữ nguyên, không tạo lại enum/lifecycle Task.
+- Chỉ bổ sung read UC29/UC33: **không review, assign, close** (UC30/31/32 còn deferred), không sửa Issue khi đọc, không tự tạo/đóng Task. `POST /api/v1/issues` của #74 và route report giữ nguyên contract.
+
+### Routes, titles và UX thực tế
+
+| Role chính xác | List | Detail | Title hiện tại |
+|---|---|---|---|
+| CUSTOMER | `/customer/issues` | `/customer/issues/:id` | Sự cố của tôi |
+| RECEPTIONIST | `/staff/issues` | `/staff/issues/:id` | Yêu cầu sự cố |
+| MANAGER | `/manager/issues` | `/manager/issues/:id` | Danh sách sự cố |
+
+- `RequireAuth` chỉ nhận đúng một role cho từng view; detail title là `<title theo role> — Chi tiết sự cố`, back link về đúng list. `/customer/issues/report` vẫn CUSTOMER; CTA báo mới chỉ cho Customer. Không mở rộng quyền `/staff/tasks` hoặc thay H10/shell; các caveat H10 trong lịch sử vẫn giữ nguyên.
+- API thật qua shared client/TanStack Query, cache key gồm current user ID và role; report thành công invalidate scope Issue của user/role. Có filter/reset page, pagination, loading/empty/error/retry, 403/404; detail hiển thị trace ID và cảnh báo linked Task unavailable. Không có nút review/assign/close hoặc mock production.
+
+### Kiểm chứng và giới hạn bằng chứng
+
+Kết quả sau do **parent đã chạy cho triển khai #75/#79**, không phải chạy lại tests/build trong lượt tài liệu; không thay thế CI hoặc manual browser QA. Lượt chỉ sửa tài liệu đã chạy lại `npm run lint` và `npm run typecheck` tại cả backend/frontend: tất cả PASS; không chạy lại format/tests/build/e2e hoặc seed.
+
+| Phạm vi | Lệnh parent đã chạy | Kết quả |
+|---|---|---|
+| Backend | `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run build` | Tất cả PASS |
+| Backend | `npm test` | PASS: 603 tests / 26 files |
+| Frontend | `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run build` | Tất cả PASS; bundle/chunk-size warning không chặn build |
+| Frontend | `npm test` | PASS: 186 tests / 16 files |
+| Mongo e2e mở rộng | `backend/test/issues.e2e-spec.ts` | Chưa chạy local: DB test an toàn chưa xác minh; CI pending |
+
+- Fixture e2e mới kiểm tra read scope/ownership đổi chủ, inactive/missing Booking, foreign 404, query/auth/role; cleanup chỉ theo ID Issue/Booking/Room của suite, không drop DB hoặc xóa toàn collection. Có fixture scoped không chứng minh DB đang an toàn; không chạy e2e/seed lên shared DB.
+- **Chưa manual browser QA**, chưa xác nhận viewport **375px**, keyboard/overflow hoặc live authenticated API; CI head mới pending. Unit/isolated HTTP/FE tests không thay thế Mongo e2e và không chứng minh source integration hoàn chỉnh. #75/#79 chưa Done.
+- Manual QA còn phải chạy: hai Customer A/B với Booking own/foreign, list/total/detail không lộ chéo và foreign URL 404; đổi owner/inactive không còn đọc được; filter status/priority/category/keyword literal, paging/reset và query lạ; anonymous 401, role/custom permission không hợp lệ 403; Receptionist/Manager đúng scope khách sạn đơn, không vượt route role; trace ID không lộ guest PII, Task unavailable không nói không có Task; POST report regression; desktop/375px, keyboard/loading/empty/network/403/404. Ghi bằng chứng thực tế trước khi chốt.
+
+### Source tham chiếu
+
+- BE guards/routes: `backend/src/modules/issues/issues.controller.ts:16`; query: `backend/src/modules/issues/dto/list-issues.dto.ts:19`; service role/scope: `backend/src/modules/issues/issues.service.ts:67`; list/detail/projection: `:90–153`.
+- BE tests: `backend/src/modules/issues/issues.service.spec.ts`, `backend/src/modules/issues/issues.http.spec.ts`; Mongo fixture chưa chạy local: `backend/test/issues.e2e-spec.ts:183`.
+- FE route/title: `frontend/src/features/issues/routes.tsx:17`, `frontend/src/features/issues/presentation.ts:1`; cache: `frontend/src/features/issues/hooks.ts:5`; UI: `frontend/src/features/issues/pages/IssueListPage.tsx:11`, `frontend/src/features/issues/pages/IssueDetailPage.tsx:6`; tests: `frontend/src/features/issues/issue-read.test.tsx`.
+
+## 12. Jira #74 / UC28 — Report Issue (lịch sử trước merge)
+
+> #74 đã MERGED qua PR #20 tại `266e40b`, parent đã xác minh merge. Các phát biểu pending/chưa có PR/chưa merge và kết quả QA bên dưới giữ nguyên mốc triển khai trước merge, không phải trạng thái hiện tại. Hiện trạng #75/#79 ở mục 13.
 
 ### Phạm vi, SRS và giả định eligibility
 
@@ -298,12 +358,12 @@ Tests dùng mock persistence theo H8, schema/index Mongoose thật in-memory, co
 | 71 | UC25 Review Service Order Request | Chưa làm | Chưa có |
 | 72 | UC26 Assign Service Order Task | Chưa làm | Chưa có |
 | 73 | UC27 View Service History | Chưa làm | Chưa có |
-| 74 | UC28 Report Issue | Implemented, pending review; không Done; e2e local chưa chạy, CI/browser QA pending | `feature/vu-74-report-issue`; commit/PR để parent bổ sung sau |
-| 75 | UC29 View Issue List | Chưa làm | Chưa có |
+| 74 | UC28 Report Issue | MERGED; đã xác minh merge; lịch sử QA ở mục 12 | PR #20 / merge `266e40b` |
+| 75 | UC29 View Issue List | Implemented, pending review; không Done; e2e/CI/manual QA pending | `feature/vu-75-79-issue-list-detail`; commit/PR để parent bổ sung sau |
 | 76 | UC30 Review Issue Request | Chưa làm | Chưa có |
 | 77 | UC31 Assign Issue Resolution Task | Chưa làm | Chưa có |
 | 78 | UC32 Close Issue | Chưa làm | Chưa có |
-| 79 | UC33 View Issue Detail | Chưa làm | Chưa có |
+| 79 | UC33 View Issue Detail | Implemented, pending review; không Done; e2e/CI/manual QA pending | `feature/vu-75-79-issue-list-detail`; commit/PR để parent bổ sung sau |
 | 80 | UC34 Report Service Issue | Chưa làm | Chưa có |
 
 ## 2. Contract dùng lại
