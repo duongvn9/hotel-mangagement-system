@@ -9,7 +9,7 @@
 - #67 / UC38: **MERGED**, PR #18 tại merge commit `341f87f`; đã xác minh commit là ancestor của local `origin/main` khi triển khai #65. Commit triển khai `3712665`; các bằng chứng pending trong mục 10 được giữ như lịch sử trước merge.
 - #65: **MERGED**, PR #19 tại merge commit `4213c8d`. Mục 11 giữ lịch sử triển khai trước merge, không còn là trạng thái pending hiện tại.
 - #74 / UC28: **MERGED**, PR #20 tại merge commit `266e40b`; parent đã xác minh merge. https://github.com/duongvn9/hotel-mangagement-system/pull/20 — mục 12 giữ bằng chứng triển khai trước merge, không phải trạng thái pending hiện tại.
-- #75 / UC29 và #79 / UC33: **Implemented, pending review, không Done** trên nhánh hiện tại `feature/vu-75-79-issue-list-detail`; chưa ghi commit/PR, parent bổ sung sau. Xem mục 13.
+- #75 / UC29 và #79 / UC33: **Implemented, pending review, không Done** trên nhánh hiện tại `feature/vu-75-79-issue-list-detail`; đã push `a01bdc7` (BE), `a2d11ba` (FE). Draft PR #22: https://github.com/duongvn9/hotel-mangagement-system/pull/22 — chưa merge. Xem mục 13.
 - Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET giữ nguyên, UC38 đã có PATCH tiến độ và form detail. Mục 13 là hiện trạng Issue list/detail; mục 12 lưu lịch sử UC28; mục 11 lưu lịch sử #65; mục 10 lưu bằng chứng #67 trước merge; mục 9 lưu lịch sử UC37 trước merge; mục 8 lưu mốc #64 trước merge; mục 4–7 là lịch sử.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
@@ -20,7 +20,7 @@
 
 - **Implemented, pending review, không Done** trên `feature/vu-75-79-issue-list-detail`. Chưa ghi SHA/PR cho #75/#79; parent bổ sung sau, không dùng PR #20 của #74 làm PR cho lượt này.
 - Đã đọc SRS ngoài repo `D:/FULearning/Fall26/WDP301/docs/SRS - HMS.docx.md:766–775` (UC29: Customer theo stay/service của mình, Receptionist xem Issue Requests, Manager theo management scope) và `:826–835` (UC33: Manager xem detail đúng scope, không sửa dữ liệu). Detail Customer/Receptionist phục vụ điều hướng list trong cùng quyền đọc; không diễn giải UC33 thành quyền sửa hoặc quyền đọc nguồn mở rộng.
-- Ưu tiên PR nhỏ; nếu diff lớn, parent tách **hai commit BE rồi FE trong cùng một PR**, mô tả rõ FE phụ thuộc contract GET của BE và cả hai dựa trên #74 đã merge. Đây là kế hoạch bàn giao, chưa tuyên bố đã commit/tạo PR; lượt này chỉ sửa tài liệu, không thao tác Git.
+- Đã tách **hai commit BE `a01bdc7` rồi FE `a2d11ba` trong draft PR #22**, FE phụ thuộc contract GET của BE và cả hai dựa trên #74 đã merge. Diff lớn chủ yếu do bộ test; chưa merge, chờ CI/review.
 
 ### API, scope và privacy đã đối chiếu source
 
