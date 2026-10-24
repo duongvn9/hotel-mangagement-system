@@ -7,6 +7,7 @@ const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
   MANAGER: [
     { to: '/manager/rooms', label: 'Phòng' },
     { to: '/manager/room-types', label: 'Loại phòng' },
+    { to: '/manager/amenities', label: 'Tiện nghi' },
     { to: '/manager/accounts', label: 'Tài khoản' },
     { to: '/manager/roles', label: 'Vai trò' },
     { to: '/staff/feedback', label: 'Phản hồi' },
