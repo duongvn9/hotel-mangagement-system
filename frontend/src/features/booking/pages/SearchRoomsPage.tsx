@@ -9,6 +9,7 @@ import { getErrorMessage } from '@/lib/api-client'
 import { env } from '@/lib/env'
 import type { AvailableRoom, SearchAvailabilityParams } from '../api'
 import { useAvailability } from '../hooks'
+import { BedIcon, ClockIcon, UsersIcon } from '../icons'
 import { money, nightsBetween, todayISO } from '../utils'
 
 /** Đọc tiêu chí hợp lệ từ URL để chạy UC05; trả null khi chưa đủ/không hợp lệ. */
@@ -202,43 +203,55 @@ export function SearchRoomsPage() {
             return (
               <article
                 key={group.roomTypeId}
-                className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-stone-300 bg-white p-5"
+                className="overflow-hidden rounded-xl border border-stone-300 bg-white shadow-sm sm:flex"
               >
-                <div className="min-w-56 space-y-1">
-                  <p className="text-[11px] font-semibold tracking-widest text-primary uppercase">
-                    Loại phòng
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-display text-xl font-semibold text-pearl-900">
-                      {group.name}
-                    </h3>
+                <div className="relative flex h-32 items-center justify-center bg-gradient-to-br from-cream-100 to-brandy-100 sm:h-auto sm:w-44 sm:shrink-0">
+                  <BedIcon className="size-10 text-primary/60" />
+                  <span className="absolute top-3 left-3">
                     <Badge tone="success">Còn {max} phòng</Badge>
+                  </span>
+                </div>
+                <div className="flex flex-1 flex-wrap items-center justify-between gap-4 p-5">
+                  <div className="min-w-48 space-y-2">
+                    <div>
+                      <p className="text-[11px] font-semibold tracking-widest text-primary uppercase">
+                        Loại phòng
+                      </p>
+                      <h3 className="font-display text-xl font-semibold text-pearl-900">
+                        {group.name}
+                      </h3>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-stone-700">
+                      <span className="inline-flex items-center gap-1.5">
+                        <UsersIcon className="size-4 text-primary" /> Tối đa {group.capacity} khách
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <ClockIcon className="size-4 text-primary" /> Giữ phòng 15 phút
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-sm text-stone-700">
-                    Sức chứa tối đa {group.capacity} khách/phòng
-                  </p>
+                  <div className="text-right">
+                    <p className="text-xl font-semibold text-pearl-900 tabular-nums">
+                      {group.pricePerNight ? money.format(group.pricePerNight) : '—'}
+                    </p>
+                    <p className="text-xs text-stone-700">mỗi đêm</p>
+                  </div>
+                  <SelectField
+                    label="Số phòng"
+                    className="w-28"
+                    value={String(qty)}
+                    options={Array.from({ length: max + 1 }, (_, n) => ({
+                      value: String(n),
+                      label: String(n),
+                    }))}
+                    onChange={(event) =>
+                      setSelection((previous) => ({
+                        ...previous,
+                        [group.roomTypeId]: Number(event.target.value),
+                      }))
+                    }
+                  />
                 </div>
-                <div className="text-right">
-                  <p className="text-lg font-semibold text-pearl-900 tabular-nums">
-                    {group.pricePerNight ? money.format(group.pricePerNight) : '—'}
-                  </p>
-                  <p className="text-xs text-stone-700">mỗi đêm</p>
-                </div>
-                <SelectField
-                  label="Số phòng"
-                  className="w-28"
-                  value={String(qty)}
-                  options={Array.from({ length: max + 1 }, (_, n) => ({
-                    value: String(n),
-                    label: String(n),
-                  }))}
-                  onChange={(event) =>
-                    setSelection((previous) => ({
-                      ...previous,
-                      [group.roomTypeId]: Number(event.target.value),
-                    }))
-                  }
-                />
               </article>
             )
           })}
