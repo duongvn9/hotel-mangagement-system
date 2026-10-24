@@ -14,6 +14,7 @@ export const issueStatuses = [
   'CONCLUDED',
   'ASSIGNING',
   'ASSIGNED',
+  'CLOSED',
 ] as const
 export const issuePriorities = ['LOW', 'NORMAL', 'HIGH', 'URGENT'] as const
 export type IssueStatus = (typeof issueStatuses)[number]
@@ -33,6 +34,9 @@ export interface IssueRead extends IssueReceipt {
   reviewedAt?: string
   concludedAt?: string
   reviewedBy?: string
+  closedAt?: string
+  closedBy?: string
+  closureConclusion?: string
   reviewNotes?: string
   assignmentRequestedBy?: string
   assignmentRequestedAt?: string
@@ -68,6 +72,47 @@ export interface ReviewIssueInput {
 export interface AssignmentInput {
   assigneeId: string
   dueAt?: string
+}
+
+function validIssueDate(value?: string) {
+  return Boolean(value && Number.isFinite(new Date(value).getTime()))
+}
+
+export function canCloseIssue(issue: IssueDetail) {
+  if (issue.closedAt || issue.closedBy || issue.closureConclusion !== undefined) return false
+  const reviewed = Boolean(
+    issue.reviewedBy &&
+    validIssueDate(issue.reviewedAt) &&
+    (issue.handlingCategory === 'SERVICE' || issue.handlingCategory === 'OPERATIONS'),
+  )
+  if (!reviewed) return false
+  if (issue.status === 'CONCLUDED' && issue.needsStaffAction === false) {
+    return Boolean(
+      validIssueDate(issue.concludedAt) &&
+      new Date(issue.concludedAt!).getTime() >= new Date(issue.reviewedAt!).getTime() &&
+      issue.linkedTasks.length === 0,
+    )
+  }
+  return (
+    issue.status === 'ASSIGNED' &&
+    issue.needsStaffAction === true &&
+    issue.linkedTasksAvailable &&
+    issue.linkedTasks.length === 1 &&
+    issue.linkedTasks.every(
+      (task) => task.status === 'COMPLETED' && validIssueDate(task.completedAt),
+    )
+  )
+}
+
+export interface CloseIssueInput {
+  conclusion: string
+}
+
+export async function closeIssue(id: string, input: CloseIssueInput): Promise<IssueDetail> {
+  const conclusion = input.conclusion.trim()
+  if (!conclusion || conclusion.length > 2000) throw new Error('Kết luận không hợp lệ.')
+  return (await api.post<IssueDetail>(`/issues/${encodeURIComponent(id)}/close`, { conclusion }))
+    .data
 }
 
 export interface IssueAssignee {

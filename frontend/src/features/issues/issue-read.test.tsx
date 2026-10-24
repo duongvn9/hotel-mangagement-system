@@ -159,7 +159,14 @@ test('API whitelists query fields and bounds pagination without actor parameters
     priority: 'HIGH',
   } as unknown as IssueQuery)
   expect(get).toHaveBeenLastCalledWith('/issues', {
-    params: { page: 10000, limit: 100, keyword: '.*', category: 'exact', priority: 'HIGH' },
+    params: {
+      page: 10000,
+      limit: 100,
+      keyword: '.*',
+      category: 'exact',
+      priority: 'HIGH',
+      status: 'CLOSED',
+    },
   })
   await listIssues({ page: 0, limit: Number.NaN })
   expect(get).toHaveBeenLastCalledWith('/issues', { params: { page: 1, limit: 20 } })
