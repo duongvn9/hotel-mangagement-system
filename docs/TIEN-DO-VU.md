@@ -11,7 +11,7 @@
 - #74 / UC28: **MERGED**, PR #20 tại merge commit `266e40b`; parent đã xác minh merge. https://github.com/duongvn9/hotel-mangagement-system/pull/20 — mục 12 giữ bằng chứng triển khai trước merge, không phải trạng thái pending hiện tại.
 - #75 / UC29 và #79 / UC33: **MERGED**, PR #22 tại merge commit `787d1b8`. Mục 13 giữ lịch sử triển khai trước merge, không phải trạng thái pending hiện tại.
 - #76 / UC30 và #77 / UC31: **MERGED**, PR #25 tại `b5d2f2f` theo parent bàn giao; mục 14 giữ lịch sử trước merge, không phải trạng thái pending hiện tại.
-- #78 / UC32: **Implemented, pending review, không Done** trên `feature/vu-78-close-issue`; commit/PR chờ parent xử lý sau, CI và manual browser QA còn pending. Xem mục 15.
+- #78 / UC32: **Implemented, pending review, không Done** trên `feature/vu-78-close-issue`; đã push `daf0314` (BE), `588a389` (FE/docs); draft PR #26: https://github.com/duongvn9/hotel-mangagement-system/pull/26 — chưa merge, CI và manual browser QA còn pending. Xem mục 15.
 - #80 / UC34: **Chưa triển khai**, deferred sau **PROMPT10–12** khi có nguồn `SERVICE_ORDER` thật; H4 Service đã có schema/module nhưng không thay thế Service Order.
 - Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET/UC38 giữ contract hiện hữu, Task completion không tự close Issue. Mục 15 là hiện trạng; mục 14 trở xuống giữ lịch sử triển khai trước merge.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
