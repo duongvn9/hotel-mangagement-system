@@ -26,6 +26,13 @@ const STAFF_ROLES: readonly string[] = [Role.Receptionist, Role.Manager];
 /** Thời hạn giữ phòng trước khi đặt cọc (phải khớp cửa sổ thanh toán VNPay). */
 const HOLD_WINDOW_MS = 15 * 60 * 1000;
 const MS_PER_DAY = 86_400_000;
+/** Tỷ lệ đặt cọc trên tiền phòng (placeholder, chờ SRS chốt chính thức). */
+const DEPOSIT_RATE = 0.3;
+
+interface RoomRate {
+  room: Types.ObjectId;
+  ratePerNight: number;
+}
 
 type PopulatedRoom = {
   _id: Types.ObjectId;
@@ -66,12 +73,17 @@ export class BookingsService {
       );
     }
 
-    const { roomTotal } = await this.priceRooms(roomIds, dto.guests, stay);
+    const { roomTotal, rates } = await this.priceRooms(
+      roomIds,
+      dto.guests,
+      stay,
+    );
     const now = this.clock.now();
     await this.assertRoomsFree(roomIds, stay, now);
 
     const booking = await this.createBookingDocument(dto, roomIds, stay, {
       roomTotal,
+      rates,
       customer:
         user.role === Role.Customer ? new Types.ObjectId(user.id) : undefined,
     });
@@ -119,7 +131,7 @@ export class BookingsService {
     roomIds: Types.ObjectId[],
     guests: number,
     stay: StayInterval,
-  ): Promise<{ roomTotal: number }> {
+  ): Promise<{ roomTotal: number; rates: RoomRate[] }> {
     const rows = await this.rooms
       .find({ _id: { $in: roomIds } })
       .populate<{ roomType: PopulatedRoom['roomType'] }>(
@@ -141,6 +153,7 @@ export class BookingsService {
 
     let capacity = 0;
     let perNight = 0;
+    const rates: RoomRate[] = [];
     for (const room of rows) {
       if (!room.isActive || room.status === RoomStatus.Maintenance) {
         throw new ConflictException(`Room ${room._id} is not bookable`);
@@ -150,13 +163,14 @@ export class BookingsService {
       }
       capacity += room.roomType.adultCapacity + room.roomType.childCapacity;
       perNight += room.roomType.basePrice;
+      rates.push({ room: room._id, ratePerNight: room.roomType.basePrice });
     }
     if (guests > capacity) {
       throw new BadRequestException(
         'Selected rooms cannot hold the party size',
       );
     }
-    return { roomTotal: perNight * nights };
+    return { roomTotal: perNight * nights, rates };
   }
 
   /** Chặn trước nếu phòng đã bị booking chắc chắn hoặc hold còn hiệu lực chiếm. */
@@ -253,8 +267,10 @@ export class BookingsService {
     dto: CreateBookingDto,
     roomIds: Types.ObjectId[],
     stay: StayInterval,
-    extra: { roomTotal: number; customer?: Types.ObjectId },
+    extra: { roomTotal: number; rates: RoomRate[]; customer?: Types.ObjectId },
   ) {
+    // Cọc = 30% tiền phòng (placeholder chờ SRS), làm tròn về VND nguyên.
+    const depositAmount = Math.round(extra.roomTotal * DEPOSIT_RATE);
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         return await this.bookings.create({
@@ -269,8 +285,8 @@ export class BookingsService {
           guests: dto.guests,
           status: BookingStatus.PendingDeposit,
           roomTotal: extra.roomTotal,
-          // Chính sách đặt cọc: trả trước toàn bộ tiền phòng để xác nhận (placeholder chờ SRS).
-          depositAmount: extra.roomTotal,
+          depositAmount,
+          rateSnapshot: extra.rates,
         });
       } catch (error) {
         if ((error as { code?: number }).code === 11000 && attempt < 4)

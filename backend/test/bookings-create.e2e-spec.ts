@@ -129,12 +129,15 @@ describe('Create booking (e2e)', () => {
     expect(response.body).toMatchObject({
       status: 'PENDING_DEPOSIT',
       roomTotal: 2000000, // 1 phòng x 2 đêm x 1.000.000
-      depositAmount: 2000000,
+      depositAmount: 600000, // cọc 30%
       guests: 2,
     });
     expect(response.body.code).toMatch(/^BK/);
     const saved = await bookings.findById(response.body.id).lean();
     expect(String(saved?.customer)).toBe(String(customerId));
+    // Snapshot đơn giá được lưu để H7 kiểm chứng.
+    expect(saved?.rateSnapshot).toHaveLength(1);
+    expect(saved?.rateSnapshot[0]).toMatchObject({ ratePerNight: 1000000 });
     const hold = await holds
       .findOne({ booking: new Types.ObjectId(response.body.id) })
       .lean();
