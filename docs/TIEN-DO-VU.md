@@ -14,9 +14,9 @@
 - #78 / UC32: **MERGED**, PR #26 tại merge commit `8df46e7`; đã xác minh commit là ancestor của local `origin/main`. https://github.com/duongvn9/hotel-mangagement-system/pull/26 — mục 15 giữ lịch sử trước merge, không phải trạng thái pending hiện tại.
 - #68 / UC22 và #69 / UC23: **MERGED**, PR #27 tại `a9a1525`, parent đã xác minh merge; mục 16 giữ lịch sử trước merge. https://github.com/duongvn9/hotel-mangagement-system/pull/27
 - #70 / UC24 và #71 / UC25: **MERGED**, PR #30 tại `e568713`, parent đã xác minh merge; mục 17 giữ lịch sử trước merge. https://github.com/duongvn9/hotel-mangagement-system/pull/30
-- #72 / UC26 và #73 / UC27: **Implemented, pending review, không Done**, nhánh `feature/vu-72-73-service-assignment-history`; API/Task/projection/history, bằng chứng và QA pending ở mục 18. Đã push `8d083dc` (BE), `656f6c8` (giữ H7 contract), `bcd805f` (FE/docs); draft PR #31: https://github.com/duongvn9/hotel-mangagement-system/pull/31 — chờ CI/review, chưa merge.
-- #80 / UC34: **Chưa triển khai**, chờ **PROMPT09B**. Đã có Task thật nguồn `SERVICE_ORDER` và context Service Order thật; không suy assignment/history thành execution reporting đã triển khai.
-- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET/UC38 giữ contract hiện hữu, Task completion không tự close Issue. Mục 18 là hiện trạng; mục 17 trở xuống giữ lịch sử triển khai trước merge.
+- #72 / UC26 và #73 / UC27: **MERGED**, PR #31 tại merge commit `0c04844`, parent đã xác minh merge. https://github.com/duongvn9/hotel-mangagement-system/pull/31 — mục 18 giữ lịch sử triển khai trước merge, không phải trạng thái pending hiện tại.
+- #80 / UC34: **Implemented, pending review, không Done**, nhánh `feature/vu-80-report-service-issue`; contract thực tế, bằng chứng agent và QA pending ở mục 19. Commit/PR chưa biết, parent bổ sung sau; final checks của parent và CI/review còn pending. **Không triển khai PROMPT13 trước khi #80 được merge.**
+- Task core có persistence, atomic active-work uniqueness và CAS; UC37 GET/UC38 giữ contract hiện hữu, Task completion không tự close Issue. Mục 19 là hiện trạng; mục 18 trở xuống giữ lịch sử triển khai trước merge.
 - Đã đọc UC37/38, BR-TASK-03/05 và ERD ngoài repo trong thư mục `WDP301/docs`.
 - **Không đổi contract H8 nếu chưa thông báo nhóm**, đặc biệt Lâm dùng cho UC35/UC55 và các nguồn Service Order/Issue/Maintenance.
 
@@ -28,7 +28,64 @@
 - Sau đồng bộ dependencies: BE format/lint/typecheck/build PASS, 837 unit tests PASS; FE format/lint/typecheck/build PASS, 314 tests PASS. Bundle-size warning vẫn không chặn build.
 - `git diff --check` PASS; E2E được xác minh qua CI head sau push. Chỉ merge PR #27 sau khi CI xanh và GitHub xác nhận không conflict; chưa triển khai PROMPT11 trong lượt xử lý conflict.
 
-## 18. Jira #72 / UC26 và #73 / UC27 — Service Assignment / Own Execution History (hiện trạng)
+## 19. Jira #80 / UC34 — Report Service Issue (hiện trạng)
+
+### Trạng thái và đối chiếu SRS
+
+- **Implemented, pending review, không Done**, nhánh `feature/vu-80-report-service-issue`. #72/#73 đã **MERGED** qua PR #31 tại `0c04844`, parent đã xác minh. Commit/PR #80 **chưa biết, parent bổ sung sau**; final checks của parent, CI và review còn pending. **Không triển khai PROMPT13 trước khi #80 merge.**
+- Đã đọc BE/FE thực tế và SRS ngoài repo `SRS - HMS.docx.md:839–850` (UC34), BR-ISS-02/04/10 tại `:1350–1358`: báo từ công việc dịch vụ đang thực hiện, giữ service/task context và chờ review trước khi giao việc xử lý. Chọn **IN_PROGRESS** để diễn giải bảo thủ điều kiện “performing”; đây là mapping triển khai cần review, không khẳng định SRS ghi nguyên enum này hoặc cho phép mọi trạng thái assigned/completed.
+- Tạo **Issue hiện hữu**, không model/lifecycle Issue mới. `sourceTask` là ref Task dịch vụ phát sinh báo cáo, **khác `linkedTask`** dùng cho Issue Resolution Task sau review. Không tạo Task, không cập nhật progress/completion của Task hay Service Order, không assignment, billing hoặc close Issue; luồng review/assignment/closure hiện hữu giữ nguyên.
+
+### API, eligibility và nguồn authoritative
+
+- Prefix `/api/v1`: **`GET /issues/service-tasks/:taskId/context`** và **`POST /issues/service-tasks/:taskId`**; shared FE client bỏ prefix. POST body allowlist **`{ title, category, description, requestId? }`**; ba chuỗi trim bắt buộc không trắng, tối đa lần lượt **200 / 100 / 5000** ký tự; requestId optional UUID, không nhận null. Không nhận client bookingId/serviceId/serviceOrderId/sourceTaskId/reporter/status/priority/roomId hoặc field lạ.
+- Cả route/service chỉ role chính xác **SERVICE_STAFF**, và service đọc User thật **isActive + đúng role**. Task phải thuộc chính staff, `sourceType: SERVICE_ORDER`, canonical `taskType: SERVICE_ORDER_EXECUTION`; **context và report mới chỉ IN_PROGRESS**. Anonymous 401, sai role/inactive 403, nguồn missing/foreign/sai chain (kể cả taskId malformed) 404, trạng thái không hợp lệ hoặc key khác payload 409; body sai 400.
+- Đọc Service Order thật theo Task.sourceId, bắt buộc **ACCEPTED + order.linkedTask khớp Task**; Service phải tồn tại; Booking phải **active**, đúng order.booking và **booking.customer khớp order.customer**. Server derive reporter, Booking/Service Order/source Task/Service refs, priority **NORMAL**, status **PENDING_REVIEW**, reportedAt giờ server; POST trả receipt allowlist **201**, không raw document.
+- Existing execution chain vẫn hợp lệ khi **Service inactive hoặc Booking CHECKED_OUT**, miễn các điều kiện trên còn đúng. Không áp điều kiện catalog active/CHECKED_IN của tạo Service Order vào UC34, không suy phòng từ Service Order hoặc tự điền room. Booking inactive/missing hoặc đổi customer không còn hợp lệ.
+- **Giới hạn TOCTOU:** eligibility/ownership/chain được đọc rồi Issue được insert bằng thao tác riêng; **không có transaction xuyên User/Task/Order/Service/Booking/Issue**, không khóa nguồn bất biến. Partial unique index chỉ bảo đảm uniqueness của key, không bảo đảm nguồn không đổi giữa validation và insert.
+
+### Retry, dedupe và giới hạn FE
+
+- Module init tạo partial unique index **`(reporter, requestId)`**, chỉ áp dụng requestId kiểu string; UUID chuẩn hóa lowercase. Fingerprint SHA-256 gồm source task ID + title/category/description đã trim. Cùng key/cùng payload trả cùng receipt và giữ Issue đầu tiên; khác payload **409**; duplicate-key race reconcile record đã persist. Không key: nhiều báo cáo giống nhau vẫn hợp lệ, không dedupe theo nội dung hay giới hạn một Issue mỗi Task.
+- Replay cùng key kiểm tra lại active staff/own Task/nguồn liên kết hợp lệ trước khi trả Issue đã có; được trả ngay cả khi Task nay **COMPLETED**, vì lookup existing đứng trước gate IN_PROGRESS. Đây không phải quyền báo cáo mới sau completion, không bypass ownership hoặc Booking/chain validation. GET context vẫn yêu cầu IN_PROGRESS.
+- FE tích hợp form tại own Task detail, chỉ SERVICE_STAFF với nguồn/type/status đủ điều kiện; tải context thật khi mở. Có loading/error/reload, validation/focus lỗi, pending/ref chống double submit, mutation **retry: false** và receipt “Chờ xem xét”. Context/Task được yêu cầu refetch khi lỗi 403/404/409; API vẫn authoritative, không chỉ tin eligibility trên UI.
+- `crypto.randomUUID()` giữ trong **memory theo payload chuẩn hóa** để cùng payload retry dùng cùng key; thay payload dùng key riêng. **Reload/remount mất key**, không hứa retry exactly-once sau reload. “Báo sự cố khác” sau success xóa attempts/reset form để báo cáo mới có key mới, kể cả cùng nội dung. BE recovery khi completed không đồng nghĩa FE vẫn cho gửi khi context không còn eligible.
+
+### Privacy, read scope và receipt
+
+- Context chỉ taskId/title/status, serviceOrderId, Service `{ id, name, unit }`, Booking `{ id, code }`; không raw Task/Order/User/Booking, customer name/contact hoặc PII khách. Receipt chỉ Issue id/title/category/description/priority/status/reportedAt và bookingId/serviceOrderId/sourceTaskId/serviceId; không requestId/fingerprint, audit hoặc source document.
+- **Không mở quyền general Issue list/detail cho SERVICE_STAFF**; receipt không deep-link vào trang Issue/Service Order/Booking ngoài quyền. Context IDs là định danh tham chiếu, không phải cấp quyền đọc nguồn. Receptionist nhận Issue mới qua pending list/review hiện hữu; việc tạo report không thay chính sách read/review/close.
+- FE invalidate Issue list trong QueryClient/session hiện tại sau success; không tuyên bố Receptionist session khác được cập nhật realtime, cần refetch/reload theo policy hiện hữu.
+
+### Bằng chứng agent và kiểm tra còn pending
+
+Các số liệu dưới đây là **agent bàn giao**, không phải parent đã chạy final checks hoặc kết quả chạy lại trong lượt chỉ sửa tài liệu này. Không suy local PASS thành CI/review/manual QA/Done; giữ lịch sử lỗi ban đầu.
+
+| Phạm vi | Kết quả được bàn giao |
+|---|---|
+| Agent BE unit | **850 tests PASS** |
+| Agent BE fresh full E2E | **316 tests PASS**, gồm **37 tests mới**; lần đầu có collision seed fixture H5, lượt fresh rerun PASS, không gọi lần lỗi đầu PASS |
+| Agent FE | **385 tests PASS** trong full rerun bình thường; có lỗi test transient ban đầu, không giấu hoặc coi lần đầu PASS; parent chỉ nhận summary nên không tự bịa chi tiết lỗi/session |
+| Parent final checks | **Pending**, parent sẽ chạy và bổ sung kết quả, chưa có bằng chứng final PASS |
+| Commit / PR / CI / review #80 | **Chưa biết / pending**, parent bổ sung sau; không lấy PR #31 làm PR của #80 |
+| Manual browser | **Chưa thực hiện** desktop/**375px**, keyboard/overflow và live authenticated flow; bundle-size warning không chặn build nhưng không phải bằng chứng browser QA |
+
+- Manual QA pending: staff A/B, anonymous/wrong role/inactive user; foreign Task, wrong source/type, missing/mismatched linkedTask/Order/Service/Booking/customer, ACCEPTED vs trạng thái khác; ASSIGNED/IN_PROGRESS/COMPLETED; inactive Service và checked-out Booking theo policy trên, Booking inactive bị chặn.
+- Kiểm tra context/receipt IDs và không lộ PII; spoof client refs/reporter/status/priority/room, field lạ/null, trim/rỗng/200–100–5000 và vượt giới hạn; SERVICE_STAFF vẫn bị từ chối general Issue read, receipt không có deep link sai quyền.
+- Same-key/same-payload retry và concurrent race, changed-payload 409, replay sau completion khi ownership/chain còn hợp lệ; no-key repeat hợp lệ, FE same-payload key ổn định trong memory, reload mất key và explicit new report key mới. Pending khóa double submit; lỗi không tạo báo cáo thành công giả.
+- So sánh trước/sau submit/retry: Issue **PENDING_REVIEW / NORMAL**, đúng source refs, không gọi Task create/progress/complete, không sửa Service Order/billing/close. Receptionist refetch thấy Issue qua existing pending list; review/Issue Resolution Task và closure cũ không đổi, sourceTask không bị nhầm linkedTask.
+- Lượt này **chỉ sửa `docs/TIEN-DO-VU.md`**, không Git/commit/push, seed/shared DB, Mongo/container hoặc chạy lại suite. Final lint/typecheck và các checks của parent vẫn pending, không dùng kết quả lịch sử mục 18 làm bằng chứng #80.
+
+### Source đã đối chiếu
+
+- SRS ngoài repo: `D:/FULearning/Fall26/WDP301/docs/SRS - HMS.docx.md:839–850`, `:1350–1358`.
+- BE routes/role: `backend/src/modules/issues/service-task-issues.controller.ts:10`; DTO: `backend/src/modules/issues/dto/create-issue.dto.ts:13`; index init/source/context: `backend/src/modules/issues/service-task-issues.service.ts:48–128`; receipt/report/dedupe: `:130–214`; sourceTask/index: `backend/src/modules/issues/schemas/issue.schema.ts:119`, `:134`.
+- FE own Task entry: `frontend/src/features/tasks/pages/AssignedTaskDetailPage.tsx:163`; context/pending/retry: `frontend/src/features/issues/ServiceTaskIssueReport.tsx:31–104`; receipt/new report: `:117–142`; form/limits: `:185–243`; API: `frontend/src/features/issues/service-issue-api.ts`.
+- Tests: `backend/src/modules/issues/service-task-issues.service.spec.ts`, `backend/test/service-task-issues.e2e-spec.ts`, `frontend/src/features/issues/service-issue.test.tsx`.
+
+## 18. Jira #72 / UC26 và #73 / UC27 — Service Assignment / Own Execution History (lịch sử trước merge)
+
+> #72/#73 đã **MERGED** qua PR #31 tại `0c04844`, parent đã xác minh. Trạng thái pending/chưa biết commit/PR và #80 chưa triển khai bên dưới là lịch sử trước merge, không phải hiện trạng; mục 19 mô tả #80 đã implemented, pending review, không Done.
 
 ### Trạng thái và phạm vi
 
@@ -101,7 +158,7 @@ Các số liệu sau do **parent/agent bàn giao cho #72/#73**, không phải ch
 
 ## 17. Jira #70 / UC24 và #71 / UC25 — Service Requests / Review và Billing (lịch sử trước merge)
 
-> #70/#71 đã MERGED qua PR #30 tại `e568713`, parent đã xác minh. Các trạng thái pending/chưa merge, H8 chưa dùng và #80 chờ PROMPT12 bên dưới giữ mốc trước merge, không phải hiện trạng; mục 18 mô tả #72/#73 và #80 chờ PROMPT09B.
+> #70/#71 đã MERGED qua PR #30 tại `e568713`, parent đã xác minh. Các trạng thái pending/chưa merge, H8 chưa dùng và #80 chờ PROMPT12 bên dưới giữ mốc trước merge, không phải hiện trạng; mục 18 giữ lịch sử #72/#73, mục 19 mô tả hiện trạng #80.
 
 ### Trạng thái và nguồn tích hợp thật
 
