@@ -22,6 +22,12 @@
 - Đã đọc SRS ngoài repo `D:/FULearning/Fall26/WDP301/docs/SRS - HMS.docx.md:766–775` (UC29: Customer theo stay/service của mình, Receptionist xem Issue Requests, Manager theo management scope) và `:826–835` (UC33: Manager xem detail đúng scope, không sửa dữ liệu). Detail Customer/Receptionist phục vụ điều hướng list trong cùng quyền đọc; không diễn giải UC33 thành quyền sửa hoặc quyền đọc nguồn mở rộng.
 - Đã tách **hai commit BE `a01bdc7` rồi FE `a2d11ba` trong draft PR #22**, FE phụ thuộc contract GET của BE và cả hai dựa trên #74 đã merge. Diff lớn chủ yếu do bộ test; chưa merge, chờ CI/review.
 
+### Kết quả CI và sửa fixture E2E
+
+- Run `40064582714` cho head `171822f`: FE PASS, BE fail tại E2E `denies issue reads to CUSTOM_READER` (expected403, actual400). Nguyên nhân fixture gửi custom role qua dev header nhưng DevAuthMiddleware chỉ chấp nhận built-in Role enum; request chưa tới guard. Không phải lỗi mở quyền hoặc lỗi base.
+- Tách test built-in staff denied403 khỏi test custom dev header invalid400; giữ kiểm tra custom role bị service/HTTP guard từ chối trong unit suite. Không sửa Auth/RBAC, không bỏ assertion ownership hoặc tắt test.
+- Sau sửa: backend format/lint/typecheck/603 unit tests/build PASS. Chờ chạy lại E2E trên CI đúng head mới; không tuyên bố pass trước khi xác minh.
+
 ### API, scope và privacy đã đối chiếu source
 
 - `GET /api/v1/issues` (shared client: `GET /issues`) nhận `page` mặc định 1, giới hạn 1–10000; `limit` mặc định 20, giới hạn 1–100; filter `status`, `priority` theo enum hiện hữu (**PENDING_REVIEW**, **NORMAL**), `category` khớp chính xác, `keyword` tìm literal trên title không phân biệt hoa thường, escape regex. Category/keyword trim 1–100 ký tự; query lạ bị 400. Sort `reportedAt DESC, _id DESC`; response `{ items, total, page, limit }`, items và total cùng filter/scope.

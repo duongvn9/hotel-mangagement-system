@@ -232,13 +232,18 @@ describe('Report issue (e2e)', () => {
     expect(dangling.body.message).toEqual(missingDetail.body.message);
   });
 
-  it.each(['SERVICE_STAFF', 'OPERATIONS_STAFF', 'CUSTOM_READER'])(
+  it.each(['SERVICE_STAFF', 'OPERATIONS_STAFF'])(
     'denies issue reads to %s',
     async (role) => {
       await get('', role).expect(403);
       await get(`/${missing}`, role).expect(403);
     },
   );
+
+  it('rejects unsupported custom-role dev headers before authentication', async () => {
+    await get('', 'CUSTOM_READER').expect(400);
+    await get(`/${missing}`, 'CUSTOM_READER').expect(400);
+  });
 
   it('enforces read authentication and strict query validation', async () => {
     await request(app.getHttpServer()).get('/api/v1/issues').expect(401);
