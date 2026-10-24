@@ -4,8 +4,12 @@ import { useAuth } from './auth-context'
 
 // shortcut: menu tạm theo role, chuyển vào layout theo role khi có H10 (Khoa).
 const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
-  CUSTOMER: [{ to: '/customer/issues/report', label: 'Báo sự cố' }],
+  CUSTOMER: [
+    { to: '/customer/issues', label: 'Sự cố của tôi' },
+    { to: '/customer/issues/report', label: 'Báo sự cố' },
+  ],
   MANAGER: [
+    { to: '/manager/issues', label: 'Danh sách sự cố' },
     { to: '/manager/rooms', label: 'Phòng' },
     { to: '/manager/room-types', label: 'Loại phòng' },
     { to: '/manager/amenities', label: 'Tiện nghi' },
@@ -13,7 +17,10 @@ const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
     { to: '/manager/roles', label: 'Vai trò' },
     { to: '/staff/feedback', label: 'Phản hồi' },
   ],
-  RECEPTIONIST: [{ to: '/staff/feedback', label: 'Phản hồi' }],
+  RECEPTIONIST: [
+    { to: '/staff/issues', label: 'Yêu cầu sự cố' },
+    { to: '/staff/feedback', label: 'Phản hồi' },
+  ],
   SERVICE_STAFF: [{ to: '/staff/service/dashboard', label: 'Bảng điều khiển dịch vụ' }],
   OPERATIONS_STAFF: [{ to: '/staff/operations/dashboard', label: 'Bảng điều khiển vận hành' }],
 }

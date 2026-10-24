@@ -26,6 +26,7 @@ describe('Report issue (e2e)', () => {
   const room = new Types.ObjectId();
   const unrelated = new Types.ObjectId();
   const missing = new Types.ObjectId();
+  const createdIssueIds: string[] = [];
   const customer = { 'x-dev-role': 'CUSTOMER', 'x-dev-user-id': String(owner) };
   const payload = {
     title: ' Broken lamp ',
@@ -37,7 +38,10 @@ describe('Report issue (e2e)', () => {
     request(app.getHttpServer())
       .post('/api/v1/issues')
       .set(customer)
-      .send(body);
+      .send(body)
+      .expect((response) => {
+        if (response.body.id) createdIssueIds.push(response.body.id);
+      });
 
   beforeAll(async () => {
     assertTestDatabase(process.env.MONGODB_URI);
@@ -95,7 +99,7 @@ describe('Report issue (e2e)', () => {
 
   afterAll(async () => {
     if (!app) return;
-    await issues.deleteMany({ reporter: { $in: [owner, other] } });
+    await issues.deleteMany({ _id: { $in: createdIssueIds } });
     await bookings.deleteMany({ _id: { $in: [booking, foreign] } });
     await rooms.deleteMany({ _id: { $in: [room, unrelated] } });
     await app.close();
@@ -141,7 +145,8 @@ describe('Report issue (e2e)', () => {
       .post('/api/v1/issues')
       .set({ ...customer, 'x-dev-user-id': String(other) })
       .send({ ...payload, bookingId: String(foreign) })
-      .expect(201);
+      .expect(201)
+      .expect((response) => createdIssueIds.push(response.body.id));
   });
 
   it.each([
@@ -168,6 +173,93 @@ describe('Report issue (e2e)', () => {
       await post({ ...payload, roomId: String(id) }).expect(404);
     await rooms.updateOne({ _id: room }, { isActive: false });
     await post({ ...payload, roomId: String(room) }).expect(404);
+  });
+
+  const get = (path: string, role = 'CUSTOMER', userId = owner) =>
+    request(app.getHttpServer())
+      .get(`/api/v1/issues${path}`)
+      .set({ 'x-dev-role': role, 'x-dev-user-id': String(userId) });
+
+  it('scopes real Mongo reads by current booking ownership, not reporter or email', async () => {
+    const response = await post({
+      ...payload,
+      title: `Literal [${booking}].*`,
+    }).expect(201);
+    const id = response.body.id;
+    const detail = await get(`/${id}`).expect(200);
+    expect(detail.body).toEqual({
+      ...response.body,
+      linkedTasks: [],
+      linkedTasksAvailable: false,
+    });
+    await get(`/${id}`, 'CUSTOMER', other).expect(404);
+    const keyword = encodeURIComponent(`[${booking}].*`);
+    const page = await get(
+      `?keyword=${keyword}&category=Lighting&status=PENDING_REVIEW&priority=NORMAL&limit=1`,
+    ).expect(200);
+    expect(page.body.total).toBe(1);
+    expect(page.body.items[0].id).toBe(id);
+    expect(page.body.items[0]).not.toHaveProperty('reporter');
+    const empty = await get(`?keyword=${keyword}`, 'CUSTOMER', other).expect(
+      200,
+    );
+    expect(empty.body).toEqual({ items: [], total: 0, page: 1, limit: 20 });
+    await bookings.updateOne({ _id: booking }, { customer: other });
+    await get(`/${id}`).expect(404);
+    await get(`/${id}`, 'CUSTOMER', other).expect(200);
+    const revoked = await get(`?keyword=${keyword}`).expect(200);
+    expect(revoked.body.total).toBe(0);
+    await bookings.updateOne({ _id: booking }, { $unset: { customer: 1 } });
+    await get(`/${id}`).expect(404);
+    await get(`/${id}`, 'CUSTOMER', other).expect(404);
+    for (const role of ['RECEPTIONIST', 'MANAGER']) {
+      await get(`/${id}`, role).expect(200);
+      const operational = await get(`?keyword=${keyword}`, role).expect(200);
+      expect(operational.body.items[0].id).toBe(id);
+    }
+  });
+
+  it('hides missing and inactive booking context with identical detail errors', async () => {
+    const response = await post(payload).expect(201);
+    const missingDetail = await get(`/${new Types.ObjectId()}`).expect(404);
+    const malformed = await get('/bad-id').expect(404);
+    expect(malformed.body.message).toEqual(missingDetail.body.message);
+    await bookings.updateOne({ _id: booking }, { isActive: false });
+    const inactive = await get(`/${response.body.id}`).expect(404);
+    expect(inactive.body.message).toEqual(missingDetail.body.message);
+    await issues.updateOne({ _id: response.body.id }, { booking: missing });
+    const dangling = await get(`/${response.body.id}`).expect(404);
+    expect(dangling.body.message).toEqual(missingDetail.body.message);
+  });
+
+  it.each(['SERVICE_STAFF', 'OPERATIONS_STAFF'])(
+    'denies issue reads to %s',
+    async (role) => {
+      await get('', role).expect(403);
+      await get(`/${missing}`, role).expect(403);
+    },
+  );
+
+  it('rejects unsupported custom-role dev headers before authentication', async () => {
+    await get('', 'CUSTOM_READER').expect(400);
+    await get(`/${missing}`, 'CUSTOM_READER').expect(400);
+  });
+
+  it('enforces read authentication and strict query validation', async () => {
+    await request(app.getHttpServer()).get('/api/v1/issues').expect(401);
+    await request(app.getHttpServer())
+      .get(`/api/v1/issues/${missing}`)
+      .expect(401);
+    for (const query of [
+      'page=0',
+      'limit=101',
+      'status=CLOSED',
+      'priority=HIGH',
+      'keyword=',
+      'reporter=x',
+    ]) {
+      await get(`?${query}`).expect(400);
+    }
   });
 
   it('rejects guests, staff and unsupported input', async () => {
