@@ -111,8 +111,29 @@ export class Issue {
 
   @Prop({ type: Types.ObjectId, ref: 'Room' })
   room?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'ServiceOrder' })
+  serviceOrder?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Task' })
+  sourceTask?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Service' })
+  service?: Types.ObjectId;
+
+  @Prop({ select: false })
+  requestId?: string;
+
+  @Prop({ select: false })
+  requestFingerprint?: string;
 }
 
 export const IssueSchema = SchemaFactory.createForClass(Issue);
 IssueSchema.index({ reporter: 1, reportedAt: -1 });
 IssueSchema.index({ booking: 1 });
+export const ISSUE_REQUEST_INDEX = {
+  name: 'unique_issue_reporter_request',
+  unique: true,
+  partialFilterExpression: { requestId: { $type: 'string' } },
+};
+IssueSchema.index({ reporter: 1, requestId: 1 }, ISSUE_REQUEST_INDEX);

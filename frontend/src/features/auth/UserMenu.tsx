@@ -25,7 +25,10 @@ const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
     { to: '/staff/issues', label: 'Yêu cầu sự cố' },
     { to: '/staff/feedback', label: 'Phản hồi' },
   ],
-  SERVICE_STAFF: [{ to: '/staff/service/dashboard', label: 'Bảng điều khiển dịch vụ' }],
+  SERVICE_STAFF: [
+    { to: '/staff/service/dashboard', label: 'Bảng điều khiển dịch vụ' },
+    { to: '/staff/service-history', label: 'Lịch sử thực hiện dịch vụ' },
+  ],
   OPERATIONS_STAFF: [
     { to: '/staff/operations/dashboard', label: 'Bảng điều khiển vận hành' },
     { to: '/operations/maintenance/report', label: 'Báo hỏng thiết bị' },

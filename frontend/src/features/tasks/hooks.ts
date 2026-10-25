@@ -33,6 +33,7 @@ export function useUpdateTaskProgress(id: string) {
     Promise.all([
       client.invalidateQueries({ queryKey: detailKey, exact: true }),
       client.invalidateQueries({ queryKey: ['assigned-tasks', me?.id] }),
+      client.invalidateQueries({ queryKey: ['service-history', me?.id, me?.role] }),
     ])
 
   return useMutation({

@@ -18,10 +18,26 @@ import { Booking, BookingStatus } from '../bookings/schemas/booking.schema.js';
 import { Service } from '../services/schemas/service.schema.js';
 import { User } from '../users/schemas/user.schema.js';
 import { InvoicesService } from '../invoices/invoices.service.js';
-import type { InvoiceDocument } from '../invoices/schemas/invoice.schema.js';
-import { InvoiceChargeType } from '../invoices/schemas/invoice-charge.schema.js';
-import { ServiceOrderReviewStatus } from './service-order-status.js';
 import {
+  Invoice,
+  type InvoiceDocument,
+} from '../invoices/schemas/invoice.schema.js';
+import { InvoiceChargeType } from '../invoices/schemas/invoice-charge.schema.js';
+import {
+  ServiceOrderExecutionStatus,
+  ServiceOrderReviewStatus,
+} from './service-order-status.js';
+import { TasksService } from '../tasks/tasks.service.js';
+import {
+  SERVICE_ORDER_EXECUTION_TASK_TYPE,
+  TaskSourceType,
+} from '../tasks/task-contract.js';
+import type { Task } from '../tasks/schemas/task.schema.js';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import {
+  AssignServiceOrderDto,
+  ServiceHistoryQuery,
   CreateServiceOrderDto,
   ListServiceOrdersQuery,
   ReviewServiceOrderDto,
@@ -40,6 +56,8 @@ export class ServiceOrdersService implements OnModuleInit {
     @InjectModel(Service.name) private readonly services: Model<Service>,
     private readonly invoices: InvoicesService,
     @InjectModel(User.name) private readonly users: Model<User>,
+    private readonly tasks: TasksService,
+    @InjectModel(Invoice.name) private readonly invoiceRecords: Model<Invoice>,
   ) {}
 
   async onModuleInit() {
@@ -77,7 +95,33 @@ export class ServiceOrdersService implements OnModuleInit {
     return row;
   }
 
-  private response(row: ServiceOrderDocument) {
+  private async executionTask(row: ServiceOrderDocument) {
+    if (
+      !row.linkedTask ||
+      row.reviewStatus !== ServiceOrderReviewStatus.Accepted
+    )
+      return null;
+    const task = await this.tasks.findServiceOrderExecutionWork(
+      String(row._id),
+      row.linkedTask,
+    );
+    if (task) {
+      await this.tasks.repairServiceOrderExecution(task);
+      row.executionStatus =
+        task.status as unknown as ServiceOrderExecutionStatus;
+    }
+    return task;
+  }
+
+  private async repairExecutionScope(filter: object) {
+    const rows = await this.orders
+      .find({ ...filter, linkedTask: { $exists: true } })
+      .exec();
+    await Promise.all(rows.map((row) => this.executionTask(row)));
+  }
+
+  private async response(row: ServiceOrderDocument) {
+    await this.executionTask(row);
     return {
       id: String(row._id),
       bookingId: String(row.booking),
@@ -203,6 +247,8 @@ export class ServiceOrdersService implements OnModuleInit {
           }
         : {}),
     };
+    const { executionStatus: _executionStatus, ...repairScope } = filter;
+    await this.repairExecutionScope(repairScope);
     const [rows, total] = await Promise.all([
       this.orders
         .find(filter)
@@ -213,7 +259,7 @@ export class ServiceOrdersService implements OnModuleInit {
       this.orders.countDocuments(filter).exec(),
     ]);
     return {
-      items: rows.map((row) => this.response(row)),
+      items: await Promise.all(rows.map((row) => this.response(row))),
       total,
       page: query.page,
       limit: query.limit,
@@ -237,7 +283,7 @@ export class ServiceOrdersService implements OnModuleInit {
   }
 
   private staffSelection =
-    '+reviewedBy +reviewedAt +reviewDecision +reviewReason +billedInvoiceId +billedAt';
+    '+reviewedBy +reviewedAt +reviewDecision +reviewReason +billedInvoiceId +billedAt +assignmentAssignee +assignmentDueAt';
 
   private async staffResponse(row: ServiceOrderDocument) {
     const [booking, customer] = await Promise.all([
@@ -248,7 +294,19 @@ export class ServiceOrdersService implements OnModuleInit {
       this.users.findById(row.customer).select('fullName').exec(),
     ]);
     return {
-      ...this.response(row),
+      ...(await this.response(row)),
+      task: await this.taskSummary(row),
+      ...(row.executionStatus === ServiceOrderExecutionStatus.Assigning &&
+      row.assignmentAssignee
+        ? {
+            assignmentIntent: {
+              assigneeId: String(row.assignmentAssignee),
+              ...(row.assignmentDueAt
+                ? { dueAt: row.assignmentDueAt.toISOString() }
+                : {}),
+            },
+          }
+        : {}),
       customer: {
         id: String(row.customer),
         fullName: customer?.fullName ?? null,
@@ -301,6 +359,8 @@ export class ServiceOrdersService implements OnModuleInit {
           }
         : {}),
     };
+    const { executionStatus: _executionStatus, ...repairScope } = filter;
+    await this.repairExecutionScope(repairScope);
     const [rows, total] = await Promise.all([
       this.orders
         .find(filter)
@@ -518,6 +578,242 @@ export class ServiceOrdersService implements OnModuleInit {
         'Review temporarily unavailable; retry the same review',
       );
     }
+  }
+
+  private assignmentSelection =
+    '+assignmentAssignee +assignmentRequestedBy +assignmentRequestedAt +assignmentDueAt +assignmentTitle';
+
+  private async assignmentOrder(id: string) {
+    const row = await this.orders
+      .findById(this.id(id))
+      .select(`${this.staffSelection} ${this.assignmentSelection}`)
+      .exec();
+    if (!row) throw new NotFoundException('Service order not found');
+    return row;
+  }
+
+  private async assertAssignable(row: ServiceOrderDocument) {
+    if (row.reviewStatus !== ServiceOrderReviewStatus.Accepted)
+      throw new ConflictException('Service order must be ACCEPTED');
+    this.validateAmount(row);
+    if (row.amount > 0) {
+      if (!row.billedInvoiceId || !row.billedAt)
+        throw new ConflictException('Service order billing is not confirmed');
+      const invoice = await this.invoiceRecords
+        .findById(row.billedInvoiceId)
+        .exec();
+      if (!invoice || !this.matchingCharge(invoice, row))
+        throw new ConflictException('Persisted service charge is missing');
+    }
+  }
+
+  async assignees(id: string, user: AuthUser) {
+    this.receptionist(user);
+    const row = await this.assignmentOrder(id);
+    await this.assertAssignable(row);
+    if (
+      ![
+        ServiceOrderExecutionStatus.NotStarted,
+        ServiceOrderExecutionStatus.Assigning,
+      ].includes(row.executionStatus)
+    )
+      throw new ConflictException('Service order is already assigned');
+    const items = await this.users
+      .find({ isActive: true, role: Role.ServiceStaff })
+      .select('_id fullName role')
+      .sort({ fullName: 1, _id: 1 })
+      .lean();
+    return {
+      items: items.map((staff) => ({
+        id: String(staff._id),
+        displayName: staff.fullName,
+        role: staff.role,
+      })),
+    };
+  }
+
+  async assign(id: string, input: AssignServiceOrderDto, user: AuthUser) {
+    const actor = this.receptionist(user);
+    const dto = plainToInstance(AssignServiceOrderDto, input);
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      Array.isArray(input) ||
+      (await validate(dto, { whitelist: true, forbidNonWhitelisted: true }))
+        .length
+    )
+      throw new BadRequestException('Invalid assignment input');
+    const assigneeId = this.id(dto.assigneeId);
+    const dueAt = dto.dueAt === undefined ? undefined : new Date(dto.dueAt);
+    if (dueAt && !Number.isFinite(dueAt.getTime()))
+      throw new BadRequestException('Invalid dueAt');
+    let row = await this.assignmentOrder(id);
+    await this.assertAssignable(row);
+    if (row.executionStatus === ServiceOrderExecutionStatus.NotStarted) {
+      const staff = await this.users
+        .findOne({ _id: assigneeId, isActive: true, role: Role.ServiceStaff })
+        .lean();
+      if (!staff)
+        throw new BadRequestException('Assignee must be active SERVICE_STAFF');
+      const locked = await this.orders
+        .findOneAndUpdate(
+          {
+            _id: row._id,
+            reviewStatus: ServiceOrderReviewStatus.Accepted,
+            executionStatus: ServiceOrderExecutionStatus.NotStarted,
+            assignmentTaskId: { $exists: false },
+            linkedTask: { $exists: false },
+          },
+          {
+            $set: {
+              executionStatus: ServiceOrderExecutionStatus.Assigning,
+              assignmentAssignee: assigneeId,
+              assignmentRequestedBy: actor,
+              assignmentRequestedAt: new Date(),
+              assignmentTitle: `Service order: ${row.serviceName}`,
+              assignmentTaskId: new Types.ObjectId(),
+              ...(dueAt ? { assignmentDueAt: dueAt } : {}),
+            },
+          },
+          { new: true, runValidators: true },
+        )
+        .select(`${this.staffSelection} ${this.assignmentSelection}`)
+        .exec();
+      row = locked ?? (await this.assignmentOrder(id));
+    }
+    if (row.executionStatus !== ServiceOrderExecutionStatus.Assigning)
+      throw new ConflictException(
+        'Assignment already finalized; reload service order',
+      );
+    if (
+      String(row.assignmentAssignee) !== String(assigneeId) ||
+      row.assignmentDueAt?.getTime() !== dueAt?.getTime()
+    )
+      throw new ConflictException(
+        'A different assignment intent is already pending',
+      );
+    if (
+      !row.assignmentTaskId ||
+      !row.assignmentTitle ||
+      !row.assignmentRequestedAt
+    )
+      throw new ConflictException('Assignment intent is incomplete');
+    try {
+      let task = await this.tasks.findServiceOrderExecutionWork(
+        id,
+        row.assignmentTaskId,
+      );
+      if (!task) {
+        try {
+          task = await this.tasks.create(
+            {
+              title: row.assignmentTitle,
+              taskType: SERVICE_ORDER_EXECUTION_TASK_TYPE,
+              priority: 'NORMAL',
+              sourceType: TaskSourceType.ServiceOrder,
+              sourceId: id,
+              assigneeId: String(row.assignmentAssignee),
+              ...(row.assignmentDueAt
+                ? { dueAt: row.assignmentDueAt.toISOString() }
+                : {}),
+            },
+            row.assignmentTaskId,
+            row.assignmentRequestedAt,
+          );
+        } catch (error) {
+          task = await this.tasks.findServiceOrderExecutionWork(
+            id,
+            row.assignmentTaskId,
+          );
+          if (!task) throw error;
+        }
+      }
+      if (
+        String(task.assignedTo) !== String(row.assignmentAssignee) ||
+        task.dueAt?.getTime() !== row.assignmentDueAt?.getTime() ||
+        task.title !== row.assignmentTitle ||
+        task.priority !== 'NORMAL' ||
+        task.assignedAt.getTime() !== row.assignmentRequestedAt.getTime()
+      )
+        throw new ConflictException(
+          'Existing source work does not match assignment intent',
+        );
+      const finalized = await this.orders
+        .findOneAndUpdate(
+          {
+            _id: row._id,
+            reviewStatus: ServiceOrderReviewStatus.Accepted,
+            executionStatus: ServiceOrderExecutionStatus.Assigning,
+            assignmentTaskId: row.assignmentTaskId,
+            linkedTask: { $exists: false },
+          },
+          { $set: { linkedTask: task._id, executionStatus: task.status } },
+          { new: true, runValidators: true },
+        )
+        .select(this.staffSelection)
+        .exec();
+      if (!finalized)
+        throw new ConflictException(
+          'Assignment already finalized; reload service order',
+        );
+      return await this.staffResponse(finalized);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new ServiceUnavailableException(
+        'Assignment pending; retry the same assignment',
+      );
+    }
+  }
+
+  private taskResponse(task: Task & { _id: Types.ObjectId }, history = false) {
+    return {
+      id: String(task._id),
+      status: task.status,
+      assignedAt: task.assignedAt,
+      ...(task.dueAt ? { dueAt: task.dueAt } : {}),
+      ...(task.completedAt ? { completedAt: task.completedAt } : {}),
+      ...(history ? { workResult: task.workResult } : {}),
+    };
+  }
+
+  private async taskSummary(row: ServiceOrderDocument) {
+    const task = await this.executionTask(row);
+    return task
+      ? { ...this.taskResponse(task), assigneeId: String(task.assignedTo) }
+      : null;
+  }
+
+  private serviceStaff(user: AuthUser) {
+    if (!user || !/^[a-f\d]{24}$/i.test(user.id))
+      throw new UnauthorizedException();
+    if (user.role !== Role.ServiceStaff) throw new ForbiddenException();
+  }
+
+  async history(query: ServiceHistoryQuery, user: AuthUser, id?: string) {
+    this.serviceStaff(user);
+    if (query.from && query.to && new Date(query.from) > new Date(query.to))
+      throw new BadRequestException('from must not be after to');
+    const result = await this.tasks.listCompletedServiceWork(
+      user.id,
+      query,
+      id ? this.id(id) : undefined,
+    );
+    const items = await Promise.all(
+      result.items.map(async (task) => {
+        const row = this.orders.hydrate(task.order);
+        await this.tasks.repairServiceOrderExecution(task);
+        row.executionStatus = ServiceOrderExecutionStatus.Completed;
+        return {
+          ...(await this.response(row)),
+          task: this.taskResponse(task, true),
+        };
+      }),
+    );
+    if (id) {
+      if (!items[0]) throw new NotFoundException('Service history not found');
+      return items[0];
+    }
+    return { items, total: result.total, page: query.page, limit: query.limit };
   }
 
   async orderContexts(user: AuthUser) {

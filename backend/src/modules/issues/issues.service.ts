@@ -41,6 +41,9 @@ export interface IssueResponse {
   reportedAt: Date;
   bookingId: string;
   roomId?: string;
+  serviceOrderId?: string;
+  sourceTaskId?: string;
+  serviceId?: string;
 }
 
 export interface IssueRead extends Omit<IssueResponse, 'reportedAt'> {
@@ -106,6 +109,9 @@ export class IssuesService {
     closureConclusion: 1,
     booking: 1,
     room: 1,
+    serviceOrder: 1,
+    sourceTask: 1,
+    service: 1,
     handlingCategory: 1,
     needsStaffAction: 1,
     reviewedBy: 1,
@@ -230,6 +236,11 @@ export class IssuesService {
       reportedAt: issue.reportedAt.toISOString(),
       bookingId: String(issue.booking),
       ...(issue.room ? { roomId: String(issue.room) } : {}),
+      ...(issue.serviceOrder
+        ? { serviceOrderId: String(issue.serviceOrder) }
+        : {}),
+      ...(issue.sourceTask ? { sourceTaskId: String(issue.sourceTask) } : {}),
+      ...(issue.service ? { serviceId: String(issue.service) } : {}),
       ...(issue.closedAt ? { closedAt: issue.closedAt.toISOString() } : {}),
       ...(issue.handlingCategory
         ? { handlingCategory: issue.handlingCategory }

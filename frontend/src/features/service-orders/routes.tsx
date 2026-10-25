@@ -7,7 +7,25 @@ import { ServiceOrderDetailPage } from './pages/ServiceOrderDetailPage'
 import { StaffServiceOrdersPage } from './pages/StaffServiceOrdersPage'
 import { StaffServiceOrderDetailPage } from './pages/StaffServiceOrderDetailPage'
 
+import { ServiceHistoryPage, ServiceHistoryDetailPage } from './pages/ServiceHistoryPage'
+
 export const serviceOrderRoutes: RouteObject[] = [
+  {
+    path: '/staff/service-history',
+    element: (
+      <RequireAuth roles={['SERVICE_STAFF']}>
+        <ServiceHistoryPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/staff/service-history/:id',
+    element: (
+      <RequireAuth roles={['SERVICE_STAFF']}>
+        <ServiceHistoryDetailPage />
+      </RequireAuth>
+    ),
+  },
   {
     path: '/staff/service-orders',
     element: (

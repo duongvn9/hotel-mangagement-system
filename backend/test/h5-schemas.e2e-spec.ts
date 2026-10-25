@@ -9,6 +9,9 @@ import { Invoice } from '../src/modules/invoices/schemas/invoice.schema.js';
 import { PaymentTransaction } from '../src/modules/payments/schemas/payment-transaction.schema.js';
 import { seedBookings } from '../src/modules/bookings/seed.js';
 import { User } from '../src/modules/users/schemas/user.schema.js';
+import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
+import { Room } from '../src/modules/rooms/schemas/room.schema.js';
+import { toBusinessDate } from '../src/common/database/conventions.js';
 
 describe('H5 persistence (e2e)', () => {
   let app: INestApplication;
@@ -139,20 +142,31 @@ describe('H5 persistence (e2e)', () => {
 
   it('skips absent dependencies and seeds idempotently without overwriting edits', async () => {
     const users = app.get<Model<User>>(getModelToken(User.name));
-    expect(await bookings.countDocuments({ code: 'SEED-CHECKED-IN-001' })).toBe(
-      0,
-    );
+    const types = app.get<Model<RoomType>>(getModelToken(RoomType.name));
+    const rooms = app.get<Model<Room>>(getModelToken(Room.name));
+    const seededCount = () =>
+      bookings.countDocuments({ code: 'SEED-CHECKED-IN-001' });
+    // Dọn dữ liệu mẫu do e2e khác để lại (phòng 101 có thể đã bị khoá).
+    await bookings.deleteMany({ code: /^SEED-/ });
+    await rooms.deleteOne({ roomNumber: '101' });
+    await users.deleteOne({ email: 'customer@hms.local' });
+    expect(await seededCount()).toBe(0);
     await seedBookings(app);
-    expect(await bookings.countDocuments({ code: 'SEED-CHECKED-IN-001' })).toBe(
-      0,
-    );
-    await connection
-      .collection('rooms')
-      .insertOne({ _id: roomId, isActive: true });
+    expect(await seededCount()).toBe(0);
+    const roomType = await types.create({
+      name: `H5-E2E-Type-${roomId}`,
+      adultCapacity: 2,
+      childCapacity: 0,
+      basePrice: 700000,
+    });
+    await rooms.create({
+      _id: roomId,
+      roomNumber: '101',
+      floor: 1,
+      roomType: roomType._id,
+    });
     await seedBookings(app);
-    expect(await bookings.countDocuments({ code: 'SEED-CHECKED-IN-001' })).toBe(
-      0,
-    );
+    expect(await seededCount()).toBe(0);
     const user = await users.create({
       email: 'customer@hms.local',
       fullName: 'Seed H5',
@@ -163,9 +177,19 @@ describe('H5 persistence (e2e)', () => {
       const sample = await bookings
         .findOne({ code: 'SEED-CHECKED-IN-001' })
         .orFail();
+      const rate = 700000;
       expect(sample.status).toBe('CHECKED_IN');
       expect(String(sample.customer)).toBe(String(user._id));
       expect(sample.rooms.map(String)).toEqual([String(roomId)]);
+      expect(sample.roomTotal).toBe(rate * 2);
+      expect(sample.depositAmount).toBe(Math.round(rate * 2 * 0.3));
+      expect(
+        sample.rateSnapshot.map(({ room, ratePerNight }) => ({
+          room: String(room),
+          ratePerNight,
+        })),
+      ).toEqual([{ room: String(roomId), ratePerNight: rate }]);
+      expect(toBusinessDate(sample.checkIn)).toBe(toBusinessDate());
       await bookings.updateOne({ _id: sample._id }, { guestName: 'Edited' });
       await seedBookings(app);
       expect(await bookings.countDocuments({ code: sample.code })).toBe(1);
@@ -173,11 +197,10 @@ describe('H5 persistence (e2e)', () => {
         'Edited',
       );
     } finally {
-      await bookings.deleteOne({
-        code: 'SEED-CHECKED-IN-001',
-        customer: user._id,
-      });
+      await bookings.deleteMany({ code: /^SEED-/, customer: user._id });
       await users.deleteOne({ _id: user._id });
+      await rooms.deleteOne({ _id: roomId });
+      await types.deleteOne({ _id: roomType._id });
     }
   });
 });

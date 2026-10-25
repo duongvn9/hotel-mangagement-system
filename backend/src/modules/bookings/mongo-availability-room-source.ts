@@ -12,6 +12,8 @@ import type {
 
 type PopulatedRoomType = {
   _id: Types.ObjectId;
+  name: string;
+  basePrice: number;
   adultCapacity: number;
   childCapacity: number;
   isActive: boolean;
@@ -45,7 +47,7 @@ export class MongoAvailabilityRoomSource extends AvailabilityRoomSource {
       .select('roomType status isActive')
       .populate<{ roomType: PopulatedRoomType }>(
         'roomType',
-        'adultCapacity childCapacity isActive',
+        'name basePrice adultCapacity childCapacity isActive',
       )
       .lean()
       .exec();
@@ -57,6 +59,8 @@ export class MongoAvailabilityRoomSource extends AvailabilityRoomSource {
         {
           id: String(row._id),
           roomTypeId: String(roomType._id),
+          roomTypeName: roomType.name,
+          pricePerNight: roomType.basePrice,
           capacity: roomType.adultCapacity + roomType.childCapacity,
           isActive: row.isActive,
           roomTypeActive: roomType.isActive,

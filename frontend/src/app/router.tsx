@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router'
 import { accountRoutes } from '@/features/accounts/routes'
 import { authRoutes } from '@/features/auth/routes'
+import { bookingRoutes } from '@/features/booking/routes'
 import { feedbackRoutes } from '@/features/feedback/routes'
 import { issueRoutes } from '@/features/issues/routes'
 import { roleRoutes } from '@/features/roles/routes'
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
     element: <PublicLayout />,
     children: [
       { index: true, element: <HomePage /> },
+      ...bookingRoutes,
       ...authRoutes,
       ...accountRoutes,
       ...roleRoutes,

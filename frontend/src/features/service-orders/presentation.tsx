@@ -1,6 +1,6 @@
 import { isAxiosError } from 'axios'
 import { Link } from 'react-router'
-import { money, dateTime, reviewLabels, type ServiceOrder } from './api'
+import { money, dateTime, reviewLabels, executionLabels, type ServiceOrder } from './api'
 
 export function OrderError({ error, retry }: { error: unknown; retry?: () => void }) {
   const status = isAxiosError(error) ? error.response?.status : undefined
@@ -38,10 +38,7 @@ export function OrderReceipt({ order }: { order: ServiceOrder }) {
           ['Thành tiền ghi nhận từ máy chủ', money(order.amount)],
           ['Thời gian yêu cầu', dateTime(order.requestedTime)],
           ['Trạng thái duyệt', reviewLabels[order.reviewStatus] ?? order.reviewStatus],
-          [
-            'Trạng thái thực hiện',
-            order.executionStatus === 'NOT_STARTED' ? 'Chưa bắt đầu' : order.executionStatus,
-          ],
+          ['Trạng thái thực hiện', executionLabels[order.executionStatus] ?? order.executionStatus],
           ['Ngày tạo', dateTime(order.createdAt)],
           ['Ghi chú', order.notes || 'Không có'],
         ].map(([label, value]) => (
