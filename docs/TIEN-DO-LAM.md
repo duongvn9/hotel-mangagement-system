@@ -13,11 +13,13 @@ Cập nhật 25/10/2026. Đây là tài liệu tiến độ và bàn giao duy nh
 | #30 UC47 View Room List + H3 Room/RoomStatus | Đã merge main: 734ea16 |
 | #31 UC48 Create / Update Room | Đã merge main: 21cc5d7; xem [bàn giao UC48](#uc48) |
 | #32 UC51 View Amenity List | Đã triển khai/kiểm tra đầy đủ; PR #21, xem [bàn giao UC51](#uc51) |
-| #37 UC35 Report Equipment Fault / Damage | Đã triển khai/kiểm chứng trên main mới; code remote `ffb2ae5`, chờ cho phép tạo PR/merge; xem [bàn giao UC35](#uc35) |
+| #37 UC35 Report Equipment Fault / Damage | Đã triển khai/kiểm chứng trên main mới; code remote `ffb2ae5`, PR #35, chờ CI để merge; xem [bàn giao UC35](#uc35) |
 
 Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, không dùng capacity. H6 vẫn giữ hợp đồng capacity/guests riêng; chưa nối adapter Room thật. Các mục lịch sử bên dưới ghi lại đúng trạng thái từng thời điểm, kể cả blocker đã được xử lý; không dùng snapshot cũ để kết luận trạng thái hiện tại.
 
 ## Quy trình Git thường trực
+
+- Chỉ thị ngày 25/10/2026, áp dụng ngay: tính năng dùng `feature/...`, sửa lỗi dùng `fix/...`, việc khác dùng prefix phù hợp. Hoàn tất và kiểm chứng thì chủ động tạo PR nếu cần và merge main; không hỏi lại quyền tạo nhánh/PR/merge cho từng việc.
 
 - Làm xong nhánh feature hoặc fix nào thì push và merge nhánh đó vào main bằng merge commit khi đủ scope và các kiểm tra đã pass hoặc được người dùng miễn rõ ràng; không dừng ở push.
 - Sau merge, pull main mới nhất trước khi tạo nhánh tiếp theo. Fix tách từ feature phải giữ thứ tự phụ thuộc khi tích hợp vào main.
@@ -874,5 +876,5 @@ Baseline main: BE/FE lint và typecheck pass. Backend unit lượt baseline: 778
 - Bản tích hợp `ffb2ae5`: BE/FE lint, format:check, typecheck và build chuẩn đều pass. Backend **883/883 tests** (38 file) pass. Frontend toàn bộ **406/407 tests** (27 file), một ca Booking timeout khi chờ heading Deluxe, DOM còn loading; chạy lại riêng toàn file Booking bằng `--pool=forks --maxWorkers=1 --testTimeout=15000` thì **6/6 pass** trong 5,65 giây, không sửa code/config Booking. Không gọi lượt toàn frontend là xanh hoàn toàn; UC35 vẫn pass trong lượt toàn bộ.
 - E2e toàn bản tích hợp: **348/348 tests, 33/33 file pass** trên MongoDB thật, gồm UC35 và H5 seed; không còn lỗi H5 của nền cũ. Local build chuẩn BE/FE pass; frontend chỉ còn cảnh báo bundle lớn hơn 500 kB. Không phát sinh thay đổi code ngoài UC35 so với main (ngoại trừ cập nhật kỳ vọng seed registry trong test Service).
 - Bằng chứng từ lượt trước 24/10 (không tuyên bố chạy lại ngày 25/10): `.task29-validation/uc35-browser-result.json` ghi nhận API/Swagger thật, form mobile 375px không tràn, desktop 1440px, validation focus, safe-use khóa action, xác nhận report/Task/bảo trì và cơ sở chung không Task, menu Operations, không runtime errors. `.task29-validation/uc35-seed-result.json` ghi seed CLI hai lần, 7 thiết bị (4 gắn phòng, 3 cơ sở chung), giữ edited fields/timestamps/version. Các artifact kiểm chứng không commit.
-- Nhánh remote `feature/37-equipment-fault-report` đã push tại `ffb2ae5`. **Chưa tạo PR/chưa merge main:** hệ thống duyệt tự động từ chối thao tác tạo PR vì yêu cầu người dùng cho phép rõ việc xuất bản PR và mô tả triển khai lên GitHub. Nội dung PR đã chuẩn bị; cần xin phép ở bước cuối sau khi chốt kiểm chứng. Không chạy Docker tại máy; CI Docker chưa có kết quả cho nhánh này.
+- Nhánh remote `feature/37-equipment-fault-report`; [PR #35](https://github.com/duongvn9/hotel-mangagement-system/pull/35). Người dùng đã ủy quyền rõ ngày 25/10: tự tạo nhánh/PR và merge khi hoàn tất kiểm chứng, không hỏi lại từng việc. Đang chờ CI để merge UC35. Không chạy Docker tại máy.
 - Handoff #38/UC36: dùng `MaintenanceModule`, lấy trạng thái hoàn thành từ Task; không dùng receipt làm trạng thái công việc. Không tự phục hồi phòng khi hoàn thành Task. Nhóm vẫn cần xác nhận entity Maintenance ngoài ERD và chính sách giao Task cho người báo như phần quyết định phía trên.
