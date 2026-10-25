@@ -15,7 +15,7 @@ Cập nhật 25/10/2026. Đây là tài liệu tiến độ và bàn giao duy nh
 | #32 UC51 View Amenity List | Đã triển khai/kiểm tra đầy đủ; PR #21, xem [bàn giao UC51](#uc51) |
 | #37 UC35 Report Equipment Fault / Damage | Đã merge main: `d5f422c`, PR #35; backend/frontend/Docker CI xanh; xem [bàn giao UC35](#uc35) |
 | #38 UC36 View Maintenance History | Đã merge main `62b548c`, PR #36; bốn job CI xanh; xem [bàn giao UC36](#uc36) |
-| #40 UC55 Monitor Task Queues | Đang kiểm chứng trên `feature/40-task-queue-monitor`; xem [bàn giao UC55](#uc55) |
+| #40 UC55 Monitor Task Queues | Hoàn tất BE/FE/runtime; [PR #37](https://github.com/duongvn9/hotel-mangagement-system/pull/37), bốn job CI xanh tại revision `11d4f91`; xem [bàn giao UC55](#uc55) |
 
 Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, không dùng capacity. H6 vẫn giữ hợp đồng capacity/guests riêng; chưa nối adapter Room thật. Các mục lịch sử bên dưới ghi lại đúng trạng thái từng thời điểm, kể cả blocker đã được xử lý; không dùng snapshot cũ để kết luận trạng thái hiện tại.
 
@@ -953,9 +953,17 @@ Counts và workload dùng chung một response summary để cùng snapshot, b�
 
 ### Kiểm chứng
 
-Các lượt tập trung ban đầu: backend **21 unit**, **27 e2e**, frontend **32 test** pass. Có test exact priority chứa regex, facets theo dữ liệu, sort priority 400, ba trạng thái thật, priority lạ/thiếu; kiểm tra chuyển trạng thái qua TasksService thật cập nhật summary ngay và GET không ghi dữ liệu/collection mới. Baseline trước thay đổi: BE 895 unit, FE 425 test pass. Lượt regression chạy đồng thời bị timeout cả các module có sẵn; không coi các lượt đó là pass, đang chạy lại tuần tự.
+Các lượt tập trung ban đầu: backend **21 unit**, **27 e2e**, frontend **32 test** pass. Có test exact priority chứa regex, facets theo dữ liệu, sort priority 400, ba trạng thái thật, priority lạ/thiếu; kiểm tra chuyển trạng thái qua TasksService thật cập nhật summary ngay và GET không ghi dữ liệu/collection mới. Baseline trước thay đổi: BE 895 unit, FE 425 test pass. Lượt regression local bị timeout cả các module có sẵn; không coi các lượt đó là pass. CI regression đầy đủ đã xanh như bằng chứng bên dưới.
 
 Seed chuẩn đã chạy thành công hai lần trên DB riêng `hms_uc55_cli_test`; không bổ sung Task seed và không tạo Task trực tiếp trong production seed. `backend/test/task-supervision.smoke.mjs` giới hạn DB test, tạo fixture qua UC35/Task API thật để kiểm tra vòng đời và tính chỉ đọc. CI `maintenance-smoke` được mở rộng chạy smoke UC55 sau Compose/seed hai lần. Máy local không có Docker CLI/Desktop; chỉ coi Compose runtime đạt khi job CI này xanh, cùng backend/frontend/production Docker trước merge.
+
+### Kết quả cuối và artifact
+
+- Toàn repo trên CI: **916/916 unit backend (40 file), 400/400 e2e (35 file), 457/457 frontend (29 file) pass**. Không miễn check đỏ hoặc sửa module khác để làm xanh regression.
+- [CI run 40162357941](https://github.com/duongvn9/hotel-mangagement-system/actions/runs/40162357941): backend, frontend, Docker production và maintenance-smoke **đều success** trên `11d4f91`. Bao gồm lint/format/typecheck/unit/e2e/build BE; lint/format/test/build FE; build image production; Compose stack thật, health/proxy, seed hai lần và cả smoke UC36/UC55. FE typecheck local trước regression đã pass. Lượt full regression local bị dừng do máy còn khoảng 550 MB RAM trống; kết quả toàn repo được xác nhận bằng CI, không ghi các lượt timeout local thành pass.
+- Local CLI seed hai lần và smoke UC55 qua API `3038` đã pass trên DB riêng. Counts thay đổi ngay qua ASSIGNED → IN_PROGRESS → COMPLETED bằng API Task thật; Swagger, facets, sort priority 400, snapshot GET không đổi và không collection/counter mới đều đạt. Không chạy Docker local.
+- Edge headless + Vite/API thật: `.task29-validation/uc55-browser-result.json`, `uc55-queues-mobile-375.png`, `uc55-detail-mobile-375.png`, `uc55-queues-desktop.png`. Một H1; documentWidth=375 ở viewport 375, 1425 ở viewport 1440; tab cao hơn 44px; phím mũi tên/End đổi tab, Enter mở chi tiết, refresh lấy counts mới, URL giữ filter khi quay lại, reload detail trực tiếp, 404 đúng và không write controls/runtime errors. Đã xem ảnh kiểm tra bố cục. Artifact không commit; đã dừng API/Vite/Edge/Mongo test của phiên.
+- Commit API `455e4c3`, frontend `40c0aec`, e2e/Compose/handoff `11d4f91`; [PR #37 — feat(task-supervision): UC55 monitor task queues (#40)](https://github.com/duongvn9/hotel-mangagement-system/pull/37). Chủ động merge bằng merge commit sau CI xanh theo ủy quyền thường trực; PR lưu SHA và trạng thái merge thực tế.
 
 ### Giả định
 
