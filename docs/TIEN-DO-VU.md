@@ -1,6 +1,94 @@
 # Tiến độ phần việc của Vũ
 
-> Bàn giao authoritative cho thành viên và AI agent trước khi code; cập nhật 25/10/2026. Thay thế lịch sử triển khai/pending cũ trong tài liệu này.
+> Bàn giao cập nhật 25/10/2026. Mục **Final Acceptance QA** dưới đây là trạng thái mới nhất; các mục phía sau lưu evidence lịch sử, không dùng các câu pending PR #34/Maintenance/seed cũ làm trạng thái hiện tại.
+
+## Final Acceptance QA — 25/10/2026
+
+### Baseline và delivery
+
+- Nhánh `feature/vu-acceptance-qa`, tạo từ latest `origin/main@62b548c9da5e69482074d8165837c5b1f824d401` sau fetch; không thay local main, rebase/reset/force-push.
+- Xác minh trực tiếp: PR #34 MERGED tại `ce994d89238466603d3fc0926d4be69a081ac495`; PR #35 MERGED tại `d5f422cb7316a035e52f4c70482b3b065b95a844`; PR #36 Maintenance History MERGED tại baseline `62b548c`.
+- File `docs/OPENCODE-HANDOFF-VU.md` giữ local untracked, không đưa vào commit/PR.
+- Delivery của lượt QA: commit/PR/CI được bổ sung sau khi xuất bản; không tự merge.
+
+### Ma trận nghiệm thu Jira
+
+Tất cả 17 task đã implement/merge; browser A/B/C hiện có evidence thật. Không blanket DONE: shell/policy approvals và coverage giới hạn vẫn phải được owner xác nhận. PARTIAL dưới đây không có nghĩa backend không hoạt động.
+
+| Jira | Phạm vi | Acceptance mới nhất | Gate còn lại |
+|---|---|---|---|
+| 64 | Task core | PARTIAL; real source ServiceOrder/Issue/Maintenance, E2E xanh | Nhóm/Lâm/Vũ chốt Maintenance entity và assignment policy |
+| 65 | Hai staff dashboards | PARTIAL; authenticated responsive/own scope đã kiểm tra | Khoa H10 và review cuối |
+| 66 | UC37 Assigned Tasks | PARTIAL; own/foreign UI, navigation, ba viewport | H10, approval custom-role và keyboard acceptance đầy đủ |
+| 67 | UC38 Progress | PARTIAL; S/O start/complete, result validation, persisted reload | Approval custom-role, transient form/mobile và keyboard coverage đầy đủ |
+| 68 | UC22 Create Order | PARTIAL; tạo thật, quantity validation, outage/retry | Mobile transient form coverage, review pricing policy |
+| 69 | UC23 Customer Orders | PARTIAL; own list/detail/reload, outsider404 | H10/review cuối |
+| 70 | UC24 Requests | PARTIAL; Receptionist list/detail thật | H10 và policy approval exact-role |
+| 71 | UC25 Review/Billing | PARTIAL; accept, đúng một charge100000 VND | Browser ambiguous-response/replay chưa exhaustive; H7 policy owner |
+| 72 | UC26 Assignment | PARTIAL; eligible staff, một linked Task | Policy approval; mobile transient/ambiguous-response coverage |
+| 73 | UC27 History | PARTIAL; own completed history, coworker404 | H10/review cuối |
+| 74 | UC28 Customer Issue | PARTIAL; create/validation, foreign booking404 không ghi thêm | H10/review cuối |
+| 75 | UC29 Issue List | PARTIAL; role/own lists, outsider404 | H10 và exact-role approval |
+| 76 | UC30 Review Issue | PARTIAL; SERVICE và OPERATIONS review thật | Browser no-action/reject branches chưa chạy lại; policy approval |
+| 77 | UC31 Assign Resolution | PARTIAL; S/O separate resolution Task thật | Policy approval; mobile transient coverage |
+| 78 | UC32 Close | PARTIAL; task complete vẫn ASSIGNED, R/M explicit close, conclusion validation | Full keyboard/transient matrix và review cuối |
+| 79 | UC33 Detail | PARTIAL; safe role detail, own/foreign denial, persisted state | H10/review cuối |
+| 80 | UC34 Service Issue | PARTIAL; own IN_PROGRESS context, separate resolution, original chain không đổi | Mobile transient/replay coverage và exact-role approval |
+
+### Real authenticated browser A/B/C
+
+- Chrome headless thật qua native CDP; login bằng dev account picker, API thật và seed persist thật. Không mock network/API, không dùng ảnh anonymous thay acceptance. Có thêm persisted outsider/coworker hợp lệ cho negative cases.
+- **A PASS phạm vi đã chạy:** Customer tạo Giặt ủi quantity2 → Receptionist accept/assign → Service Staff start/complete có result → own history. DB cuối đúng một order, một invoice có đúng một SERVICE charge source-linked **100000 VND**; invoice **UNPAID**, không đánh đồng billed/paid.
+- **B PASS:** Customer report → Receptionist SERVICE review/assign → worker start/complete → Issue còn ASSIGNED dù Task COMPLETED → Manager explicit close. Empty result/conclusion bị chặn.
+- **C PASS:** Staff từ own SERVICE_ORDER_EXECUTION IN_PROGRESS report → PENDING_REVIEW → Receptionist OPERATIONS review/assign → Operations complete separate resolution Task → Receptionist close. Read-only snapshots original Task/Order/Invoice deep-equal trước/sau C.
+- DB cuối: 1 order, 3 completed Tasks có result, 2 closed Issues, 1 invoice/1 service charge. Không có Issue thêm từ foreign-booking attempt.
+- **87 authenticated observations** =29 account/route pairs ×1440/768/375; 20 distinct paths, 122 screenshots; không phát hiện horizontal overflow hoặc unlabeled controls trong matrix. Workflow mutation chạy một lần tại1440, không claim mọi transient mutation ở tablet/mobile đã chạy.
+- Own/foreign: outsider order/Issue404, coworker Task/history404, wrong-role UI access denied; foreign booking report qua form404, không persist. Không force foreign-task mutation qua API trong browser lượt này.
+- Zero/negative quantity khóa submit; empty Task result/Issue/service-report/closure fields bị chặn. Backend outage thật sinh502, khóa submit; restart + **Thử lại** phục hồi choices. Throttled SPA navigation hiện loading rồi detail thật. Auth reload giữ session; Tab có visible focus ring và validation focus.
+- Giới hạn: không exhaustive concurrency/ambiguous-response replay/cancellation/reject/no-action browser matrix; không full keyboard-only/screen-reader/contrast/dialog-trap audit; supported dev auth không chứng minh Firebase/password verification hoặc mobile hardware. Chỉ một số screenshot được mở xem; overflow/label assertions áp dụng đủ87.
+- Evidence local, không commit token/profile/artifacts: `C:\Users\MYPC~1\AppData\Local\Temp\opencode\vu-browser-20261025\results.json`, `responsive-results.json`, `C-before.json`, `C-after.json`, `final-db.json`, `validation-retry-results.json`, `ui-evidence.jsonl`, `loading-keyboard.json` và screenshots. Temp artifacts không được bảo đảm tồn tại lâu dài.
+
+### Automated QA trên 62b548c
+
+| Check | Backend | Frontend |
+|---|---|---|
+| `npm run format:check` | PASS | PASS |
+| `npm run lint` | PASS | PASS |
+| `npm run typecheck` | PASS (production config) | PASS |
+| `npm run test -- --maxWorkers=2 --hookTimeout=60000` | **895/895**,39 files | **425/425**,28 files |
+| `npm run build` | PASS | PASS; JS737.14kB warning |
+| Full E2E `npm run test:e2e -- --maxWorkers=1 --hookTimeout=60000` | **373/373**,34 files | Không áp dụng |
+| Seed→H5 tuần tự, mỗi lệnh maxWorkers1/hookTimeout60000 | seed **3/3**, sau đó H5 **3/3** | Không áp dụng |
+| Test-inclusive diagnostic | `npx --no-install tsc -p tsconfig.json --noEmit --incremental false`: **FAIL51 errors/19 test files** | `npx --no-install tsc -p tsconfig.app.json --noEmit --incremental false`: PASS |
+
+- Seed→H5 dùng `npm run test:e2e -- test/seed.e2e-spec.ts --maxWorkers=1 --hookTimeout=60000`, sau đó cùng lệnh với `test/h5-schemas.e2e-spec.ts`. Lỗi thứ tự cũ **không tái hiện** trên baseline mới; full suite cũng xanh. Không giữ lỗi cũ như blocker hiện hữu.
+- Diagnostic backend còn Auth private-member mock intersections, Invoice/Notification mock typings, enum/Mongoose overloads, nullable fixtures và collection/Swagger unions. Đây là debt test typing của nhiều owners, không phải production typecheck failure; không giảm assertions/disable test để che.
+- Sau fix copy bên dưới: targeted Tasks **36/36** (hai regression fail trước sửa), full FE **427/427**,28 files; format/lint/typecheck/build PASS,319 modules. Không chạy lại browser sau copy-only fix; không gán evidence browser baseline cho câu chữ mới.
+- `git diff --check` PASS. Không sửa test runner config, public contracts hay dependencies.
+
+### Defect và remaining owners
+
+| Mục | Phân loại / severity | Evidence, owner và acceptance impact |
+|---|---|---|
+| Task list mô tả không thể cập nhật tiến độ | **FIXED, minor** | Login S/O → `/staff/tasks` từng ghi “Chỉ xem, không thay đổi tiến độ” nhưng detail cho start/complete. Root cause copy UC37 cũ chưa cập nhật UC38. Đổi thành mở own detail để cập nhật; regression hai worker roles. Không đổi business rules |
+| H10 | **PARTIAL**, Khoa | `frontend/src/app/router.tsx` vẫn PublicLayout/TODO H10; menu tạm không phải final role shell. Không chặn backend A/B/C |
+| Maintenance source/caller | **RESOLVED kỹ thuật**, Lâm/Vũ | Real `maintenances`, durable identity và TasksService.create; PR35/36 đã merge. Không còn missing-schema blocker |
+| Maintenance business policy | **PARTIAL; approval BLOCKED**, nhóm/Lâm/Vũ | Cần chốt entity ngoài ERD, self-assignment cho reporter và reporter-or-assignee history scope; không coi denial hiện tại là defect |
+| Custom-role/exact-role | **PARTIAL; mở rộng quyền BLOCKED**, Dương/Vũ/nhóm | Guard role OR declared permissions; Task có task:execute, ServiceOrder/Issue exact-role. Không tự widen. Dev headers built-in-only nên không chứng minh Firebase custom-role acceptance |
+| Shared exception URL/log privacy | **PARTIAL, privacy-hardening gap**, Dương | `backend/src/common/filters/http-exception.filter.ts:42` dùng originalUrl trong log/error response và raw unexpected stack. Repro: request lỗi với query chứa marker trên disposable API, kiểm tra path echo; source xác nhận behavior, lượt này chưa demonstrate secret/cross-user leak. Tránh sensitive query; owner cần sanitize/review trước security sign-off |
+| Booking/H7 policy | **PARTIAL**, Hiếu/Dương | Seed room101/current VN day/snapshots và insert-only đã có; old seed-order issue không tái hiện. H7 partial snapshot fallback current prices cần Hiếu chốt, không tự kết luận defect |
+| Test-inclusive TS | **PARTIAL, medium technical debt**, Auth/Invoice/Notifications và test owners | Diagnostic command trên tái hiện51 errors; production build/typecheck và runtime suites xanh. Không tuyên bố toàn repo TS sạch |
+| FE bundle | **PARTIAL, nonblocking warning**, FE nhóm |737.14kB baseline; build không fail, chưa tối ưu ngoài scope |
+
+### Isolation, cleanup và kết luận
+
+- Docker daemon không khả dụng; dùng local mongod riêng loopback, không đổi infra/shared Mongo27017. Automated instance27125/private temp storage; seed/H5 DB `hms_vu_acceptance_auto_20261025`, full suite DB `hms_vu_acceptance_auto_20261025_test` theo safety guard `_test`.
+- Browser instance27126/DB `hms_vu_browser_20261025_test`, API3106, UI5200, CDP9306; backend ignoreEnvFile=true, frontend envFile=false; Firebase/mail không bật. Không đọc real .env, gửi mail/payment hay dùng teammate DB.
+- Automated11 DB tạo trong lượt được drop trên disposable instance; browser DB drop, profile/storage browser đã dọn; owned processes dừng và ports đóng. Automated temp storage/log còn ngoài repo, không commit. Không chạy Compose smoke và không claim Docker/Firebase PASS.
+- **Tổng thể PARTIAL, chưa READY FOR FINAL ACCEPTANCE toàn bộ17 Jira.** A/B/C core đã có authenticated browser evidence, automated suite xanh; các approval/H10 và coverage giới hạn nêu trên còn mở. Không tái implement completed features, không tự merge.
+
+## Evidence lịch sử trước lượt acceptance
+
 > Baseline được bàn giao: `feature/vu-final-integration-qa`, PR #32 đã merge tại `f51f298`. Lượt hợp nhất tài liệu không thao tác Git, không sửa production/test/seed/config.
 > Bố cục theo [TIEN-DO-DUONG.md](TIEN-DO-DUONG.md): trạng thái → dùng lại → bàn giao → lưu ý → hạn chế → kiểm tra nhanh.
 

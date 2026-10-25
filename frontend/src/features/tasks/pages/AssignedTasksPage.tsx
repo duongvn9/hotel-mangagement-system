@@ -32,7 +32,7 @@ export function AssignedTasksPage() {
     <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
       <h1 className="font-display text-4xl font-semibold">Công việc được giao</h1>
       <p className="text-sm text-stone-700">
-        Danh sách công việc được giao cho bạn. Chỉ xem, không thay đổi tiến độ.
+        Danh sách công việc được giao cho bạn. Mở chi tiết công việc của bạn để cập nhật tiến độ.
       </p>
       <form
         role="search"
