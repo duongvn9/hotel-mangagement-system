@@ -32,6 +32,7 @@ const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
   OPERATIONS_STAFF: [
     { to: '/staff/operations/dashboard', label: 'Bảng điều khiển vận hành' },
     { to: '/operations/maintenance/report', label: 'Báo hỏng thiết bị' },
+    { to: '/operations/maintenance/history', label: 'Lịch sử bảo trì' },
   ],
 }
 
