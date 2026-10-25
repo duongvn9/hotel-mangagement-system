@@ -32,6 +32,7 @@ import { EquipmentModule } from './modules/equipment/equipment.module.js';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module.js';
 import { TaskSupervisionModule } from './modules/task-supervision/task-supervision.module.js';
 import { ReportsModule } from './modules/reports/reports.module.js';
+import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { ReportsModule } from './modules/reports/reports.module.js';
     MaintenanceModule,
     TaskSupervisionModule,
     ReportsModule,
+    DashboardModule,
     // Module nghiệp vụ thêm vào đây, xem src/modules/README.md
   ],
   // Khai báo ở đây (không dùng app.useGlobal* trong main.ts) để test e2e cũng có.
