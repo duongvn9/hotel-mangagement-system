@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios'
+import { Link } from 'react-router'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert } from '@/components/Alert'
@@ -42,6 +43,7 @@ export function ReportFaultPage() {
       void cache.invalidateQueries({ queryKey: ['maintenance-targets'] })
       void cache.invalidateQueries({ queryKey: ['rooms'] })
       void cache.invalidateQueries({ queryKey: ['tasks'] })
+      void cache.invalidateQueries({ queryKey: ['maintenance-history'] })
     },
   })
   function clearErrors(...fields: string[]) {
@@ -157,6 +159,12 @@ export function ReportFaultPage() {
               {warning}
             </Alert>
           ))}
+          <Link
+            className="inline-flex min-h-11 items-center text-primary underline"
+            to="/operations/maintenance/history"
+          >
+            Xem lịch sử bảo trì
+          </Link>
           <Button onClick={reset}>Báo cáo vấn đề khác</Button>
         </div>
       ) : (

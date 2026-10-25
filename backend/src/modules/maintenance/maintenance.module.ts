@@ -10,6 +10,9 @@ import {
 } from './schemas/maintenance.schema.js';
 import { MaintenanceService } from './maintenance.service.js';
 import { MaintenanceController } from './maintenance.controller.js';
+import { Task, TaskSchema } from '../tasks/schemas/task.schema.js';
+import { MaintenanceHistoryService } from './maintenance-history.service.js';
+import { MaintenanceHistoryController } from './maintenance-history.controller.js';
 
 @Module({
   imports: [
@@ -19,10 +22,12 @@ import { MaintenanceController } from './maintenance.controller.js';
     MongooseModule.forFeature([
       { name: Maintenance.name, schema: MaintenanceSchema },
       { name: User.name, schema: UserSchema },
+      // TasksModule exports only its service; reuse the authoritative schema for read-only aggregation.
+      { name: Task.name, schema: TaskSchema },
     ]),
   ],
-  controllers: [MaintenanceController],
-  providers: [MaintenanceService],
+  controllers: [MaintenanceController, MaintenanceHistoryController],
+  providers: [MaintenanceService, MaintenanceHistoryService],
   exports: [MaintenanceService, MongooseModule],
 })
 export class MaintenanceModule {}

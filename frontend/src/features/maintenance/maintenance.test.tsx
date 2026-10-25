@@ -142,7 +142,10 @@ describe('UC35 ReportFaultPage', () => {
     expect(await screen.findByText('Đã ghi nhận báo cáo bảo trì.')).toBeInTheDocument()
     expect(screen.getByText('task1')).toBeInTheDocument()
     expect(screen.getByText('Phòng đã được đánh dấu bảo trì, không khả dụng.')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /Lịch sử/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Xem lịch sử bảo trì' })).toHaveAttribute(
+      'href',
+      '/operations/maintenance/history',
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Báo cáo vấn đề khác' }))
     expect(screen.getByLabelText(/Mô tả lỗi/)).toHaveValue('')
   })
