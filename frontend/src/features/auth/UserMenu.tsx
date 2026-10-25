@@ -14,6 +14,7 @@ const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
     { to: '/manager/dashboard', label: 'Tổng quan' },
     { to: '/manager/task-queues', label: 'Hàng đợi task' },
     { to: '/manager/reports/revenue', label: 'Báo cáo doanh thu' },
+    { to: '/manager/reports/operational', label: 'Báo cáo vận hành' },
     { to: '/manager/issues', label: 'Danh sách sự cố' },
     { to: '/manager/rooms', label: 'Phòng' },
     { to: '/manager/room-types', label: 'Loại phòng' },

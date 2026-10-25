@@ -11,7 +11,10 @@ import type { AuthUser } from '../../common/auth/auth-user.js';
 import { Role } from '../../common/constants/role.enum.js';
 import { toBusinessDate } from '../../common/database/conventions.js';
 import { Task, TaskStatus } from '../tasks/schemas/task.schema.js';
-import { TaskSourceType } from '../tasks/task-contract.js';
+import {
+  maintenanceTaskLookup,
+  maintenanceStatusStage,
+} from './maintenance-history.pipeline.js';
 import { Maintenance } from './schemas/maintenance.schema.js';
 import {
   MaintenanceHistoryQuery,
@@ -64,58 +67,9 @@ export class MaintenanceHistoryService {
       );
     return [
       { $match: match },
-      // Validate the link as well as its id, so corrupt links cannot grant scope.
-      {
-        $lookup: {
-          from: this.tasks.collection.name,
-          let: { taskId: '$task', reportId: '$_id' },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ['$_id', '$$taskId'] },
-                    { $eq: ['$sourceType', TaskSourceType.Maintenance] },
-                    { $eq: ['$sourceId', '$$reportId'] },
-                  ],
-                },
-              },
-            },
-            {
-              $project: {
-                title: 1,
-                priority: 1,
-                status: 1,
-                assignedTo: 1,
-                assignedAt: 1,
-                dueAt: 1,
-                completedAt: 1,
-                workResult: 1,
-              },
-            },
-          ],
-          as: 'taskRows',
-        },
-      },
-      { $set: { taskData: { $arrayElemAt: ['$taskRows', 0] } } },
+      ...maintenanceTaskLookup(this.tasks.collection.name),
       { $match: maintenanceHistoryScope(new Types.ObjectId(actor.id)) },
-      {
-        $set: {
-          historyStatus: {
-            $cond: [
-              { $eq: ['$requiresAction', false] },
-              'NO_ACTION',
-              {
-                $cond: [
-                  { $in: ['$taskData.status', Object.values(TaskStatus)] },
-                  '$taskData.status',
-                  null,
-                ],
-              },
-            ],
-          },
-        },
-      },
+      maintenanceStatusStage(),
       {
         $lookup: {
           from: 'rooms',

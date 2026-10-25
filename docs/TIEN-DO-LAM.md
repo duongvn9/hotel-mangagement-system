@@ -17,10 +17,70 @@ Cập nhật 25/10/2026. Đây là tài liệu tiến độ và bàn giao duy nh
 | #38 UC36 View Maintenance History | Đã merge main `62b548c`, PR #36; bốn job CI xanh; xem [bàn giao UC36](#uc36) |
 | #40 UC55 Monitor Task Queues | Đã merge main `daeb696`; hoàn tất BE/FE/runtime; [PR #37](https://github.com/duongvn9/hotel-mangagement-system/pull/37), bốn job CI xanh tại revision `11d4f91`; xem [bàn giao UC55](#uc55) |
 | #41 UC56 View Revenue Report | Đã merge main `e2921aa`; hoàn tất BE/FE/runtime; [PR #40](https://github.com/duongvn9/hotel-mangagement-system/pull/40), bốn job CI xanh; xem [bàn giao UC56](#uc56) |
-| #39 Manager Dashboard | Hoàn tất BE/FE/runtime; [PR #41](https://github.com/duongvn9/hotel-mangagement-system/pull/41), bốn job CI xanh; xem [bàn giao Dashboard](#manager-dashboard) |
+| #39 Manager Dashboard | Đã merge main `5fadbdf`; [PR #41](https://github.com/duongvn9/hotel-mangagement-system/pull/41), bốn job CI xanh; xem [bàn giao Dashboard](#manager-dashboard) |
+| #42 UC57 View Operational Report | Hoàn tất BE/FE/runtime trên `feature/42-operational-report`; [PR #42](https://github.com/duongvn9/hotel-mangagement-system/pull/42), bốn job CI xanh; xem [bàn giao UC57](#uc57) |
 
 Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, không dùng capacity. H6 vẫn giữ hợp đồng capacity/guests riêng; chưa nối adapter Room thật. Các mục lịch sử bên dưới ghi lại đúng trạng thái từng thời điểm, kể cả blocker đã được xử lý; không dùng snapshot cũ để kết luận trạng thái hiện tại.
 
+
+<a id="uc57"></a>
+## #42 UC57 — View Operational Report
+
+Nhánh `feature/42-operational-report`, từ main `5fadbdf`. SRS HMS_UC57/BR-RPT-01/03/04 quy định luồng, nguồn và ngày nghiệp vụ; bộ chỉ số/công thức dưới đây là đề xuất của prompt, chưa trở thành business rule được nhóm duyệt. Không thêm doanh thu, xuất file, SLA hoặc thứ tự priority.
+
+### Khảo sát nguồn thật và khác biệt SRS/ERD
+
+| Nguồn / schema trong backend/src/modules | Hợp đồng đọc thực tế |
+|---|---|
+| `bookings/schemas/booking.schema.ts` | `createdAt`, `checkedInAt`, `checkedOutAt`, `cancelledAt`; `checkIn/checkOut: Date`, `rooms[]`, `status`, `isActive`. BookingStatus: PENDING_DEPOSIT/CONFIRMED/CHECKED_IN/CHECKED_OUT/CANCELLED. Không có BookingSource/AdultCount/ChildCount: không thêm bySource hoặc trường mới. |
+| `rooms/schemas/room.schema.ts` | `isActive`, `status`; RoomStatus AVAILABLE/OCCUPIED/CLEANING/MAINTENANCE. |
+| `service-orders/schemas/service-order.schema.ts` | Nguồn đã tồn tại, collection serviceorders. Dùng `requestedTime`, không dùng createdAt; review PENDING_REVIEW/ACCEPTING/ACCEPTED/REJECTED; execution NOT_STARTED/ASSIGNING/ASSIGNED/IN_PROGRESS/COMPLETED. Không tính tiền. |
+| `issues/schemas/issue.schema.ts` | `reportedAt`, `closedAt`, `category` chuỗi; IssueStatus PENDING_REVIEW/REVIEWED/ASSIGNING/ASSIGNED/CONCLUDED/CLOSED. IssuePriority LOW/NORMAL/HIGH/URGENT là enum riêng, không suy thành enum Task. |
+| `maintenance/schemas/maintenance.schema.ts` | Collection `maintenances`, thời điểm báo `createdAt`, `requiresAction`, `preventsSafeUse`, `task`; không lưu status. |
+| `tasks/schemas/task.schema.ts`, `tasks/task-contract.ts` | `assignedTo`, `assignedAt`, `completedAt`, `dueAt`; TaskStatus chỉ ASSIGNED/IN_PROGRESS/COMPLETED. priority/taskType là chuỗi trim tự do; sourceType hiện có SERVICE_ORDER/ISSUE/MAINTENANCE nhưng report nhóm theo giá trị dữ liệu, không dựng danh sách hoặc thứ tự ưu tiên. |
+
+Sáu nguồn đều hiện hữu, không nguồn nào bị giả lập. Chỉ Booking/Room có isActive và áp dụng lọc đó; không gán điều kiện isActive cho schema không có field. Khi model chưa đăng ký, khối tương ứng trả `{available:false,reason:'not_available'}`; occupancy cần cả Booking và Room, maintenance cần Maintenance và Task. Lỗi truy vấn bất ngờ làm toàn request trả lỗi 500 chuẩn, khác cách partial failure của Dashboard.
+
+UC36 được trích nguyên pipeline lookup/trạng thái sang `maintenance-history.pipeline.ts`, cả lịch sử và báo cáo cùng dùng. Lookup xác minh `_id=task`, `sourceType=MAINTENANCE`, `sourceId=maintenance._id`; scope UC36 vẫn reporter HOẶC assignedTo, không đổi quyền. requiresAction=false → NO_ACTION; Task hợp lệ → ba TaskStatus; thiếu/sai link → null. UC57 bổ sung `maintenance.unknownStatus` và nhãn “Không xác định”, không ép thành trạng thái thật. Không sửa module tasks/schema/service của Vũ.
+
+### API, công thức và bàn giao
+
+`GET /api/v1/reports/operational`: chỉ `@Roles(Role.Manager)`, không @Permissions. Seed roles hiện chỉ Manager có report:view, nhưng guard role HOẶC permission có thể mở quyền cho custom role; test custom role có quyền thật vẫn nhận 403. Query chỉ from/to YYYY-MM-DD và granularity day|month mặc định day; ngày thật, from≤to, tối đa 366 ngày inclusive; trường lạ/giá trị sai nhận 400. Không có endpoint ghi hoặc dữ liệu định danh cá nhân trong response.
+
+Tái dùng `reportPeriod/reportBuckets` UC56 và base DTO `ReportPeriodQuery`. Chuẩn ngày `common/database/conventions.ts`, H6 `businessBoundary`/`availability.core.ts`: [from 00:00, ngày sau to 00:00) Asia/Ho_Chi_Minh. Booking Date được `$dateTrunc` cùng timezone trước khi giao khoảng, tương đương quy ước ngày H6; không trừ hai instant UTC thô. Mỗi event dùng timestamp của chính nó, không bắt buộc trạng thái hiện tại trùng event.
+
+- Booking: số tạo/nhận/trả/hủy theo bốn timestamp riêng, chỉ isActive.
+- Công suất: chỉ active CHECKED_IN/CHECKED_OUT; số ngày giao [checkIn,checkOut) với kỳ × rooms.length, cộng thành occupiedRoomNights. availableRoomNights = số Room active hiện tại × số ngày inclusive. rate làm tròn 4 số lẻ, null khi mẫu số 0, không kẹp 100%; note/FE ghi rõ ước tính vì thiếu lịch sử số phòng/trạng thái.
+- ServiceOrder: số requestedTime trong kỳ; phân bố review/execution hiện tại của cohort yêu cầu trong kỳ.
+- Issue: reportedAt/closedAt riêng; phân bố status/category của cohort reportedAt; trung bình (closedAt−reportedAt)/giờ trên cohort closedAt trong kỳ, chỉ start Date hợp lệ và end≥start, 1 số lẻ hoặc null.
+- Maintenance: cohort createdAt; đếm ngăn dùng phòng/cần xử lý, phân bố trạng thái suy ra dùng chung UC36 và unknownStatus.
+- Task: assignedAt/completedAt riêng; nhóm taskType/sourceType theo cohort assignedAt, giữ chuỗi lạ. Trung bình hoàn thành theo cohort completedAt với thời gian hợp lệ, 1 số lẻ/null. Snapshot gọi `TaskSupervisionService.summary({}, actor)` không lọc kỳ; phòng snapshot chỉ active, đầy đủ bốn trạng thái.
+
+Một aggregation mỗi Booking/Room/ServiceOrder/Issue/Maintenance/Task và một aggregation UC55: **7 truy vấn cố định**, chạy các nguồn song song, không N+1, không tải danh sách bản ghi về để tính. Lookup bảo trì nằm trong aggregation. Không cache/bộ đếm/collection/seed mới. Snapshot có asOf nhưng các nguồn đọc độc lập, không bảo đảm giao dịch đồng thời. hasPeriodData gồm hoạt động theo kỳ và đêm-phòng ở; không tính mẫu số phòng hiện tại thành hoạt động. Series liên tục day/month, tháng đầu/cuối chỉ phần giao kỳ, sáu tổng khớp số đếm.
+
+FE `features/reports/pages/OperationalReportPage.tsx`, route `/manager/reports/operational` dưới PublicLayout khi H10 chưa merge; RequireAuth MANAGER, UserMenu có “Báo cáo vận hành”. `ReportPeriodFields` và `ReportBarChart` được tách dùng chung UC56/57; không thay công thức doanh thu. Query URL áp dụng bằng nút, ngày dd/MM/yyyy, mặc định đầu tháng–hôm nay giờ VN. Hai nhóm theo kỳ/ảnh chụp tách rõ, empty vẫn giữ snapshot; lỗi/Thử lại và lỗi 400 cạnh ô lọc; nguồn thiếu không giả 0; occupancy vi-VN 1 số lẻ và cảnh báo >100%; biểu đồ SVG chọn chỉ số kèm bảng đầy đủ. Bảng nhãn test đối chiếu enum thật; category/taskType/sourceType lạ giữ nguyên chuỗi. Không dependency, màu hex, Lucide hoặc thao tác ghi.
+
+### Chỉ mục đề xuất và giới hạn
+
+Không tự thay index module nguồn. Đề xuất chủ Booking cân nhắc isActive+createdAt/checkedInAt/checkedOutAt/cancelledAt và truy vấn khoảng lưu trú; ServiceOrder requestedTime; Issue reportedAt/closedAt; Task assignedAt/completedAt/dueAt; Maintenance createdAt toàn cục (index hiện tại room/equipment/reportedBy đứng trước ngày). Cần đo explain trên dữ liệu thật: các nhánh facet có thể quét tập lớn, index timestamp riêng không tự bảo đảm được dùng trong facet. Index lookup Task `_id` đã có. Không đặt index thừa khi chưa có số đo.
+
+Điểm tái dùng #39/H10: ReportsModule export OperationalReportService; dashboard không import ngược tạo vòng, không tự thêm KPI Dashboard trong task này. Khoa có thể chuyển reportRoutes/menu vào layout Manager mà giữ nguyên API/page/role guard. Priority Task là chuỗi tự do, không có thứ tự cố định; muốn sort theo ưu tiên cần Vũ chốt enum/thứ tự trước. Công suất và bộ chỉ số vẫn cần nhóm xác nhận.
+
+### Kết quả kiểm chứng / PR
+
+Baseline main 5fadbdf: BE lint/typecheck + **940 unit (42 file)**, FE lint/typecheck + **507 test (31 file)** đều pass. Lượt focused sau tích hợp: **25 e2e Mongo thật**, **14 unit gồm UC36/UC57**, **15 frontend UC57** pass; **24 frontend UC56** pass sau tách component. Lượt đầu sai fixture Issue thiếu reporter/booking và assertion error.path không tính query string, đã sửa test theo schema/format thật rồi chạy lại đạt; không thay production để né test.
+
+CI [40183757752](https://github.com/duongvn9/hotel-mangagement-system/actions/runs/40183757752) trên `f42a540`: **942/942 unit backend (43 file), 477/477 e2e Mongo (38 file), 522/522 frontend (32 file)** pass. Backend/frontend/production Docker/maintenance-smoke đều success. BE lint/format/typecheck/test/e2e/build; FE lint/format/test/build (tsc -b) đạt. Compose thật `docker compose up --build -d --wait`, health/proxy, seed chuẩn hai lần/idempotency UC36 và smoke UC55/UC56/Dashboard/UC57 tất cả pass. UC57 sau bổ sung có **28 e2e** gồm custom role thật có report:view vẫn 403, event không phụ thuộc current status, loại duration âm và ongoing stay vẫn là period data. Máy local không có Docker CLI, không ghi local Docker pass.
+
+Lượt full regression local chạy rất chậm và FE báo hai ca ServiceOrder assignment-history thất bại; không thay module owner. Đã chủ động dừng lượt trùng local sau khi **toàn bộ suite cùng revision đã pass CI**, không ghi full local pass. Local feature lint/format/typecheck đã đạt cả BE/FE. E2e dùng hms_uc57_UUID_test; mỗi test chỉ dọn `_id` fixture nó tạo, không xóa collection nguồn. Smoke Compose chỉ đọc sáu nguồn sau seed chuẩn hai lần, đối chiếu UC55/Room/series và snapshot không đổi/không collection mới.
+
+Kiểm tra lại local ServiceOrder: lượt đầu 26/27 (findByRole hết thời gian khi UI còn “Đang tải nhân viên dịch vụ…”); sau khi các tiến trình kiểm tra/build khác kết thúc, chạy lại nguyên suite cùng lệnh, không sửa source/test/setup/timeout nội bộ, **27/27 pass (9,52s)**. Frontend `npm run build` chuẩn pass, vẫn cảnh báo chunk >500kB có sẵn. Backend `npm run build` local gặp Windows EPERM unlink `dist/app.module.d.ts`; không ghi local build chuẩn pass, dùng kết quả build chuẩn CI đã thành công và artifact preview riêng đã kiểm chứng. Không xóa dist bị khóa để né lỗi.
+
+Local API/Swagger smoke `operational-report.smoke.mjs` đã pass trên hms_uc57_cli_test: sáu nguồn available, đối chiếu UC55, số phòng active, mẫu số đêm-phòng, tổng sáu series; repeated GET không đổi dữ liệu/danh sách collection. Artifact backend riêng `dist/operational-preview` được biên dịch bằng tsconfig.build.json và chạy seed registry hiện hành, không thêm seed UC57. Chưa đồng nhất kết quả preview với lệnh build/seed chuẩn; các lệnh chuẩn được ghi riêng khi chạy.
+
+Edge + Vite + API thật: `.task29-validation/uc57-browser-result.json`, `uc57-mobile-375.png`, `uc57-desktop.png` (đã xem hai ảnh). Mobile375 documentWidth=375, một H1, bốn control cao44px, bảng đủ7 cột trong vùng cuộn. Desktop1440 documentWidth=1425. Đổi metric cập nhật SVG, submit tháng đổi URL, reload trực tiếp giữ kỳ, không runtime exception. Browser tạo một fixture Booking đúng schema trong DB test và dọn đúng `_id` ở finally; không seed mới hay ghi dữ liệu dev. Đã dừng đúng PID API/Vite/Edge preview sau kiểm chứng.
+
+[PR #42](https://github.com/duongvn9/hotel-mangagement-system/pull/42), title `feat(reports): UC57 view operational report (#42)`. Commit `92b9fbf` backend/pipeline chung, `d87666f` frontend, `f42a540` e2e/Compose/bàn giao. Sau commit kết quả này, yêu cầu CI revision cuối xanh lần nữa rồi merge bằng merge commit; SHA merge thực tế lưu trên PR. Không tự sửa Jira, không có TODO/mock chặn chức năng.
 
 ## Quy trình Git thường trực
 
