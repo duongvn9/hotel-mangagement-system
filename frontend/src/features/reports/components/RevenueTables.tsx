@@ -1,42 +1,18 @@
+import { ReportBarChart } from './ReportBarChart'
 import type { RevenueReport } from '../api'
 import { revenueBucketLabel, revenueMoney } from '../presentation'
 export function RevenueSeries({ series }: Pick<RevenueReport, 'series'>) {
-  const max = Math.max(1, ...series.map((row) => row.successAmount))
-  const step = 1000 / series.length
   return (
     <section className="space-y-4" aria-labelledby="revenue-series-heading">
       <h2 id="revenue-series-heading" className="text-xl font-semibold">
         Thực thu theo thời gian
       </h2>
       <figure className="rounded border border-stone-300 bg-white p-4">
-        <svg
-          viewBox="0 0 1040 240"
-          role="img"
-          aria-label="Biểu đồ cột thực thu theo kỳ; số liệu đầy đủ trong bảng bên dưới"
-          className="w-full text-primary"
-        >
-          <line x1="20" y1="205" x2="1020" y2="205" stroke="currentColor" />
-          {series.map((row, index) => (
-            <g key={row.bucket}>
-              <rect
-                x={20 + index * step + step * 0.15}
-                y={205 - (row.successAmount / max) * 170}
-                width={Math.max(0.5, step * 0.7)}
-                height={(row.successAmount / max) * 170}
-                fill="currentColor"
-              >
-                <title>
-                  {revenueBucketLabel(row.bucket)}: {revenueMoney(row.successAmount)}
-                </title>
-              </rect>
-              {index % Math.max(1, Math.ceil(series.length / 8)) === 0 && (
-                <text x={20 + index * step} y="230" fontSize="13" fill="currentColor">
-                  {revenueBucketLabel(row.bucket)}
-                </text>
-              )}
-            </g>
-          ))}
-        </svg>
+        <ReportBarChart
+          rows={series.map((row) => ({ bucket: row.bucket, value: row.successAmount }))}
+          label="Biểu đồ cột thực thu theo kỳ; số liệu đầy đủ trong bảng bên dưới"
+          format={revenueMoney}
+        />
         <figcaption className="mt-2 text-sm text-stone-700">
           Chiều cao cột biểu thị tiền thực thu. Bảng dưới đây có đầy đủ từng kỳ, gồm cả kỳ bằng 0.
         </figcaption>

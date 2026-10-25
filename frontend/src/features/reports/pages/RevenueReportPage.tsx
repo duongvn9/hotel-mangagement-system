@@ -4,7 +4,7 @@ import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { ReportPeriodFields } from '../components/ReportPeriodFields'
 import { getErrorMessage } from '@/lib/api-client'
 import type { RevenueQuery } from '../api'
 import { useRevenueReport } from '../hooks'
@@ -93,32 +93,14 @@ function RevenueReportContent() {
         aria-label="Bộ lọc báo cáo doanh thu"
         className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
       >
-        <TextField
-          label="Từ ngày"
-          required
-          placeholder="dd/MM/yyyy"
-          inputMode="numeric"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
+        <ReportPeriodFields
+          from={from}
+          to={to}
+          granularity={granularity}
+          onFrom={setFrom}
+          onTo={setTo}
+          onGranularity={setGranularity}
           error={submitted ? error || undefined : undefined}
-        />
-        <TextField
-          label="Đến ngày"
-          required
-          placeholder="dd/MM/yyyy"
-          inputMode="numeric"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          error={submitted ? error || undefined : undefined}
-        />
-        <SelectField
-          label="Gộp theo"
-          value={granularity}
-          onChange={(e) => setGranularity(e.target.value as RevenueQuery['granularity'])}
-          options={[
-            { value: 'day', label: 'Ngày' },
-            { value: 'month', label: 'Tháng' },
-          ]}
         />
         <SelectField
           label="Phương thức thanh toán"
