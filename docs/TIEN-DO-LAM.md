@@ -13,7 +13,7 @@ Cập nhật 25/10/2026. Đây là tài liệu tiến độ và bàn giao duy nh
 | #30 UC47 View Room List + H3 Room/RoomStatus | Đã merge main: 734ea16 |
 | #31 UC48 Create / Update Room | Đã merge main: 21cc5d7; xem [bàn giao UC48](#uc48) |
 | #32 UC51 View Amenity List | Đã triển khai/kiểm tra đầy đủ; PR #21, xem [bàn giao UC51](#uc51) |
-| #37 UC35 Report Equipment Fault / Damage | Đã triển khai; đang chốt kiểm chứng và tích hợp main, xem [bàn giao UC35](#uc35) |
+| #37 UC35 Report Equipment Fault / Damage | Đã triển khai/kiểm chứng trên main mới; code remote `ffb2ae5`, chờ cho phép tạo PR/merge; xem [bàn giao UC35](#uc35) |
 
 Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, không dùng capacity. H6 vẫn giữ hợp đồng capacity/guests riêng; chưa nối adapter Room thật. Các mục lịch sử bên dưới ghi lại đúng trạng thái từng thời điểm, kể cả blocker đã được xử lý; không dùng snapshot cũ để kết luận trạng thái hiện tại.
 
@@ -864,3 +864,15 @@ Route `/operations/maintenance/report`, fallback PublicLayout theo router hiện
 ### Kiểm chứng
 
 Baseline main: BE/FE lint và typecheck pass. Backend unit lượt baseline: 778 pass, 60 skipped vì beforeAll `issues.http.spec.ts` timeout 10000ms; frontend: 281 pass/21 file, hai worker Service Order không khởi động (Vitest pool timeout). Không sửa code/config các module đó. Các lượt kiểm tra cuối dùng thời hạn hook phù hợp và runner frontend forks; kết quả cuối sẽ ghi bên dưới. Local Docker được miễn theo yêu cầu thường trực; không chạy Docker tại máy.
+
+### Tiếp tục và bàn giao UC35 — 25/10/2026
+
+- Code UC35 đã commit `790bd50`; tích hợp `origin/main@ce994d8` bằng merge commit `ffb2ae5`. Xung đột UserMenu đã giải quyết để giữ cả lịch sử dịch vụ trên main và mục báo hỏng cho Operations Staff. Worktree chính đã đồng bộ bản tích hợp, không còn các file untracked do lượt merge Windows thất bại.
+- Trước tích hợp: lint/format/typecheck BE và FE pass; backend **871/871** unit tests, frontend **355/355** tests pass. UC35 **22/22 e2e** pass. Toàn e2e nền cũ **293/294** pass; lỗi H5 kiểm tra seed không tồn tại trong DB dùng chung. Main mới có thay đổi seed/test H5, nên chạy lại toàn bộ trên bản tích hợp thay vì miễn lỗi.
+- Cách chạy giới hạn tài nguyên: backend `npm test -- --maxWorkers=2 --hookTimeout=60000 --testTimeout=15000`; frontend `npm test -- --pool=forks --maxWorkers=2 --testTimeout=15000`; e2e `npm run test:e2e -- --hookTimeout=60000 --testTimeout=15000`. MongoDB cục bộ riêng, DB `hms_uc35_integrated_test`, không dùng DB dev. Không thay config runner của dự án chỉ để tránh timeout tại máy.
+- Build BE trước tích hợp pass. Build FE trước tích hợp pass với `npx vite build --outDir .uc35-build` sau typecheck, do Windows chặn dọn `frontend/dist/assets`; thư mục build tạm đã được xóa. Kiểm tra bản tích hợp dùng thư mục worktree riêng để chạy lệnh build chuẩn.
+- Bản tích hợp `ffb2ae5`: BE/FE lint, format:check, typecheck và build chuẩn đều pass. Backend **883/883 tests** (38 file) pass. Frontend toàn bộ **406/407 tests** (27 file), một ca Booking timeout khi chờ heading Deluxe, DOM còn loading; chạy lại riêng toàn file Booking bằng `--pool=forks --maxWorkers=1 --testTimeout=15000` thì **6/6 pass** trong 5,65 giây, không sửa code/config Booking. Không gọi lượt toàn frontend là xanh hoàn toàn; UC35 vẫn pass trong lượt toàn bộ.
+- E2e toàn bản tích hợp: **348/348 tests, 33/33 file pass** trên MongoDB thật, gồm UC35 và H5 seed; không còn lỗi H5 của nền cũ. Local build chuẩn BE/FE pass; frontend chỉ còn cảnh báo bundle lớn hơn 500 kB. Không phát sinh thay đổi code ngoài UC35 so với main (ngoại trừ cập nhật kỳ vọng seed registry trong test Service).
+- Bằng chứng từ lượt trước 24/10 (không tuyên bố chạy lại ngày 25/10): `.task29-validation/uc35-browser-result.json` ghi nhận API/Swagger thật, form mobile 375px không tràn, desktop 1440px, validation focus, safe-use khóa action, xác nhận report/Task/bảo trì và cơ sở chung không Task, menu Operations, không runtime errors. `.task29-validation/uc35-seed-result.json` ghi seed CLI hai lần, 7 thiết bị (4 gắn phòng, 3 cơ sở chung), giữ edited fields/timestamps/version. Các artifact kiểm chứng không commit.
+- Nhánh remote `feature/37-equipment-fault-report` đã push tại `ffb2ae5`. **Chưa tạo PR/chưa merge main:** hệ thống duyệt tự động từ chối thao tác tạo PR vì yêu cầu người dùng cho phép rõ việc xuất bản PR và mô tả triển khai lên GitHub. Nội dung PR đã chuẩn bị; cần xin phép ở bước cuối sau khi chốt kiểm chứng. Không chạy Docker tại máy; CI Docker chưa có kết quả cho nhánh này.
+- Handoff #38/UC36: dùng `MaintenanceModule`, lấy trạng thái hoàn thành từ Task; không dùng receipt làm trạng thái công việc. Không tự phục hồi phòng khi hoàn thành Task. Nhóm vẫn cần xác nhận entity Maintenance ngoài ERD và chính sách giao Task cho người báo như phần quyết định phía trên.
