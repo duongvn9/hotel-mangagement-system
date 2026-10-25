@@ -1,6 +1,6 @@
 # Tiến độ Trần Bảo Lâm — Grand Emily HMS
 
-Cập nhật 24/10/2026. Đây là tài liệu tiến độ và bàn giao duy nhất của Lâm; các task sau tiếp tục cập nhật vào file này. File CLAUDE-CONTEXT-TRAN-BAO-LAM.md giữ vai trò context dự án, không phải một file tiến độ theo UC.
+Cập nhật 25/10/2026. Đây là tài liệu tiến độ và bàn giao duy nhất của Lâm; các task sau tiếp tục cập nhật vào file này. File CLAUDE-CONTEXT-TRAN-BAO-LAM.md giữ vai trò context dự án, không phải một file tiến độ theo UC.
 
 ## Hiện trạng mới nhất
 
@@ -13,6 +13,7 @@ Cập nhật 24/10/2026. Đây là tài liệu tiến độ và bàn giao duy nh
 | #30 UC47 View Room List + H3 Room/RoomStatus | Đã merge main: 734ea16 |
 | #31 UC48 Create / Update Room | Đã merge main: 21cc5d7; xem [bàn giao UC48](#uc48) |
 | #32 UC51 View Amenity List | Đã triển khai/kiểm tra đầy đủ; PR #21, xem [bàn giao UC51](#uc51) |
+| #37 UC35 Report Equipment Fault / Damage | Đã triển khai; đang chốt kiểm chứng và tích hợp main, xem [bàn giao UC35](#uc35) |
 
 Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, không dùng capacity. H6 vẫn giữ hợp đồng capacity/guests riêng; chưa nối adapter Room thật. Các mục lịch sử bên dưới ghi lại đúng trạng thái từng thời điểm, kể cả blocker đã được xử lý; không dùng snapshot cũ để kết luận trạng thái hiện tại.
 
@@ -813,3 +814,53 @@ Pin chính xác Nodemailer **10.2.1** (22/10/2026) và @types/nodemailer **8.0.2
 
 Audit cuối (10.2.1): **0 finding cho Nodemailer/dependency mới**; audit toàn cây vẫn exit 1 vì 4 high có sẵn (`@nestjs/core`, `@nestjs/platform-express`, `@nestjs/testing`, `multer`), không phát sinh vulnerability mới. Kiểm tra cuối: lint không warning, format:check, typecheck, build pass; 51 H9 unit test pass; e2e AppModule thật **252/252** (29 file) pass. Script `notify:test` đã build ra entry point nhưng tuyệt đối không chạy; Gmail thật chưa kiểm chứng. Bộ unit toàn backend trên code cuối với cache tắt: **830/830 pass** (34 file). Commit code `e864bab`, test `d04b848`.
 PR: [#29 — H9 Gmail notification](https://github.com/duongvn9/hotel-mangagement-system/pull/29). Quy trình xuất bản: chỉ merge bằng merge commit sau khi Backend, Frontend và Docker Images trên head cuối xanh; tiêu đề merge dùng "Merge pull request #29 from duongvn9/feature/36-gmail-notification". Xem PR để biết trạng thái CI/merge thực tế.
+
+<a id="uc35"></a>
+## #37 / UC35 — Report Equipment Fault / Damage (24/10/2026)
+
+### Bước 0 và quyết định đã xác nhận
+
+Baseline `main@e568713`, nhánh `feature/37-equipment-fault-report`. Task core #64 đã merge: `TasksService.create(input: CreateTaskDto, identity?: Types.ObjectId)`; input title/taskType/priority/sourceType/sourceId/assigneeId/dueAt?. Assignee bắt buộc, trạng thái ASSIGNED → IN_PROGRESS → COMPLETED, không PENDING. taskType/priority là string, không có TaskType enum. Task.sourceId không khai báo refPath; TasksService kiểm tra `_id` thật qua `connection.collection(TASK_SOURCE_COLLECTIONS[sourceType])`. Nguồn MAINTENANCE ánh xạ chính xác tới `maintenances`.
+
+Issue đã có nhưng `IssuesService.create(dto, userId)` bắt buộc booking thuộc Customer qua IssueContextAdapter, có quy trình duyệt riêng trước giao Task. Theo quyết định mới của người dùng: **không tạo Issue, không mở rộng/sửa schema/service/module Issue**, dùng model `Maintenance`, collection `maintenances`, nguồn Task `MAINTENANCE`. Đây là **entity ngoài ERD gốc, nâng tổng số lên 17 entity; cần nhóm xác nhận**. Phương án mở rộng Issue trước đó đã hủy.
+
+RoomsModule export model Room và RoomsService; status hiện có AVAILABLE/OCCUPIED/CLEANING/MAINTENANCE. UC35 dùng model Room export để cập nhật status nguyên tử có điều kiện, không thay hàm update phòng chung.
+
+### Schema / provider / seed
+
+- `common/constants/equipment-condition.enum.ts`: EquipmentCondition GOOD / FAULTY / UNDER_REPAIR (giả định ERD chưa liệt kê giá trị).
+- Equipment, collection `equipment`: assetCode trim required unique, name/category trim required, location optional, condition mặc định GOOD, room optional ref Room, isActive default true, timestamps. EquipmentModule export MongooseModule và EquipmentService. **Equipment chỉ có seed, không CRUD/endpoint quản lý**.
+- Maintenance, collection `maintenances`: reportedBy ref User, room/equipment/facilityLocation optional, description trim 1–2000, requiresAction default true, preventsSafeUse default false, task ref Task được đặt sau khi Task tồn tại, timestamps. Không status/completedAt và không sửa/xóa qua HTTP.
+- Có thêm metadata kỹ thuật để gửi lại an toàn: requestKey, requestFingerprint (SHA-256 payload chuẩn hóa), taskIdentity (ObjectId cố định lưu trước khi tạo Task), receipt (kết quả hoàn tất ghi nhận). **Receipt không phải trạng thái hoàn thành công việc**. Unique index reportedBy + requestKey chống tạo bản ghi trùng; dữ liệu mô tả/đối tượng/người báo immutable.
+- MaintenanceModule import EquipmentModule, RoomsModule, TasksModule và schema User sẵn có; export MaintenanceService/MongooseModule. Không import Issue/Bookings/Notifications, không forwardRef. AppModule đăng ký EquipmentModule/MaintenanceModule.
+- Seed registry: roles → users → amenities → room-types → rooms → **equipment** → services → bookings → feedback. 7 thiết bị mẫu: điều hòa, TV, két sắt, bình nóng lạnh gắn phòng; thang máy, máy phát, bơm nước cơ sở chung, một thiết bị inactive. Seed `$setOnInsert` + upsert; không đổi edited fields/timestamps/version; thiếu phòng theo roomNumber thì bỏ qua dòng tương ứng.
+
+### API / luồng ghi / retry
+
+| Endpoint | Hợp đồng |
+|---|---|
+| GET `/api/v1/maintenance/targets?q=` | Active rooms/equipment; tìm kiếm không phân biệt hoa thường, escape regex, q tối đa 100 ký tự, tối đa 20 mỗi nhóm, sort ổn định; equipment kèm roomId/roomNumber |
+| POST `/api/v1/maintenance/reports` | Body roomId?, equipmentId?, facilityLocation? (trim ≤200), description (trim 1–2000), requiresAction? (true), preventsSafeUse? (false). 201: reportId, taskId? và roomMarkedUnavailable/warnings |
+
+Chỉ `@Roles(Role.OperationsStaff)`, không gắn permission. Seed role có `issue:report` cho Customer/Service Staff/Operations Staff; gắn permission OR role sẽ mở rộng sai quyền. BE chặn các role khác 403, anonymous 401; service còn kiểm tra User thật active Operations Staff. FE RequireAuth cũng chỉ role vận hành.
+
+1. Validate DTO/field lạ, actor active, ít nhất một đối tượng/vị trí + mô tả, target tồn tại active, equipment/room không mâu thuẫn; equipment-only tự suy ra phòng của nó. preventsSafeUse bắt buộc có phòng và requiresAction=true. Không ghi dữ liệu nghiệp vụ nếu validation đầu vào thất bại.
+2. Header `Idempotency-Key` là UUID: FE tự tạo và giữ nguyên cho mọi lần retry một báo cáo; optional cho caller tạo mới, server sinh UUID nếu thiếu. **Caller tích hợp muốn retry an toàn phải giữ và gửi lại cùng UUID**, không tạo UUID mới. Cùng key + payload khác trả 409; unique key theo reportedBy. Nội dung ID chuẩn hóa lowercase, chuỗi trim và boolean defaults trước khi hash.
+3. Ghi Maintenance cùng durable taskIdentity trước; nếu requiresAction thì gọi chính `TasksService.create(dto, taskIdentity)`, sourceType MAINTENANCE/sourceId Maintenance._id, **taskType MAINTENANCE**, **priority URGENT nếu preventsSafeUse, ngược lại NORMAL**, assignee chính Operations Staff báo cáo (giả định đã được người dùng chỉ định; cần nhóm chốt). Không ghi trực tiếp Task model. Lookup Task qua `TasksService.findAssigned(actorId, taskIdentity)` trước khi tạo; lỗi create không rõ đã commit thì đối chiếu lại sourceId/type/priority. Giữ cùng identity cả khi Task đã COMPLETED, không tạo công việc mới khi retry.
+4. Sau khi có Task, đặt Maintenance.task; Equipment chỉ GOOD → FAULTY bằng update có điều kiện, giữ UNDER_REPAIR/FAULTY.
+5. preventsSafeUse=true: `findOneAndUpdate` Room active + status thuộc AVAILABLE/CLEANING → MAINTENANCE. Đã MAINTENANCE thì giữ nguyên/true. OCCUPIED không bị ghi đè, trả false và warning “Phòng đang có khách; cần lễ tân xử lý”. preventsSafeUse=false không cập nhật Room.
+6. Ghi receipt cuối cùng. Replay receipt không chạy lại side effects, nên không đưa phòng đã được phục hồi thủ công về MAINTENANCE lần nữa. Lỗi sau khi Maintenance đã lưu trả **503**, message chứa reportId; log error có reportId, không báo thành công im lặng. Retry cùng key/payload tiếp tục cùng report/Task. FE khóa nội dung khi kết quả chưa rõ, giữ key và có nút Gửi lại; lỗi validation/auth trước ghi cho phép sửa dữ liệu.
+
+Mongo dev/CI dùng mongo:8 standalone, không cấu hình replSet/replicaSet; code UC35 không session/transaction. Ghi nhiều collection không atomic: Maintenance/Task hoặc một side effect có thể đã tồn tại khi trả 503, cần retry; target có thể bị thay đổi giữa các bước do writer khác. Không có worker tự phục hồi nếu người dùng không retry. Khóa UUID trong form giữ trong phiên component, refresh/đóng tab không tự phục hồi khóa; API caller cần tự lưu key nếu cần retry sau reload.
+
+BR-MNT-04 kiểm chứng qua H6 thật: phòng MAINTENANCE bị loại khỏi available rooms. Không ghi đè OCCUPIED: lễ tân phải xử lý tình trạng an toàn của phòng đang có khách. Không tự phục hồi phòng khi Task hoàn thành; thuộc luồng hoàn thành/đóng hoặc Manager UC48, ngoài #37. Không notification.
+
+### Frontend và điểm mở rộng #38
+
+Route `/operations/maintenance/report`, fallback PublicLayout theo router hiện tại vì H10 chưa có layout riêng; UserMenu chỉ Operations Staff có “Báo hỏng thiết bị”. Form chọn Phòng/Thiết bị/Cơ sở khác, search debounce 250ms, hiện phòng của thiết bị, mô tả đếm 2000 ký tự, required/focus/aria errors; safe-use tự bật/khóa requiresAction. Loading/error/retry/empty search, pending chống double submit, giữ dữ liệu khi lỗi; xác nhận report/Task/phòng/warnings và nút báo cáo vấn đề khác, không link chết sang UC36. Dùng component/token chung, không Lucide/hex mới.
+
+#38/UC36 có thể import MaintenanceModule để đọc Maintenance và liên kết task; trạng thái hoàn thành phải lấy từ Task, **không suy ra từ receipt**. Chưa tạo API lịch sử hay tự quyết scope quyền lịch sử.
+
+### Kiểm chứng
+
+Baseline main: BE/FE lint và typecheck pass. Backend unit lượt baseline: 778 pass, 60 skipped vì beforeAll `issues.http.spec.ts` timeout 10000ms; frontend: 281 pass/21 file, hai worker Service Order không khởi động (Vitest pool timeout). Không sửa code/config các module đó. Các lượt kiểm tra cuối dùng thời hạn hook phù hợp và runner frontend forks; kết quả cuối sẽ ghi bên dưới. Local Docker được miễn theo yêu cầu thường trực; không chạy Docker tại máy.
