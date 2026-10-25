@@ -63,6 +63,24 @@ it.each(['SERVICE_STAFF', 'OPERATIONS_STAFF', 'CUSTOM_ROLE'])(
   },
 )
 
+it.each(['SERVICE_STAFF', 'OPERATIONS_STAFF'])(
+  'guides %s to their own task detail to update progress',
+  async (role) => {
+    get.mockResolvedValue({ data: list })
+    renderTasks('/staff/tasks', role)
+    expect(await screen.findByRole('link', { name: task.title })).toHaveAttribute(
+      'href',
+      '/staff/tasks/task-1',
+    )
+    expect(
+      screen.getByText(
+        'Danh sách công việc được giao cho bạn. Mở chi tiết công việc của bạn để cập nhật tiến độ.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Chỉ xem|không thay đổi tiến độ/i)).not.toBeInTheDocument()
+  },
+)
+
 it.each(['CUSTOM_ROLE', 'MANAGER', 'CUSTOMER', 'RECEPTIONIST'])(
   'denies unprivileged %s without fetching',
   async (role) => {
