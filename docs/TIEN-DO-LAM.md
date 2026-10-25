@@ -14,7 +14,8 @@ Cập nhật 25/10/2026. Đây là tài liệu tiến độ và bàn giao duy nh
 | #31 UC48 Create / Update Room | Đã merge main: 21cc5d7; xem [bàn giao UC48](#uc48) |
 | #32 UC51 View Amenity List | Đã triển khai/kiểm tra đầy đủ; PR #21, xem [bàn giao UC51](#uc51) |
 | #37 UC35 Report Equipment Fault / Damage | Đã merge main: `d5f422c`, PR #35; backend/frontend/Docker CI xanh; xem [bàn giao UC35](#uc35) |
-| #38 UC36 View Maintenance History | BE/FE/seed/test hoàn tất; [PR #36](https://github.com/duongvn9/hotel-mangagement-system/pull/36) có trạng thái CI/merge; xem [bàn giao UC36](#uc36) |
+| #38 UC36 View Maintenance History | Đã merge main `62b548c`, PR #36; bốn job CI xanh; xem [bàn giao UC36](#uc36) |
+| #40 UC55 Monitor Task Queues | Hoàn tất BE/FE/runtime; [PR #37](https://github.com/duongvn9/hotel-mangagement-system/pull/37), bốn job CI xanh tại revision `11d4f91`; xem [bàn giao UC55](#uc55) |
 
 Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, không dùng capacity. H6 vẫn giữ hợp đồng capacity/guests riêng; chưa nối adapter Room thật. Các mục lịch sử bên dưới ghi lại đúng trạng thái từng thời điểm, kể cả blocker đã được xử lý; không dùng snapshot cũ để kết luận trạng thái hiện tại.
 
@@ -917,3 +918,54 @@ Baseline `main@d5f422c`, đã pull trước khi tạo `feature/38-maintenance-hi
 Phạm vi reporter HOẶC assignee và trạng thái NO_ACTION/null là quyết định triển khai, cần nhóm xác nhận; chưa phải business rule được nhóm phê duyệt. Seed chỉ có quan sát không Task; hoàn thành có completedAt/workResult được chứng minh bằng test và smoke qua Task thật. Không thêm sharing giữa nhân viên, chi phí, CSV, xóa/lưu trữ hoặc cập nhật lịch sử. Không có TODO/mock chặn UC36 trong production.
 
 #42 có thể tái dùng schema Maintenance (`createdAt` là reportedAt), liên kết Task và hàm phạm vi nếu actor/quyền báo cáo trùng; KPI toàn khách sạn hoặc scope Manager cần đặc tả riêng, không tái sử dụng quyền Operations Staff một cách ngầm định. Không suy ra hoàn thành từ receipt hoặc tự khôi phục Room từ lịch sử. Không gửi notification.
+
+<a id="uc55"></a>
+## #40 — UC55 Monitor Task Queues
+
+Baseline main `62b548c`, nhánh `feature/40-task-queue-monitor`. Task core #64 đã có; chưa có API Manager giám sát tương đương. Module mới `task-supervision` chỉ đọc, không sửa module tasks của Vũ hoặc nghiệp vụ Issue/Service Order/Booking/Invoice/Payment.
+
+### Hợp đồng thực tế và khác biệt so với prompt
+
+- Task dùng `assignedTo`: schema đọc, aggregation và lookup đều dùng tên này. Tham số API vẫn là `assigneeId`, chuyển sang ObjectId của `assignedTo` khi lọc.
+- Chỉ có ASSIGNED / IN_PROGRESS / COMPLETED, không thêm PENDING. Không có startedAt nên không tự dựng trường này. Nhãn trạng thái/nguồn FE được test đối chiếu hợp đồng BE thật.
+- `priority` là string có trim, không normalize chữ hoa/thường hoặc collation. Lọc bằng equality **phân biệt hoa thường**, ký tự regex được hiểu nguyên văn. DTO chỉ kiểm tra chuỗi không rỗng, tối đa 100 ký tự; không IsEnum hoặc TaskPriority.
+- `/summary` trả `facets.priorities` và `facets.taskTypes` distinct từ dữ liệu trong phạm vi quản lý, độc lập các filter hiện chọn để có thể đổi lựa chọn. Frontend dùng các facets này, không hardcode danh sách ưu tiên.
+- Sort chỉ `assignedAt|dueAt|completedAt`; `priority` trả 400. Cả hai chiều đều null cuối, có `_id` làm tiêu chí phụ ổn định. Không tự dựng bảng xếp hạng ưu tiên.
+- Nhãn priority chỉ để hiển thị: LOW=Thấp, NORMAL=Bình thường, HIGH=Cao, URGENT=Khẩn cấp; giá trị lạ giữ nguyên chuỗi, thiếu hiện “—”. Không ép khớp enum BE.
+
+### API, phạm vi và tính nhất quán
+
+Ba GET `/api/v1/task-queues/summary`, `/tasks`, `/tasks/:id`, chỉ Manager ở BE và FE. Không dùng permission chung để tránh cơ chế OR mở quyền cho nhân viên. Module đăng ký lại đúng TaskSchema hiện hữu để đọc; không tạo schema Task khác, không vòng phụ thuộc.
+
+Mỗi endpoint thực hiện một aggregation mới, không cache hoặc lưu counts/overdue/workload. Hàm scope chung `taskSupervisionScope()` hiện là toàn bộ Task của khách sạn, được áp dụng cả summary/list/detail. Clock inject được: quá hạn khi dueAt là Date, nhỏ hơn now và status khác COMPLETED. Counts có assigned/inProgress/completed/other/total; other dành cho dữ liệu legacy bất thường, bình thường bằng 0. Summary không nhận status/overdue; hai filter này chỉ dành cho bảng.
+
+Workload nhóm theo assignedTo, xếp số việc mở giảm dần, giới hạn 100 người trước lookup; tổng summary vẫn tính toàn bộ. User projection chỉ id/fullName/role; thiếu user trả null và log cảnh báo ID, không làm lỗi danh sách. List facet items/total cùng bộ lọc, lookup sau phân trang. Detail trả workResult khi hoàn thành; MAINTENANCE có summary Room/Equipment tối thiểu, ISSUE/SERVICE_ORDER chỉ trả tham chiếu nguồn, không kéo module ngoài phạm vi.
+
+Không thay index Task hiện hữu (`assignedTo,status`; `status`; `sourceType,sourceId`; unique active source/taskType). Khi dữ liệu lớn cần Vũ đánh giá explain cho `{status:1,dueAt:1,_id:1}` hoặc `{assignedTo:1,status:1,dueAt:1}`; không khẳng định index giải quyết sort null cuối hoặc facets toàn scope.
+
+### Frontend và bàn giao tái sử dụng
+
+Routes `/manager/task-queues` và `/:id` dưới PublicLayout/menu Manager hiện có. Ba tab có counts, roving tabindex, phím mũi tên/Home/End; một H1, link thật mở chi tiết bằng Enter. Bộ lọc, trang và sort lưu URL, giữ khi back/refresh. Tìm tiêu đề debounce 300ms; dropdown ưu tiên lấy facets, chọn người từ workload. Checkbox quá hạn chỉ lọc bảng, có giải thích phạm vi counts.
+
+Counts và workload dùng chung một response summary để cùng snapshot, bảng tải riêng. Mỗi khối có loading/error/thử lại; rỗng toàn bộ, rỗng do lọc và rỗng hàng đợi tách biệt. Filter đang tải giữ facets cũ và báo đang cập nhật. staleTime=0, refetch khi focus hoặc bấm Làm mới; không polling. generatedAt và aria-live báo snapshot. Ngày hiển thị dd/MM/yyyy HH:mm Việt Nam, bảng cuộn trong container ở 375px. Chi tiết chỉ xem, không có sửa/giao lại/hoàn thành.
+
+`TaskSupervisionService.summary/list/detail`, scope và DTO có thể tái sử dụng cho #39/#42 sau khi thống nhất quyền/phạm vi. Báo cáo KPI/ngày và mở rộng nguồn cần hợp đồng riêng, không ngầm dùng scope Manager cho nhân viên.
+
+### Kiểm chứng
+
+Các lượt tập trung ban đầu: backend **21 unit**, **27 e2e**, frontend **32 test** pass. Có test exact priority chứa regex, facets theo dữ liệu, sort priority 400, ba trạng thái thật, priority lạ/thiếu; kiểm tra chuyển trạng thái qua TasksService thật cập nhật summary ngay và GET không ghi dữ liệu/collection mới. Baseline trước thay đổi: BE 895 unit, FE 425 test pass. Lượt regression local bị timeout cả các module có sẵn; không coi các lượt đó là pass. CI regression đầy đủ đã xanh như bằng chứng bên dưới.
+
+Seed chuẩn đã chạy thành công hai lần trên DB riêng `hms_uc55_cli_test`; không bổ sung Task seed và không tạo Task trực tiếp trong production seed. `backend/test/task-supervision.smoke.mjs` giới hạn DB test, tạo fixture qua UC35/Task API thật để kiểm tra vòng đời và tính chỉ đọc. CI `maintenance-smoke` được mở rộng chạy smoke UC55 sau Compose/seed hai lần. Máy local không có Docker CLI/Desktop; chỉ coi Compose runtime đạt khi job CI này xanh, cùng backend/frontend/production Docker trước merge.
+
+### Kết quả cuối và artifact
+
+- Toàn repo trên CI: **916/916 unit backend (40 file), 400/400 e2e (35 file), 457/457 frontend (29 file) pass**. Không miễn check đỏ hoặc sửa module khác để làm xanh regression.
+- Rà soát cuối bổ sung ba test priority lạ `toString`, `__proto__`, `constructor`: bảng nhãn chỉ đọc own property, tránh trùng prototype JavaScript. Riêng FE UC55 sau bổ sung **35/35 pass**, lint/typecheck pass; không thay hợp đồng hoặc thứ tự priority. Kết quả CI revision cuối và merge thực tế được lưu tại PR #37.
+- [CI run 40162357941](https://github.com/duongvn9/hotel-mangagement-system/actions/runs/40162357941): backend, frontend, Docker production và maintenance-smoke **đều success** trên `11d4f91`. Bao gồm lint/format/typecheck/unit/e2e/build BE; lint/format/test/build FE; build image production; Compose stack thật, health/proxy, seed hai lần và cả smoke UC36/UC55. FE typecheck local trước regression đã pass. Lượt full regression local bị dừng do máy còn khoảng 550 MB RAM trống; kết quả toàn repo được xác nhận bằng CI, không ghi các lượt timeout local thành pass.
+- Local CLI seed hai lần và smoke UC55 qua API `3038` đã pass trên DB riêng. Counts thay đổi ngay qua ASSIGNED → IN_PROGRESS → COMPLETED bằng API Task thật; Swagger, facets, sort priority 400, snapshot GET không đổi và không collection/counter mới đều đạt. Không chạy Docker local.
+- Edge headless + Vite/API thật: `.task29-validation/uc55-browser-result.json`, `uc55-queues-mobile-375.png`, `uc55-detail-mobile-375.png`, `uc55-queues-desktop.png`. Một H1; documentWidth=375 ở viewport 375, 1425 ở viewport 1440; tab cao hơn 44px; phím mũi tên/End đổi tab, Enter mở chi tiết, refresh lấy counts mới, URL giữ filter khi quay lại, reload detail trực tiếp, 404 đúng và không write controls/runtime errors. Đã xem ảnh kiểm tra bố cục. Artifact không commit; đã dừng API/Vite/Edge/Mongo test của phiên.
+- Commit API `455e4c3`, frontend `40c0aec`, e2e/Compose/handoff `11d4f91`; [PR #37 — feat(task-supervision): UC55 monitor task queues (#40)](https://github.com/duongvn9/hotel-mangagement-system/pull/37). Chủ động merge bằng merge commit sau CI xanh theo ủy quyền thường trực; PR lưu SHA và trạng thái merge thực tế.
+
+### Giả định
+
+Priority là chuỗi tự do theo hợp đồng Task hiện tại; **không có thứ tự ưu tiên cố định**. Nếu nhóm muốn sort theo mức ưu tiên, cần Vũ chốt enum và thứ tự trước. Scope Manager toàn Task một khách sạn, workload và overdue là giả định triển khai/mở rộng cần nhóm xác nhận; chưa phải business rule mới được phê duyệt. Không thêm TaskPriority, không sửa module tasks của Vũ.
