@@ -14,7 +14,7 @@ Cập nhật 25/10/2026. Đây là tài liệu tiến độ và bàn giao duy nh
 | #31 UC48 Create / Update Room | Đã merge main: 21cc5d7; xem [bàn giao UC48](#uc48) |
 | #32 UC51 View Amenity List | Đã triển khai/kiểm tra đầy đủ; PR #21, xem [bàn giao UC51](#uc51) |
 | #37 UC35 Report Equipment Fault / Damage | Đã merge main: `d5f422c`, PR #35; backend/frontend/Docker CI xanh; xem [bàn giao UC35](#uc35) |
-| #38 UC36 View Maintenance History | Đã triển khai BE/FE/seed/test, đang chốt kiểm chứng và xuất bản; xem [bàn giao UC36](#uc36) |
+| #38 UC36 View Maintenance History | BE/FE/seed/test hoàn tất; [PR #36](https://github.com/duongvn9/hotel-mangagement-system/pull/36) có trạng thái CI/merge; xem [bàn giao UC36](#uc36) |
 
 Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, không dùng capacity. H6 vẫn giữ hợp đồng capacity/guests riêng; chưa nối adapter Room thật. Các mục lịch sử bên dưới ghi lại đúng trạng thái từng thời điểm, kể cả blocker đã được xử lý; không dùng snapshot cũ để kết luận trạng thái hiện tại.
 
@@ -910,7 +910,7 @@ Baseline `main@d5f422c`, đã pull trước khi tạo `feature/38-maintenance-hi
 - Trình duyệt thật API/Vite: `.task29-validation/uc36-browser-result.json`, `uc36-history-mobile-375.png`, `uc36-detail-mobile-375.png`, `uc36-history-desktop.png`; 375px documentWidth=375, 1440px documentWidth=1440, một H1, link 44px, Enter mở chi tiết, giữ filter khi quay lại, refresh chi tiết trực tiếp, scoped 404, không write controls/runtime errors. Bản ghi hoàn thành trong smoke được tạo qua UC35 và chuyển trạng thái qua Task API thật trên DB test riêng. Không commit các artifact này.
 - Docker CLI/Desktop không có tại máy (đã kiểm tra lệnh và đường dẫn cài chuẩn), nên không tuyên bố local Compose pass. Bổ sung job CI `maintenance-smoke` trên ubuntu-22.04: `docker compose up --build -d --wait`, health backend/frontend proxy, `npm run seed` hai lần, smoke list/detail/Swagger/idempotency và dọn volume test. Chỉ merge sau khi job này cùng backend/frontend/Docker production xanh.
 - Toàn repo trên code cuối: **backend 895/895 unit tests (39 file), e2e 373/373 (34 file), frontend 425/425 (28 file) pass**. BE/FE lint (không warning), format:check, typecheck và build chuẩn đều pass. Lượt frontend chạy chung ban đầu 424/425, một test Service Order timeout khi chờ danh sách nhân viên; sau khi dừng preview helpers, chạy lại toàn frontend với `--pool=forks --maxWorkers=1 --testTimeout=15000` đạt 425/425, không sửa code/config module đó. Backend dùng maxWorkers=2/hookTimeout=60000/testTimeout=15000; e2e chạy tuần tự với hookTimeout=60000/testTimeout=15000 trên DB `hms_uc36_full_test`, không dùng DB dev. Build FE còn cảnh báo bundle lớn hơn 500 kB có sẵn.
-- Commit API/seed/unit `577f69e`, frontend `18bbdd9`, e2e/Compose CI `3840912`; nhánh `feature/38-maintenance-history`. PR và CI runtime đang được xuất bản; chưa tuyên bố Compose xanh trước khi job hoàn tất. Theo ủy quyền thường trực, chủ động merge bằng merge commit sau khi toàn bộ CI xanh.
+- Commit API/seed/unit `577f69e`, frontend `18bbdd9`, e2e/Compose CI `3840912`; nhánh `feature/38-maintenance-history`, [PR #36 — feat(maintenance): UC36 view maintenance history (#38)](https://github.com/duongvn9/hotel-mangagement-system/pull/36). Xem PR để đối chiếu kết quả CI runtime và merge commit thực tế. Theo ủy quyền thường trực, chủ động merge bằng merge commit sau khi toàn bộ CI (backend, frontend, production Docker, maintenance-smoke) xanh; không coi kết quả local là thay thế Compose runtime.
 
 ### Giả định / giới hạn / mở khóa #42
 
