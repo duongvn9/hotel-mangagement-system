@@ -13,6 +13,7 @@ import { serviceOrderRoutes } from '@/features/service-orders/routes'
 import { taskRoutes } from '@/features/tasks/routes'
 import { staffDashboardRoutes } from '@/features/staff-dashboards/routes'
 import { maintenanceRoutes } from '@/features/maintenance/routes'
+import { taskSupervisionRoutes } from '@/features/task-supervision/routes'
 
 import { PublicLayout } from '@/layouts/PublicLayout'
 import { HomePage } from '@/pages/HomePage'
@@ -43,6 +44,7 @@ export const router = createBrowserRouter([
       // TODO(#18): Move staff dashboards into the H10 role layout when available.
       ...staffDashboardRoutes,
       ...maintenanceRoutes,
+      ...taskSupervisionRoutes,
       { path: '*', element: <NotFoundPage /> },
     ],
   },
