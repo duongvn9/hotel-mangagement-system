@@ -72,7 +72,7 @@ jobs:
           CORS_ORIGINS: http://localhost
 
   maintenance-smoke:
-    # Runtime Compose verification for UC35/36/55/56, isolated from every development database.
+    # Runtime Compose verification for UC35/36/55/56 and Manager dashboard, isolated from every development database.
     runs-on: ubuntu-22.04
     needs: [backend, frontend]
     timeout-minutes: 15
@@ -106,6 +106,8 @@ jobs:
         run: docker compose exec -T backend node test/task-supervision.smoke.mjs
       - name: Verify UC56 recorded revenue and read-only reporting
         run: docker compose exec -T backend node test/revenue-report.smoke.mjs
+      - name: Verify Manager dashboard reuses live sources without writes
+        run: docker compose exec -T backend node test/manager-dashboard.smoke.mjs
       - name: Runtime logs on failure
         if: failure()
         run: docker compose logs --tail 120
