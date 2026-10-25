@@ -19,7 +19,7 @@ const priorityLabels: Record<string, string> = {
 }
 /** Display only: no enum, ordering rule or case normalization for free-string priorities. */
 export const priorityLabel = (value?: string | null) =>
-  value ? (priorityLabels[value] ?? value) : '—'
+  value ? (Object.hasOwn(priorityLabels, value) ? priorityLabels[value] : value) : '—'
 export const priorityOption = (value: string) =>
   priorityLabel(value) === value ? value : `${priorityLabel(value)} (${value})`
 const clock = new Intl.DateTimeFormat('vi-VN', {
