@@ -1,22 +1,12 @@
+import { ReportPeriodQuery } from './report-period.dto.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsIn, IsString, Matches, ValidateIf } from 'class-validator';
+import { IsEnum, ValidateIf } from 'class-validator';
 import {
   PaymentMethod,
   PaymentPurpose,
 } from '../../payments/schemas/payment-transaction.schema.js';
 
-export class RevenueReportQuery {
-  @ApiProperty({ example: '2026-10-01' })
-  @IsString()
-  @Matches(/^\d{4}-\d{2}-\d{2}$/)
-  from: string;
-  @ApiProperty({ example: '2026-10-25' })
-  @IsString()
-  @Matches(/^\d{4}-\d{2}-\d{2}$/)
-  to: string;
-  @ApiPropertyOptional({ enum: ['day', 'month'], default: 'day' })
-  @IsIn(['day', 'month'])
-  granularity: 'day' | 'month' = 'day';
+export class RevenueReportQuery extends ReportPeriodQuery {
   @ApiPropertyOptional({ enum: PaymentMethod })
   @ValidateIf((_o, value) => value !== undefined)
   @IsEnum(PaymentMethod)
