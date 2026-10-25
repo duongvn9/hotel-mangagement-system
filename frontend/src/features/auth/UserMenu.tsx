@@ -29,7 +29,10 @@ const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
     { to: '/staff/service/dashboard', label: 'Bảng điều khiển dịch vụ' },
     { to: '/staff/service-history', label: 'Lịch sử thực hiện dịch vụ' },
   ],
-  OPERATIONS_STAFF: [{ to: '/staff/operations/dashboard', label: 'Bảng điều khiển vận hành' }],
+  OPERATIONS_STAFF: [
+    { to: '/staff/operations/dashboard', label: 'Bảng điều khiển vận hành' },
+    { to: '/operations/maintenance/report', label: 'Báo hỏng thiết bị' },
+  ],
 }
 
 /** Góc phải header: link đăng nhập, hoặc tên người dùng + đăng xuất (UC03). */
