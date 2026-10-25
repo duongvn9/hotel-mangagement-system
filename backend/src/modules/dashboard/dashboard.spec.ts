@@ -27,17 +27,15 @@ function setup(now = new Date('2026-10-31T17:00:00Z')) {
   ]);
   const rooms = { aggregate: vi.fn(() => ({ exec })) };
   const revenue = {
-    revenue: vi
-      .fn()
-      .mockImplementation(async (query) => ({
-        period: {
-          from: query.from,
-          to: query.to,
-          timezone: 'Asia/Ho_Chi_Minh',
-        },
-        totals: { successCount: 2, successAmount: 1234567 },
-        private: 'secret',
-      })),
+    revenue: vi.fn().mockImplementation(async (query) => ({
+      period: {
+        from: query.from,
+        to: query.to,
+        timezone: 'Asia/Ho_Chi_Minh',
+      },
+      totals: { successCount: 2, successAmount: 1234567 },
+      private: 'secret',
+    })),
   };
   const clock = { now: vi.fn(() => now) };
   const service = new DashboardService(
