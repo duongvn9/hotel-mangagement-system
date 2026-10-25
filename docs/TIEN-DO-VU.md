@@ -1,6 +1,81 @@
 # Tiến độ phần việc của Vũ
 
-> Bàn giao cập nhật 25/10/2026. Mục **Final Acceptance QA** dưới đây là trạng thái mới nhất; các mục phía sau lưu evidence lịch sử, không dùng các câu pending PR #34/Maintenance/seed cũ làm trạng thái hiện tại.
+> Bàn giao cập nhật 25/10/2026. Mục **Final Acceptance Closeout** là trạng thái mới nhất. Evidence Final Acceptance QA phía sau được giữ theo baseline đã chạy; các bảng PARTIAL lịch sử không thay thế phân loại closeout.
+
+## Final Acceptance Closeout — team sign-off
+
+### Git, PR và phạm vi xác nhận
+
+- Fetch xác nhận `origin/main@4539e1aea16d2831f37b12742ccf3fab73663db4`. PR [#38](https://github.com/duongvn9/hotel-mangagement-system/pull/38) **MERGED** lúc `2026-10-25T05:00:46Z`, merge SHA `4539e1a`; head `6e0829385cf4725a3cf0aa341f47e3710d0829b3`. Cả `1948ac6` và `6e08293` đã nằm trong ancestry main.
+- PR head CI run `40163484356`: backend/frontend/docker/maintenance-smoke SUCCESS. Main merge CI run `40163969449`: SUCCESS. GitHub `reviews=[]`, `reviewDecision` rỗng: không có formal review ghi nhận; merge theo yêu cầu trực tiếp của người dùng không được mô tả thành team/business approval.
+- Closeout docs trên nhánh riêng `docs/vu-acceptance-closeout` từ latest main; không sửa public contract/code, không merge tiếp. Giữ nguyên `docs/OPENCODE-HANDOFF-VU.md` local untracked, không stage.
+- Đã đối chiếu TIEN-DO-VU/DUONG/HIEU/LAM, README, SRS ngoài repo `D:\FULearning\Fall26\WDP301\docs\SRS - HMS.docx.md`: UC22–34/37–38 và BR-SER/ISS/TASK/MNT. Không tự coi thiếu exhaustive testing hoặc dependency không liên quan là blocker của mọi Jira.
+
+### Ma trận acceptance hiện tại
+
+**READY FOR ACCEPTANCE** = đủ evidence để owner/reviewer nghiệm thu phạm vi nêu dưới, chưa phải đã được ký duyệt/DONE. **PENDING APPROVAL** = có policy ảnh hưởng phạm vi cần quyết định. **BLOCKED** chỉ dùng khi có material defect/dependency đã chứng minh; hiện chưa có toàn Jira Vũ nào thuộc loại này.
+
+| Jira | Phân loại | Evidence/giới hạn nghiệm thu |
+|---|---|---|
+| 64 | PENDING APPROVAL | ServiceOrder/Issue Task core READY; Maintenance kỹ thuật có thật nhưng representation/self-assignment cần nhóm ký phạm vi tích hợp |
+| 65 | READY FOR ACCEPTANCE | Hai own-scope dashboards có browser authenticated/responsive; H10 là delivery riêng của Khoa, không có bằng chứng dashboard hỏng |
+| 66 | READY FOR ACCEPTANCE | Own list/detail/foreign404 đúng UC37; delegation custom-role mở rộng không phải điều kiện tự đặt thêm |
+| 67 | READY FOR ACCEPTANCE | Own lifecycle/result/time/CAS và browser S/O hoàn thành; không coi exhaustive mobile/keyboard là defect |
+| 68 | READY FOR ACCEPTANCE | Own CHECKED_IN Booking, active Service, quantity và snapshot server, real create/retry |
+| 69 | READY FOR ACCEPTANCE | Own Customer list/detail/reload và outsider denial |
+| 70 | READY FOR ACCEPTANCE | Receptionist requests/list/detail khớp actor SRS |
+| 71 | PENDING APPROVAL (partial/legacy Booking slice) | Normal complete-snapshot bookings READY: một source-linked charge đúng tiền. Chỉ fallback H7 cho thiếu/partial snapshot cần Hiếu chốt; không phủ nhận evidence normal path |
+| 72 | READY FOR ACCEPTANCE | Accepted/ledger gate, active SERVICE_STAFF, durable linked Task/duplicate protection |
+| 73 | READY FOR ACCEPTANCE | Own completed history đúng BR-SER-10; coworker404 |
+| 74 | READY FOR ACCEPTANCE | Customer owned Booking report, required validation, foreign-booking404 không ghi thêm |
+| 75 | READY FOR ACCEPTANCE | Customer own / Receptionist / Manager scopes đúng BR-ISS-03 |
+| 76 | READY FOR ACCEPTANCE | Receptionist review/category/priority/action và persisted E2E; thiếu browser no-action rerun không phải thiếu chức năng |
+| 77 | READY FOR ACCEPTANCE | Reviewed Issue → eligible SERVICE/OPERATIONS resolution Task riêng |
+| 78 | READY FOR ACCEPTANCE | Completed Task không tự close; authorized R/M explicit close/conclusion gate |
+| 79 | READY FOR ACCEPTANCE | Role-specific detail và ownership, không có material disclosure defect được chứng minh |
+| 80 | READY FOR ACCEPTANCE | Own executing Service Task context; Issue/resolution riêng; original Task/Order/ledger không đổi |
+
+Kết luận: **15 Jira READY**, **2 Jira PENDING APPROVAL có giới hạn phạm vi (#64/#71)**, **0 Jira BLOCKED được chứng minh**. Không tự cập nhật Jira Done; không suy READY thành owner approval. Nếu Hiếu loại legacy/partial bookings khỏi supported acceptance scope một cách rõ ràng, normal scope #71 có thể được ký riêng.
+
+### Sáu gate liên nhóm — trạng thái, bằng chứng và tác động
+
+| Gate | Status / owner | Evidence source hiện tại | Quyết định/tác động thật |
+|---|---|---|---|
+| A. H10 shell | BLOCKED riêng delivery H10 / Khoa | `frontend/src/app/router.tsx:29` dùng PublicLayout; `:44` TODO migrate | Chưa có role shell cuối. Không block #65–#80 nếu nghiệm thu chức năng dưới navigation hiện có; chỉ block tiêu chí shell cụ thể nếu Khoa/nhóm xác nhận nó bắt buộc |
+| B. Maintenance | RESOLVED kỹ thuật; PENDING APPROVAL policy / Lâm,Vũ,nhóm | `tasks.service.ts:30`, `maintenance.service.ts:200–239`, `maintenance-history.service.ts:22` | Real maintenances và TasksService caller; reporter self-assigned, history reporter OR assignee. Chỉ #64 Maintenance slice cần ký; không block ServiceOrder/Issue |
+| C. RBAC | RESOLVED built-in SRS; PENDING APPROVAL delegation / Dương,Vũ,nhóm | `auth/roles.guard.ts:36–50`, `tasks/tasks.controller.ts:31`, `tasks/tasks.service.ts:354–409`, service-orders/issues controllers | Role OR declared permission; Task task:execute nhưng new-assignee specialization built-in; ServiceOrder/Issue exact actors. Không có bằng chứng unauthorized bypass. Custom delegation là scope quyết định riêng, không blanket block built-in tasks |
+| D. Pricing | PENDING APPROVAL partial/legacy policy / Hiếu,Dương | `service-orders.service.ts:186–207`, `invoices/room-type-pricing.adapter.ts:37–63` | Order snapshot server đúng; H7 chỉ dùng snapshot khi đủ mọi room, thiếu một room thì fallback current prices toàn booking. Có thể ảnh hưởng #71 legacy slice; không block normal complete-snapshot order flows |
+| E. URL/log privacy | PENDING APPROVAL security contract + owner hardening / Dương | `common/filters/http-exception.filter.ts:43–53` | originalUrl gồm query vào error path/log, unexpected stack raw. Source-confirmed hardening gap; chưa có secret/cross-user leak demonstrated. Tách security debt trừ khi security release gate bắt buộc hoặc sensitive-query exploit được chứng minh |
+| F. Test-inclusive TS | RESOLVED classification as debt, remediation còn mở / test owners | Production tsconfig.build excludes tests; diagnostic hiện tại51 errors/19 files | Production checks/runtime xanh; không block các Jira nếu team không quy định full test compilation là release gate. Không sửa mocks/assertions để che |
+
+Các đường dẫn backend rút gọn trong bảng nằm dưới `backend/src/modules/`, trừ shared filter dưới `backend/src/`.
+
+### Tin nhắn bàn giao để owner xác nhận
+
+Các tin nhắn dưới đây **đã soạn, chưa gửi/chưa có phản hồi**, không giả tạo team sign-off:
+
+- **Khoa:** “#65 và các màn Vũ đã có authenticated QA dưới PublicLayout/menu hiện tại; H10 router vẫn TODO. Bạn xác nhận nghiệm thu functionality độc lập H10 hay yêu cầu role shell trước? Đề nghị nhận functionality ngay, migration shell theo H10 riêng vì không có functional defect. Nếu shell là tiêu chí bắt buộc, ghi rõ task/màn bị ảnh hưởng thay vì giữ toàn bộ17 task.”
+- **Lâm + nhóm/Vũ:** “Xin ký Maintenance riêng entity ngoài ERD, actionable report tự giao reporter, UC36 reporter OR assignee. Có thể giữ hiện tại hoặc chuyển dispatch/thu hẹp history. Đề nghị giữ contract hiện tại nếu đúng vận hành để chốt #64 integration, không clone Task core. Đồng thời cần regression unsafe OCCUPIED room bên dưới; không được giải quyết safety bằng approval bỏ BR-MNT-04.”
+- **Dương + nhóm/Vũ:** “Xin chốt custom permissions có delegate actor-specific ServiceOrder/Issue và new-assignee specialization không, hay chỉ own Task execution hiện tại? Đề nghị giữ exact SRS actors và mở rộng bằng mapping được review riêng; built-in tasks có thể nghiệm thu ngay. Filter hiện echo/log query: đề nghị path bỏ query + structured redacted log thay vì allowlist tùy tiện. Xin xác nhận test-inclusive TS là debt riêng hay release gate; không xem production typecheck như toàn bộ test TS sạch.”
+- **Hiếu + Dương:** “H7 đủ snapshot thì giữ giá, thiếu một room thì hiện reprice toàn booking theo current RoomType. Chọn all-or-nothing hiện tại, preserve từng snapshot + fallback phần thiếu, hay fail-closed partial? Đề nghị complete snapshot authoritative; phân biệt legacy hoàn toàn thiếu với partial malformed và fail-closed partial cho tới khi có migration policy, tránh đổi tiền âm thầm. Normal #71 đã đúng một charge; chỉ legacy slice chờ quyết định. Sau chốt cần two-room changed-price regression + no duplicate billing.”
+
+### Targeted verification và defect triage lượt closeout
+
+- Diff `62b548c..4539e1a`: PR37 thêm Manager read-only task-supervision/router/menu/CI smoke; PR38 chỉ copy Task guidance/regressions/docs. Không đổi Task/Issue/ServiceOrder/Invoice/Maintenance lifecycle production. Không chạy lại A/B/C hoặc full suite.
+- Trên `4539e1a`: BE/FE `npm run lint`, `npm run typecheck` PASS. BE `npm run test -- src/modules/task-supervision/task-supervision.spec.ts`: **21/21**,1 file. FE Tasks + task-supervision: **71/71**,2 files, dùng temp Vitest config giữ React/alias/setup/jsdom/workspace nhưng không load env; hai lần config resolution lỗi trước pass, không phải application test failure. Temp config đã xóa.
+- Diagnostic hiện tại `tsc -p tsconfig.json --noEmit --incremental false --pretty false`: **51 errors/19 files**,exit2; count cũ được xác nhận lại. Owners Auth/Invoice/Notifications/Booking/Payments/facilities và test integration. Không có lỗi test Task core/task-supervision trong danh sách19.
+- Không chạy HTTP E2E mới: runner supervision đổi DB sang random `hms_uc55_*_test`, AppModule mặc định có env-file loading; lượt closeout không dựng harness riêng để override. Đây là giới hạn thực thi an toàn của lượt này, không chứng minh suite không chạy được. Main CI `40163969449` đã PASS suite/smoke, không gán là local rerun. Có thể chạy focused task-supervision HTTP test trong harness cô lập ignoreEnvFile ở lần tích hợp tiếp nếu cần sign-off local.
+- **Không có material defect mới trong code Vũ đã được chứng minh.** Copy defect cũ FIXED bởi1948ac6. Các gap sau thuộc owner khác, không tự sửa contract.
+- **Safety integration risk cần Lâm/Hiếu/Khoa kiểm chứng (potential high nếu tái hiện):** unsafe OCCUPIED report chỉ warning và giữ OCCUPIED (`maintenance.service.ts:283–307`); availability loại MAINTENANCE, còn OCCUPIED theo date overlap (`bookings/mongo-availability-room-source.ts:27–29,67`), booking gate không kiểm unresolved unsafe reports (`bookings.service.ts:198,236–276`). Chưa chạy runtime repro, không gọi confirmed exploit/defect hoặc block mọi Task. Existing tests `maintenance.e2e-spec.ts:172–231` chỉ cover MAINTENANCE availability và OCCUPIED warning. Regression cần: unsafe occupied report → future non-overlapping stay không được book cho đến explicit clearance, cả sau checkout/status update; nếu fail là defect BR-MNT-04 phải sửa trong Maintenance/availability, không chỉ xin approval.
+- Sau pricing decision: focused two-room partial snapshot/changed current prices + duplicate charge assertions. Sau privacy hardening: synthetic query marker vắng error path/log, giữ standard error shape. Chỉ chạy khi có decision/fix tương ứng.
+- Full keyboard-only/screen reader/Firebase/mobile hardware và exhaustive ambiguous-response/concurrency browser chưa thực hiện; là giới hạn evidence hoặc release QA riêng, không tự đặt thành defect của15 Jira READY. Existing persisted E2E/built-in browser evidence dưới đây vẫn giữ đúng baseline, không gọi là rerun tại4539e1a.
+
+### Hướng dẫn nghiệm thu/bàn giao
+
+1. Reviewer đối chiếu15 READY với SRS, evidence A/B/C và CI; ghi explicit acceptance/task trên Jira, không dùng merge làm chữ ký nghiệp vụ.
+2. Lâm/nhóm ký Maintenance slice #64; Hiếu/Dương quyết pricing slice #71 hoặc explicitly giới hạn supported scope; lưu người quyết định/ngày/phương án, không tự sửa hợp đồng.
+3. Khoa nhận H10 riêng; Dương nhận privacy/test-typing/delegation debt; Lâm/Hiếu/Khoa nhận safety regression. Nếu phát hiện material failure thì mở defect và chỉ block đúng phạm vi bị ảnh hưởng.
+4. **Vũ có thể kết thúc development chức năng đã giao và bàn giao15 task để nghiệm thu; chưa thể tuyên bố toàn bộ17 task DONE/team signed-off.** Không có yêu cầu reimplement; #64/#71 chờ quyết định có giới hạn. PR closeout chỉ docs, Draft, không tự merge.
 
 ## Final Acceptance QA — 25/10/2026
 
@@ -9,7 +84,7 @@
 - Nhánh `feature/vu-acceptance-qa`, tạo từ latest `origin/main@62b548c9da5e69482074d8165837c5b1f824d401` sau fetch; không thay local main, rebase/reset/force-push.
 - Xác minh trực tiếp: PR #34 MERGED tại `ce994d89238466603d3fc0926d4be69a081ac495`; PR #35 MERGED tại `d5f422cb7316a035e52f4c70482b3b065b95a844`; PR #36 Maintenance History MERGED tại baseline `62b548c`.
 - File `docs/OPENCODE-HANDOFF-VU.md` giữ local untracked, không đưa vào commit/PR.
-- Delivery: code/regression/evidence commit `1948ac6ffce560ad4c26168e71ee3c7f726074da`, đã push `origin/feature/vu-acceptance-qa`; Draft PR [#38](https://github.com/duongvn9/hotel-mangagement-system/pull/38) targeting main, OPEN/isDraft=true, không tự merge. CI run `40163267763` tại đúng `1948ac6`: backend/frontend/docker/maintenance-smoke đều SUCCESS (xác minh GitHub CLI). Snapshot này không tự chứng nhận CI của commit tài liệu tiếp theo hoặc final acceptance.
+- Delivery lịch sử: code/regression/evidence commit `1948ac6ffce560ad4c26168e71ee3c7f726074da`, docs commit `6e08293`; PR [#38](https://github.com/duongvn9/hotel-mangagement-system/pull/38) nay MERGED tại4539e1a. CI run `40163267763` tại1948ac6 và `40163484356` tại6e08293 đều SUCCESS; trạng thái closeout/merge main xem mục đầu.
 
 ### Ma trận nghiệm thu Jira
 
