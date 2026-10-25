@@ -54,3 +54,5 @@ MaintenanceSchema.index(
 );
 MaintenanceSchema.index({ room: 1, createdAt: -1 });
 MaintenanceSchema.index({ equipment: 1, createdAt: -1 });
+MaintenanceSchema.index({ reportedBy: 1, createdAt: -1 });
+MaintenanceSchema.index({ task: 1 });
