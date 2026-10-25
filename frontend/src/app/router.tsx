@@ -15,6 +15,7 @@ import { staffDashboardRoutes } from '@/features/staff-dashboards/routes'
 import { maintenanceRoutes } from '@/features/maintenance/routes'
 import { taskSupervisionRoutes } from '@/features/task-supervision/routes'
 import { reportRoutes } from '@/features/reports/routes'
+import { dashboardRoutes } from '@/features/dashboard/routes'
 
 import { PublicLayout } from '@/layouts/PublicLayout'
 import { HomePage } from '@/pages/HomePage'
@@ -47,6 +48,7 @@ export const router = createBrowserRouter([
       ...maintenanceRoutes,
       ...taskSupervisionRoutes,
       ...reportRoutes,
+      ...dashboardRoutes,
       { path: '*', element: <NotFoundPage /> },
     ],
   },
