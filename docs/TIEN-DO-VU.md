@@ -9,7 +9,7 @@
 - Nhánh `feature/vu-acceptance-qa`, tạo từ latest `origin/main@62b548c9da5e69482074d8165837c5b1f824d401` sau fetch; không thay local main, rebase/reset/force-push.
 - Xác minh trực tiếp: PR #34 MERGED tại `ce994d89238466603d3fc0926d4be69a081ac495`; PR #35 MERGED tại `d5f422cb7316a035e52f4c70482b3b065b95a844`; PR #36 Maintenance History MERGED tại baseline `62b548c`.
 - File `docs/OPENCODE-HANDOFF-VU.md` giữ local untracked, không đưa vào commit/PR.
-- Delivery của lượt QA: commit/PR/CI được bổ sung sau khi xuất bản; không tự merge.
+- Delivery: code/regression/evidence commit `1948ac6ffce560ad4c26168e71ee3c7f726074da`, đã push `origin/feature/vu-acceptance-qa`; Draft PR [#38](https://github.com/duongvn9/hotel-mangagement-system/pull/38) targeting main, OPEN/isDraft=true, không tự merge. CI run `40163267763` tại đúng `1948ac6`: backend/frontend/docker/maintenance-smoke đều SUCCESS (xác minh GitHub CLI). Snapshot này không tự chứng nhận CI của commit tài liệu tiếp theo hoặc final acceptance.
 
 ### Ma trận nghiệm thu Jira
 
