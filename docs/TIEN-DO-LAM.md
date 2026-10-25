@@ -15,9 +15,11 @@ Cập nhật 25/10/2026. Đây là tài liệu tiến độ và bàn giao duy nh
 | #32 UC51 View Amenity List | Đã triển khai/kiểm tra đầy đủ; PR #21, xem [bàn giao UC51](#uc51) |
 | #37 UC35 Report Equipment Fault / Damage | Đã merge main: `d5f422c`, PR #35; backend/frontend/Docker CI xanh; xem [bàn giao UC35](#uc35) |
 | #38 UC36 View Maintenance History | Đã merge main `62b548c`, PR #36; bốn job CI xanh; xem [bàn giao UC36](#uc36) |
-| #40 UC55 Monitor Task Queues | Hoàn tất BE/FE/runtime; [PR #37](https://github.com/duongvn9/hotel-mangagement-system/pull/37), bốn job CI xanh tại revision `11d4f91`; xem [bàn giao UC55](#uc55) |
+| #40 UC55 Monitor Task Queues | Đã merge main `daeb696`; hoàn tất BE/FE/runtime; [PR #37](https://github.com/duongvn9/hotel-mangagement-system/pull/37), bốn job CI xanh tại revision `11d4f91`; xem [bàn giao UC55](#uc55) |
+| #41 UC56 View Revenue Report | Hoàn tất BE/FE/runtime; [PR #40](https://github.com/duongvn9/hotel-mangagement-system/pull/40), bốn job CI xanh; xem [bàn giao UC56](#uc56) |
 
 Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, không dùng capacity. H6 vẫn giữ hợp đồng capacity/guests riêng; chưa nối adapter Room thật. Các mục lịch sử bên dưới ghi lại đúng trạng thái từng thời điểm, kể cả blocker đã được xử lý; không dùng snapshot cũ để kết luận trạng thái hiện tại.
+
 
 ## Quy trình Git thường trực
 
@@ -969,3 +971,55 @@ Seed chuẩn đã chạy thành công hai lần trên DB riêng `hms_uc55_cli_te
 ### Giả định
 
 Priority là chuỗi tự do theo hợp đồng Task hiện tại; **không có thứ tự ưu tiên cố định**. Nếu nhóm muốn sort theo mức ưu tiên, cần Vũ chốt enum và thứ tự trước. Scope Manager toàn Task một khách sạn, workload và overdue là giả định triển khai/mở rộng cần nhóm xác nhận; chưa phải business rule mới được phê duyệt. Không thêm TaskPriority, không sửa module tasks của Vũ.
+
+<a id="uc56"></a>
+## #41 — UC56 View Revenue Report
+
+Ngày 25/10/2026; baseline `daeb696`, đã tích hợp main nhóm mới `4539e1a` có acceptance QA của Vũ trước CI cuối. Nhánh `feature/41-revenue-report`, triển khai trong worktree riêng để giữ cây baseline main nguyên vẹn. Phạm vi BE + FE + test + Compose runtime, chỉ đọc; không sửa payments/invoices/bookings/rooms/tasks, không seed thanh toán và không thêm dependency.
+
+### Bước 0 — dữ liệu và luồng thật
+
+- `backend/src/modules/payments/schemas/payment-transaction.schema.ts`: collection `paymenttransactions`, timestamps. `booking`/`invoice` ObjectId required ref Booking/Invoice, từng field có index; `transactionRef` string required/trim/unique; `providerTransactionRef` string tùy chọn trim/minlength 1; `method` PaymentMethod VNPAY/CASH; `purpose` PaymentPurpose DEPOSIT/FINAL; `status` PaymentStatus PENDING/SUCCESS/FAILED/CANCELLED mặc định PENDING; `amount` Number required, validator `isMoneyVnd` là safe integer >=0; `paidAt` Date tùy chọn; `isActive` Boolean mặc định true. Không có currency, refundedAmount, REFUNDED, REFUND, số tiền âm hợp lệ hoặc collection hoàn tiền.
+- Index: booking, invoice, transactionRef unique; `(method,providerTransactionRef)` unique partial khi providerTransactionRef là string. Không thêm index vào schema Hiếu. Nếu dữ liệu lớn, Hiếu cần đánh giá explain cho paidAt/status/isActive và createdAt/status/isActive; chưa khẳng định index mới cần thiết hoặc tự sửa hợp đồng.
+- `payments.module.ts` export MongooseModule, VnpayService, VnpaySettlementPort. `payments-api.module.ts` export PaymentsService và tách orchestration khỏi foundation để tránh vòng với InvoicesModule. ReportsModule đăng ký **đúng PaymentTransactionSchema hiện có** để đọc; không import orchestration hoặc Invoice model.
+- VNPay settlement/endpoints đã merge tại `e91521c`; `payments.controller.ts` có deposit/final, vnpay/return và vnpay/ipn. `VnpayService.verifyReturn` chỉ xác nhận thành công khi response/status đều 00, đòi paidAt hợp lệ và provider ref khác 0; IPN gọi `MongoVnpaySettlementPort.commitAtomically` trong `vnpay-settlement.adapter.ts` để CAS PENDING sang terminal. Return không ghi tiền. CASH có trong enum nhưng chưa có endpoint/luồng ghi nhận tiền mặt ở quầy.
+- Callback có PayDate thì có thể lưu paidAt cả khi thất bại/hủy, vì vậy **không coi chỉ có paidAt là SUCCESS**. SUCCESS chuẩn bắt buộc ngày tại lớp xác minh nhưng schema không bắt buộc, nên dữ liệu legacy thiếu ngày vẫn có thể tồn tại; chưa đọc DB dev để khẳng định có/không có bản ghi lỗi thực tế.
+- Adapter reconcileInvoice tính depositPaid/finalPaid từ giao dịch SUCCESS active theo purpose và cập nhật balanceDue/status; best-effort, có thể để H7 recalculate hội tụ khi tổng hóa đơn chưa đủ. Báo cáo không đọc/ghi Invoice và không suy doanh thu từ finalPaid/totalAmount.
+- Không có endpoint thống kê doanh thu trùng. `roles/seed.ts` chỉ gán report:view cho Manager trong seed hiện tại nhưng quyền có thể được quản lý lại; BE `@Roles(Role.Manager)` **không** có Permissions, FE RequireAuth chỉ MANAGER.
+
+### API / công thức / ngày nghiệp vụ
+
+`GET /api/v1/reports/revenue` trong ReportsModule mới, Swagger typed response. Query bắt buộc from/to YYYY-MM-DD có thật, from<=to, tối đa 366 ngày; granularity day|month mặc định day; method/purpose dùng enum thật tùy chọn; query lạ trả 400 theo error filter chuẩn. Chỉ Manager, vai trò khác 403, chưa đăng nhập 401; không có endpoint ghi.
+
+Một aggregation `$facet` mới mỗi request trên PaymentTransaction, không cache/collection/counter mới, không N+1 hoặc tải toàn bộ transaction về để cộng. Chỉ active. Doanh thu tổng = tổng amount hợp lệ của SUCCESS theo paidAt. DEPOSIT và FINAL đều cộng tổng nhưng có breakdown riêng, byMethod/byPurpose luôn đủ enum và ổn định; series liên tục và zero-fill. Tổng series = tổng breakdown = tổng thực thu. Không trả PII, booking/invoice ID hoặc mã giao dịch. Trả generatedAt từ clock inject được.
+
+Không có biểu diễn hoàn tiền: refunds=null, refundsSupported=false, netAmount=null; không trả 0 hoặc bịa refund rule. FAILED/CANCELLED/PENDING chỉ đếm theo createdAt dù có paidAt, không cộng tiền. Mọi filter method/purpose áp cho cả doanh thu, số lượng và anomalies. SUCCESS thiếu paidAt hoặc amount không phải safe integer >=0 bị loại/cảnh báo; method/purpose legacy sai enum cũng bị loại để breakdown không mất tổng. Với SUCCESS thiếu/không phải Date paidAt, **chỉ anomalies dùng createdAt để xác định kỳ**; nếu có Date paidAt thì dùng chính ngày đó. Đây là quy ước bổ sung đã báo trong tiến độ, không coi createdAt là ngày thu tiền. Không có currency nên không tự thêm field/logic tiền tệ. Tổng vượt Number.MAX_SAFE_INTEGER trả 503 yêu cầu thu hẹp kỳ thay vì trả tiền đã mất chính xác.
+
+`report-period.ts` tái dùng BUSINESS_TIMEZONE/toBusinessDate từ common/database/conventions.ts: ranh giới `[from 00:00+07:00, ngày sau to 00:00+07:00)`, kiểm tra calendar thật bằng round-trip; không lấy UTC midnight. `$dateToString` dùng Asia/Ho_Chi_Minh. Điền bucket bằng bước ngày Việt Nam trong kỳ tối đa 366; tháng đầu/cuối chỉ tính phần nằm trong kỳ, FE có ghi chú. Clock báo cáo không tái dùng clock availability.
+
+### Frontend / tích hợp
+
+`features/reports/` gồm api/hooks/presentation/components/pages/routes, `/manager/reports/revenue`, menu “Báo cáo doanh thu”. H10 Manager layout chưa có trên baseline, ghép PublicLayout theo convention hiện hành. Không tự dựng layout chung.
+
+Ngày nhập/hiển thị dd/MM/yyyy, mặc định đầu tháng đến hôm nay theo Việt Nam; có validation và nút Xem báo cáo, không gọi lại khi đang gõ/chọn. Filter đã áp dụng lưu URL để refresh/back giữ nguyên. Form khởi tạo lại theo URL, query theo actor+filter; không polling hoặc tự đổi báo cáo khi focus. Thẻ Tổng thực thu, giao dịch thành công, hoàn tiền chưa hỗ trợ và thực thu ròng chỉ khi có; khối “Không tính vào doanh thu” tách số lượng thất bại/hủy/chờ; cảnh báo anomalies. Bảng phương thức/mục đích, chart SVG bằng token kèm bảng dữ liệu đủ bucket; số căn phải, vi-VN VND. Label keys có test đối chiếu source enum BE thật, unknown string dùng own-property check và giữ nguyên, kể cả prototype keys. Loading giữ form, lỗi getErrorMessage/thử lại, empty thông báo rõ và không dựng bảng số 0. Dùng component/token chung, không dependency/chart lib, không nút xuất/sửa/hoàn tiền/đối soát; container cuộn ngang ở 375px, control chuẩn 44px.
+
+### Seed / kiểm chứng / giới hạn
+
+Không thêm seed. DB dev không có PaymentTransaction thì báo cáo rỗng; CASH trong fixture test không có nghĩa đã triển khai thu tiền mặt. Test payment chỉ dùng schema thật và ObjectId tham chiếu fixture, không tạo/sửa Booking/Invoice. Fixture hỏng được sửa có chủ đích qua native collection trong DB test để kiểm tra dữ liệu legacy; chỉ dọn ID thuộc test. Compose smoke dùng DB hms_*test, fixtures đúng schema từ dist, snapshot trước/sau GET và dọn riêng fixtures.
+
+Baseline local trên main: BE/FE lint/typecheck pass; test đã khởi chạy nhưng bị dừng do tài nguyên máy làm cả lệnh đọc/ghi chậm bất thường, không ghi là pass. Baseline main mới `4539e1a`, [CI 40163969449](https://github.com/duongvn9/hotel-mangagement-system/actions/runs/40163969449): cả backend/frontend/Docker production/maintenance-smoke success. Kết quả UC56 riêng/regression/runtime cuối được ghi dưới đây, không miễn check đỏ.
+
+### Giả định / điểm tái dùng
+
+UC56 thiếu đặc tả trong SRS; dùng đặc tả đề xuất trong prompt, nhóm cần xác nhận. Tiền thực thu theo paidAt, cọc+final tách riêng/cùng tổng; hoàn tiền chưa hỗ trợ, ròng chưa thể xác định; thất bại/hủy/chờ theo createdAt; lịch Việt Nam hai đầu, tối đa 366 ngày; Manager-only. Missing paidAt anomaly theo createdAt, legacy enum sai bị loại và unsafe aggregate trả 503 là quyết định kỹ thuật bổ sung cần lưu ý khi nhóm chốt nghiệp vụ. Không làm CSV/PDF, chi tiết giao dịch, đối soát, RevPAR/ADR/occupancy, thuế/công nợ hoặc so sánh kỳ.
+
+ReportsModule export RevenueReportService.revenue(query, actor), reportPeriod/reportBuckets để #39 và #42 tái dùng sau khi chốt scope/KPI riêng. Không bịa nguồn hoàn tiền hoặc dùng tổng Invoice làm tiền đã thu. Không TODO/mock chặn báo cáo production; dữ liệu test không import vào production.
+### Kết quả cuối / PR / artifact UC56
+
+- [PR #40 — feat(reports): UC56 view revenue report (#41)](https://github.com/duongvn9/hotel-mangagement-system/pull/40), nhánh `feature/41-revenue-report`. Commit API `bb2819f`, frontend `20b6b82`, test/Compose/bàn giao `0e1325a`, tích hợp origin/main `ab117cd`. PR ghi SHA/merge commit thực tế sau kiểm tra revision cuối.
+- [CI 40165506198](https://github.com/duongvn9/hotel-mangagement-system/actions/runs/40165506198) trên `ab117cd`: **929/929 unit backend (41 file), 429/429 e2e (36 file), 486/486 frontend (30 file) pass**. BE lint/format/typecheck/unit/e2e/build; FE lint/format/test/build (build gồm tsc -b); Docker production và maintenance-smoke tất cả success. Compose runtime chạy stack thật, health/proxy, seed chuẩn hai lần, smoke UC36/55/56 đều đạt; không thêm payment seed. Không có Docker CLI/Desktop local nên không báo local Compose pass.
+- Riêng UC56: **13 unit BE, 29 e2e, 24 frontend tests** được xác nhận trong CI. Unit BE local 13/13; frontend local thread pool 24/24 pass. Lượt fork pool Windows không khởi động được worker (no tests), e2e local dừng khi nạp module quá chậm; không ghi là pass, e2e đầy đủ dùng kết quả CI Mongo thật. Lint/typecheck local đã chạy đạt ở baseline và code UC56; CI kiểm lại code cuối.
+- Local `npm run build` bị EPERM unlink các file dist bị Windows khóa, kể cả chạy ngoài sandbox; không tính là build local pass. Biên dịch cùng `tsconfig.build.json` qua tsc ra `dist/uc56-preview` riêng đã thành công, API thật từ artifact này boot, smoke UC56 qua API/Swagger thật trên `hms_uc56_cli_test` pass. Build chuẩn Nest và frontend đã pass trên CI. Không sửa config/dependency để né môi trường local.
+- Edge/Vite/API thật: `.task29-validation/uc56-browser-result.json`, `uc56-revenue-mobile-375.png`, `uc56-revenue-desktop.png`; đã xem ảnh. Viewport 375 documentWidth=375, một H1, nút submit 44px; viewport 1440 documentWidth=1425. Kiểm tra không fetch khi đang chọn bộ lọc, submit/filter CASH, tháng một phần, reload giữ filter, hoàn tiền chưa hỗ trợ, cảnh báo anomalies và không runtime errors. Script dùng click submit, không tuyên bố đã kiểm chứng Enter thật trong browser; form/Button chuẩn được kiểm tra qua Testing Library.
+- Fixture smoke CI/local được dọn theo ID mà script tự tạo. Trong lượt browser thất bại đầu, script không lưu danh sách ID ra file; phương án dọn lại theo createdAt bị auto-review từ chối vì không chứng minh phạm vi sở hữu. Đã bỏ phương án đó, chạy lại browser **chỉ đọc**, giữ bốn PaymentTransaction fixture và Manager trong DB test riêng `hms_uc56_cli_test` thay vì xóa theo điều kiện rộng. Không xóa collection hoặc dữ liệu dev. Các tiến trình preview/test được dừng sau kiểm tra; artifact local không commit.
+- Chỉ cập nhật tài liệu sau các kết quả trên; tiếp tục yêu cầu bốn job CI revision tài liệu cuối xanh trước merge commit, theo ủy quyền thường trực.
