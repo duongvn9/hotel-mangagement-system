@@ -16,7 +16,8 @@ Cập nhật 25/10/2026. Đây là tài liệu tiến độ và bàn giao duy nh
 | #37 UC35 Report Equipment Fault / Damage | Đã merge main: `d5f422c`, PR #35; backend/frontend/Docker CI xanh; xem [bàn giao UC35](#uc35) |
 | #38 UC36 View Maintenance History | Đã merge main `62b548c`, PR #36; bốn job CI xanh; xem [bàn giao UC36](#uc36) |
 | #40 UC55 Monitor Task Queues | Đã merge main `daeb696`; hoàn tất BE/FE/runtime; [PR #37](https://github.com/duongvn9/hotel-mangagement-system/pull/37), bốn job CI xanh tại revision `11d4f91`; xem [bàn giao UC55](#uc55) |
-| #41 UC56 View Revenue Report | Hoàn tất BE/FE/runtime; [PR #40](https://github.com/duongvn9/hotel-mangagement-system/pull/40), bốn job CI xanh; xem [bàn giao UC56](#uc56) |
+| #41 UC56 View Revenue Report | Đã merge main `e2921aa`; hoàn tất BE/FE/runtime; [PR #40](https://github.com/duongvn9/hotel-mangagement-system/pull/40), bốn job CI xanh; xem [bàn giao UC56](#uc56) |
+| #39 Manager Dashboard | Đang kiểm chứng trên `feature/39-manager-dashboard`; xem [bàn giao Dashboard](#manager-dashboard) |
 
 Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, không dùng capacity. H6 vẫn giữ hợp đồng capacity/guests riêng; chưa nối adapter Room thật. Các mục lịch sử bên dưới ghi lại đúng trạng thái từng thời điểm, kể cả blocker đã được xử lý; không dùng snapshot cũ để kết luận trạng thái hiện tại.
 
@@ -1023,3 +1024,43 @@ ReportsModule export RevenueReportService.revenue(query, actor), reportPeriod/re
 - Edge/Vite/API thật: `.task29-validation/uc56-browser-result.json`, `uc56-revenue-mobile-375.png`, `uc56-revenue-desktop.png`; đã xem ảnh. Viewport 375 documentWidth=375, một H1, nút submit 44px; viewport 1440 documentWidth=1425. Kiểm tra không fetch khi đang chọn bộ lọc, submit/filter CASH, tháng một phần, reload giữ filter, hoàn tiền chưa hỗ trợ, cảnh báo anomalies và không runtime errors. Script dùng click submit, không tuyên bố đã kiểm chứng Enter thật trong browser; form/Button chuẩn được kiểm tra qua Testing Library.
 - Fixture smoke CI/local được dọn theo ID mà script tự tạo. Trong lượt browser thất bại đầu, script không lưu danh sách ID ra file; phương án dọn lại theo createdAt bị auto-review từ chối vì không chứng minh phạm vi sở hữu. Đã bỏ phương án đó, chạy lại browser **chỉ đọc**, giữ bốn PaymentTransaction fixture và Manager trong DB test riêng `hms_uc56_cli_test` thay vì xóa theo điều kiện rộng. Không xóa collection hoặc dữ liệu dev. Các tiến trình preview/test được dừng sau kiểm tra; artifact local không commit.
 - Chỉ cập nhật tài liệu sau các kết quả trên; tiếp tục yêu cầu bốn job CI revision tài liệu cuối xanh trước merge commit, theo ủy quyền thường trực.
+<a id="manager-dashboard"></a>
+## #39 — Manager Dashboard
+
+Ngày 25/10/2026; baseline main `e2921aa`, nhánh `feature/39-manager-dashboard`. Phạm vi BE/FE/test/runtime trang Tổng quan Manager chỉ đọc. SRS chỉ nêu quyền màn hình/vai trò/danh sách màn, chưa có use case/KPI dashboard; chưa đối chiếu sơ đồ luồng hình ảnh. Đây là đặc tả đề xuất theo prompt, nhóm cần xác nhận các thẻ/lối tắt. Không thêm KPI, biểu đồ, booking widget, cảnh báo mới, xuất hoặc tùy biến thẻ.
+
+### Bước 0 — layout, routes, nguồn tái dùng
+
+- H10 (#18) chưa có layout/sidebar/topbar/index riêng Manager; `frontend/src/app/router.tsx` vẫn dùng PublicLayout; menu role ở `features/auth/UserMenu.tsx`, chưa có Tổng quan/Manager root. Thêm `/manager/dashboard` dưới PublicLayout và menu “Tổng quan”, không đổi login/redirect hoặc tự dựng H10.
+- Route Manager thật: `/manager/accounts`, `/manager/roles`, `/manager/rooms`, `/manager/room-types`, `/manager/amenities`, `/manager/services`, `/manager/task-queues`, `/manager/task-queues/:taskId`, `/manager/issues`, `/manager/issues/:id`, `/manager/reports/revenue`. `/staff/feedback` là route dùng chung cho Receptionist **và Manager**, nên lối tắt Phản hồi hợp lệ dù prefix staff. CRUD tài khoản/phòng/loại phòng/dịch vụ/tiện nghi dùng form trong trang hiện có, không bịa route new/edit. Không có route báo cáo vận hành trên baseline; không hiển thị link/nút sắp có. Auth/profile và public booking không được coi là lối tắt quản trị.
+- TaskSupervisionService.summary(query: TaskQueueFilters, actor: AuthUser), export bởi TaskSupervisionModule, đã merge UC55. Dashboard gọi summary({}, actor), lấy đúng assigned/inProgress/completed/overdue, bỏ workload/PII/facets/other/total khỏi phản hồi. Không tự tính lại TaskStatus/overdue hoặc sửa tasks.
+- RoomsModule export RoomsService và MongooseModule chứa Room; RoomsService.list(ListRoomsQuery) là danh sách/populate/count, không có hàm group trạng thái. Dashboard inject model Room chính thức từ RoomsModule, một aggregation `{isActive:true}` group status, đủ RoomStatus AVAILABLE/OCCUPIED/CLEANING/MAINTENANCE và activeTotal; không dựa RoomType.isActive, đúng quy tắc active Room của UC47, không sửa Room/schema/service.
+- UC56 đã merge main `e2921aa`: ReportsModule export RevenueReportService.revenue(RevenueReportQuery, AuthUser); common BUSINESS_TIMEZONE/toBusinessDate và reports/report-period.ts là hợp đồng lịch Việt Nam. Dashboard dựng kỳ từ đầu tháng đến ngày Việt Nam của DashboardClock, gọi RevenueReportService với granularity=day và không filter. Chỉ lấy totals.successAmount/successCount và period từ kết quả; không tự cộng tiền, đọc Invoice hoặc xây Revenue service khác.
+- Không có backend dashboard hoặc frontend features/dashboard trùng. `features/staff-dashboards` hiện có là màn nhân viên Service/Operations, không mở rộng hoặc đổi quyền các màn đó. Cả ba nguồn có thật nên nhánh thực tế đều available; not_available chỉ là hợp đồng fallback cho nguồn thiếu trong tương lai, không mock nguồn production.
+- `roles/seed.ts` gán report:view và facility:manage cho Manager trong seed hiện tại; quyền custom có thể được cấp sau. Controller dùng **@Roles(Role.Manager), không @Permissions**, FE RequireAuth roles MANAGER. E2e dùng custom role thật có report:view/facility:manage, token verifier mock tại biên Firebase, auth/RolesGuard thật và xác nhận vẫn 403; không nới DevAuthMiddleware để nhận custom header.
+
+### API / DI / xử lý lỗi từng phần
+
+GET `/api/v1/dashboard/manager`, không nhận query (query lạ trả 400 chuẩn). Swagger có ManagerDashboard và union block available/unavailable. Chưa đăng nhập 401; bốn vai trò khác và custom permission role 403. Không POST/PATCH/PUT/DELETE, thử đều 404; chỉ trả chỉ số tổng hợp, không PII hoặc mã nguồn nghiệp vụ.
+
+DashboardModule import RoomsModule, TaskSupervisionModule, ReportsModule theo export chính thức; export DashboardService. AppModule đăng ký module mới, không forwardRef/vòng phụ thuộc. DashboardClock inject được, đọc một lần để generatedAt, rooms.asOf và kỳ doanh thu thống nhất theo thời điểm request. Task overdue dùng chính clock/định nghĩa của UC55. Ba phương thức taskSummary/roomSummary/revenueSummary chạy song song bằng Promise.allSettled. Mỗi request ba aggregation (một mỗi nguồn), không phụ thuộc lượng bản ghi, không cache/collection/field/counter mới. Các nguồn được đọc độc lập, không tuyên bố snapshot transaction xuyên cả ba nguồn.
+
+Nguồn lỗi: riêng khối đó `{available:false,reason:'error'}`, HTTP vẫn 200 và các khối khác giữ số đúng. Log error `manager_dashboard_source_error` với source/errorName, response không lộ message/stack/URI nội bộ. Khi nguồn sẵn sàng nhưng rỗng: available=true, số 0 thật; không dùng zero che nguồn lỗi. Phòng legacy có status ngoài enum làm riêng khối rooms lỗi thay vì activeTotal lệch tổng bốn trạng thái; không tự sửa dữ liệu hỏng.
+
+### Frontend / bàn giao H10
+
+`features/dashboard/` có api/hooks/components/pages/routes và shortcuts.ts. Một H1 Tổng quan; Số liệu hiện tại gồm ba section có H3/aria-labelledby. Task: Đã giao/Đang xử lý/Hoàn thành/Quá hạn + link hàng đợi. Rooms: bốn nhãn RoomStatus tái dùng rooms/api, tổng active/asOf + link phòng. Revenue: Thực thu (giao dịch thành công), tiền vi-VN VND, số giao dịch, kỳ dd/MM/yyyy–dd/MM/yyyy, link report mang đúng from/to. Tái dùng helper hiển thị ngày/tiền của reports, không tạo business formula.
+
+Lối tắt nhóm Tài khoản và vai trò / Cơ sở vật chất / Giám sát / Báo cáo, tổng 10 link. Test import **router thật**, matchRoutes mọi href và kiểm tra guard chứa MANAGER, loại wildcard/màn chỉ dành vai trò khác; test âm bắt route báo cáo vận hành chưa có. Không link chết/disabled sắp có. Thẻ revenue không available thì không hiện số/link riêng thẻ; lối tắt report vẫn hợp lệ vì route UC56 có thật.
+
+Loading từng thẻ; lỗi nguồn hiện riêng và Thử lại gọi toàn endpoint. not_available chọn hiện placeholder “Chưa có dữ liệu nguồn”, không giả zero. Lỗi endpoint dùng getErrorMessage/Alert/Thử lại. Làm mới và focus lấy snapshot mới, staleTime=0, không interval. aria-live polite thông báo thời gian/số cập nhật, aria-busy khi đang fetch. Component/token chung, control/link 44px, không hex/Lucide/dependency hoặc animation mới. Khoa có thể chuyển `dashboardRoutes` từ children PublicLayout sang Manager layout H10 và chuyển menu Tổng quan; không phải sửa page/API hoặc thay auth/điều hướng.
+
+### Kiểm chứng / seed / phạm vi
+
+Baseline **BE/FE lint/typecheck pass, 929/929 unit backend (41 file), 486/486 frontend (30 file) pass** trên nguồn main e2921aa. Tests dùng threads/maxWorkers=1/testTimeout=60000; không sửa code tích hợp hiện hữu cho tới khi baseline xong. Riêng Dashboard ban đầu **11 unit BE, 20 e2e Mongo thật, 21 frontend pass**; lint/typecheck feature pass, đã bỏ import thừa trong unit test. E2e DB riêng hms_dashboard_UUID_test, fixture Task/Room/PaymentTransaction đúng schema, chuyển Task bằng TasksService thật; chỉ dọn ID fixture của test, không xóa collection/module khác. Custom role test dùng fixture role/user của chính test.
+
+Không thêm seed hoặc dữ liệu mock production. CI maintenance-smoke mở rộng chạy Dashboard smoke **chỉ đọc** sau Compose/seed chuẩn hai lần và smoke UC36/55/56: đối chiếu trực tiếp TaskQueues/Rooms/Revenue API, Swagger, repeated snapshot không đổi và không collection mới. Docker local không có, không tuyên bố local Compose pass; chỉ merge khi CI runtime và backend/frontend/production Docker đều xanh. Kết quả regression/build/runtime cuối sẽ bổ sung sau khi chạy thật.
+
+### Giả định / tái dùng
+
+Dashboard đề xuất chưa có đặc tả/KPI SRS được duyệt; ba nhóm số kế thừa UC55/UC47/UC56, doanh thu còn phụ thuộc định nghĩa tiền thực thu UC56 chưa được nhóm duyệt. Active Room chỉ theo Room.isActive/status, snapshot hiện tại không phải occupancy KPI hoặc tình trạng theo kỳ. Partial failure rõ ràng, không silent fallback. Nguồn lỗi không làm hỏng toàn trang, chưa có timeout/retry nền riêng; retry thủ công toàn endpoint. Không làm #42, H10, Issue List, auth hoặc quản trị mới. DashboardService/API có thể tái dùng khi ghép H10 nhưng không là nơi tự thêm KPI.
