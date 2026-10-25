@@ -108,6 +108,8 @@ jobs:
         run: docker compose exec -T backend node test/revenue-report.smoke.mjs
       - name: Verify Manager dashboard reuses live sources without writes
         run: docker compose exec -T backend node test/manager-dashboard.smoke.mjs
+      - name: Verify UC57 operational report reads all six sources
+        run: docker compose exec -T backend node test/operational-report.smoke.mjs
       - name: Runtime logs on failure
         if: failure()
         run: docker compose logs --tail 120
