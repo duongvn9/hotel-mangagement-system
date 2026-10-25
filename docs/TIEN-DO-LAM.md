@@ -18,7 +18,7 @@ Cập nhật 25/10/2026. Đây là tài liệu tiến độ và bàn giao duy nh
 | #40 UC55 Monitor Task Queues | Đã merge main `daeb696`; hoàn tất BE/FE/runtime; [PR #37](https://github.com/duongvn9/hotel-mangagement-system/pull/37), bốn job CI xanh tại revision `11d4f91`; xem [bàn giao UC55](#uc55) |
 | #41 UC56 View Revenue Report | Đã merge main `e2921aa`; hoàn tất BE/FE/runtime; [PR #40](https://github.com/duongvn9/hotel-mangagement-system/pull/40), bốn job CI xanh; xem [bàn giao UC56](#uc56) |
 | #39 Manager Dashboard | Đã merge main `5fadbdf`; [PR #41](https://github.com/duongvn9/hotel-mangagement-system/pull/41), bốn job CI xanh; xem [bàn giao Dashboard](#manager-dashboard) |
-| #42 UC57 View Operational Report | Đang kiểm chứng trên `feature/42-operational-report`; xem [bàn giao UC57](#uc57) |
+| #42 UC57 View Operational Report | Hoàn tất BE/FE/runtime trên `feature/42-operational-report`; [PR #42](https://github.com/duongvn9/hotel-mangagement-system/pull/42), bốn job CI xanh; xem [bàn giao UC57](#uc57) |
 
 Hợp đồng RoomType hiện hành dùng adultCapacity và childCapacity, không dùng capacity. H6 vẫn giữ hợp đồng capacity/guests riêng; chưa nối adapter Room thật. Các mục lịch sử bên dưới ghi lại đúng trạng thái từng thời điểm, kể cả blocker đã được xử lý; không dùng snapshot cũ để kết luận trạng thái hiện tại.
 
@@ -66,11 +66,21 @@ Không tự thay index module nguồn. Đề xuất chủ Booking cân nhắc is
 
 Điểm tái dùng #39/H10: ReportsModule export OperationalReportService; dashboard không import ngược tạo vòng, không tự thêm KPI Dashboard trong task này. Khoa có thể chuyển reportRoutes/menu vào layout Manager mà giữ nguyên API/page/role guard. Priority Task là chuỗi tự do, không có thứ tự cố định; muốn sort theo ưu tiên cần Vũ chốt enum/thứ tự trước. Công suất và bộ chỉ số vẫn cần nhóm xác nhận.
 
-### Kiểm chứng đang thực hiện
+### Kết quả kiểm chứng / PR
 
 Baseline main 5fadbdf: BE lint/typecheck + **940 unit (42 file)**, FE lint/typecheck + **507 test (31 file)** đều pass. Lượt focused sau tích hợp: **25 e2e Mongo thật**, **14 unit gồm UC36/UC57**, **15 frontend UC57** pass; **24 frontend UC56** pass sau tách component. Lượt đầu sai fixture Issue thiếu reporter/booking và assertion error.path không tính query string, đã sửa test theo schema/format thật rồi chạy lại đạt; không thay production để né test.
 
-Regression toàn dự án, build, browser API thật và Docker Compose/Swagger CI đang chạy; chỉ merge khi mọi check bắt buộc revision cuối xanh. Máy local không có Docker CLI, Compose phải được xác minh bởi job runtime CI, không ghi local Docker pass. E2e dùng hms_uc57_UUID_test; mỗi test chỉ dọn `_id` fixture nó tạo, không xóa collection nguồn. Smoke Compose chỉ đọc sáu nguồn sau seed chuẩn hai lần, đối chiếu UC55/Room/series và snapshot không đổi/không collection mới. Kết quả cuối/PR được bổ sung khi có bằng chứng.
+CI [40183757752](https://github.com/duongvn9/hotel-mangagement-system/actions/runs/40183757752) trên `f42a540`: **942/942 unit backend (43 file), 477/477 e2e Mongo (38 file), 522/522 frontend (32 file)** pass. Backend/frontend/production Docker/maintenance-smoke đều success. BE lint/format/typecheck/test/e2e/build; FE lint/format/test/build (tsc -b) đạt. Compose thật `docker compose up --build -d --wait`, health/proxy, seed chuẩn hai lần/idempotency UC36 và smoke UC55/UC56/Dashboard/UC57 tất cả pass. UC57 sau bổ sung có **28 e2e** gồm custom role thật có report:view vẫn 403, event không phụ thuộc current status, loại duration âm và ongoing stay vẫn là period data. Máy local không có Docker CLI, không ghi local Docker pass.
+
+Lượt full regression local chạy rất chậm và FE báo hai ca ServiceOrder assignment-history thất bại; không thay module owner. Đã chủ động dừng lượt trùng local sau khi **toàn bộ suite cùng revision đã pass CI**, không ghi full local pass. Local feature lint/format/typecheck đã đạt cả BE/FE. E2e dùng hms_uc57_UUID_test; mỗi test chỉ dọn `_id` fixture nó tạo, không xóa collection nguồn. Smoke Compose chỉ đọc sáu nguồn sau seed chuẩn hai lần, đối chiếu UC55/Room/series và snapshot không đổi/không collection mới.
+
+Kiểm tra lại local ServiceOrder: lượt đầu 26/27 (findByRole hết thời gian khi UI còn “Đang tải nhân viên dịch vụ…”); sau khi các tiến trình kiểm tra/build khác kết thúc, chạy lại nguyên suite cùng lệnh, không sửa source/test/setup/timeout nội bộ, **27/27 pass (9,52s)**. Frontend `npm run build` chuẩn pass, vẫn cảnh báo chunk >500kB có sẵn. Backend `npm run build` local gặp Windows EPERM unlink `dist/app.module.d.ts`; không ghi local build chuẩn pass, dùng kết quả build chuẩn CI đã thành công và artifact preview riêng đã kiểm chứng. Không xóa dist bị khóa để né lỗi.
+
+Local API/Swagger smoke `operational-report.smoke.mjs` đã pass trên hms_uc57_cli_test: sáu nguồn available, đối chiếu UC55, số phòng active, mẫu số đêm-phòng, tổng sáu series; repeated GET không đổi dữ liệu/danh sách collection. Artifact backend riêng `dist/operational-preview` được biên dịch bằng tsconfig.build.json và chạy seed registry hiện hành, không thêm seed UC57. Chưa đồng nhất kết quả preview với lệnh build/seed chuẩn; các lệnh chuẩn được ghi riêng khi chạy.
+
+Edge + Vite + API thật: `.task29-validation/uc57-browser-result.json`, `uc57-mobile-375.png`, `uc57-desktop.png` (đã xem hai ảnh). Mobile375 documentWidth=375, một H1, bốn control cao44px, bảng đủ7 cột trong vùng cuộn. Desktop1440 documentWidth=1425. Đổi metric cập nhật SVG, submit tháng đổi URL, reload trực tiếp giữ kỳ, không runtime exception. Browser tạo một fixture Booking đúng schema trong DB test và dọn đúng `_id` ở finally; không seed mới hay ghi dữ liệu dev. Đã dừng đúng PID API/Vite/Edge preview sau kiểm chứng.
+
+[PR #42](https://github.com/duongvn9/hotel-mangagement-system/pull/42), title `feat(reports): UC57 view operational report (#42)`. Commit `92b9fbf` backend/pipeline chung, `d87666f` frontend, `f42a540` e2e/Compose/bàn giao. Sau commit kết quả này, yêu cầu CI revision cuối xanh lần nữa rồi merge bằng merge commit; SHA merge thực tế lưu trên PR. Không tự sửa Jira, không có TODO/mock chặn chức năng.
 
 ## Quy trình Git thường trực
 
