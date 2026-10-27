@@ -232,6 +232,7 @@ docker compose -f docker-compose.prod.yml up -d --build    # hoặc: make prod
 
 - Code theo feature trong `frontend/src/features/<tên>`; gọi API qua `api` trong `src/lib/api-client.ts` và TanStack Query.
 - Import bằng alias `@/` (trỏ tới `src/`).
+- Trang mới cần xuất hiện trong menu: thêm một mục vào `frontend/src/app/navigation.ts` (nhóm của role đó, nhãn không trùng trong cùng role). Khu nhân viên (`/staff`, `/manager`, `/reception`, `/operations`) tự nằm trong khung nhân viên có thanh bên, các đường dẫn khác nằm trong khung khách; việc ai được vào vẫn do `RequireAuth` của route quyết định.
 - Màu, font, khoảng cách luôn dùng token/class Tailwind từ design system, không viết mã hex trong component (xem [`DESIGN.md`](DESIGN.md)).
 - Component mới có đủ trạng thái hover, focus, disabled và kiểm tra ở màn hình 375px.
 
