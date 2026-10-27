@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import {
   ApiConflictResponse,
   ApiCreatedResponse,
@@ -17,6 +17,10 @@ import {
   CreateBookingDto,
   WalkInBookingResponse,
 } from './dto/create-booking.dto.js';
+import {
+  BookingListResponse,
+  ListBookingsQuery,
+} from './dto/list-bookings.dto.js';
 import { BookingsService } from './bookings.service.js';
 
 @ApiTags('bookings')
@@ -33,6 +37,17 @@ export class BookingsController {
   @ApiConflictResponse({ description: 'Rooms are unavailable or just taken' })
   create(@Body() dto: CreateBookingDto, @CurrentUser() user?: AuthUser) {
     return this.bookings.create(dto, user);
+  }
+
+  @Get()
+  @Roles(Role.Receptionist, Role.Manager)
+  @ApiOperation({
+    summary:
+      'UC10 — List bookings with filters and paging (Receptionist/Manager)',
+  })
+  @ApiOkResponse({ type: BookingListResponse })
+  list(@Query() query: ListBookingsQuery) {
+    return this.bookings.list(query);
   }
 
   @Post('walk-in')

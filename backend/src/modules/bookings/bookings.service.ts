@@ -20,11 +20,16 @@ import { Booking, BookingStatus } from './schemas/booking.schema.js';
 import { RoomHold, type RoomHoldDocument } from './schemas/room-hold.schema.js';
 import { AvailabilityClock } from './availability.adapters.js';
 import {
+  businessBoundary,
   normalizeStay,
   overlaps,
   type StayInterval,
 } from './availability.core.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
+import type {
+  BookingListResponse,
+  ListBookingsQuery,
+} from './dto/list-bookings.dto.js';
 
 /** Thời hạn giữ phòng trước khi đặt cọc (phải khớp cửa sổ thanh toán VNPay). */
 const HOLD_WINDOW_MS = 15 * 60 * 1000;
@@ -178,6 +183,91 @@ export class BookingsService {
       checkOut: stay.checkOut.toISOString(),
       guests: booking.guests,
       roomTotal: booking.roomTotal,
+    };
+  }
+
+  /**
+   * UC10: danh sách booking cho lễ tân/quản lý, lọc theo trạng thái, từ khoá và ngày nhận
+   * phòng (theo ngày làm việc giờ Việt Nam, gồm cả hai đầu), mới nhận phòng nhất trước.
+   */
+  async list(query: ListBookingsQuery): Promise<BookingListResponse> {
+    const filter: Record<string, unknown> = { isActive: true };
+    if (query.status) filter.status = query.status;
+    if (query.q) {
+      const pattern = {
+        $regex: query.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        $options: 'i',
+      };
+      filter.$or = [
+        { code: pattern },
+        { guestName: pattern },
+        { guestEmail: pattern },
+        { guestPhone: pattern },
+      ];
+    }
+    if (query.checkInFrom || query.checkInTo) {
+      const range: Record<string, Date> = {};
+      try {
+        if (query.checkInFrom) range.$gte = businessBoundary(query.checkInFrom);
+        if (query.checkInTo)
+          range.$lt = new Date(
+            businessBoundary(query.checkInTo).getTime() + MS_PER_DAY,
+          );
+      } catch (error) {
+        throw new BadRequestException(
+          error instanceof Error ? error.message : 'Invalid date filter',
+        );
+      }
+      filter.checkIn = range;
+    }
+
+    const [rows, total] = await Promise.all([
+      this.bookings
+        .find(filter)
+        .sort({ checkIn: -1, _id: -1 })
+        .skip((query.page - 1) * query.limit)
+        .limit(query.limit)
+        .populate<{
+          rooms: {
+            _id: Types.ObjectId;
+            roomNumber?: string;
+            roomType?: { name?: string } | null;
+          }[];
+        }>({
+          path: 'rooms',
+          select: 'roomNumber roomType',
+          populate: { path: 'roomType', select: 'name' },
+        })
+        .lean()
+        .exec(),
+      this.bookings.countDocuments(filter),
+    ]);
+
+    return {
+      items: rows.map((booking) => ({
+        id: String(booking._id),
+        code: booking.code,
+        status: booking.status,
+        guestName: booking.guestName,
+        guestEmail: booking.guestEmail,
+        guestPhone: booking.guestPhone,
+        rooms: booking.rooms.map((room) => ({
+          id: String(room._id),
+          ...(room.roomNumber ? { roomNumber: room.roomNumber } : {}),
+          ...(room.roomType?.name ? { roomTypeName: room.roomType.name } : {}),
+        })),
+        checkIn: booking.checkIn.toISOString(),
+        checkOut: booking.checkOut.toISOString(),
+        guests: booking.guests,
+        roomTotal: booking.roomTotal,
+        createdAt: (
+          (booking as { createdAt?: Date }).createdAt ?? booking.checkIn
+        ).toISOString(),
+        walkIn: booking.createdBy !== undefined,
+      })),
+      total,
+      page: query.page,
+      limit: query.limit,
     };
   }
 

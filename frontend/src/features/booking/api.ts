@@ -93,6 +93,52 @@ export async function createWalkInBooking(input: CreateBookingInput): Promise<Wa
   return (await api.post<WalkInBooking>('/bookings/walk-in', input)).data
 }
 
+export interface BookingListParams {
+  page: number
+  limit: number
+  status?: string
+  /** Tìm theo mã booking, tên, email hoặc số điện thoại khách. */
+  q?: string
+  /** YYYY-MM-DD, giờ Việt Nam, gồm cả hai đầu. */
+  checkInFrom?: string
+  checkInTo?: string
+}
+
+export interface BookingListRoom {
+  id: string
+  roomNumber?: string
+  roomTypeName?: string
+}
+
+export interface BookingListItem {
+  id: string
+  code: string
+  status: string
+  guestName: string
+  guestEmail: string
+  guestPhone: string
+  rooms: BookingListRoom[]
+  checkIn: string
+  checkOut: string
+  guests: number
+  roomTotal: number
+  createdAt: string
+  /** Booking do nhân viên tạo tại quầy (UC08). */
+  walkIn: boolean
+}
+
+export interface BookingListPage {
+  items: BookingListItem[]
+  total: number
+  page: number
+  limit: number
+}
+
+/** UC10 — Danh sách booking cho lễ tân/quản lý, lọc và phân trang phía server. */
+export async function listBookings(params: BookingListParams): Promise<BookingListPage> {
+  return (await api.get<BookingListPage>('/bookings', { params })).data
+}
+
 /** Phản hồi tối thiểu khi huỷ (service trả booking đã CANCELLED). */
 export interface CancelledBooking {
   status: string
