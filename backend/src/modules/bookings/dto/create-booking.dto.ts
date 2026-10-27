@@ -92,3 +92,29 @@ export class BookingResponse {
   @ApiProperty({ description: 'Thời điểm giữ phòng hết hạn nếu chưa đặt cọc' })
   holdExpiresAt: string;
 }
+
+export class WalkInBookingResponse {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  code: string;
+
+  @ApiProperty({ enum: ['CONFIRMED'] })
+  status: string;
+
+  @ApiProperty({ type: [String] })
+  rooms: string[];
+
+  @ApiProperty()
+  checkIn: string;
+
+  @ApiProperty()
+  checkOut: string;
+
+  @ApiProperty()
+  guests: number;
+
+  @ApiProperty({ description: 'Tiền phòng (VND)' })
+  roomTotal: number;
+}

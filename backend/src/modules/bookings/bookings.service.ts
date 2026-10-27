@@ -129,6 +129,59 @@ export class BookingsService {
   }
 
   /**
+   * UC08: lễ tân/quản lý đặt phòng cho khách tại quầy. Khách đã có mặt nên booking vào
+   * thẳng CONFIRMED (không cọc VNPay, không RoomHold 15 phút) và chiếm phòng ngay. Dùng
+   * chung bước tính giá và kiểm tra phòng trống với luồng online.
+   */
+  async createWalkIn(dto: CreateBookingDto, user: AuthUser) {
+    const roomIds = dto.rooms.map((id) => new Types.ObjectId(id));
+    if (new Set(dto.rooms).size !== dto.rooms.length) {
+      throw new BadRequestException('Duplicate rooms in request');
+    }
+    let stay: StayInterval;
+    try {
+      stay = normalizeStay(dto);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Invalid stay dates',
+      );
+    }
+
+    const { roomTotal, rates } = await this.priceRooms(
+      roomIds,
+      dto.guests,
+      stay,
+    );
+    await this.assertRoomsFree(roomIds, stay, this.clock.now());
+
+    const booking = await this.createBookingDocument(dto, roomIds, stay, {
+      roomTotal,
+      rates,
+      status: BookingStatus.Confirmed,
+      createdBy: new Types.ObjectId(user.id),
+    });
+
+    // Hai lễ tân đặt trùng phòng cùng lúc: booking tạo trước (_id nhỏ hơn) thắng.
+    if (await this.lostConfirmedRace(booking._id, roomIds, stay)) {
+      await this.bookings.deleteOne({ _id: booking._id });
+      throw new ConflictException(
+        'One or more rooms were just taken; please choose again',
+      );
+    }
+
+    return {
+      id: String(booking._id),
+      code: booking.code,
+      status: booking.status,
+      rooms: dto.rooms,
+      checkIn: stay.checkIn.toISOString(),
+      checkOut: stay.checkOut.toISOString(),
+      guests: booking.guests,
+      roomTotal: booking.roomTotal,
+    };
+  }
+
+  /**
    * Huỷ booking (chủ booking, nhân viên, hoặc Guest kèm mã): nhả RoomHold đang giữ và
    * chuyển sang CANCELLED. Chỉ cho huỷ khi PENDING_DEPOSIT hoặc CONFIRMED (trước check-in);
    * không tự động hoàn tiền (xử lý thủ công/ngoài phạm vi).
@@ -292,6 +345,24 @@ export class BookingsService {
     return !(await this.hasConflict(roomIds, stay, now, holdId, holdId));
   }
 
+  private async lostConfirmedRace(
+    bookingId: Types.ObjectId,
+    roomIds: Types.ObjectId[],
+    stay: StayInterval,
+  ): Promise<boolean> {
+    const earlier = await this.bookings
+      .find({
+        _id: { $lt: bookingId },
+        rooms: { $in: roomIds },
+        isActive: true,
+        status: { $in: [BookingStatus.Confirmed, BookingStatus.CheckedIn] },
+      })
+      .select('checkIn checkOut')
+      .lean()
+      .exec();
+    return earlier.some((record) => this.conflicts(stay, record));
+  }
+
   private conflicts(
     stay: StayInterval,
     record: { checkIn: Date; checkOut: Date },
@@ -307,7 +378,13 @@ export class BookingsService {
     dto: CreateBookingDto,
     roomIds: Types.ObjectId[],
     stay: StayInterval,
-    extra: { roomTotal: number; rates: RoomRate[]; customer?: Types.ObjectId },
+    extra: {
+      roomTotal: number;
+      rates: RoomRate[];
+      customer?: Types.ObjectId;
+      createdBy?: Types.ObjectId;
+      status?: BookingStatus;
+    },
   ) {
     // Cọc = 30% tiền phòng (placeholder chờ SRS), làm tròn về VND nguyên.
     const depositAmount = Math.round(extra.roomTotal * DEPOSIT_RATE);
@@ -316,6 +393,7 @@ export class BookingsService {
         return await this.bookings.create({
           code: this.newBookingCode(),
           ...(extra.customer ? { customer: extra.customer } : {}),
+          ...(extra.createdBy ? { createdBy: extra.createdBy } : {}),
           guestName: dto.guestName.trim(),
           guestEmail: dto.guestEmail.trim(),
           guestPhone: dto.guestPhone.trim(),
@@ -323,7 +401,7 @@ export class BookingsService {
           checkIn: stay.checkIn,
           checkOut: stay.checkOut,
           guests: dto.guests,
-          status: BookingStatus.PendingDeposit,
+          status: extra.status ?? BookingStatus.PendingDeposit,
           roomTotal: extra.roomTotal,
           depositAmount,
           rateSnapshot: extra.rates,

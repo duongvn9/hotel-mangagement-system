@@ -20,6 +20,10 @@ export class Booking {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   customer?: Types.ObjectId;
 
+  // Nhân viên tạo booking tại quầy (walk-in); booking online không có trường này.
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  createdBy?: Types.ObjectId;
+
   @Prop({ required: true, trim: true })
   guestName: string;
 

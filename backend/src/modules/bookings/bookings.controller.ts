@@ -8,11 +8,14 @@ import {
 } from '@nestjs/swagger';
 import type { AuthUser } from '../../common/auth/auth-user.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
+import { Role } from '../../common/constants/role.enum.js';
 import { Public } from '../../common/decorators/public.decorator.js';
+import { Roles } from '../../common/decorators/roles.decorator.js';
 import {
   BookingResponse,
   CancelBookingDto,
   CreateBookingDto,
+  WalkInBookingResponse,
 } from './dto/create-booking.dto.js';
 import { BookingsService } from './bookings.service.js';
 
@@ -30,6 +33,18 @@ export class BookingsController {
   @ApiConflictResponse({ description: 'Rooms are unavailable or just taken' })
   create(@Body() dto: CreateBookingDto, @CurrentUser() user?: AuthUser) {
     return this.bookings.create(dto, user);
+  }
+
+  @Post('walk-in')
+  @Roles(Role.Receptionist, Role.Manager)
+  @ApiOperation({
+    summary:
+      'UC08 — Create a confirmed booking for a walk-in guest (Receptionist/Manager)',
+  })
+  @ApiCreatedResponse({ type: WalkInBookingResponse })
+  @ApiConflictResponse({ description: 'Rooms are unavailable or just taken' })
+  createWalkIn(@Body() dto: CreateBookingDto, @CurrentUser() user: AuthUser) {
+    return this.bookings.createWalkIn(dto, user);
   }
 
   @Post(':id/cancel')
