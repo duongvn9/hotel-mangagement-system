@@ -139,6 +139,54 @@ export async function listBookings(params: BookingListParams): Promise<BookingLi
   return (await api.get<BookingListPage>('/bookings', { params })).data
 }
 
+export interface InvoiceTotals {
+  roomTotal: number
+  serviceTotal: number
+  additionalTotal: number
+  discountTotal: number
+  taxTotal: number
+  totalAmount: number
+  depositPaid: number
+  finalPaid: number
+  balanceDue: number
+}
+
+export interface BookingCharge {
+  type: string
+  amount: number
+  reason: string
+  sourceId?: string
+}
+
+export interface BookingCharges {
+  bookingId: string
+  code: string
+  status: string
+  totals: InvoiceTotals
+  charges: BookingCharge[]
+}
+
+export interface AddChargeInput {
+  /** Số tiền (VND, số nguyên dương). */
+  amount: number
+  reason: string
+  /** Mã chống trùng cho một lần ghi; gửi lại cùng mã thì không ghi thêm khoản mới. */
+  requestId: string
+}
+
+/** UC17 — Các khoản phí và tổng hợp hóa đơn của booking. */
+export async function getBookingCharges(id: string): Promise<BookingCharges> {
+  return (await api.get<BookingCharges>(`/bookings/${id}/charges`)).data
+}
+
+/** UC17 — Ghi phụ phí cho khách đang ở (booking CHECKED_IN). */
+export async function addCheckoutCharge(
+  id: string,
+  input: AddChargeInput,
+): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${id}/charges`, input)).data
+}
+
 export interface RoomReplacement {
   /** Phòng đang thuộc booking cần đổi đi. */
   from: string

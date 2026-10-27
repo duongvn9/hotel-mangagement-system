@@ -1,10 +1,12 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  addCheckoutCharge,
   cancelBooking,
   checkInBooking,
   createBooking,
   createWalkInBooking,
   initiateDeposit,
+  getBookingCharges,
   getCheckInOptions,
   getRoomStatusBoard,
   getSameDayList,
@@ -14,6 +16,7 @@ import {
   searchAvailability,
   updateBooking,
   verifyVnpayReturn,
+  type AddChargeInput,
   type BookingListParams,
   type GuestListParams,
   type RoomReplacement,
@@ -102,6 +105,23 @@ export function useCheckInOptions(id: string | null) {
     queryFn: () => getCheckInOptions(id as string),
     enabled: id !== null,
     retry: false,
+  })
+}
+
+/** UC17 — chỉ chạy khi mở khung phụ phí của một booking. */
+export function useBookingCharges(id: string | null) {
+  return useQuery({
+    queryKey: ['booking-charges', id],
+    queryFn: () => getBookingCharges(id as string),
+    enabled: id !== null,
+  })
+}
+
+export function useAddCharge(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: AddChargeInput) => addCheckoutCharge(id, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', id] }),
   })
 }
 
