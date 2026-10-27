@@ -6,6 +6,7 @@ import { getErrorMessage } from '@/lib/api-client'
 import type { BookingListItem } from '../api'
 import { useAddCharge, useBookingCharges } from '../hooks'
 import { money, newRequestId } from '../utils'
+import { SettleAndCheckOut } from './SettleAndCheckOut'
 
 /** Mức phụ phí tối đa một khoản (VND), khớp giới hạn của server. */
 const MAX_CHARGE = 100_000_000
@@ -20,6 +21,8 @@ export function CheckoutCharges({ booking }: { booking: BookingListItem }) {
   const charges = useBookingCharges(open ? booking.id : null)
   const add = useAddCharge(booking.id)
 
+  // Đã thu xong thanh toán cuối thì hóa đơn chốt: không ghi thêm phụ phí (server cũng từ chối).
+  const settled = (charges.data?.totals.finalPaid ?? 0) > 0
   const value = Number(amount)
   const valid =
     amount !== '' &&
@@ -82,29 +85,40 @@ export function CheckoutCharges({ booking }: { booking: BookingListItem }) {
                   Còn phải trả: {money.format(charges.data.totals.balanceDue)}
                 </p>
               </div>
+              <SettleAndCheckOut
+                booking={booking}
+                totals={charges.data.totals}
+                onReload={() => void charges.refetch()}
+                reloading={charges.isFetching}
+              />
             </>
           )}
 
-          <form onSubmit={submit} className="grid gap-3 sm:grid-cols-[160px_1fr_auto] sm:items-end">
-            <TextField
-              label="Số tiền (VND)"
-              type="number"
-              min={1}
-              max={MAX_CHARGE}
-              step={1}
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-            />
-            <TextField
-              label="Lý do"
-              maxLength={200}
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-            />
-            <Button type="submit" size="sm" disabled={!valid} loading={add.isPending}>
-              Thêm phụ phí
-            </Button>
-          </form>
+          {!settled && (
+            <form
+              onSubmit={submit}
+              className="grid gap-3 sm:grid-cols-[160px_1fr_auto] sm:items-end"
+            >
+              <TextField
+                label="Số tiền (VND)"
+                type="number"
+                min={1}
+                max={MAX_CHARGE}
+                step={1}
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+              />
+              <TextField
+                label="Lý do"
+                maxLength={200}
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+              />
+              <Button type="submit" size="sm" disabled={!valid} loading={add.isPending}>
+                Thêm phụ phí
+              </Button>
+            </form>
+          )}
           {add.isError && <Alert tone="danger">{getErrorMessage(add.error)}</Alert>}
         </div>
       )}
