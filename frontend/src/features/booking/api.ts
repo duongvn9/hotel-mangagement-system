@@ -139,6 +139,53 @@ export async function listBookings(params: BookingListParams): Promise<BookingLi
   return (await api.get<BookingListPage>('/bookings', { params })).data
 }
 
+export interface RoomReplacement {
+  /** Phòng đang thuộc booking cần đổi đi. */
+  from: string
+  /** Phòng thay thế: cùng loại phòng, sẵn sàng và còn trống. */
+  to: string
+}
+
+export interface CheckInResult {
+  id: string
+  code: string
+  status: string
+  checkedInAt: string
+  rooms: { id: string; roomNumber: string }[]
+}
+
+/** UC16 — Nhận phòng; phòng chưa sẵn sàng có thể đổi sang phòng khác cùng loại (giá không đổi). */
+export async function checkInBooking(
+  id: string,
+  replacements: RoomReplacement[] = [],
+): Promise<CheckInResult> {
+  const body = replacements.length > 0 ? { replacements } : {}
+  return (await api.post<CheckInResult>(`/bookings/${id}/check-in`, body)).data
+}
+
+export interface CheckInRoomOption {
+  id: string
+  roomNumber: string
+  roomTypeName: string
+  /** Phòng đang hoạt động và có trạng thái vật lý AVAILABLE. */
+  ready: boolean
+  /** Trạng thái vật lý, hoặc INACTIVE nếu phòng bị vô hiệu hoá. */
+  status: string
+  /** Phòng thay thế hợp lệ; rỗng nếu phòng đã sẵn sàng. */
+  replacements: { id: string; roomNumber: string; floor: number }[]
+}
+
+export interface CheckInOptions {
+  bookingId: string
+  code: string
+  rooms: CheckInRoomOption[]
+}
+
+/** UC16 — Từng phòng của booking đã sẵn sàng chưa và có thể đổi sang phòng nào. */
+export async function getCheckInOptions(id: string): Promise<CheckInOptions> {
+  return (await api.get<CheckInOptions>(`/bookings/${id}/check-in-options`)).data
+}
+
 export interface SameDayList {
   date: string
   summary: {
