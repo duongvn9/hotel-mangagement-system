@@ -139,6 +139,58 @@ export async function listBookings(params: BookingListParams): Promise<BookingLi
   return (await api.get<BookingListPage>('/bookings', { params })).data
 }
 
+export type RoomOccupancy = 'FREE' | 'HELD' | 'RESERVED' | 'IN_HOUSE'
+
+export interface RoomBoardBooking {
+  code: string
+  guestName: string
+  status: string
+  checkIn: string
+  checkOut: string
+}
+
+export interface RoomBoardEntry {
+  id: string
+  roomNumber: string
+  floor: number
+  roomTypeId: string
+  roomTypeName: string
+  capacity: number
+  /** Trạng thái vật lý hiện tại của phòng. */
+  status: string
+  /** Mức chiếm trong ngày đang xem. */
+  occupancy: RoomOccupancy
+  /** Trạng thái vật lý đáng hiển thị cho ngày đang xem (OCCUPIED/CLEANING chỉ hôm nay), null nếu không có. */
+  physicalStatus: string | null
+  booking: RoomBoardBooking | null
+}
+
+export interface RoomStatusBoard {
+  date: string
+  summary: {
+    total: number
+    free: number
+    held: number
+    reserved: number
+    inHouse: number
+    maintenance: number
+    cleaning: number
+  }
+  rooms: RoomBoardEntry[]
+}
+
+export interface RoomStatusBoardParams {
+  /** YYYY-MM-DD, giờ Việt Nam; bỏ trống = hôm nay. */
+  date?: string
+  floor?: number
+  roomTypeId?: string
+}
+
+/** UC13 — Sơ đồ trạng thái phòng theo ngày cho lễ tân/quản lý. */
+export async function getRoomStatusBoard(params: RoomStatusBoardParams): Promise<RoomStatusBoard> {
+  return (await api.get<RoomStatusBoard>('/room-status-board', { params })).data
+}
+
 export type UpdateBookingInput = Partial<CreateBookingInput>
 
 /** UC11 — Lễ tân/Quản lý sửa booking; server kiểm tra lại phòng trống và tính lại giá. */
