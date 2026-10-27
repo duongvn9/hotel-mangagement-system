@@ -12,6 +12,8 @@ import {
 import { MongoAvailabilityRoomSource } from './mongo-availability-room-source.js';
 import { BookingsController } from './bookings.controller.js';
 import { BookingsService } from './bookings.service.js';
+import { FrontDeskController } from './front-desk.controller.js';
+import { FrontDeskService } from './front-desk.service.js';
 import { RoomStatusBoardController } from './room-status-board.controller.js';
 import { RoomStatusBoardService } from './room-status-board.service.js';
 
@@ -27,12 +29,14 @@ import { RoomStatusBoardService } from './room-status-board.service.js';
     AvailabilityController,
     BookingsController,
     RoomStatusBoardController,
+    FrontDeskController,
   ],
   providers: [
     AvailabilityService,
     AvailabilityClock,
     BookingsService,
     RoomStatusBoardService,
+    FrontDeskService,
     {
       provide: AvailabilityRoomSource,
       useClass: MongoAvailabilityRoomSource,
