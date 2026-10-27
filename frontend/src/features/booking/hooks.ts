@@ -7,10 +7,12 @@ import {
   getRoomStatusBoard,
   initiateFinal,
   listBookings,
+  searchGuests,
   searchAvailability,
   updateBooking,
   verifyVnpayReturn,
   type BookingListParams,
+  type GuestListParams,
   type RoomStatusBoardParams,
   type SearchAvailabilityParams,
   type UpdateBookingInput,
@@ -29,6 +31,16 @@ export function useBookingList(params: BookingListParams) {
   return useQuery({
     queryKey: ['bookings', params],
     queryFn: () => listBookings(params),
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** UC14 — chỉ chạy khi đã có từ khoá hợp lệ. */
+export function useGuestSearch(params: GuestListParams | null) {
+  return useQuery({
+    queryKey: ['guests', params],
+    queryFn: () => searchGuests(params as GuestListParams),
+    enabled: params !== null,
     placeholderData: keepPreviousData,
   })
 }
