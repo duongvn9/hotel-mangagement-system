@@ -1,6 +1,7 @@
 import type { RouteObject } from 'react-router'
 import { Role } from '@/features/auth/api'
 import { RequireAuth } from '@/features/auth/RequireAuth'
+import { EditBookingPage } from './pages/EditBookingPage'
 import { BookingListPage } from './pages/BookingListPage'
 import { BookingDetailPage } from './pages/BookingDetailPage'
 import { CreateBookingPage } from './pages/CreateBookingPage'
@@ -10,7 +11,7 @@ import { SearchRoomsPage } from './pages/SearchRoomsPage'
 import { WalkInBookingPage } from './pages/WalkInBookingPage'
 
 /**
- * Màn đặt phòng hướng Guest/Customer (UC05, UC07/UC46, UC12, UC20, UC21) và booking tại quầy cho lễ tân (UC08, UC10).
+ * Màn đặt phòng hướng Guest/Customer (UC05, UC07/UC46, UC12, UC20, UC21) và booking tại quầy cho lễ tân (UC08, UC10, UC11).
  * Để công khai: Guest chưa đăng nhập vẫn đặt được và tự thanh toán bằng mã booking.
  */
 export const bookingRoutes: RouteObject[] = [
@@ -23,6 +24,14 @@ export const bookingRoutes: RouteObject[] = [
     element: (
       <RequireAuth roles={[Role.Receptionist, Role.Manager]}>
         <BookingListPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: 'reception/bookings/:code/edit',
+    element: (
+      <RequireAuth roles={[Role.Receptionist, Role.Manager]}>
+        <EditBookingPage />
       </RequireAuth>
     ),
   },

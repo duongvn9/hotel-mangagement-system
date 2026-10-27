@@ -139,6 +139,16 @@ export async function listBookings(params: BookingListParams): Promise<BookingLi
   return (await api.get<BookingListPage>('/bookings', { params })).data
 }
 
+export type UpdateBookingInput = Partial<CreateBookingInput>
+
+/** UC11 — Lễ tân/Quản lý sửa booking; server kiểm tra lại phòng trống và tính lại giá. */
+export async function updateBooking(
+  id: string,
+  input: UpdateBookingInput,
+): Promise<{ id: string; status: string }> {
+  return (await api.patch<{ id: string; status: string }>(`/bookings/${id}`, input)).data
+}
+
 /** Phản hồi tối thiểu khi huỷ (service trả booking đã CANCELLED). */
 export interface CancelledBooking {
   status: string

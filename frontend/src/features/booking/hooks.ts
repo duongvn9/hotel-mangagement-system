@@ -7,9 +7,11 @@ import {
   initiateFinal,
   listBookings,
   searchAvailability,
+  updateBooking,
   verifyVnpayReturn,
   type BookingListParams,
   type SearchAvailabilityParams,
+  type UpdateBookingInput,
 } from './api'
 
 /** UC05 — chỉ chạy khi đã có ngày và số khách hợp lệ. */
@@ -35,6 +37,13 @@ export function useCreateBooking() {
 
 export function useCreateWalkInBooking() {
   return useMutation({ mutationFn: createWalkInBooking })
+}
+
+export function useUpdateBooking() {
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateBookingInput }) =>
+      updateBooking(id, input),
+  })
 }
 
 export function useCancelBooking() {
