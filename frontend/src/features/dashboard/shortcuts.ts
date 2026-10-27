@@ -26,3 +26,10 @@ export const MANAGER_SHORTCUTS = [
   },
   { title: 'Báo cáo', links: [{ to: '/manager/reports/revenue', label: 'Báo cáo doanh thu' }] },
 ] as const
+
+/** Lối tắt của lễ tân: các việc làm thường xuyên nhất ở quầy. */
+export const RECEPTION_SHORTCUTS = [
+  { to: '/reception/booking/new', label: 'Tạo booking' },
+  { to: '/reception/guests', label: 'Tìm khách' },
+  { to: '/reception/bookings', label: 'Danh sách booking' },
+] as const

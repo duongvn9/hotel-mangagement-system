@@ -16,6 +16,7 @@ describe('router layouts', () => {
     '/manager/dashboard',
     '/manager/accounts',
     '/manager/task-queues/abc',
+    '/reception/dashboard',
     '/reception/front-desk',
     '/reception/rooms',
     '/reception/bookings/BK1/edit',

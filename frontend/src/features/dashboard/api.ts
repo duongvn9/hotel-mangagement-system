@@ -17,3 +17,32 @@ export interface ManagerDashboard {
 }
 export const getManagerDashboard = async () =>
   (await api.get<ManagerDashboard>('/dashboard/manager')).data
+
+export interface ReceptionDashboard {
+  generatedAt: string
+  /** Đến và đi của hôm nay (giờ Việt Nam), tổng hợp từ UC15. */
+  frontDesk: DashboardBlock<{
+    date: string
+    arrivals: { total: number; awaitingDeposit: number; ready: number; checkedIn: number }
+    departures: { total: number; awaitingCheckOut: number; checkedOut: number }
+  }>
+  /** Trạng thái phòng của hôm nay, tổng hợp từ UC13. */
+  rooms: DashboardBlock<{
+    date: string
+    total: number
+    free: number
+    held: number
+    reserved: number
+    inHouse: number
+    maintenance: number
+    cleaning: number
+  }>
+  /** Việc đang chờ lễ tân xử lý. */
+  requests: DashboardBlock<{
+    serviceOrdersPendingReview: number
+    issuesPendingReview: number
+    feedbackUnreplied: number
+  }>
+}
+export const getReceptionDashboard = async () =>
+  (await api.get<ReceptionDashboard>('/dashboard/reception')).data

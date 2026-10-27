@@ -7,7 +7,7 @@ const routes = [
   { path: '/login', element: <LoginPage /> },
   { path: '/', element: <p>trang chủ</p> },
   { path: '/manager/dashboard', element: <p>trang quản lý</p> },
-  { path: '/reception/front-desk', element: <p>trang lễ tân</p> },
+  { path: '/reception/dashboard', element: <p>trang lễ tân</p> },
   { path: '/booking/new', element: <p>trang đặt phòng</p> },
 ]
 
@@ -59,7 +59,7 @@ describe('LoginPage', () => {
       expect(await screen.findByText('trang quản lý')).toBeInTheDocument()
     })
 
-    it('đưa lễ tân vào màn đến và đi trong ngày', async () => {
+    it('đưa lễ tân vào Tổng quan lễ tân', async () => {
       signedIn('RECEPTIONIST')
       expect(await screen.findByText('trang lễ tân')).toBeInTheDocument()
     })

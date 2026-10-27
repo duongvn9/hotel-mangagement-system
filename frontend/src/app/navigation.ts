@@ -16,6 +16,8 @@ export interface NavGroup {
   items: NavItem[]
 }
 
+const RECEPTION_DASHBOARD = '/reception/dashboard'
+
 const RECEPTION_DESK: NavItem[] = [
   { to: '/reception/front-desk', label: 'Đến và đi trong ngày' },
   { to: '/reception/rooms', label: 'Sơ đồ phòng' },
@@ -38,7 +40,10 @@ const NAV_BY_ROLE: Record<string, NavGroup[]> = {
     },
   ],
   RECEPTIONIST: [
-    { label: 'Quầy lễ tân', items: RECEPTION_DESK },
+    {
+      label: 'Quầy lễ tân',
+      items: [{ to: RECEPTION_DASHBOARD, label: 'Tổng quan' }, ...RECEPTION_DESK],
+    },
     {
       label: 'Yêu cầu',
       items: [
@@ -82,7 +87,11 @@ const NAV_BY_ROLE: Record<string, NavGroup[]> = {
     },
     {
       label: 'Lễ tân',
-      items: [...RECEPTION_DESK, { to: '/staff/feedback', label: 'Phản hồi' }],
+      items: [
+        { to: RECEPTION_DASHBOARD, label: 'Tổng quan lễ tân' },
+        ...RECEPTION_DESK,
+        { to: '/staff/feedback', label: 'Phản hồi' },
+      ],
     },
   ],
   SERVICE_STAFF: [
@@ -114,7 +123,7 @@ const STAFF_ROLES = ['MANAGER', 'RECEPTIONIST', 'SERVICE_STAFF', 'OPERATIONS_STA
 /** Trang làm việc của từng role, dùng sau khi đăng nhập và cho nút "Khu làm việc". */
 const ROLE_HOME: Record<string, string> = {
   MANAGER: '/manager/dashboard',
-  RECEPTIONIST: '/reception/front-desk',
+  RECEPTIONIST: RECEPTION_DASHBOARD,
   SERVICE_STAFF: '/staff/service/dashboard',
   OPERATIONS_STAFF: '/staff/operations/dashboard',
 }
