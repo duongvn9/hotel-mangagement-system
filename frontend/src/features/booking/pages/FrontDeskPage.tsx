@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
+import { Button } from '@/components/Button'
+import { SelectField } from '@/components/SelectField'
 import { TextField } from '@/components/TextField'
 import { getErrorMessage } from '@/lib/api-client'
 import { BOOKING_STATUS_DISPLAY, type BookingListItem } from '../api'
-import { useSameDayList } from '../hooks'
+import { useCheckIn, useCheckInOptions, useSameDayList } from '../hooks'
 import { formatDate, money, todayISO } from '../utils'
 
 /** UC15 — View Same-Day Check-In/Out List. Lễ tân xem khách đến và khách đi của một ngày. */
@@ -50,6 +52,7 @@ export function FrontDeskPage() {
               ]}
               total={data.summary.arrivals.total}
               items={data.arrivals}
+              canCheckIn
             />
             <DaySection
               title="Khách đi"
@@ -76,9 +79,19 @@ interface DaySectionProps {
   chips: { label: string; count: number }[]
   total: number
   items: BookingListItem[]
+  /** Cho phép Check In ở các booking đã xác nhận (danh sách khách đến). */
+  canCheckIn?: boolean
 }
 
-function DaySection({ title, emptyText, chipsLabel, chips, total, items }: DaySectionProps) {
+function DaySection({
+  title,
+  emptyText,
+  chipsLabel,
+  chips,
+  total,
+  items,
+  canCheckIn = false,
+}: DaySectionProps) {
   return (
     <div className="space-y-3">
       <h2 className="font-display text-2xl font-semibold text-pearl-900">
@@ -101,7 +114,7 @@ function DaySection({ title, emptyText, chipsLabel, chips, total, items }: DaySe
       ) : (
         <ul className="space-y-3">
           {items.map((booking) => (
-            <BookingRow key={booking.id} booking={booking} />
+            <BookingRow key={booking.id} booking={booking} canCheckIn={canCheckIn} />
           ))}
         </ul>
       )}
@@ -109,16 +122,16 @@ function DaySection({ title, emptyText, chipsLabel, chips, total, items }: DaySe
   )
 }
 
-function BookingRow({ booking }: { booking: BookingListItem }) {
+function BookingRow({ booking, canCheckIn }: { booking: BookingListItem; canCheckIn: boolean }) {
   const status = BOOKING_STATUS_DISPLAY[booking.status] ?? {
     label: booking.status,
     tone: 'neutral' as const,
   }
   return (
-    <li aria-label={booking.code}>
+    <li aria-label={booking.code} className="rounded-lg border border-stone-300 bg-white">
       <Link
         to={`/booking/${booking.id}`}
-        className="block space-y-1 rounded-lg border border-stone-300 bg-white p-4 hover:bg-cream-50"
+        className="block space-y-1 rounded-lg p-4 hover:bg-cream-50"
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -142,6 +155,111 @@ function BookingRow({ booking }: { booking: BookingListItem }) {
           <p className="text-xs font-semibold text-warning">Chưa đặt cọc</p>
         )}
       </Link>
+      {canCheckIn && booking.status === 'CONFIRMED' && <CheckInAction booking={booking} />}
     </li>
+  )
+}
+
+const ROOM_STATE_LABEL: Record<string, string> = {
+  CLEANING: 'đang dọn',
+  OCCUPIED: 'đang có khách',
+  MAINTENANCE: 'đang bảo trì',
+  INACTIVE: 'đã ngừng hoạt động',
+}
+
+/**
+ * UC16 — nút Check In. Nếu phòng chưa sẵn sàng thì server từ chối; khi đó lấy danh sách phòng
+ * chưa sẵn sàng cùng phòng thay thế hợp lệ để lễ tân đổi phòng rồi nhận phòng.
+ */
+function CheckInAction({ booking }: { booking: BookingListItem }) {
+  const checkIn = useCheckIn()
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [selection, setSelection] = useState<Record<string, string>>({})
+  const options = useCheckInOptions(panelOpen ? booking.id : null)
+  const blocked = options.data?.rooms.filter((room) => !room.ready) ?? []
+
+  async function run(replacements?: { from: string; to: string }[]) {
+    try {
+      await checkIn.mutateAsync({ id: booking.id, ...(replacements ? { replacements } : {}) })
+      setPanelOpen(false)
+    } catch {
+      // Lỗi hiển thị qua checkIn.error; mở khung đổi phòng nếu nguyên nhân là phòng chưa sẵn sàng.
+      setPanelOpen(true)
+    }
+  }
+
+  const complete = blocked.length > 0 && blocked.every((room) => Boolean(selection[room.id]))
+
+  return (
+    <div className="space-y-3 border-t border-stone-200 p-4">
+      {checkIn.isError && <Alert tone="danger">{getErrorMessage(checkIn.error)}</Alert>}
+
+      {panelOpen && options.isPending && (
+        <p className="text-sm text-stone-700">Đang tải phòng thay thế…</p>
+      )}
+      {panelOpen && blocked.length > 0 && (
+        <div className="space-y-3 rounded border border-stone-300 bg-cream-50 p-3">
+          {blocked.map((room) => {
+            const taken = Object.entries(selection)
+              .filter(([id]) => id !== room.id)
+              .map(([, value]) => value)
+            const choices = room.replacements.filter((item) => !taken.includes(item.id))
+            return (
+              <div key={room.id} className="space-y-2">
+                <p className="text-sm font-semibold text-pearl-900">
+                  Phòng {room.roomNumber} {ROOM_STATE_LABEL[room.status] ?? room.status}
+                </p>
+                {room.replacements.length === 0 ? (
+                  <p className="text-sm text-stone-700">Không có phòng thay thế phù hợp.</p>
+                ) : (
+                  <SelectField
+                    label={`Thay phòng ${room.roomNumber} bằng`}
+                    value={selection[room.id] ?? ''}
+                    options={[
+                      { value: '', label: 'Chọn phòng' },
+                      ...choices.map((item) => ({
+                        value: item.id,
+                        label: `${item.roomNumber} (tầng ${item.floor})`,
+                      })),
+                    ]}
+                    onChange={(event) =>
+                      setSelection((current) => ({ ...current, [room.id]: event.target.value }))
+                    }
+                  />
+                )}
+              </div>
+            )
+          })}
+          <div className="flex flex-wrap gap-3">
+            <Button
+              size="sm"
+              disabled={!complete}
+              loading={checkIn.isPending}
+              onClick={() =>
+                run(blocked.map((room) => ({ from: room.id, to: selection[room.id] as string })))
+              }
+            >
+              Đổi phòng và Check In
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setPanelOpen(false)
+                checkIn.reset()
+              }}
+            >
+              Đóng
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {!(panelOpen && blocked.length > 0) && (
+        <Button size="sm" loading={checkIn.isPending} onClick={() => run()}>
+          Check In
+        </Button>
+      )}
+    </div>
   )
 }
