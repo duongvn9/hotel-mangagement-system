@@ -11,9 +11,9 @@ import type {
   AddCheckoutChargeDto,
   BookingChargesResponse,
 } from './dto/checkout-charge.dto.js';
+import { toBookingChargesResponse } from './invoice-summary.js';
 import { InvoicesService } from './invoices.service.js';
 import { InvoiceChargeType } from './schemas/invoice-charge.schema.js';
-import type { InvoiceDocument } from './schemas/invoice.schema.js';
 
 @Injectable()
 export class CheckoutChargesService {
@@ -43,14 +43,14 @@ export class CheckoutChargesService {
       reason: dto.reason,
       sourceId: `checkout:${dto.requestId}`,
     });
-    return this.response(booking, invoice);
+    return toBookingChargesResponse(booking, invoice);
   }
 
   /** Các khoản phí và tổng hợp hóa đơn hiện tại của booking. */
   async list(bookingId: string): Promise<BookingChargesResponse> {
     const booking = await this.booking(bookingId);
     const invoice = await this.invoices.getOrCreateForBooking(bookingId);
-    return this.response(booking, invoice);
+    return toBookingChargesResponse(booking, invoice);
   }
 
   private async booking(bookingId: string) {
@@ -62,33 +62,5 @@ export class CheckoutChargesService {
       throw new NotFoundException('Booking not found');
     }
     return booking;
-  }
-
-  private response(
-    booking: { _id: unknown; code: string; status: string },
-    invoice: InvoiceDocument,
-  ): BookingChargesResponse {
-    return {
-      bookingId: String(booking._id),
-      code: booking.code,
-      status: booking.status,
-      totals: {
-        roomTotal: invoice.roomTotal,
-        serviceTotal: invoice.serviceTotal,
-        additionalTotal: invoice.additionalTotal,
-        discountTotal: invoice.discountTotal,
-        taxTotal: invoice.taxTotal,
-        totalAmount: invoice.totalAmount,
-        depositPaid: invoice.depositPaid,
-        finalPaid: invoice.finalPaid,
-        balanceDue: invoice.balanceDue,
-      },
-      charges: invoice.charges.map((charge) => ({
-        type: charge.type,
-        amount: charge.amount,
-        reason: charge.reason,
-        ...(charge.sourceId ? { sourceId: charge.sourceId } : {}),
-      })),
-    };
   }
 }
