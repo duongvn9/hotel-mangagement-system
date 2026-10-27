@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   cancelBooking,
   createBooking,
+  createWalkInBooking,
   initiateDeposit,
   initiateFinal,
   searchAvailability,
@@ -20,6 +21,10 @@ export function useAvailability(params: SearchAvailabilityParams | null) {
 
 export function useCreateBooking() {
   return useMutation({ mutationFn: createBooking })
+}
+
+export function useCreateWalkInBooking() {
+  return useMutation({ mutationFn: createWalkInBooking })
 }
 
 export function useCancelBooking() {

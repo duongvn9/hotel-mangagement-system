@@ -75,6 +75,24 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   return (await api.post<Booking>('/bookings', input)).data
 }
 
+/** Booking walk-in lễ tân vừa tạo (UC08): vào thẳng CONFIRMED, không cọc/giữ phòng. */
+export interface WalkInBooking {
+  id: string
+  code: string
+  status: string
+  rooms: string[]
+  checkIn: string
+  checkOut: string
+  guests: number
+  /** Tiền phòng server tính (VND). */
+  roomTotal: number
+}
+
+/** UC08 — Lễ tân/Quản lý tạo booking cho khách vãng lai tại quầy. */
+export async function createWalkInBooking(input: CreateBookingInput): Promise<WalkInBooking> {
+  return (await api.post<WalkInBooking>('/bookings/walk-in', input)).data
+}
+
 /** Phản hồi tối thiểu khi huỷ (service trả booking đã CANCELLED). */
 export interface CancelledBooking {
   status: string
