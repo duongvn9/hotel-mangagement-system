@@ -3,6 +3,7 @@ import {
   addCheckoutCharge,
   cancelBooking,
   checkInBooking,
+  checkOutBooking,
   createBooking,
   createWalkInBooking,
   initiateDeposit,
@@ -12,6 +13,7 @@ import {
   getSameDayList,
   initiateFinal,
   listBookings,
+  recordCashPayment,
   searchGuests,
   searchAvailability,
   updateBooking,
@@ -122,6 +124,29 @@ export function useAddCharge(id: string) {
   return useMutation({
     mutationFn: (input: AddChargeInput) => addCheckoutCharge(id, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', id] }),
+  })
+}
+
+/** UC18 — xác nhận thu tiền mặt rồi làm mới hóa đơn của booking. */
+export function useRecordCash(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (requestId: string) => recordCashPayment(id, requestId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', id] }),
+  })
+}
+
+/** UC18 — sau khi trả phòng làm mới danh sách đến/đi, sơ đồ phòng, danh sách booking và hóa đơn. */
+export function useCheckOut() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => checkOutBooking(id),
+    onSuccess: () =>
+      Promise.all(
+        ['same-day', 'room-status-board', 'bookings', 'booking-charges'].map((key) =>
+          queryClient.invalidateQueries({ queryKey: [key] }),
+        ),
+      ),
   })
 }
 

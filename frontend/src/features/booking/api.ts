@@ -162,6 +162,8 @@ export interface BookingCharges {
   bookingId: string
   code: string
   status: string
+  /** Trạng thái hóa đơn: UNPAID, PARTIALLY_PAID hoặc PAID. */
+  invoiceStatus: string
   totals: InvoiceTotals
   charges: BookingCharge[]
 }
@@ -185,6 +187,26 @@ export async function addCheckoutCharge(
   input: AddChargeInput,
 ): Promise<BookingCharges> {
   return (await api.post<BookingCharges>(`/bookings/${id}/charges`, input)).data
+}
+
+/** UC18 — Lễ tân xác nhận đã thu tiền mặt thanh toán cuối; số tiền do server tính từ hóa đơn. */
+export async function recordCashPayment(id: string, requestId: string): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${id}/payments/cash`, { requestId })).data
+}
+
+export interface CheckOutResult {
+  id: string
+  code: string
+  status: string
+  checkedOutAt: string
+  rooms: { id: string; roomNumber: string; status: string }[]
+  /** Hóa đơn cuối đã thanh toán đủ. */
+  invoice: BookingCharges
+}
+
+/** UC18 — Trả phòng cho khách đã thanh toán đủ; phòng chuyển sang chờ dọn. */
+export async function checkOutBooking(id: string): Promise<CheckOutResult> {
+  return (await api.post<CheckOutResult>(`/bookings/${id}/check-out`)).data
 }
 
 export interface RoomReplacement {
