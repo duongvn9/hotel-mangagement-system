@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
@@ -31,8 +31,14 @@ const EMPTY_FILTERS: Filters = { q: '', status: '', checkInFrom: '', checkInTo: 
 
 /** UC10 — View Booking List. Lễ tân/Quản lý tra cứu booking theo trạng thái, từ khoá và ngày nhận phòng. */
 export function BookingListPage() {
-  const [draft, setDraft] = useState<Filters>(EMPTY_FILTERS)
-  const [applied, setApplied] = useState<Filters>(EMPTY_FILTERS)
+  // Từ trang tìm khách (UC14): mở sẵn danh sách đã lọc theo email của khách.
+  const [searchParams] = useSearchParams()
+  const [initial] = useState<Filters>(() => ({
+    ...EMPTY_FILTERS,
+    q: (searchParams.get('q') ?? '').trim().slice(0, 100),
+  }))
+  const [draft, setDraft] = useState<Filters>(initial)
+  const [applied, setApplied] = useState<Filters>(initial)
   const [pageNumber, setPageNumber] = useState(1)
 
   const params: BookingListParams = {

@@ -139,6 +139,37 @@ export async function listBookings(params: BookingListParams): Promise<BookingLi
   return (await api.get<BookingListPage>('/bookings', { params })).data
 }
 
+export interface GuestProfile {
+  name: string
+  email: string
+  phone: string
+  /** Khách từng đặt khi đã đăng nhập tài khoản. */
+  hasAccount: boolean
+  totalBookings: number
+  /** Số booking đã trả phòng. */
+  completedStays: number
+  /** Ngày nhận phòng gần nhất (ISO), không tính booking đã huỷ. */
+  lastCheckIn: string | null
+}
+
+export interface GuestListParams {
+  q: string
+  page: number
+  limit: number
+}
+
+export interface GuestListPage {
+  items: GuestProfile[]
+  total: number
+  page: number
+  limit: number
+}
+
+/** UC14 — Tìm hồ sơ khách (gộp từ booking) theo tên, email, số điện thoại hoặc mã booking. */
+export async function searchGuests(params: GuestListParams): Promise<GuestListPage> {
+  return (await api.get<GuestListPage>('/guests', { params })).data
+}
+
 export type RoomOccupancy = 'FREE' | 'HELD' | 'RESERVED' | 'IN_HOUSE'
 
 export interface RoomBoardBooking {
