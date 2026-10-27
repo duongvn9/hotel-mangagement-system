@@ -4,12 +4,14 @@ import {
   createBooking,
   createWalkInBooking,
   initiateDeposit,
+  getRoomStatusBoard,
   initiateFinal,
   listBookings,
   searchAvailability,
   updateBooking,
   verifyVnpayReturn,
   type BookingListParams,
+  type RoomStatusBoardParams,
   type SearchAvailabilityParams,
   type UpdateBookingInput,
 } from './api'
@@ -27,6 +29,14 @@ export function useBookingList(params: BookingListParams) {
   return useQuery({
     queryKey: ['bookings', params],
     queryFn: () => listBookings(params),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useRoomStatusBoard(params: RoomStatusBoardParams) {
+  return useQuery({
+    queryKey: ['room-status-board', params],
+    queryFn: () => getRoomStatusBoard(params),
     placeholderData: keepPreviousData,
   })
 }
