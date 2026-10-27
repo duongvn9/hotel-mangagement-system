@@ -59,6 +59,8 @@ export class BookingChargesResponse {
   bookingId: string;
   code: string;
   status: string;
+  /** Trạng thái hóa đơn: UNPAID, PARTIALLY_PAID hoặc PAID. */
+  invoiceStatus: string;
   totals: InvoiceTotals;
   charges: ChargeLine[];
 }

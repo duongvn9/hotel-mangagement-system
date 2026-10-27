@@ -39,6 +39,7 @@ const charges = (items: { reason: string; amount: number }[] = []): BookingCharg
     bookingId: 'd1',
     code: 'DPI',
     status: 'CHECKED_IN',
+    invoiceStatus: 'PARTIALLY_PAID',
     totals: {
       roomTotal: 2_000_000,
       serviceTotal: 0,
