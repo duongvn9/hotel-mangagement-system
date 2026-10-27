@@ -49,6 +49,8 @@ import { RoomStatusBoardService } from './room-status-board.service.js';
     AvailabilityService,
     AvailabilityRoomSource,
     AvailabilityClock,
+    FrontDeskService,
+    RoomStatusBoardService,
   ],
 })
 export class BookingsModule {}
