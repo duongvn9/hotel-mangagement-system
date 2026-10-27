@@ -4,6 +4,8 @@ import { Invoice, InvoiceSchema } from './schemas/invoice.schema.js';
 import { BookingsModule } from '../bookings/bookings.module.js';
 import { PaymentsModule } from '../payments/payments.module.js';
 import { RoomsModule } from '../rooms/rooms.module.js';
+import { CheckoutChargesController } from './checkout-charges.controller.js';
+import { CheckoutChargesService } from './checkout-charges.service.js';
 import { InvoicesService } from './invoices.service.js';
 import {
   InvoicePricingAdapter,
@@ -19,8 +21,10 @@ import { RoomTypePricingAdapter } from './room-type-pricing.adapter.js';
     RoomsModule,
     MongooseModule.forFeature([{ name: Invoice.name, schema: InvoiceSchema }]),
   ],
+  controllers: [CheckoutChargesController],
   providers: [
     InvoicesService,
+    CheckoutChargesService,
     {
       provide: InvoicePricingAdapter,
       useClass: RoomTypePricingAdapter,
