@@ -139,6 +139,23 @@ export async function listBookings(params: BookingListParams): Promise<BookingLi
   return (await api.get<BookingListPage>('/bookings', { params })).data
 }
 
+export interface SameDayList {
+  date: string
+  summary: {
+    arrivals: { total: number; awaitingDeposit: number; ready: number; checkedIn: number }
+    departures: { total: number; awaitingCheckOut: number; checkedOut: number }
+  }
+  /** Khách đến trong ngày (chưa cọc, đã xác nhận, đã nhận phòng). */
+  arrivals: BookingListItem[]
+  /** Khách đi trong ngày (đang ở, đã trả phòng). */
+  departures: BookingListItem[]
+}
+
+/** UC15 — Danh sách khách đến và đi trong ngày (mặc định hôm nay, giờ Việt Nam). */
+export async function getSameDayList(params: { date?: string }): Promise<SameDayList> {
+  return (await api.get<SameDayList>('/front-desk/same-day', { params })).data
+}
+
 export interface GuestProfile {
   name: string
   email: string

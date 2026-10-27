@@ -5,6 +5,7 @@ import {
   createWalkInBooking,
   initiateDeposit,
   getRoomStatusBoard,
+  getSameDayList,
   initiateFinal,
   listBookings,
   searchGuests,
@@ -31,6 +32,14 @@ export function useBookingList(params: BookingListParams) {
   return useQuery({
     queryKey: ['bookings', params],
     queryFn: () => listBookings(params),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useSameDayList(date: string) {
+  return useQuery({
+    queryKey: ['same-day', date],
+    queryFn: () => getSameDayList({ date }),
     placeholderData: keepPreviousData,
   })
 }
