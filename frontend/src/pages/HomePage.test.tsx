@@ -111,7 +111,7 @@ describe('HomePage', () => {
     renderHome({ ...ME, role: 'RECEPTIONIST', fullName: 'Trần Lễ Tân' })
     expect(screen.getByRole('link', { name: /Vào khu làm việc/ })).toHaveAttribute(
       'href',
-      '/reception/front-desk',
+      '/reception/dashboard',
     )
     expect(screen.getByText(/Lễ tân/)).toBeInTheDocument()
   })

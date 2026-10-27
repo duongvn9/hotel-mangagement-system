@@ -13,7 +13,7 @@ const me = (role: string, permissions: string[] = []): Me => ({
 describe('roleHome', () => {
   it('sends each role to its own workspace and everyone else to the home page', () => {
     expect(roleHome('MANAGER')).toBe('/manager/dashboard')
-    expect(roleHome('RECEPTIONIST')).toBe('/reception/front-desk')
+    expect(roleHome('RECEPTIONIST')).toBe('/reception/dashboard')
     expect(roleHome('SERVICE_STAFF')).toBe('/staff/service/dashboard')
     expect(roleHome('OPERATIONS_STAFF')).toBe('/staff/operations/dashboard')
     expect(roleHome('CUSTOMER')).toBe('/')
@@ -35,6 +35,7 @@ describe('navGroupsFor', () => {
     const groups = navGroupsFor(me('RECEPTIONIST'))
     expect(groups.map((group) => group.label)).toEqual(['Quầy lễ tân', 'Yêu cầu'])
     expect(groups[0]?.items.map((item) => item.to)).toEqual([
+      '/reception/dashboard',
       '/reception/front-desk',
       '/reception/rooms',
       '/reception/bookings',
@@ -53,7 +54,12 @@ describe('navGroupsFor', () => {
       'Lễ tân',
     ])
     expect(flatLinks(me('MANAGER')).map((link) => link.to)).toEqual(
-      expect.arrayContaining(['/manager/dashboard', '/manager/rooms', '/reception/front-desk']),
+      expect.arrayContaining([
+        '/manager/dashboard',
+        '/manager/rooms',
+        '/reception/dashboard',
+        '/reception/front-desk',
+      ]),
     )
   })
 
