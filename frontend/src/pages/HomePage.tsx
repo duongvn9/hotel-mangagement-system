@@ -91,9 +91,12 @@ export function HomePage() {
           {STEPS.map((step, index) => (
             <li
               key={step.title}
-              className="grid grid-cols-[auto_1fr] gap-6 border-t border-stone-300 py-6"
+              className="grid grid-cols-[4rem_1fr] gap-6 border-t border-stone-300 py-6"
             >
-              <span aria-hidden className="font-display text-5xl font-semibold text-primary">
+              <span
+                aria-hidden
+                className="font-display text-5xl font-semibold text-primary lining-nums"
+              >
                 {String(index + 1).padStart(2, '0')}
               </span>
               <div>
