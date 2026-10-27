@@ -99,6 +99,19 @@ describe('BookingListPage', () => {
     )
   })
 
+  it('starts from the search text in the URL', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue({ data: page() })
+    renderWithAuth(bookingRoutes, {
+      path: '/reception/bookings?q=ann%40example.test',
+      auth: { me: receptionist, status: 'authenticated' },
+    })
+    await screen.findByText('BKLIST1')
+    expect(get).toHaveBeenCalledWith('/bookings', {
+      params: { page: 1, limit: 20, q: 'ann@example.test' },
+    })
+    expect(screen.getByLabelText('Tìm kiếm')).toHaveValue('ann@example.test')
+  })
+
   it('pages through results', async () => {
     const get = vi.spyOn(api, 'get').mockResolvedValue({ data: page({ total: 45, limit: 20 }) })
     renderPage()
