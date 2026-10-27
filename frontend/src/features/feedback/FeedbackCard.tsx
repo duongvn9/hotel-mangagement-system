@@ -3,6 +3,7 @@ import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import type { FeedbackItem } from './api'
+import { RatingStars } from './RatingStars'
 
 const formatTime = (iso: string) =>
   new Date(iso).toLocaleString('vi-VN', {
@@ -42,17 +43,7 @@ export function FeedbackCard({ item, canReply, pending, error, onReply }: Feedba
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {item.rating && (
-            <span
-              className="text-gold-500"
-              role="img"
-              aria-label={`${item.rating} trên 5 sao`}
-              title={`${item.rating}/5`}
-            >
-              {'★'.repeat(item.rating)}
-              <span className="text-stone-300">{'★'.repeat(5 - item.rating)}</span>
-            </span>
-          )}
+          {item.rating && <RatingStars rating={item.rating} />}
           {item.reply ? (
             <Badge tone="success">Đã trả lời</Badge>
           ) : (
