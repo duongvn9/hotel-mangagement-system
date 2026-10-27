@@ -5,6 +5,7 @@ import { Model, Types } from 'mongoose';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { Invoice } from '../src/modules/invoices/schemas/invoice.schema.js';
+import { PaymentTransaction } from '../src/modules/payments/schemas/payment-transaction.schema.js';
 import {
   Booking,
   BookingStatus,
@@ -16,6 +17,7 @@ describe('Record checkout additional charge (e2e)', () => {
   let app: INestApplication;
   let bookings: Model<Booking>;
   let invoices: Model<Invoice>;
+  let payments: Model<PaymentTransaction>;
   let rooms: Model<Room>;
   let roomTypes: Model<RoomType>;
   const tag = String(new Types.ObjectId()).slice(-8).toUpperCase();
@@ -64,6 +66,7 @@ describe('Record checkout additional charge (e2e)', () => {
       .find({ code: new RegExp(`^CHG${tag}`) })
       .select('_id')
       .lean();
+    await payments.deleteMany({ booking: { $in: docs.map((d) => d._id) } });
     await invoices.deleteMany({ booking: { $in: docs.map((d) => d._id) } });
     await bookings.deleteMany({ code: new RegExp(`^CHG${tag}`) });
   };
@@ -78,6 +81,7 @@ describe('Record checkout additional charge (e2e)', () => {
     await app.init();
     bookings = app.get(getModelToken(Booking.name));
     invoices = app.get(getModelToken(Invoice.name));
+    payments = app.get(getModelToken(PaymentTransaction.name));
     rooms = app.get(getModelToken(Room.name));
     roomTypes = app.get(getModelToken(RoomType.name));
     await Promise.all([
@@ -213,6 +217,26 @@ describe('Record checkout additional charge (e2e)', () => {
       await add(booking.id, charge('req-12345678')).expect(409);
       expect(await invoices.countDocuments({ booking: booking._id })).toBe(0);
     }
+  });
+
+  it('stops taking charges once the final payment is settled', async () => {
+    const booking = await seed();
+    await add(booking.id, charge('req-12345678')).expect(201);
+    const invoice = await invoices.findOne({ booking: booking._id });
+    await payments.create({
+      booking: booking._id,
+      invoice: invoice?._id,
+      transactionRef: `CASH-${tag}`,
+      method: 'CASH',
+      purpose: 'FINAL',
+      status: 'SUCCESS',
+      amount: 2150000,
+      paidAt: new Date(),
+    });
+    const { body } = await add(booking.id, charge('req-87654321')).expect(409);
+    expect(body.message).toMatch(/already been paid/i);
+    const again = await list(booking.id).expect(200);
+    expect(again.body.charges).toHaveLength(1);
   });
 
   it('validates the charge', async () => {

@@ -7,6 +7,11 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema.js';
+import {
+  PaymentPurpose,
+  PaymentStatus,
+  PaymentTransaction,
+} from '../payments/schemas/payment-transaction.schema.js';
 import type {
   AddCheckoutChargeDto,
   BookingChargesResponse,
@@ -19,6 +24,8 @@ import { InvoiceChargeType } from './schemas/invoice-charge.schema.js';
 export class CheckoutChargesService {
   constructor(
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
+    @InjectModel(PaymentTransaction.name)
+    private readonly payments: Model<PaymentTransaction>,
     private readonly invoices: InvoicesService,
   ) {}
 
@@ -34,6 +41,19 @@ export class CheckoutChargesService {
     if (booking.status !== BookingStatus.CheckedIn) {
       throw new ConflictException(
         'Additional charges can only be recorded for a guest who is checked in',
+      );
+    }
+    // Đã thu xong thanh toán cuối thì hóa đơn đã chốt: thêm phí sẽ mở lại một khoản nợ không thể thu.
+    if (
+      await this.payments.exists({
+        booking: booking._id,
+        purpose: PaymentPurpose.Final,
+        status: PaymentStatus.Success,
+        isActive: true,
+      })
+    ) {
+      throw new ConflictException(
+        'The invoice has already been paid; no more charges can be added',
       );
     }
     const invoice = await this.invoices.addCharge({
