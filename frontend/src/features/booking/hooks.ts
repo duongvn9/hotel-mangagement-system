@@ -1,12 +1,14 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import {
   cancelBooking,
   createBooking,
   createWalkInBooking,
   initiateDeposit,
   initiateFinal,
+  listBookings,
   searchAvailability,
   verifyVnpayReturn,
+  type BookingListParams,
   type SearchAvailabilityParams,
 } from './api'
 
@@ -16,6 +18,14 @@ export function useAvailability(params: SearchAvailabilityParams | null) {
     queryKey: ['availability', params],
     queryFn: () => searchAvailability(params as SearchAvailabilityParams),
     enabled: params !== null,
+  })
+}
+
+export function useBookingList(params: BookingListParams) {
+  return useQuery({
+    queryKey: ['bookings', params],
+    queryFn: () => listBookings(params),
+    placeholderData: keepPreviousData,
   })
 }
 
