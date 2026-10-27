@@ -5,6 +5,7 @@ import { BookingsModule } from '../bookings/bookings.module.js';
 import { PaymentsModule } from '../payments/payments.module.js';
 import { RoomsModule } from '../rooms/rooms.module.js';
 import { CashPaymentService } from './cash-payment.service.js';
+import { CheckOutService } from './check-out.service.js';
 import { CheckOutController } from './check-out.controller.js';
 import { CheckoutChargesController } from './checkout-charges.controller.js';
 import { CheckoutChargesService } from './checkout-charges.service.js';
@@ -28,6 +29,7 @@ import { RoomTypePricingAdapter } from './room-type-pricing.adapter.js';
     InvoicesService,
     CheckoutChargesService,
     CashPaymentService,
+    CheckOutService,
     {
       provide: InvoicePricingAdapter,
       useClass: RoomTypePricingAdapter,
