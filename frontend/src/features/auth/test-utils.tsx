@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { createMemoryRouter, RouterProvider, type RouteObject } from 'react-router'
+import { createMemoryRouter, parsePath, RouterProvider, type RouteObject } from 'react-router'
 import type { Me } from './api'
 import { AuthContext, type AuthContextValue } from './auth-context'
 
@@ -13,10 +13,14 @@ export const ME: Me = {
   permissions: [],
 }
 
-/** Render routes với AuthContext giả, bắt đầu ở `path`. */
+/** Render routes với AuthContext giả, bắt đầu ở `path` (kèm `state` của router nếu cần, ví dụ { from }). */
 export function renderWithAuth(
   routes: RouteObject[],
-  { path = '/', auth = {} }: { path?: string; auth?: Partial<AuthContextValue> } = {},
+  {
+    path = '/',
+    auth = {},
+    state,
+  }: { path?: string; auth?: Partial<AuthContextValue>; state?: unknown } = {},
 ) {
   const value: AuthContextValue = {
     me: null,
@@ -29,7 +33,9 @@ export function renderWithAuth(
     refresh: vi.fn(),
     ...auth,
   }
-  const router = createMemoryRouter(routes, { initialEntries: [path] })
+  const router = createMemoryRouter(routes, {
+    initialEntries: [state === undefined ? path : { ...parsePath(path), state }],
+  })
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const wrap = (children: ReactNode) => (
     <QueryClientProvider client={queryClient}>

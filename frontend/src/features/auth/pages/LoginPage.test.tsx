@@ -1,11 +1,14 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { api } from '@/lib/api-client'
-import { renderWithAuth } from '../test-utils'
+import { ME, renderWithAuth } from '../test-utils'
 import { LoginPage } from './LoginPage'
 
 const routes = [
   { path: '/login', element: <LoginPage /> },
   { path: '/', element: <p>trang chủ</p> },
+  { path: '/manager/dashboard', element: <p>trang quản lý</p> },
+  { path: '/reception/front-desk', element: <p>trang lễ tân</p> },
+  { path: '/booking/new', element: <p>trang đặt phòng</p> },
 ]
 
 describe('LoginPage', () => {
@@ -42,5 +45,37 @@ describe('LoginPage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Quản Lý/ }))
     await waitFor(() => expect(loginAsDev).toHaveBeenCalledWith(account))
+  })
+
+  describe('đã có phiên đăng nhập', () => {
+    const signedIn = (role: string) =>
+      renderWithAuth(routes, {
+        path: '/login',
+        auth: { me: { ...ME, role }, status: 'authenticated' },
+      })
+
+    it('đưa nhân viên vào trang làm việc của vai trò', async () => {
+      signedIn('MANAGER')
+      expect(await screen.findByText('trang quản lý')).toBeInTheDocument()
+    })
+
+    it('đưa lễ tân vào màn đến và đi trong ngày', async () => {
+      signedIn('RECEPTIONIST')
+      expect(await screen.findByText('trang lễ tân')).toBeInTheDocument()
+    })
+
+    it('đưa khách về trang chủ', async () => {
+      signedIn('CUSTOMER')
+      expect(await screen.findByText('trang chủ')).toBeInTheDocument()
+    })
+
+    it('quay lại trang đang xem dở trước khi bị yêu cầu đăng nhập', async () => {
+      renderWithAuth(routes, {
+        path: '/login',
+        auth: { me: { ...ME, role: 'MANAGER' }, status: 'authenticated' },
+        state: { from: '/booking/new' },
+      })
+      expect(await screen.findByText('trang đặt phòng')).toBeInTheDocument()
+    })
   })
 })
