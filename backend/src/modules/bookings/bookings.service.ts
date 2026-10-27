@@ -26,6 +26,11 @@ import {
   type StayInterval,
 } from './availability.core.js';
 import {
+  BOOKING_ROOMS_POPULATE,
+  toBookingListItem,
+  type PopulatedListRoom,
+} from './booking-list-item.js';
+import {
   CreateBookingDto,
   UpdateBookingDto,
 } from './dto/create-booking.dto.js';
@@ -230,44 +235,14 @@ export class BookingsService {
         .sort({ checkIn: -1, _id: -1 })
         .skip((query.page - 1) * query.limit)
         .limit(query.limit)
-        .populate<{
-          rooms: {
-            _id: Types.ObjectId;
-            roomNumber?: string;
-            roomType?: { name?: string } | null;
-          }[];
-        }>({
-          path: 'rooms',
-          select: 'roomNumber roomType',
-          populate: { path: 'roomType', select: 'name' },
-        })
+        .populate<{ rooms: PopulatedListRoom[] }>(BOOKING_ROOMS_POPULATE)
         .lean()
         .exec(),
       this.bookings.countDocuments(filter),
     ]);
 
     return {
-      items: rows.map((booking) => ({
-        id: String(booking._id),
-        code: booking.code,
-        status: booking.status,
-        guestName: booking.guestName,
-        guestEmail: booking.guestEmail,
-        guestPhone: booking.guestPhone,
-        rooms: booking.rooms.map((room) => ({
-          id: String(room._id),
-          ...(room.roomNumber ? { roomNumber: room.roomNumber } : {}),
-          ...(room.roomType?.name ? { roomTypeName: room.roomType.name } : {}),
-        })),
-        checkIn: booking.checkIn.toISOString(),
-        checkOut: booking.checkOut.toISOString(),
-        guests: booking.guests,
-        roomTotal: booking.roomTotal,
-        createdAt: (
-          (booking as { createdAt?: Date }).createdAt ?? booking.checkIn
-        ).toISOString(),
-        walkIn: booking.createdBy !== undefined,
-      })),
+      items: rows.map(toBookingListItem),
       total,
       page: query.page,
       limit: query.limit,
