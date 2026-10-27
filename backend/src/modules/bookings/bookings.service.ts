@@ -25,7 +25,10 @@ import {
   overlaps,
   type StayInterval,
 } from './availability.core.js';
-import { CreateBookingDto } from './dto/create-booking.dto.js';
+import {
+  CreateBookingDto,
+  UpdateBookingDto,
+} from './dto/create-booking.dto.js';
 import type {
   BookingListResponse,
   ListBookingsQuery,
@@ -272,6 +275,152 @@ export class BookingsService {
   }
 
   /**
+   * UC11: lễ tân/quản lý sửa booking PENDING_DEPOSIT hoặc CONFIRMED (trước check-in). Đổi
+   * phòng/ngày/số khách thì tính lại giá và kiểm tra lại phòng trống, bỏ qua chính booking
+   * này; PENDING_DEPOSIT cập nhật cả RoomHold và tiền cọc, CONFIRMED giữ nguyên tiền cọc
+   * (khách có thể đã cọc, phần chênh lệch xử lý ở hóa đơn cuối).
+   */
+  async update(bookingId: string, dto: UpdateBookingDto) {
+    if (!/^[a-f\d]{24}$/i.test(bookingId)) {
+      throw new BadRequestException('Invalid booking ID');
+    }
+    const fields = Object.values(dto).filter((value) => value !== undefined);
+    if (fields.length === 0) {
+      throw new BadRequestException('Nothing to update');
+    }
+    if (dto.rooms && new Set(dto.rooms).size !== dto.rooms.length) {
+      throw new BadRequestException('Duplicate rooms in request');
+    }
+    const booking = await this.bookings.findById(bookingId);
+    if (!booking || !booking.isActive) {
+      throw new NotFoundException('Booking not found');
+    }
+    if (
+      ![BookingStatus.PendingDeposit, BookingStatus.Confirmed].includes(
+        booking.status,
+      )
+    ) {
+      throw new ConflictException(
+        'Only a pending or confirmed booking can be updated',
+      );
+    }
+
+    const previous = {
+      rooms: booking.rooms,
+      checkIn: booking.checkIn,
+      checkOut: booking.checkOut,
+      guests: booking.guests,
+      guestName: booking.guestName,
+      guestEmail: booking.guestEmail,
+      guestPhone: booking.guestPhone,
+      roomTotal: booking.roomTotal,
+      depositAmount: booking.depositAmount,
+      rateSnapshot: booking.rateSnapshot,
+    };
+    const staysChanged =
+      dto.rooms !== undefined ||
+      dto.checkIn !== undefined ||
+      dto.checkOut !== undefined ||
+      dto.guests !== undefined;
+    const pending = booking.status === BookingStatus.PendingDeposit;
+
+    if (staysChanged) {
+      const roomIds = dto.rooms
+        ? dto.rooms.map((id) => new Types.ObjectId(id))
+        : booking.rooms;
+      let stay: StayInterval;
+      try {
+        stay = normalizeStay({
+          checkIn: dto.checkIn ?? booking.checkIn,
+          checkOut: dto.checkOut ?? booking.checkOut,
+        });
+      } catch (error) {
+        throw new BadRequestException(
+          error instanceof Error ? error.message : 'Invalid stay dates',
+        );
+      }
+      const guests = dto.guests ?? booking.guests;
+      const { roomTotal, rates } = await this.priceRooms(roomIds, guests, stay);
+      await this.assertRoomsFree(roomIds, stay, this.clock.now(), booking._id);
+
+      booking.rooms = roomIds;
+      booking.checkIn = stay.checkIn;
+      booking.checkOut = stay.checkOut;
+      booking.guests = guests;
+      booking.roomTotal = roomTotal;
+      booking.rateSnapshot = rates;
+      if (pending) {
+        booking.depositAmount = Math.round(roomTotal * DEPOSIT_RATE);
+      }
+    }
+    if (dto.guestName !== undefined) booking.guestName = dto.guestName.trim();
+    if (dto.guestEmail !== undefined)
+      booking.guestEmail = dto.guestEmail.trim();
+    if (dto.guestPhone !== undefined)
+      booking.guestPhone = dto.guestPhone.trim();
+    await booking.save();
+
+    if (staysChanged) {
+      const hold = pending
+        ? await this.holds.findOneAndUpdate(
+            { booking: booking._id, isActive: true },
+            {
+              $set: {
+                rooms: booking.rooms,
+                checkIn: booking.checkIn,
+                checkOut: booking.checkOut,
+              },
+            },
+            { returnDocument: 'after' },
+          )
+        : null;
+      // Hai thao tác đổi cùng phòng/ngày cùng lúc: bên có _id nhỏ hơn thắng; bên thua hoàn tác.
+      const stay = { checkIn: booking.checkIn, checkOut: booking.checkOut };
+      const lost = hold
+        ? !(await this.wonTheRace(
+            hold._id,
+            booking.rooms,
+            stay,
+            this.clock.now(),
+          ))
+        : await this.lostConfirmedRace(booking._id, booking.rooms, stay);
+      if (lost) {
+        await this.bookings.updateOne({ _id: booking._id }, { $set: previous });
+        if (hold) {
+          await this.holds.updateOne(
+            { _id: hold._id },
+            {
+              $set: {
+                rooms: previous.rooms,
+                checkIn: previous.checkIn,
+                checkOut: previous.checkOut,
+              },
+            },
+          );
+        }
+        throw new ConflictException(
+          'One or more rooms were just taken; please choose again',
+        );
+      }
+    }
+
+    return {
+      id: String(booking._id),
+      code: booking.code,
+      status: booking.status,
+      rooms: booking.rooms.map(String),
+      checkIn: booking.checkIn.toISOString(),
+      checkOut: booking.checkOut.toISOString(),
+      guests: booking.guests,
+      guestName: booking.guestName,
+      guestEmail: booking.guestEmail,
+      guestPhone: booking.guestPhone,
+      roomTotal: booking.roomTotal,
+      depositAmount: booking.depositAmount,
+    };
+  }
+
+  /**
    * Huỷ booking (chủ booking, nhân viên, hoặc Guest kèm mã): nhả RoomHold đang giữ và
    * chuyển sang CANCELLED. Chỉ cho huỷ khi PENDING_DEPOSIT hoặc CONFIRMED (trước check-in);
    * không tự động hoàn tiền (xử lý thủ công/ngoài phạm vi).
@@ -361,8 +510,18 @@ export class BookingsService {
     roomIds: Types.ObjectId[],
     stay: StayInterval,
     now: Date,
+    excludeBookingId?: Types.ObjectId,
   ): Promise<void> {
-    if (await this.hasConflict(roomIds, stay, now)) {
+    if (
+      await this.hasConflict(
+        roomIds,
+        stay,
+        now,
+        undefined,
+        undefined,
+        excludeBookingId,
+      )
+    ) {
       throw new ConflictException(
         'One or more rooms are not available for the selected dates',
       );
@@ -375,12 +534,14 @@ export class BookingsService {
     now: Date,
     excludeHoldId?: Types.ObjectId,
     earlierThanHoldId?: Types.ObjectId,
+    excludeBookingId?: Types.ObjectId,
   ): Promise<boolean> {
     const blocking = await this.bookings
       .find({
         rooms: { $in: roomIds },
         isActive: true,
         status: { $in: [BookingStatus.Confirmed, BookingStatus.CheckedIn] },
+        ...(excludeBookingId ? { _id: { $ne: excludeBookingId } } : {}),
       })
       .select('checkIn checkOut')
       .lean()
@@ -393,6 +554,7 @@ export class BookingsService {
       expiresAt: { $gt: now },
     };
     if (excludeHoldId) holdFilter._id = { $ne: excludeHoldId };
+    if (excludeBookingId) holdFilter.booking = { $ne: excludeBookingId };
     const activeHolds = await this.holds
       .find(holdFilter)
       .select('booking checkIn checkOut')

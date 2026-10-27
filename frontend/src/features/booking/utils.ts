@@ -37,3 +37,10 @@ export function todayISO(): string {
   const vn = new Date(now.getTime() + (now.getTimezoneOffset() + 420) * 60_000)
   return vn.toISOString().slice(0, 10)
 }
+
+/** Ngày làm việc (YYYY-MM-DD, giờ Việt Nam) của một mốc ISO; giá trị đã là ngày thì giữ nguyên. */
+export function toBusinessDate(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const time = Date.parse(value)
+  return Number.isNaN(time) ? value : new Date(time + 7 * 3_600_000).toISOString().slice(0, 10)
+}

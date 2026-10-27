@@ -12,6 +12,9 @@ import { formatDate, money } from '../utils'
 
 const PAGE_SIZE = 20
 
+/** Trạng thái còn sửa được (UC11): trước khi nhận phòng và chưa huỷ. */
+const EDITABLE_STATUSES = ['PENDING_DEPOSIT', 'CONFIRMED']
+
 const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả' },
   ...Object.entries(BOOKING_STATUS_DISPLAY).map(([value, { label }]) => ({ value, label })),
@@ -127,10 +130,10 @@ export function BookingListPage() {
                   tone: 'neutral' as const,
                 }
                 return (
-                  <li key={booking.id}>
+                  <li key={booking.id} className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                     <Link
                       to={`/booking/${booking.id}`}
-                      className="grid gap-3 rounded-lg border border-stone-300 bg-white p-5 hover:bg-cream-50 md:grid-cols-[1.2fr_1fr_1fr_auto] md:items-center"
+                      className="grid flex-1 gap-3 rounded-lg border border-stone-300 bg-white p-5 hover:bg-cream-50 md:grid-cols-[1.2fr_1fr_1fr_auto] md:items-center"
                     >
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -162,6 +165,14 @@ export function BookingListPage() {
                         {money.format(booking.roomTotal)}
                       </p>
                     </Link>
+                    {EDITABLE_STATUSES.includes(booking.status) && (
+                      <Link
+                        to={`/reception/bookings/${encodeURIComponent(booking.code)}/edit`}
+                        className="inline-flex items-center justify-center rounded border border-pearl-900 px-5 text-xs font-semibold tracking-wider text-pearl-900 uppercase hover:bg-pearl-900 hover:text-cream-100"
+                      >
+                        Sửa
+                      </Link>
+                    )}
                   </li>
                 )
               })}

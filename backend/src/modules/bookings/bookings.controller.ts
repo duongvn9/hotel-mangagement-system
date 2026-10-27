@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import {
   ApiConflictResponse,
   ApiCreatedResponse,
@@ -15,6 +23,8 @@ import {
   BookingResponse,
   CancelBookingDto,
   CreateBookingDto,
+  UpdateBookingDto,
+  UpdatedBookingResponse,
   WalkInBookingResponse,
 } from './dto/create-booking.dto.js';
 import {
@@ -60,6 +70,20 @@ export class BookingsController {
   @ApiConflictResponse({ description: 'Rooms are unavailable or just taken' })
   createWalkIn(@Body() dto: CreateBookingDto, @CurrentUser() user: AuthUser) {
     return this.bookings.createWalkIn(dto, user);
+  }
+
+  @Patch(':id')
+  @Roles(Role.Receptionist, Role.Manager)
+  @ApiOperation({
+    summary:
+      'UC11 — Update a pending/confirmed booking, re-checking availability (Receptionist/Manager)',
+  })
+  @ApiOkResponse({ type: UpdatedBookingResponse })
+  @ApiConflictResponse({
+    description: 'Rooms are unavailable, or the booking cannot be edited',
+  })
+  update(@Param('id') id: string, @Body() dto: UpdateBookingDto) {
+    return this.bookings.update(id, dto);
   }
 
   @Post(':id/cancel')
