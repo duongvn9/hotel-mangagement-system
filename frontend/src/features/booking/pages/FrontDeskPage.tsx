@@ -7,6 +7,7 @@ import { SelectField } from '@/components/SelectField'
 import { TextField } from '@/components/TextField'
 import { getErrorMessage } from '@/lib/api-client'
 import { BOOKING_STATUS_DISPLAY, type BookingListItem } from '../api'
+import { CheckoutCharges } from '../components/CheckoutCharges'
 import { useCheckIn, useCheckInOptions, useSameDayList } from '../hooks'
 import { formatDate, money, todayISO } from '../utils'
 
@@ -64,6 +65,7 @@ export function FrontDeskPage() {
               ]}
               total={data.summary.departures.total}
               items={data.departures}
+              canRecordCharges
             />
           </div>
         )
@@ -81,6 +83,8 @@ interface DaySectionProps {
   items: BookingListItem[]
   /** Cho phép Check In ở các booking đã xác nhận (danh sách khách đến). */
   canCheckIn?: boolean
+  /** Cho phép ghi phụ phí ở các booking đang ở (danh sách khách đi). */
+  canRecordCharges?: boolean
 }
 
 function DaySection({
@@ -91,6 +95,7 @@ function DaySection({
   total,
   items,
   canCheckIn = false,
+  canRecordCharges = false,
 }: DaySectionProps) {
   return (
     <div className="space-y-3">
@@ -114,7 +119,12 @@ function DaySection({
       ) : (
         <ul className="space-y-3">
           {items.map((booking) => (
-            <BookingRow key={booking.id} booking={booking} canCheckIn={canCheckIn} />
+            <BookingRow
+              key={booking.id}
+              booking={booking}
+              canCheckIn={canCheckIn}
+              canRecordCharges={canRecordCharges}
+            />
           ))}
         </ul>
       )}
@@ -122,7 +132,15 @@ function DaySection({
   )
 }
 
-function BookingRow({ booking, canCheckIn }: { booking: BookingListItem; canCheckIn: boolean }) {
+function BookingRow({
+  booking,
+  canCheckIn,
+  canRecordCharges,
+}: {
+  booking: BookingListItem
+  canCheckIn: boolean
+  canRecordCharges: boolean
+}) {
   const status = BOOKING_STATUS_DISPLAY[booking.status] ?? {
     label: booking.status,
     tone: 'neutral' as const,
@@ -156,6 +174,7 @@ function BookingRow({ booking, canCheckIn }: { booking: BookingListItem; canChec
         )}
       </Link>
       {canCheckIn && booking.status === 'CONFIRMED' && <CheckInAction booking={booking} />}
+      {canRecordCharges && booking.status === 'CHECKED_IN' && <CheckoutCharges booking={booking} />}
     </li>
   )
 }

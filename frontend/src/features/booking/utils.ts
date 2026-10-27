@@ -44,3 +44,11 @@ export function toBusinessDate(value: string): string {
   const time = Date.parse(value)
   return Number.isNaN(time) ? value : new Date(time + 7 * 3_600_000).toISOString().slice(0, 10)
 }
+
+/** Mã chống trùng cho một lần ghi (UC17): gửi lại cùng mã thì server không ghi thêm. */
+export function newRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
