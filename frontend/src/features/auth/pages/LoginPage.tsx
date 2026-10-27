@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate, useLocation, useNavigate } from 'react-router'
+import { Link, Navigate, useLocation } from 'react-router'
+import { roleHome } from '@/app/navigation'
 import { Alert } from '@/components/Alert'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
@@ -11,21 +12,24 @@ import { useAuth } from '../auth-context'
 /** UC02 Login. */
 export function LoginPage() {
   const { me, isDevMode, login, loginAsDev } = useAuth()
-  const navigate = useNavigate()
-  const from = (useLocation().state as { from?: string } | null)?.from ?? '/'
+  const from = (useLocation().state as { from?: string } | null)?.from
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
+  const [signedIn, setSignedIn] = useState(false)
 
-  if (me) return <Navigate to={from} replace />
+  // Về trang đang xem dở; nếu không có thì nhân viên vào trang làm việc của vai trò, khách về trang chủ.
+  const destination = from && from !== '/' ? from : me ? roleHome(me.role) : '/'
+
+  if (me || signedIn) return <Navigate to={destination} replace />
 
   async function run(action: () => Promise<void>) {
     setError('')
     setPending(true)
     try {
       await action()
-      navigate(from, { replace: true })
+      setSignedIn(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : getErrorMessage(err))
     } finally {
