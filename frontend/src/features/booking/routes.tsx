@@ -6,12 +6,13 @@ import { BookingListPage } from './pages/BookingListPage'
 import { BookingDetailPage } from './pages/BookingDetailPage'
 import { CreateBookingPage } from './pages/CreateBookingPage'
 import { MyBookingsPage } from './pages/MyBookingsPage'
+import { RoomStatusBoardPage } from './pages/RoomStatusBoardPage'
 import { PaymentReturnPage } from './pages/PaymentReturnPage'
 import { SearchRoomsPage } from './pages/SearchRoomsPage'
 import { WalkInBookingPage } from './pages/WalkInBookingPage'
 
 /**
- * Màn đặt phòng hướng Guest/Customer (UC05, UC07/UC46, UC12, UC20, UC21) và booking tại quầy cho lễ tân (UC08, UC10, UC11).
+ * Màn đặt phòng hướng Guest/Customer (UC05, UC07/UC46, UC12, UC20, UC21) và booking tại quầy cho lễ tân (UC08, UC10, UC11) và sơ đồ phòng (UC13).
  * Để công khai: Guest chưa đăng nhập vẫn đặt được và tự thanh toán bằng mã booking.
  */
 export const bookingRoutes: RouteObject[] = [
@@ -19,6 +20,14 @@ export const bookingRoutes: RouteObject[] = [
   { path: 'booking/new', element: <CreateBookingPage /> },
   { path: 'booking/:id', element: <BookingDetailPage /> },
   { path: 'my-bookings', element: <MyBookingsPage /> },
+  {
+    path: 'reception/rooms',
+    element: (
+      <RequireAuth roles={[Role.Receptionist, Role.Manager]}>
+        <RoomStatusBoardPage />
+      </RequireAuth>
+    ),
+  },
   {
     path: 'reception/bookings',
     element: (
