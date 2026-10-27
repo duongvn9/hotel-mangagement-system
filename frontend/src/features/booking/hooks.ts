@@ -1,9 +1,11 @@
-import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   cancelBooking,
+  checkInBooking,
   createBooking,
   createWalkInBooking,
   initiateDeposit,
+  getCheckInOptions,
   getRoomStatusBoard,
   getSameDayList,
   initiateFinal,
@@ -14,6 +16,7 @@ import {
   verifyVnpayReturn,
   type BookingListParams,
   type GuestListParams,
+  type RoomReplacement,
   type RoomStatusBoardParams,
   type SearchAvailabilityParams,
   type UpdateBookingInput,
@@ -74,6 +77,31 @@ export function useUpdateBooking() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateBookingInput }) =>
       updateBooking(id, input),
+  })
+}
+
+/** UC16 — sau khi nhận phòng làm mới danh sách đến/đi, sơ đồ phòng và danh sách booking. */
+export function useCheckIn() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, replacements }: { id: string; replacements?: RoomReplacement[] }) =>
+      checkInBooking(id, replacements),
+    onSuccess: () =>
+      Promise.all(
+        ['same-day', 'room-status-board', 'bookings'].map((key) =>
+          queryClient.invalidateQueries({ queryKey: [key] }),
+        ),
+      ),
+  })
+}
+
+/** UC16 — chỉ chạy khi cần xem phòng nào chưa sẵn sàng (sau khi check-in bị chặn). */
+export function useCheckInOptions(id: string | null) {
+  return useQuery({
+    queryKey: ['check-in-options', id],
+    queryFn: () => getCheckInOptions(id as string),
+    enabled: id !== null,
+    retry: false,
   })
 }
 
