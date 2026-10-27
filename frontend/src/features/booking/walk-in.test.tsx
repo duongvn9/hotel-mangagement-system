@@ -74,6 +74,23 @@ describe('WalkInBookingPage', () => {
     })
   })
 
+  it('prefills the guest details from the query string', async () => {
+    renderWithAuth(bookingRoutes, {
+      path:
+        '/reception/booking/new?' +
+        new URLSearchParams({
+          guestName: 'Ann Nguyễn',
+          guestEmail: 'ann@example.test',
+          guestPhone: '0900000003',
+        }).toString(),
+      auth: { me: receptionist, status: 'authenticated' },
+    })
+    await searchRooms()
+    expect(screen.getByLabelText(/Họ tên/)).toHaveValue('Ann Nguyễn')
+    expect(screen.getByLabelText(/Email/)).toHaveValue('ann@example.test')
+    expect(screen.getByLabelText(/Số điện thoại/)).toHaveValue('0900000003')
+  })
+
   it('needs at least one room before creating', async () => {
     const post = vi.spyOn(api, 'post')
     renderPage()

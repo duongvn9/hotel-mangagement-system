@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router'
 import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
@@ -10,6 +11,8 @@ import { formatDate, money, nightsBetween, todayISO } from '../utils'
 
 /** UC08 — Create Booking for Guest. Lễ tân chọn phòng trống rồi đặt hộ khách vãng lai, vào thẳng CONFIRMED. */
 export function WalkInBookingPage() {
+  // Từ trang tìm khách (UC14): điền sẵn thông tin khách cũ, lễ tân vẫn sửa được.
+  const [params] = useSearchParams()
   const [checkIn, setCheckIn] = useState('')
   const [checkOut, setCheckOut] = useState('')
   const [guests, setGuests] = useState('2')
@@ -17,9 +20,9 @@ export function WalkInBookingPage() {
   const [criteria, setCriteria] = useState<SearchAvailabilityParams | null>(null)
   const [selected, setSelected] = useState<string[]>([])
 
-  const [guestName, setGuestName] = useState('')
-  const [guestEmail, setGuestEmail] = useState('')
-  const [guestPhone, setGuestPhone] = useState('')
+  const [guestName, setGuestName] = useState(params.get('guestName') ?? '')
+  const [guestEmail, setGuestEmail] = useState(params.get('guestEmail') ?? '')
+  const [guestPhone, setGuestPhone] = useState(params.get('guestPhone') ?? '')
   const [created, setCreated] = useState<WalkInBooking | null>(null)
 
   const availability = useAvailability(criteria)
