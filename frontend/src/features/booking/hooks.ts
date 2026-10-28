@@ -7,6 +7,7 @@ import {
   createBooking,
   createWalkInBooking,
   getBooking,
+  getServiceCatalog,
   holdBooking,
   initiateDeposit,
   getBookingCharges,
@@ -229,6 +230,15 @@ export function useReconcilePayment() {
   return useMutation({
     mutationFn: ({ id, note }: { id: string; note?: string }) => reconcilePayment(id, note),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payment-reconciliation'] }),
+  })
+}
+
+/** Danh mục dịch vụ công khai để khách chọn kèm khi đặt phòng. */
+export function useServiceCatalog() {
+  return useQuery({
+    queryKey: ['service-catalog'],
+    queryFn: getServiceCatalog,
+    staleTime: 5 * 60 * 1000,
   })
 }
 

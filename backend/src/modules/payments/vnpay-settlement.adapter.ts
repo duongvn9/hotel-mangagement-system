@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { ServiceOrdersService } from '../service-orders/service-orders.service.js';
 import {
   BookingStatus,
   UNCONFIRMED_BOOKING_STATUSES,
@@ -52,6 +54,7 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
     @InjectModel(RoomHold.name) private readonly holds: Model<RoomHold>,
     @InjectModel(Invoice.name) private readonly invoices: Model<Invoice>,
+    private readonly moduleRef: ModuleRef,
   ) {
     super();
   }
@@ -111,6 +114,8 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
           result.transactionRef,
         );
         if (!confirmed) return 'committed';
+        // Booking vừa CONFIRMED: tự sinh ServiceOrder từ dịch vụ khách chọn khi đặt.
+        await this.generateServiceOrders(expected.booking.id);
       }
       await this.reconcileInvoice(expected);
     }
@@ -195,6 +200,26 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
       { booking: bookingId, isActive: true },
       { $set: { isActive: false } },
     );
+  }
+
+  /**
+   * Best-effort sinh ServiceOrder từ dịch vụ khách chọn, khi booking vừa CONFIRMED.
+   * Phân giải lazy qua ModuleRef để tránh phụ thuộc vòng (payments nằm dưới service-orders);
+   * lỗi sinh đơn không được làm hỏng việc settlement (tiền đã ghi nhận).
+   */
+  private async generateServiceOrders(bookingId: string): Promise<void> {
+    try {
+      const serviceOrders = this.moduleRef.get(ServiceOrdersService, {
+        strict: false,
+      });
+      await serviceOrders.generateForConfirmedBooking(bookingId);
+    } catch (error) {
+      this.logger.warn(
+        `Auto service-order generation failed for booking ${bookingId}: ${
+          (error as Error).message
+        }`,
+      );
+    }
   }
 
   /**

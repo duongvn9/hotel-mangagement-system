@@ -136,6 +136,7 @@ describe('CreateBookingPage (hold-first flow)', () => {
       throw new Error(`unexpected POST ${url}`)
     })
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/service-catalog') return { data: { items: [] } }
       if (url === '/bookings/b9')
         return { data: { ...booking, id: 'b9', status: 'PENDING_DEPOSIT' } }
       throw new Error(`unexpected GET ${url}`)
@@ -167,6 +168,54 @@ describe('CreateBookingPage (hold-first flow)', () => {
     expect(post).toHaveBeenCalledWith(
       '/bookings/details',
       expect.objectContaining({ holdToken: 'HOLDTOKEN123', guestName: 'Nguyen Van A' }),
+    )
+  })
+
+  it('lets the guest pick add-on services sent with the contact details', async () => {
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+      if (url === '/bookings/hold') return { data: held }
+      if (url === '/bookings/details') return { data: { ...held, status: 'PENDING_DEPOSIT' } }
+      throw new Error(`unexpected POST ${url}`)
+    })
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/service-catalog')
+        return {
+          data: {
+            items: [
+              { id: 'svc1', name: 'Giặt ủi', unit: 'kg', billable: true, unitPriceVND: 50000 },
+            ],
+          },
+        }
+      if (url === '/bookings/b9')
+        return { data: { ...booking, id: 'b9', status: 'PENDING_DEPOSIT' } }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    const { router } = renderWithAuth(bookingRoutes, {
+      path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+    })
+
+    await screen.findByRole('button', { name: 'Tiếp tục đặt cọc' })
+    // Chọn dịch vụ thêm (checkbox trong danh mục).
+    fireEvent.click(await screen.findByRole('checkbox'))
+
+    fireEvent.change(screen.getByLabelText('Họ tên', { exact: false }), {
+      target: { value: 'Nguyen Van A' },
+    })
+    fireEvent.change(screen.getByLabelText('Email', { exact: false }), {
+      target: { value: 'a@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText('Số điện thoại', { exact: false }), {
+      target: { value: '0900000000' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục đặt cọc' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/booking/b9'))
+    expect(post).toHaveBeenCalledWith(
+      '/bookings/details',
+      expect.objectContaining({
+        serviceSelections: [{ serviceId: 'svc1', quantity: 1 }],
+      }),
     )
   })
 })

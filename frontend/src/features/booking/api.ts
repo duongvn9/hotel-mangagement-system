@@ -116,12 +116,33 @@ export async function holdBooking(input: HoldBookingInput): Promise<HeldBooking>
   return (await api.post<HeldBooking>('/bookings/hold', input)).data
 }
 
+/** Dịch vụ khách chọn kèm khi đặt; tự sinh ServiceOrder khi booking xác nhận. */
+export interface ServiceSelectionInput {
+  serviceId: string
+  quantity: number
+}
+
 /** Nhập thông tin liên hệ cho hold còn hạn: ROOM_HELD → PENDING_DEPOSIT (không gia hạn). */
 export interface SubmitBookingDetailsInput {
   holdToken: string
   guestName: string
   guestEmail: string
   guestPhone: string
+  serviceSelections?: ServiceSelectionInput[]
+}
+
+/** Một dịch vụ trong danh mục công khai (cho khách chọn kèm lúc đặt). */
+export interface ServiceCatalogItem {
+  id: string
+  name: string
+  unit: string
+  billable: boolean
+  unitPriceVND: number | null
+}
+
+/** Danh mục dịch vụ công khai để khách chọn kèm khi đặt (không cần đăng nhập). */
+export async function getServiceCatalog(): Promise<ServiceCatalogItem[]> {
+  return (await api.get<{ items: ServiceCatalogItem[] }>('/bookings/service-catalog')).data.items
 }
 
 export async function submitBookingDetails(input: SubmitBookingDetailsInput): Promise<HeldBooking> {
