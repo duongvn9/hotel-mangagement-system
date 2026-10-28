@@ -2,9 +2,12 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   cancelBooking,
   createBooking,
+  getBooking,
+  holdBooking,
   initiateDeposit,
   initiateFinal,
   searchAvailability,
+  submitBookingDetails,
   verifyVnpayReturn,
   type SearchAvailabilityParams,
 } from './api'
@@ -20,6 +23,43 @@ export function useAvailability(params: SearchAvailabilityParams | null) {
 
 export function useCreateBooking() {
   return useMutation({ mutationFn: createBooking })
+}
+
+export function useHoldBooking() {
+  return useMutation({ mutationFn: holdBooking })
+}
+
+export function useSubmitBookingDetails() {
+  return useMutation({ mutationFn: submitBookingDetails })
+}
+
+/**
+ * Đọc trạng thái authoritative của booking từ backend. `refetchInterval` để trang
+ * kết quả thanh toán tự cập nhật khi IPN chốt CONFIRMED; dừng khi đã ở trạng thái cuối.
+ */
+export function useBooking(
+  id: string,
+  options: { code?: string; enabled?: boolean; poll?: boolean } = {},
+) {
+  const { code, enabled = true, poll = false } = options
+  return useQuery({
+    queryKey: ['booking', id, code ?? null],
+    queryFn: () => getBooking(id, code === undefined ? {} : { code }),
+    enabled: enabled && id.length > 0,
+    retry: false,
+    refetchInterval: poll
+      ? (query) => {
+          const status = query.state.data?.status
+          const settled =
+            status === 'CONFIRMED' ||
+            status === 'CANCELLED' ||
+            status === 'EXPIRED' ||
+            status === 'CHECKED_IN' ||
+            status === 'CHECKED_OUT'
+          return settled ? false : 3000
+        }
+      : false,
+  })
 }
 
 export function useCancelBooking() {

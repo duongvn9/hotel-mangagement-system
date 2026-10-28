@@ -8,6 +8,9 @@ import { env } from './env'
 export const api = axios.create({
   baseURL: env.apiBaseUrl,
   timeout: 15_000,
+  // Gửi/nhận cookie phiên khách (hms_sid, HttpOnly) cho luồng giữ phòng:
+  // 1 hold/phiên, tiếp tục đúng hold khi refresh, và đọc lại booking theo phiên.
+  withCredentials: true,
 })
 
 let getToken: (() => Promise<string | null>) | null = null

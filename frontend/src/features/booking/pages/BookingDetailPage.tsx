@@ -7,44 +7,25 @@ import { TextField } from '@/components/TextField'
 import { getErrorMessage } from '@/lib/api-client'
 import { useAuth } from '@/features/auth/auth-context'
 import { BOOKING_STATUS_DISPLAY, type InitiatePaymentInput } from '../api'
-import { useCancelBooking, useInitiateDeposit, useInitiateFinal } from '../hooks'
 import {
-  getStoredBooking,
-  patchStoredBooking,
-  rememberPaymentRef,
-  type StoredBooking,
-} from '../storage'
+  useBooking,
+  useCancelBooking,
+  useInitiateDeposit,
+  useInitiateFinal,
+} from '../hooks'
+import { rememberPaymentRef, upsertStoredBooking } from '../storage'
 import { formatDate, formatDateTime, money, nightsBetween } from '../utils'
+import { formatRemaining, useHoldCountdown } from './useHoldCountdown'
 
-/** Đếm ngược tới thời điểm giữ phòng hết hạn. */
-function useCountdown(target?: string): number | null {
-  const [remaining, setRemaining] = useState<number | null>(() =>
-    target ? Date.parse(target) - Date.now() : null,
-  )
-  useEffect(() => {
-    if (!target) return
-    const tick = () => setRemaining(Date.parse(target) - Date.now())
-    tick()
-    const timer = window.setInterval(tick, 1000)
-    return () => window.clearInterval(timer)
-  }, [target])
-  return remaining
-}
-
-function formatRemaining(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const minutes = Math.floor(total / 60)
-  const seconds = total % 60
-  return `${minutes}:${String(seconds).padStart(2, '0')}`
-}
-
-/** UC09 (đọc lại ở client) + UC12/UC20/UC21 — chi tiết & thao tác với một booking. */
+/**
+ * UC09/UC12/UC20/UC21 — chi tiết & thao tác với một booking. Trạng thái và hạn giữ phòng
+ * đọc authoritative từ backend (GET /bookings/:id); localStorage chỉ là bộ nhớ đệm hiển thị.
+ */
 export function BookingDetailPage() {
   const { id = '' } = useParams()
   const [params] = useSearchParams()
   const { me } = useAuth()
 
-  const [booking, setBooking] = useState<StoredBooking | undefined>(() => getStoredBooking(id))
   const [typedCode, setTypedCode] = useState(params.get('code') ?? '')
   const [confirmCancel, setConfirmCancel] = useState(false)
 
@@ -52,13 +33,25 @@ export function BookingDetailPage() {
   const final = useInitiateFinal()
   const cancel = useCancelBooking()
 
-  const code = booking?.code ?? typedCode.trim()
-  const needsCode = !me && !code
+  const code = typedCode.trim()
+  const query = useBooking(id, { ...(code ? { code } : {}) })
+  const booking = query.data
+
+  // Khách từ thiết bị khác (không có phiên/không đăng nhập) cần mã booking để đọc.
+  const needsCode = query.isError && !me && !code
+
+  // Đồng bộ bản lưu client theo dữ liệu authoritative để màn "Đặt phòng của tôi" không lỗi thời.
+  useEffect(() => {
+    if (booking) upsertStoredBooking(booking)
+  }, [booking])
+
   const status = booking?.status
   const cancelled = status === 'CANCELLED'
-  const statusDisplay = status ? BOOKING_STATUS_DISPLAY[status] : undefined
+  const expired = status === 'EXPIRED'
+  const statusDisplay = status ? (BOOKING_STATUS_DISPLAY[status] ?? undefined) : undefined
 
-  const remaining = useCountdown(status === 'PENDING_DEPOSIT' ? booking?.holdExpiresAt : undefined)
+  const holding = status === 'PENDING_DEPOSIT' || status === 'ROOM_HELD'
+  const remaining = useHoldCountdown(holding ? booking?.holdExpiresAt : undefined)
   const holdExpired = remaining !== null && remaining <= 0
 
   function payload(): InitiatePaymentInput {
@@ -69,9 +62,8 @@ export function BookingDetailPage() {
     const mutation = kind === 'deposit' ? deposit : final
     try {
       const result = await mutation.mutateAsync(payload())
-      // Nhớ giao dịch này thuộc booking nào để trang Return cập nhật đúng.
+      // Nhớ giao dịch này thuộc booking nào để trang Return đọc đúng trạng thái.
       rememberPaymentRef(result.transactionRef, id)
-      // Chuyển hướng sang cổng VNPay để khách thanh toán.
       window.location.href = result.paymentUrl
     } catch {
       // Lỗi hiển thị qua mutation.isError.
@@ -80,10 +72,9 @@ export function BookingDetailPage() {
 
   async function doCancel() {
     try {
-      const result = await cancel.mutateAsync({ id, ...(me ? {} : { code }) })
-      patchStoredBooking(id, { status: result.status })
-      setBooking((previous) => (previous ? { ...previous, status: result.status } : previous))
+      await cancel.mutateAsync({ id, ...(me ? {} : { code }) })
       setConfirmCancel(false)
+      await query.refetch()
     } catch {
       // Lỗi hiển thị qua cancel.isError.
     }
@@ -105,27 +96,48 @@ export function BookingDetailPage() {
         </div>
       </div>
 
-      {!booking && (
-        <Alert tone="info">
-          Không có thông tin chi tiết của booking này trên thiết bị hiện tại. Bạn vẫn có thể đặt cọc
-          hoặc huỷ nếu nhập đúng mã booking (vé) đã nhận.
-        </Alert>
+      {query.isPending && !needsCode && <p role="status">Đang tải thông tin đặt phòng…</p>}
+
+      {query.isError && !needsCode && (
+        <Alert tone="danger">{getErrorMessage(query.error, 'Không đọc được thông tin đặt phòng.')}</Alert>
+      )}
+
+      {needsCode && (
+        <>
+          <Alert tone="info">
+            Nhập mã booking (vé) đã nhận để xem và thao tác với đơn này trên thiết bị hiện tại.
+          </Alert>
+          <div className="max-w-sm">
+            <TextField
+              label="Mã booking (vé)"
+              placeholder="BK..."
+              value={typedCode}
+              onChange={(event) => setTypedCode(event.target.value)}
+            />
+          </div>
+        </>
       )}
 
       {booking && (
         <>
-          {status === 'PENDING_DEPOSIT' && !holdExpired && remaining !== null && (
+          {holding && !holdExpired && remaining !== null && (
             <Alert tone="warning">
               Phòng đang được giữ. Vui lòng đặt cọc trong{' '}
-              <strong>{formatRemaining(remaining)}</strong> phút, nếu không phòng sẽ được mở lại.
+              <strong>{formatRemaining(remaining)}</strong>, nếu không phòng sẽ được mở lại.
             </Alert>
           )}
-          {status === 'PENDING_DEPOSIT' && holdExpired && (
+          {holding && holdExpired && (
             <Alert tone="danger">
-              Đã quá thời gian giữ phòng. Nếu phòng đã bị khách khác đặt, việc đặt cọc có thể không
-              thành công — vui lòng tìm phòng lại.
+              Đã quá thời gian giữ phòng. Trạng thái sẽ sớm chuyển sang hết hạn; vui lòng tìm phòng
+              lại nếu bạn vẫn muốn đặt.
             </Alert>
           )}
+          {expired && (
+            <Alert tone="danger">
+              Đơn đã hết hạn giữ phòng và phòng đã được mở lại. Vui lòng tìm phòng để đặt lại.
+            </Alert>
+          )}
+          {cancelled && <Alert tone="success">Booking đã được huỷ và phòng đã được mở lại.</Alert>}
 
           <dl className="grid gap-4 rounded-lg border border-stone-300 bg-white p-6 sm:grid-cols-2 lg:grid-cols-4">
             <div>
@@ -160,7 +172,7 @@ export function BookingDetailPage() {
                 {money.format(booking.depositAmount)}
               </dd>
             </div>
-            {booking.holdExpiresAt && status === 'PENDING_DEPOSIT' && (
+            {booking.holdExpiresAt && holding && (
               <div>
                 <dt className="text-xs tracking-wider text-stone-700 uppercase">Giữ phòng đến</dt>
                 <dd className="mt-1 font-semibold">{formatDateTime(booking.holdExpiresAt)}</dd>
@@ -170,45 +182,32 @@ export function BookingDetailPage() {
         </>
       )}
 
-      {needsCode && (
-        <div className="max-w-sm">
-          <TextField
-            label="Mã booking (vé)"
-            placeholder="BK..."
-            value={typedCode}
-            onChange={(event) => setTypedCode(event.target.value)}
-          />
-        </div>
-      )}
-
       {deposit.isError && <Alert tone="danger">{getErrorMessage(deposit.error)}</Alert>}
       {final.isError && <Alert tone="danger">{getErrorMessage(final.error)}</Alert>}
       {cancel.isError && <Alert tone="danger">{getErrorMessage(cancel.error)}</Alert>}
-      {cancelled && <Alert tone="success">Booking đã được huỷ và phòng đã được mở lại.</Alert>}
 
-      {!cancelled && (
+      {booking && !cancelled && !expired && (
         <div className="flex flex-wrap gap-3">
-          {(status === 'PENDING_DEPOSIT' || !booking) && (
+          {status === 'PENDING_DEPOSIT' && (
             <Button
               loading={deposit.isPending}
-              disabled={needsCode}
+              disabled={holdExpired}
               onClick={() => void pay('deposit')}
             >
               Đặt cọc qua VNPay
             </Button>
           )}
-          {(status === 'CONFIRMED' || status === 'CHECKED_OUT' || !booking) && (
+          {(status === 'CONFIRMED' || status === 'CHECKED_OUT') && (
             <Button
               variant="secondary"
               loading={final.isPending}
-              disabled={needsCode}
               onClick={() => void pay('final')}
             >
               Thanh toán phần còn lại
             </Button>
           )}
-          {status !== 'CHECKED_IN' && status !== 'CHECKED_OUT' && (
-            <Button variant="danger" disabled={needsCode} onClick={() => setConfirmCancel(true)}>
+          {status !== 'CHECKED_IN' && status !== 'CHECKED_OUT' && status !== 'ROOM_HELD' && (
+            <Button variant="danger" onClick={() => setConfirmCancel(true)}>
               Huỷ booking
             </Button>
           )}
