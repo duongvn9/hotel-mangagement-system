@@ -15,6 +15,8 @@ import {
   getSameDayList,
   initiateFinal,
   listBookings,
+  listReconciliation,
+  reconcilePayment,
   recordCashPayment,
   searchGuests,
   searchAvailability,
@@ -210,6 +212,23 @@ export function useCancelBooking() {
   return useMutation({
     mutationFn: ({ id, code }: { id: string; code?: string }) =>
       cancelBooking(id, code === undefined ? {} : { code }),
+  })
+}
+
+/** Issue ② — hàng đợi đối soát tiền về muộn (Manager). */
+export function useReconciliationList() {
+  return useQuery({
+    queryKey: ['payment-reconciliation'],
+    queryFn: listReconciliation,
+  })
+}
+
+/** Đánh dấu một khoản đã đối soát rồi làm mới hàng đợi. */
+export function useReconcilePayment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note?: string }) => reconcilePayment(id, note),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payment-reconciliation'] }),
   })
 }
 

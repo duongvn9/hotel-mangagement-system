@@ -10,6 +10,7 @@ import { RoomStatusBoardPage } from './pages/RoomStatusBoardPage'
 import { FrontDeskPage } from './pages/FrontDeskPage'
 import { GuestSearchPage } from './pages/GuestSearchPage'
 import { PaymentReturnPage } from './pages/PaymentReturnPage'
+import { ReconciliationPage } from './pages/ReconciliationPage'
 import { SearchRoomsPage } from './pages/SearchRoomsPage'
 import { WalkInBookingPage } from './pages/WalkInBookingPage'
 
@@ -69,6 +70,14 @@ export const bookingRoutes: RouteObject[] = [
     element: (
       <RequireAuth roles={[Role.Receptionist, Role.Manager]}>
         <WalkInBookingPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: 'manager/payments/reconciliation',
+    element: (
+      <RequireAuth roles={[Role.Manager]}>
+        <ReconciliationPage />
       </RequireAuth>
     ),
   },
