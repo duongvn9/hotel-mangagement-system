@@ -223,6 +223,52 @@ describe('Payment consistency with room hold (e2e)', () => {
     );
   });
 
+  it('does not confirm when the hold lapsed before the IPN but the sweep has not run yet', async () => {
+    const { bookingId } = await reachPendingDeposit(
+      '2095-04-10',
+      '2095-04-12',
+      '203.0.113.24',
+    );
+    // Cọc khởi tạo lúc hold còn hợp lệ.
+    const deposit = await http()
+      .post('/api/v1/payments/deposit')
+      .set(STAFF)
+      .send({ bookingId })
+      .expect(201);
+
+    // Hold vừa quá hạn nhưng sweep CHƯA chạy: hold vẫn active, booking vẫn PENDING_DEPOSIT.
+    await holds.updateOne(
+      { booking: new Types.ObjectId(bookingId) },
+      { $set: { expiresAt: new Date(Date.now() - 1000) } },
+    );
+
+    const callback = await http()
+      .get(
+        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 600000, nextTxnNo())}`,
+      )
+      .expect(200);
+    // Tiền có thật nên ACK VNPay, nhưng adapter tự phát hiện hold quá hạn: không confirm.
+    expect(callback.body.RspCode).toBe('00');
+    expect((await bookings.findById(bookingId))?.status).toBe('EXPIRED');
+    const hold = await holds
+      .findOne({ booking: new Types.ObjectId(bookingId) })
+      .lean();
+    expect(hold?.isActive).toBe(false);
+
+    const payment = await payments
+      .findOne({ transactionRef: deposit.body.transactionRef })
+      .lean();
+    expect(payment).toMatchObject({
+      status: 'SUCCESS',
+      needsReconciliation: true,
+    });
+
+    // Phòng được giải phóng dù sweep chưa kịp chạy.
+    expect(await availableIds('2095-04-10', '2095-04-12')).toContain(
+      String(roomId),
+    );
+  });
+
   it('rejects a deposit once the hold has expired and expires the booking', async () => {
     const { bookingId } = await reachPendingDeposit(
       '2095-03-10',

@@ -209,3 +209,40 @@ describe('BookingDetailPage (server-authoritative)', () => {
     expect(screen.queryByRole('button', { name: 'Đặt cọc qua VNPay' })).not.toBeInTheDocument()
   })
 })
+
+describe('PaymentReturnPage (server-authoritative)', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    window.history.replaceState({}, '', '/')
+  })
+
+  it('flags money that arrived after the hold expired for reconciliation', async () => {
+    rememberPaymentRef('TXN-LATE', 'b2')
+    const path = '/payment/vnpay-return?vnp_TxnRef=TXN-LATE&vnp_ResponseCode=00'
+    window.history.replaceState({}, '', path)
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url.startsWith('/payments/vnpay/return'))
+        return { data: { transactionRef: 'TXN-LATE', status: 'SUCCESS', responseCode: '00' } }
+      if (url === '/bookings/b2')
+        return {
+          data: {
+            ...booking,
+            id: 'b2',
+            code: 'BK999',
+            status: 'EXPIRED',
+            holdExpiresAt: undefined,
+          },
+        }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    renderWithAuth(bookingRoutes, { path })
+
+    // Tiền về sau hạn giữ phòng: hiện thông báo đối soát, KHÔNG kẹt ở "đang hoàn tất".
+    expect(
+      await screen.findByText(/đã nhận thanh toán nhưng phòng không còn được giữ/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/đang hoàn tất xác nhận booking/i)).not.toBeInTheDocument()
+  })
+})
