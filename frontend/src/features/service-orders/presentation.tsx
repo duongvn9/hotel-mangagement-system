@@ -10,7 +10,7 @@ export function OrderError({ error, retry }: { error: unknown; retry?: () => voi
       : status === 404
         ? 'Không tìm thấy yêu cầu hoặc dữ liệu không thuộc tài khoản của bạn.'
         : status === 409
-          ? 'Đặt phòng không còn ở trạng thái đã nhận phòng hoặc dữ liệu yêu cầu đã thay đổi. Vui lòng tải lại lựa chọn và kiểm tra trước khi gửi.'
+          ? 'Đặt phòng chưa được xác nhận hoặc không còn nhận dịch vụ, hoặc dữ liệu yêu cầu đã thay đổi. Vui lòng tải lại lựa chọn và kiểm tra trước khi gửi.'
           : status === 400
             ? 'Thông tin không hợp lệ. Vui lòng kiểm tra lựa chọn, số lượng và ghi chú.'
             : 'Không thể kết nối hoặc tải dữ liệu. Vui lòng thử lại; gửi lại cùng nội dung sẽ dùng cùng mã yêu cầu để tránh trùng lặp.'

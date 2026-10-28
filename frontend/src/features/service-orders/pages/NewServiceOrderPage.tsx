@@ -119,7 +119,7 @@ export function NewServiceOrderPage() {
       {contexts.isError && <OrderError error={contexts.error} retry={reload} />}
       {catalog.isError && <OrderError error={catalog.error} retry={reload} />}
       {!loading && !contexts.isError && !bookings.length && (
-        <p role="status">Bạn không có kỳ lưu trú đã nhận phòng để yêu cầu dịch vụ.</p>
+        <p role="status">Bạn chưa có kỳ lưu trú nào (đã xác nhận trở lên) để yêu cầu dịch vụ.</p>
       )}
       {!loading && !catalog.isError && !services.length && (
         <p role="status">Hiện không có dịch vụ đang hoạt động để yêu cầu.</p>
@@ -141,7 +141,7 @@ export function NewServiceOrderPage() {
       <form onSubmit={submit} noValidate className="max-w-2xl space-y-5">
         <fieldset disabled={unavailable || mutation.isPending} className="min-w-0 space-y-5">
           <SelectField
-            label="Đặt phòng đã nhận phòng"
+            label="Kỳ lưu trú"
             required
             value={chosenBooking}
             onChange={(e) => {

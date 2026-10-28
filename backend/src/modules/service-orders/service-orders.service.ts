@@ -47,6 +47,16 @@ import {
   type ServiceOrderDocument,
 } from './schemas/service-order.schema.js';
 
+/**
+ * Khách đặt được dịch vụ từ khi booking được xác nhận (CONFIRMED) cho tới khi còn ở
+ * (CHECKED_IN). Riêng việc nhận/ghi phí dịch vụ (accept) vẫn yêu cầu khách đang ở
+ * (CHECKED_IN) để không giao dịch vụ trước khi khách nhận phòng.
+ */
+const ORDERABLE_BOOKING_STATUSES: readonly BookingStatus[] = [
+  BookingStatus.Confirmed,
+  BookingStatus.CheckedIn,
+];
+
 @Injectable()
 export class ServiceOrdersService implements OnModuleInit {
   constructor(
@@ -83,15 +93,32 @@ export class ServiceOrdersService implements OnModuleInit {
     return new Types.ObjectId(value);
   }
 
+  /**
+   * Lấy booking của chính khách. `require` chọn mức trạng thái cần có:
+   *  - 'orderable': đặt dịch vụ, cho phép từ CONFIRMED trở đi (CONFIRMED/CHECKED_IN).
+   *  - 'in-house': nhận/ghi phí dịch vụ, chỉ khi khách đang ở (CHECKED_IN).
+   * Bỏ trống `require` thì chỉ kiểm tra quyền sở hữu (không ràng buộc trạng thái).
+   */
   private async ownedBooking(
     booking: Types.ObjectId,
     customer: Types.ObjectId,
-    active = false,
+    require?: 'orderable' | 'in-house',
   ) {
     const row = await this.bookings.findOne({ _id: booking, customer }).exec();
     if (!row) throw new NotFoundException('Booking not found');
-    if (active && (!row.isActive || row.status !== BookingStatus.CheckedIn))
-      throw new ConflictException('Booking must be active and CHECKED_IN');
+    if (require) {
+      const allowed =
+        row.isActive &&
+        (require === 'in-house'
+          ? row.status === BookingStatus.CheckedIn
+          : ORDERABLE_BOOKING_STATUSES.includes(row.status));
+      if (!allowed)
+        throw new ConflictException(
+          require === 'in-house'
+            ? 'Booking must be active and CHECKED_IN'
+            : 'Booking must be active and CONFIRMED or CHECKED_IN',
+        );
+    }
     return row;
   }
 
@@ -148,7 +175,7 @@ export class ServiceOrdersService implements OnModuleInit {
       .select('+requestFingerprint')
       .exec();
     if (!row) return null;
-    await this.ownedBooking(row.booking, customer, true);
+    await this.ownedBooking(row.booking, customer, 'orderable');
     if (row.requestFingerprint !== fingerprint)
       throw new ConflictException(
         'requestId already used with a different payload',
@@ -160,7 +187,7 @@ export class ServiceOrdersService implements OnModuleInit {
     const customer = this.customer(user);
     const booking = this.id(dto.bookingId);
     const serviceId = this.id(dto.serviceId);
-    await this.ownedBooking(booking, customer, true);
+    await this.ownedBooking(booking, customer, 'orderable');
     if (!Number.isSafeInteger(dto.quantity) || dto.quantity < 1)
       throw new BadRequestException('quantity must be a positive safe integer');
     const requestedTime =
@@ -464,7 +491,7 @@ export class ServiceOrdersService implements OnModuleInit {
     if (row.reviewStatus === ServiceOrderReviewStatus.PendingReview) {
       this.validateAmount(row);
       if (dto.decision === 'ACCEPT')
-        await this.ownedBooking(row.booking, row.customer, true);
+        await this.ownedBooking(row.booking, row.customer, 'in-house');
       const claimed = await this.orders
         .findOneAndUpdate(
           {
@@ -517,7 +544,7 @@ export class ServiceOrdersService implements OnModuleInit {
           String(row.booking),
         );
         if (!this.matchingCharge(invoice, row)) {
-          await this.ownedBooking(row.booking, row.customer, true);
+          await this.ownedBooking(row.booking, row.customer, 'in-house');
           try {
             await this.invoices.addCharge({
               bookingId: String(row.booking),
@@ -819,7 +846,11 @@ export class ServiceOrdersService implements OnModuleInit {
   async orderContexts(user: AuthUser) {
     const customer = this.customer(user);
     const rows = await this.bookings
-      .find({ customer, isActive: true, status: BookingStatus.CheckedIn })
+      .find({
+        customer,
+        isActive: true,
+        status: { $in: ORDERABLE_BOOKING_STATUSES },
+      })
       .select('_id code checkIn checkOut')
       .sort({ checkIn: -1, _id: 1 })
       .exec();

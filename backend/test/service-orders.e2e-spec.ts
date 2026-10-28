@@ -136,6 +136,43 @@ describe('UC22/23 customer service orders', () => {
     return String(user._id);
   };
 
+  it('Issue ① lets a guest order from CONFIRMED but still accepts only in-house', async () => {
+    // Chưa xác nhận (PENDING_DEPOSIT): chưa đặt được dịch vụ.
+    await bookings.updateOne(
+      { _id: bookingId },
+      { status: BookingStatus.PendingDeposit },
+    );
+    await post(body()).expect(409);
+
+    // Đã xác nhận nhưng chưa nhận phòng: ĐẶT được dịch vụ.
+    await bookings.updateOne(
+      { _id: bookingId },
+      { status: BookingStatus.Confirmed },
+    );
+    const created = await post(body()).expect(201);
+    const id = created.body.id as string;
+
+    // ...nhưng lễ tân chưa NHẬN (accept) được khi khách chưa nhận phòng.
+    await prepareBilling();
+    await review(id).expect(409);
+
+    // Khi khách đã nhận phòng thì accept được.
+    await bookings.updateOne(
+      { _id: bookingId },
+      { status: BookingStatus.CheckedIn },
+    );
+    await review(id).expect(200);
+
+    // Hàng đợi đặt dịch vụ của khách cũng liệt kê booking CONFIRMED.
+    await bookings.updateOne(
+      { _id: bookingId },
+      { status: BookingStatus.Confirmed },
+    );
+    expect((await get('/order-contexts').expect(200)).body.items).toHaveLength(
+      1,
+    );
+  });
+
   it('UC26 gates exact roles, accepted state, persisted billing and eligible staff', async () => {
     const assignee = await createWorker();
     const id = (await post(body())).body.id;
