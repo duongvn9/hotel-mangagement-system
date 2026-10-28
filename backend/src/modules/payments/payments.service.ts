@@ -7,7 +7,10 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { randomBytes } from 'node:crypto';
 import { Model, Types } from 'mongoose';
-import { BookingStatus } from '../../common/constants/booking-status.enum.js';
+import {
+  BookingStatus,
+  UNCONFIRMED_BOOKING_STATUSES,
+} from '../../common/constants/booking-status.enum.js';
 import {
   authorizeBookingAccess,
   type BookingActor,
@@ -16,6 +19,7 @@ import {
   Booking,
   type BookingDocument,
 } from '../bookings/schemas/booking.schema.js';
+import { RoomHold } from '../bookings/schemas/room-hold.schema.js';
 import { InvoicesService } from '../invoices/invoices.service.js';
 import {
   PaymentMethod,
@@ -50,6 +54,7 @@ export class PaymentsService {
     @InjectModel(PaymentTransaction.name)
     private readonly payments: Model<PaymentTransaction>,
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
+    @InjectModel(RoomHold.name) private readonly holds: Model<RoomHold>,
     private readonly invoices: InvoicesService,
     private readonly vnpay: VnpayService,
     private readonly settlement: VnpaySettlementPort,
@@ -64,12 +69,46 @@ export class PaymentsService {
     if (booking.status !== BookingStatus.PendingDeposit) {
       throw new ConflictException('Booking is not awaiting a deposit');
     }
+    // Chỉ cho đặt cọc khi hold còn hợp lệ; deadline thanh toán trùng thời hạn giữ phòng.
+    const holdExpiresAt = await this.requireValidHold(booking);
     return this.initiate(
       booking,
       PaymentPurpose.Deposit,
       booking.depositAmount,
       options,
+      holdExpiresAt,
     );
+  }
+
+  /**
+   * Cọc chỉ hợp lệ khi phòng còn được giữ. Nếu hold đã hết hạn/mất hiệu lực thì chủ động
+   * chuyển booking chưa xác nhận sang EXPIRED và chặn thanh toán (thống nhất deadline).
+   */
+  private async requireValidHold(booking: BookingDocument): Promise<Date> {
+    const hold = await this.holds
+      .findOne({ booking: booking._id })
+      .sort({ createdAt: -1 });
+    const now = Date.now();
+    if (!hold || !hold.isActive || hold.expiresAt.getTime() <= now) {
+      await this.bookings.updateOne(
+        {
+          _id: booking._id,
+          status: { $in: UNCONFIRMED_BOOKING_STATUSES },
+          isActive: true,
+        },
+        { $set: { status: BookingStatus.Expired } },
+      );
+      if (hold?.isActive) {
+        await this.holds.updateOne(
+          { _id: hold._id },
+          { $set: { isActive: false } },
+        );
+      }
+      throw new ConflictException(
+        'Room hold has expired; please start a new booking',
+      );
+    }
+    return hold.expiresAt;
   }
 
   async initiateFinal(
@@ -100,6 +139,7 @@ export class PaymentsService {
     purpose: PaymentPurpose,
     amount: number,
     options: InitiateOptions,
+    expiresAt?: Date,
   ) {
     if (!Number.isSafeInteger(amount) || amount <= 0) {
       throw new ConflictException('No positive amount is payable');
@@ -145,7 +185,8 @@ export class PaymentsService {
       {
         ipAddress: options.ipAddress,
         createdAt: now,
-        expiresAt: new Date(now.getTime() + PAYMENT_WINDOW_MS),
+        // Deadline thanh toán không vượt quá thời hạn giữ phòng (nếu có hold).
+        expiresAt: expiresAt ?? new Date(now.getTime() + PAYMENT_WINDOW_MS),
         ...(options.locale === undefined ? {} : { locale: options.locale }),
         ...(options.bankCode === undefined
           ? {}

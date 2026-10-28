@@ -7,6 +7,7 @@ import { createHmac } from 'node:crypto';
 import { envValidationSchema } from '../../config/env.validation.js';
 import { VNPAY_SANDBOX_URL } from '../../config/vnpay.config.js';
 import { Booking } from '../bookings/schemas/booking.schema.js';
+import { RoomHold } from '../bookings/schemas/room-hold.schema.js';
 import { Invoice } from '../invoices/schemas/invoice.schema.js';
 import { PaymentsModule } from './payments.module.js';
 import {
@@ -101,6 +102,8 @@ async function moduleFor(config: unknown = settings) {
     .overrideProvider(getModelToken(PaymentTransaction.name))
     .useValue({})
     .overrideProvider(getModelToken(Booking.name))
+    .useValue({})
+    .overrideProvider(getModelToken(RoomHold.name))
     .useValue({})
     .overrideProvider(getModelToken(Invoice.name))
     .useValue({})

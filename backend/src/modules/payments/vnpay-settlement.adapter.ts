@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { BookingStatus } from '../../common/constants/booking-status.enum.js';
 import { Booking } from '../bookings/schemas/booking.schema.js';
+import { RoomHold } from '../bookings/schemas/room-hold.schema.js';
 import {
   Invoice,
   InvoiceStatus,
@@ -20,6 +21,13 @@ import {
 } from './vnpay.service.js';
 
 type CompareAndSet = Extract<VnpayIpnPlan, { action: 'compare-and-set' }>;
+
+/** Booking coi như đã nhận cọc (cọc giao lại là idempotent, không cần confirm lại). */
+const CONFIRMED_STATUSES: readonly BookingStatus[] = [
+  BookingStatus.Confirmed,
+  BookingStatus.CheckedIn,
+  BookingStatus.CheckedOut,
+];
 
 /**
  * Mongo adapter cho VnpaySettlementPort: ghi nhận bền vững một giao dịch VNPay.
@@ -39,6 +47,7 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
     @InjectModel(PaymentTransaction.name)
     private readonly payments: Model<PaymentTransaction>,
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
+    @InjectModel(RoomHold.name) private readonly holds: Model<RoomHold>,
     @InjectModel(Invoice.name) private readonly invoices: Model<Invoice>,
   ) {
     super();
@@ -92,19 +101,70 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
 
     if (result.status === PaymentStatus.Success) {
       if (expected.payment.purpose === PaymentPurpose.Deposit) {
-        await this.bookings.updateOne(
-          {
-            _id: new Types.ObjectId(expected.booking.id),
-            status: BookingStatus.PendingDeposit,
-            isActive: true,
-          },
-          { $set: { status: BookingStatus.Confirmed } },
+        // Tiền đã về nhưng chỉ confirm khi booking còn giữ phòng hợp lệ. Nếu không
+        // (hết hạn/đã huỷ do callback về muộn) thì ghi nhận để đối soát, không confirm.
+        const confirmed = await this.confirmDeposit(
+          expected,
+          result.transactionRef,
         );
+        if (!confirmed) return 'committed';
       }
       await this.reconcileInvoice(expected);
     }
 
     return 'committed';
+  }
+
+  /**
+   * Chuyển booking PENDING_DEPOSIT -> CONFIRMED và chấm dứt hold khi cọc thành công.
+   * Kiểm tra kết quả update (không tin mù): nếu không chuyển được vì booking đã
+   * EXPIRED/CANCELLED (tiền về muộn) thì đánh dấu payment để đối soát và trả false.
+   * Idempotent: cọc giao lại cho booking đã CONFIRMED/CHECKED_* vẫn coi là thành công.
+   */
+  private async confirmDeposit(
+    expected: ExpectedVnpayPayment,
+    transactionRef: string,
+  ): Promise<boolean> {
+    const bookingId = new Types.ObjectId(expected.booking.id);
+    const updated = await this.bookings.updateOne(
+      {
+        _id: bookingId,
+        status: BookingStatus.PendingDeposit,
+        isActive: true,
+      },
+      { $set: { status: BookingStatus.Confirmed } },
+    );
+    if (updated.modifiedCount === 1) {
+      await this.deactivateHold(bookingId);
+      return true;
+    }
+
+    const booking = await this.bookings
+      .findById(bookingId)
+      .select('status isActive')
+      .lean();
+    if (booking && booking.isActive && CONFIRMED_STATUSES.includes(booking.status)) {
+      // Cọc giao lại cho booking đã xác nhận: không đổi gì thêm, hold đã nhả.
+      await this.deactivateHold(bookingId);
+      return true;
+    }
+
+    await this.payments.updateOne(
+      { transactionRef },
+      { $set: { needsReconciliation: true } },
+    );
+    this.logger.warn(
+      `Deposit ${transactionRef} settled but booking ${expected.booking.id} ` +
+        `is not confirmable (${booking?.status ?? 'missing'}); flagged for reconciliation`,
+    );
+    return false;
+  }
+
+  private async deactivateHold(bookingId: Types.ObjectId): Promise<void> {
+    await this.holds.updateMany(
+      { booking: bookingId, isActive: true },
+      { $set: { isActive: false } },
+    );
   }
 
   /**
