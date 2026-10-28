@@ -25,11 +25,13 @@ const booking = () => ({
 describe('H5 schema validation', () => {
   it('uses exactly the shared booking statuses and supports multiple Room refs', async () => {
     expect(Object.values(BookingStatus)).toEqual([
+      'ROOM_HELD',
       'PENDING_DEPOSIT',
       'CONFIRMED',
       'CHECKED_IN',
       'CHECKED_OUT',
       'CANCELLED',
+      'EXPIRED',
     ]);
     const doc = new Booking(booking());
     await expect(doc.validate()).resolves.toBeUndefined();
@@ -66,7 +68,7 @@ describe('H5 schema validation', () => {
       { adultCount: 0 },
       { adultCount: 1.5 },
       { childCount: -1 },
-      { status: 'EXPIRED' },
+      { status: 'BOGUS' },
       { checkOut: booking().checkIn },
     ]) {
       await expect(
@@ -144,9 +146,10 @@ describe('H5 schema validation', () => {
     await expect(new Invoice({}).validate()).rejects.toThrow();
   });
 
-  it('requires hold expiry and valid stay/rooms, exposes TTL and availability indexes', async () => {
+  it('requires hold token/expiry and valid stay/rooms, exposes availability index', async () => {
     const data = {
       booking: new Types.ObjectId(),
+      holdToken: 'HOLD_TOKEN_SAMPLE_0001',
       rooms: booking().rooms,
       checkIn: booking().checkIn,
       checkOut: booking().checkOut,
@@ -154,6 +157,7 @@ describe('H5 schema validation', () => {
     };
     await expect(new Hold(data).validate()).resolves.toBeUndefined();
     for (const patch of [
+      { holdToken: undefined },
       { expiresAt: null },
       { expiresAt: 'invalid' },
       { rooms: [] },
@@ -164,7 +168,8 @@ describe('H5 schema validation', () => {
         new Hold({ ...data, ...patch }).validate(),
       ).rejects.toThrow();
     }
-    expect(RoomHoldSchema.indexes()).toContainEqual([
+    // Không còn TTL tự xoá: backend chủ động nhả hold quá hạn.
+    expect(RoomHoldSchema.indexes()).not.toContainEqual([
       { expiresAt: 1 },
       { expireAfterSeconds: 0 },
     ]);

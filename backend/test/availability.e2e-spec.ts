@@ -69,6 +69,7 @@ describe('H6 real booking and hold queries', () => {
     expect(await service.findAvailableRooms(query)).toHaveLength(2);
     await holds.create({
       booking: id,
+      holdToken: 'AVAIL-HOLD-TOKEN-1',
       rooms: roomIds,
       ...normalizeStay(query),
       expiresAt: new Date('2090-10-21T00:00:00Z'),

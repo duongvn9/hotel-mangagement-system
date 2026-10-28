@@ -1,4 +1,8 @@
-import { Module } from '@nestjs/common';
+import {
+  Module,
+  type MiddlewareConsumer,
+  type NestModule,
+} from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RoomsModule } from '../rooms/rooms.module.js';
 import { Booking, BookingSchema } from './schemas/booking.schema.js';
@@ -12,6 +16,8 @@ import {
 import { MongoAvailabilityRoomSource } from './mongo-availability-room-source.js';
 import { BookingsController } from './bookings.controller.js';
 import { BookingsService } from './bookings.service.js';
+import { GuestSessionMiddleware } from './guest-session.middleware.js';
+import { HoldExpiryService } from './hold-expiry.service.js';
 
 @Module({
   imports: [
@@ -26,6 +32,7 @@ import { BookingsService } from './bookings.service.js';
     AvailabilityService,
     AvailabilityClock,
     BookingsService,
+    HoldExpiryService,
     {
       provide: AvailabilityRoomSource,
       useClass: MongoAvailabilityRoomSource,
@@ -38,4 +45,8 @@ import { BookingsService } from './bookings.service.js';
     AvailabilityClock,
   ],
 })
-export class BookingsModule {}
+export class BookingsModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(GuestSessionMiddleware).forRoutes(BookingsController);
+  }
+}

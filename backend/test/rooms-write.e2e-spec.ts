@@ -289,6 +289,7 @@ describe('UC48 room write API', () => {
     });
     await holds.create({
       booking: booking._id,
+      holdToken: 'ROOMS-WRITE-HOLD-1',
       rooms: [id],
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,

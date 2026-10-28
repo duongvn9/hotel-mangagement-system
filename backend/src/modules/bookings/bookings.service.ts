@@ -1,13 +1,15 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomBytes } from 'node:crypto';
-import { Model, Types } from 'mongoose';
+import { Model, Types, type HydratedDocument } from 'mongoose';
 import type { AuthUser } from '../../common/auth/auth-user.js';
 import {
   authorizeBookingAccess,
@@ -21,6 +23,11 @@ import {
   BookingStatus,
   BookingSource,
 } from './schemas/booking.schema.js';
+import {
+  BLOCKING_BOOKING_STATUSES,
+  RELEASED_BOOKING_STATUSES,
+  UNCONFIRMED_BOOKING_STATUSES,
+} from '../../common/constants/booking-status.enum.js';
 import { RoomHold, type RoomHoldDocument } from './schemas/room-hold.schema.js';
 import { AvailabilityClock } from './availability.adapters.js';
 import {
@@ -29,10 +36,20 @@ import {
   type StayInterval,
 } from './availability.core.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
+import {
+  HoldBookingDto,
+  SubmitBookingDetailsDto,
+} from './dto/hold-booking.dto.js';
+import type { GuestSessionContext } from './guest-session.decorator.js';
 
-/** Thời hạn giữ phòng trước khi đặt cọc (phải khớp cửa sổ thanh toán VNPay). */
+type BookingDocument = HydratedDocument<Booking>;
+
+/** Thời hạn giữ phòng (một cửa sổ: gồm điền form + đặt cọc; refresh không gia hạn). */
 const HOLD_WINDOW_MS = 15 * 60 * 1000;
 const MS_PER_DAY = 86_400_000;
+/** Chống lạm dụng: tối đa số hold một phiên/IP tạo trong cửa sổ thời gian. */
+const HOLD_RATE_WINDOW_MS = 30 * 60 * 1000;
+const HOLD_RATE_MAX = 3;
 /** Tỷ lệ đặt cọc trên tiền phòng (placeholder, chờ SRS chốt chính thức). */
 export const DEPOSIT_RATE = 0.3;
 
@@ -104,6 +121,7 @@ export class BookingsService {
     try {
       hold = await this.holds.create({
         booking: booking._id,
+        holdToken: this.newHoldToken(),
         rooms: roomIds,
         checkIn: stay.checkIn,
         checkOut: stay.checkOut,
@@ -154,12 +172,14 @@ export class BookingsService {
     }
     authorizeBookingAccess(booking, actor);
     if (
-      ![BookingStatus.PendingDeposit, BookingStatus.Confirmed].includes(
-        booking.status,
-      )
+      ![
+        BookingStatus.RoomHeld,
+        BookingStatus.PendingDeposit,
+        BookingStatus.Confirmed,
+      ].includes(booking.status)
     ) {
       throw new ConflictException(
-        'Only a pending or confirmed booking can be cancelled',
+        'Only a held, pending or confirmed booking can be cancelled',
       );
     }
     booking.status = BookingStatus.Cancelled;
@@ -253,7 +273,7 @@ export class BookingsService {
       .find({
         rooms: { $in: roomIds },
         isActive: true,
-        status: { $in: [BookingStatus.Confirmed, BookingStatus.CheckedIn] },
+        status: { $in: BLOCKING_BOOKING_STATUSES },
       })
       .select('checkIn checkOut')
       .lean()
@@ -283,9 +303,7 @@ export class BookingsService {
       if (
         !parent ||
         !parent.isActive ||
-        [BookingStatus.Cancelled, BookingStatus.CheckedOut].includes(
-          parent.status,
-        )
+        RELEASED_BOOKING_STATUSES.includes(parent.status)
       ) {
         continue;
       }
@@ -332,24 +350,32 @@ export class BookingsService {
   ) {
     // Cọc = 30% tiền phòng (placeholder chờ SRS), làm tròn về VND nguyên.
     const depositAmount = Math.round(extra.roomTotal * DEPOSIT_RATE);
+    return this.insertBooking({
+      ...(extra.customer ? { customer: extra.customer } : {}),
+      guestName: dto.guestName.trim(),
+      guestEmail: dto.guestEmail.trim(),
+      guestPhone: dto.guestPhone.trim(),
+      rooms: roomIds,
+      checkIn: stay.checkIn,
+      checkOut: stay.checkOut,
+      adultCount: dto.adultCount,
+      childCount: dto.childCount,
+      source: extra.source,
+      status: BookingStatus.PendingDeposit,
+      roomTotal: extra.roomTotal,
+      depositAmount,
+      rateSnapshot: extra.rates,
+    });
+  }
+
+  private async insertBooking(
+    data: Record<string, unknown>,
+  ): Promise<BookingDocument> {
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         return await this.bookings.create({
           code: this.newBookingCode(),
-          ...(extra.customer ? { customer: extra.customer } : {}),
-          guestName: dto.guestName.trim(),
-          guestEmail: dto.guestEmail.trim(),
-          guestPhone: dto.guestPhone.trim(),
-          rooms: roomIds,
-          checkIn: stay.checkIn,
-          checkOut: stay.checkOut,
-          adultCount: dto.adultCount,
-          childCount: dto.childCount,
-          source: extra.source,
-          status: BookingStatus.PendingDeposit,
-          roomTotal: extra.roomTotal,
-          depositAmount,
-          rateSnapshot: extra.rates,
+          ...data,
         });
       } catch (error) {
         if ((error as { code?: number }).code === 11000 && attempt < 4)
@@ -364,5 +390,276 @@ export class BookingsService {
     return `BK${Date.now().toString(36).toUpperCase()}${randomBytes(3)
       .toString('hex')
       .toUpperCase()}`;
+  }
+
+  private newHoldToken(): string {
+    return randomBytes(24).toString('base64url');
+  }
+
+  // ───────────────────────── Luồng giữ phòng TO-BE ─────────────────────────
+
+  /**
+   * Cấp hold khi khách bấm "Đặt phòng": chạy chống lạm dụng + kiểm tra khả dụng,
+   * tạo Booking nháp ROOM_HELD + RoomHold, khóa phòng một cửa sổ 15 phút.
+   * Một phiên chỉ giữ 1 hold; bấm lại trả hold cũ, KHÔNG gia hạn.
+   */
+  async hold(dto: HoldBookingDto, ctx: GuestSessionContext, user?: AuthUser) {
+    const roomIds = dto.rooms.map((id) => new Types.ObjectId(id));
+    if (new Set(dto.rooms).size !== dto.rooms.length) {
+      throw new BadRequestException('Duplicate rooms in request');
+    }
+    let stay: StayInterval;
+    try {
+      stay = normalizeStay(dto);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Invalid stay dates',
+      );
+    }
+    const now = this.clock.now();
+
+    // Một hold/phiên: nếu phiên đang giữ một hold còn hạn thì trả lại chính nó.
+    if (ctx.sessionId) {
+      const existing = await this.holds
+        .findOne({
+          sessionId: ctx.sessionId,
+          isActive: true,
+          expiresAt: { $gt: now },
+        })
+        .sort({ createdAt: -1 });
+      if (existing) {
+        const current = await this.bookings.findById(existing.booking);
+        if (
+          current?.isActive &&
+          UNCONFIRMED_BOOKING_STATUSES.includes(current.status)
+        ) {
+          return this.holdResponse(current, existing);
+        }
+        await this.holds.updateOne(
+          { _id: existing._id },
+          { $set: { isActive: false } },
+        );
+      }
+    }
+
+    await this.enforceHoldRate(ctx, now);
+
+    const { roomTotal, rates } = await this.priceRooms(
+      roomIds,
+      { adultCount: dto.adultCount, childCount: dto.childCount },
+      stay,
+    );
+    await this.assertRoomsFree(roomIds, stay, now);
+    const source =
+      user && user.role !== Role.Customer
+        ? BookingSource.FrontDesk
+        : BookingSource.Online;
+
+    const booking = await this.insertBooking({
+      ...(user?.role === Role.Customer
+        ? { customer: new Types.ObjectId(user.id) }
+        : {}),
+      rooms: roomIds,
+      checkIn: stay.checkIn,
+      checkOut: stay.checkOut,
+      adultCount: dto.adultCount,
+      childCount: dto.childCount,
+      source,
+      status: BookingStatus.RoomHeld,
+      roomTotal,
+      depositAmount: Math.round(roomTotal * DEPOSIT_RATE),
+      rateSnapshot: rates,
+    });
+
+    let hold: RoomHoldDocument;
+    try {
+      hold = await this.holds.create({
+        booking: booking._id,
+        holdToken: this.newHoldToken(),
+        ...(ctx.sessionId ? { sessionId: ctx.sessionId } : {}),
+        ...(ctx.clientIp ? { clientIp: ctx.clientIp } : {}),
+        rooms: roomIds,
+        checkIn: stay.checkIn,
+        checkOut: stay.checkOut,
+        expiresAt: new Date(now.getTime() + HOLD_WINDOW_MS),
+        isActive: true,
+      });
+    } catch (error) {
+      await this.bookings.deleteOne({ _id: booking._id });
+      throw error;
+    }
+
+    if (!(await this.wonTheRace(hold._id, roomIds, stay, now))) {
+      await this.holds.deleteOne({ _id: hold._id });
+      await this.bookings.deleteOne({ _id: booking._id });
+      throw new ConflictException(
+        'One or more rooms were just taken; please choose again',
+      );
+    }
+    return this.holdResponse(booking, hold);
+  }
+
+  /**
+   * Nhập thông tin liên hệ cho hold còn hạn: ROOM_HELD -> PENDING_DEPOSIT.
+   * KHÔNG reset thời hạn giữ phòng (một cửa sổ duy nhất).
+   */
+  async submitDetails(dto: SubmitBookingDetailsDto) {
+    const hold = await this.holds.findOne({ holdToken: dto.holdToken });
+    if (!hold || !hold.isActive) {
+      throw new NotFoundException('Hold not found or no longer active');
+    }
+    const now = this.clock.now();
+    const booking = await this.bookings.findById(hold.booking);
+    if (!booking || !booking.isActive) {
+      throw new NotFoundException('Booking not found');
+    }
+    if (!(hold.expiresAt > now)) {
+      await this.lazyExpire(booking, hold, now);
+      throw new ConflictException('Hold has expired; please start again');
+    }
+    if (booking.status === BookingStatus.PendingDeposit) {
+      return this.holdResponse(booking, hold); // idempotent
+    }
+    if (booking.status !== BookingStatus.RoomHeld) {
+      throw new ConflictException('Booking is not awaiting contact details');
+    }
+    booking.guestName = dto.guestName.trim();
+    booking.guestEmail = dto.guestEmail.trim();
+    booking.guestPhone = dto.guestPhone.trim();
+    booking.status = BookingStatus.PendingDeposit;
+    await booking.save();
+    return this.holdResponse(booking, hold);
+  }
+
+  /** Đọc authoritative một booking + deadline thật từ server (thay localStorage). */
+  async getBooking(
+    id: string,
+    ctx: { code?: string; user?: AuthUser; sessionId?: string },
+  ) {
+    if (!/^[a-f\d]{24}$/i.test(id)) {
+      throw new BadRequestException('Invalid booking ID');
+    }
+    const booking = await this.bookings.findById(id);
+    if (!booking || !booking.isActive) {
+      throw new NotFoundException('Booking not found');
+    }
+    const hold = await this.holds
+      .findOne({ booking: booking._id })
+      .sort({ createdAt: -1 });
+    this.authorizeRead(booking, hold, ctx);
+    await this.lazyExpire(booking, hold, this.clock.now());
+    return this.readResponse(booking, hold);
+  }
+
+  /** Nhả các hold quá hạn: chuyển booking chưa xác nhận sang EXPIRED (sweep định kỳ). */
+  async sweepExpired(now: Date = this.clock.now()): Promise<number> {
+    const stale = await this.holds
+      .find({ isActive: true, expiresAt: { $lte: now } })
+      .select('_id booking')
+      .lean();
+    let expired = 0;
+    for (const hold of stale) {
+      const result = await this.bookings.updateOne(
+        {
+          _id: hold.booking,
+          isActive: true,
+          status: { $in: UNCONFIRMED_BOOKING_STATUSES },
+        },
+        { $set: { status: BookingStatus.Expired } },
+      );
+      await this.holds.updateOne(
+        { _id: hold._id },
+        { $set: { isActive: false } },
+      );
+      if (result.modifiedCount) expired += 1;
+    }
+    return expired;
+  }
+
+  private async enforceHoldRate(
+    ctx: GuestSessionContext,
+    now: Date,
+  ): Promise<void> {
+    const keys: Record<string, string>[] = [];
+    if (ctx.sessionId) keys.push({ sessionId: ctx.sessionId });
+    if (ctx.clientIp) keys.push({ clientIp: ctx.clientIp });
+    if (keys.length === 0) return;
+    const since = new Date(now.getTime() - HOLD_RATE_WINDOW_MS);
+    const recent = await this.holds.countDocuments({
+      createdAt: { $gte: since },
+      $or: keys,
+    });
+    if (recent >= HOLD_RATE_MAX) {
+      throw new HttpException(
+        'Too many booking holds from this session; please wait a few minutes',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  private authorizeRead(
+    booking: BookingDocument,
+    hold: RoomHoldDocument | null,
+    ctx: { code?: string; user?: AuthUser; sessionId?: string },
+  ): void {
+    if (ctx.sessionId && hold?.sessionId && ctx.sessionId === hold.sessionId) {
+      return;
+    }
+    authorizeBookingAccess(booking, {
+      ...(ctx.user ? { user: ctx.user } : {}),
+      ...(ctx.code ? { code: ctx.code } : {}),
+    });
+  }
+
+  private async lazyExpire(
+    booking: BookingDocument,
+    hold: RoomHoldDocument | null,
+    now: Date,
+  ): Promise<void> {
+    if (!UNCONFIRMED_BOOKING_STATUSES.includes(booking.status)) return;
+    const expired = !hold || !hold.isActive || !(hold.expiresAt > now);
+    if (!expired) return;
+    booking.status = BookingStatus.Expired;
+    await booking.save();
+    if (hold?.isActive) {
+      hold.isActive = false;
+      await hold.save();
+    }
+  }
+
+  private holdResponse(booking: BookingDocument, hold: RoomHoldDocument) {
+    return {
+      bookingId: String(booking._id),
+      holdToken: hold.holdToken,
+      status: booking.status,
+      rooms: booking.rooms.map(String),
+      checkIn: booking.checkIn.toISOString(),
+      checkOut: booking.checkOut.toISOString(),
+      adultCount: booking.adultCount,
+      childCount: booking.childCount,
+      roomTotal: booking.roomTotal,
+      depositAmount: booking.depositAmount,
+      holdExpiresAt: hold.expiresAt.toISOString(),
+    };
+  }
+
+  private readResponse(booking: BookingDocument, hold: RoomHoldDocument | null) {
+    const holdActive =
+      hold?.isActive &&
+      UNCONFIRMED_BOOKING_STATUSES.includes(booking.status) &&
+      hold.expiresAt > this.clock.now();
+    return {
+      id: String(booking._id),
+      code: booking.code,
+      status: booking.status,
+      rooms: booking.rooms.map(String),
+      checkIn: booking.checkIn.toISOString(),
+      checkOut: booking.checkOut.toISOString(),
+      adultCount: booking.adultCount,
+      childCount: booking.childCount,
+      roomTotal: booking.roomTotal,
+      depositAmount: booking.depositAmount,
+      ...(holdActive ? { holdExpiresAt: hold!.expiresAt.toISOString() } : {}),
+    };
   }
 }
