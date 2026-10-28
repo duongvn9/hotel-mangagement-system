@@ -50,6 +50,7 @@ import {
 } from './dto/list-bookings.dto.js';
 import { BookingsService } from './bookings.service.js';
 import { CheckInService } from './check-in.service.js';
+import { ServicesService } from '../services/services.service.js';
 
 @ApiTags('bookings')
 @Controller('bookings')
@@ -57,7 +58,18 @@ export class BookingsController {
   constructor(
     private readonly bookings: BookingsService,
     private readonly checkIns: CheckInService,
+    private readonly services: ServicesService,
   ) {}
+
+  @Get('service-catalog')
+  @Public()
+  @ApiOperation({
+    summary: 'Public catalog of active services a guest can add while booking',
+  })
+  @ApiOkResponse({ description: 'Active services for booking add-ons' })
+  serviceCatalog() {
+    return this.services.publicCatalog();
+  }
 
   @Post('hold')
   @Public()

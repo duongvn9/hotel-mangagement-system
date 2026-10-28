@@ -1,5 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
   IsEmail,
@@ -9,7 +11,20 @@ import {
   Matches,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+
+/** Một dịch vụ khách chọn kèm khi đặt phòng. */
+export class ServiceSelectionDto {
+  @ApiProperty({ description: 'ObjectId của dịch vụ' })
+  @IsMongoId()
+  serviceId: string;
+
+  @ApiProperty({ minimum: 1, description: 'Số lượng' })
+  @IsInt()
+  @Min(1)
+  quantity: number;
+}
 
 /** Cấp hold khi khách bấm "Đặt phòng" (chưa cần thông tin liên hệ). */
 export class HoldBookingDto {
@@ -60,6 +75,18 @@ export class SubmitBookingDetailsDto {
   @ApiProperty({ description: 'Số điện thoại liên hệ' })
   @Matches(/^[0-9+\-\s]{6,20}$/, { message: 'guestPhone is invalid' })
   guestPhone: string;
+
+  @ApiPropertyOptional({
+    type: [ServiceSelectionDto],
+    description:
+      'Dịch vụ chọn kèm (tuỳ chọn); tự sinh đơn khi booking xác nhận',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => ServiceSelectionDto)
+  serviceSelections?: ServiceSelectionDto[];
 }
 
 /** Trả về cho client sau khi cấp hold. */

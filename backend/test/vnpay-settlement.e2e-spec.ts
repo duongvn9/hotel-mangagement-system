@@ -5,6 +5,7 @@ import { Model, Types } from 'mongoose';
 import { createHmac } from 'node:crypto';
 import { AppModule } from '../src/app.module.js';
 import { Booking } from '../src/modules/bookings/schemas/booking.schema.js';
+import { RoomHold } from '../src/modules/bookings/schemas/room-hold.schema.js';
 import { Invoice } from '../src/modules/invoices/schemas/invoice.schema.js';
 import {
   PaymentPurpose,
@@ -58,16 +59,18 @@ describe('VNPay settlement persistence (e2e)', () => {
   let vnpay: VnpayService;
   let settlement: VnpaySettlementPort;
   let bookings: Model<Booking>;
+  let holds: Model<RoomHold>;
   let invoices: Model<Invoice>;
   let payments: Model<PaymentTransaction>;
   const bookingId = new Types.ObjectId();
   const invoiceId = new Types.ObjectId();
+  const roomId = new Types.ObjectId();
 
   const seed = async (txnRef: string) => {
     await bookings.create({
       _id: bookingId,
       code: `VNP-${txnRef}`,
-      rooms: [new Types.ObjectId()],
+      rooms: [roomId],
       guestName: 'Settlement test',
       guestEmail: 'settle@example.test',
       guestPhone: '0900000000',
@@ -77,6 +80,16 @@ describe('VNPay settlement persistence (e2e)', () => {
       roomTotal: 1000000,
       depositAmount: 300000,
       status: 'PENDING_DEPOSIT',
+    });
+    // Online booking ở PENDING_DEPOSIT luôn có hold hợp lệ; settlement cần kiểm tra hạn.
+    await holds.create({
+      booking: bookingId,
+      holdToken: `HOLD-${txnRef}`,
+      rooms: [roomId],
+      checkIn: new Date('2026-10-23'),
+      checkOut: new Date('2026-10-25'),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      isActive: true,
     });
     await invoices.create({
       _id: invoiceId,
@@ -124,20 +137,28 @@ describe('VNPay settlement persistence (e2e)', () => {
     vnpay = app.get(VnpayService);
     settlement = app.get(VnpaySettlementPort);
     bookings = app.get(getModelToken(Booking.name));
+    holds = app.get(getModelToken(RoomHold.name));
     invoices = app.get(getModelToken(Invoice.name));
     payments = app.get(getModelToken(PaymentTransaction.name));
-    await Promise.all([bookings.init(), invoices.init(), payments.init()]);
+    await Promise.all([
+      bookings.init(),
+      holds.init(),
+      invoices.init(),
+      payments.init(),
+    ]);
   });
 
   beforeEach(async () => {
     await payments.deleteMany({ booking: bookingId });
     await invoices.deleteMany({ booking: bookingId });
+    await holds.deleteMany({ booking: bookingId });
     await bookings.deleteMany({ _id: bookingId });
   });
 
   afterAll(async () => {
     await payments.deleteMany({ booking: bookingId });
     await invoices.deleteMany({ booking: bookingId });
+    await holds.deleteMany({ booking: bookingId });
     await bookings.deleteMany({ _id: bookingId });
     await app.close();
   });

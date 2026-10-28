@@ -60,6 +60,7 @@ const NAV_BY_ROLE: Record<string, NavGroup[]> = {
         { to: '/manager/dashboard', label: 'Tổng quan' },
         { to: '/manager/task-queues', label: 'Hàng đợi task' },
         { to: '/manager/issues', label: 'Danh sách sự cố' },
+        { to: '/manager/payments/reconciliation', label: 'Đối soát thanh toán' },
       ],
     },
     {

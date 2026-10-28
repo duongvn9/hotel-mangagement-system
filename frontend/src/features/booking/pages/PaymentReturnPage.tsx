@@ -61,15 +61,24 @@ export function PaymentReturnPage() {
             )}
           </dl>
 
-          {bookingId && booking?.status !== 'CONFIRMED' && verify.data.status === 'SUCCESS' && (
-            <p className="text-sm text-stone-700" role="status">
-              Hệ thống đang hoàn tất xác nhận booking từ cổng thanh toán. Trạng thái sẽ tự cập nhật
-              trong giây lát.
-            </p>
-          )}
+          {verify.data.status === 'SUCCESS' &&
+            (booking?.status === 'PENDING_DEPOSIT' || booking?.status === 'ROOM_HELD') && (
+              <p className="text-sm text-stone-700" role="status">
+                Hệ thống đang hoàn tất xác nhận booking từ cổng thanh toán. Trạng thái sẽ tự cập
+                nhật trong giây lát.
+              </p>
+            )}
           {booking?.status === 'CONFIRMED' && (
             <p className="text-sm text-success">Đặt phòng của bạn đã được xác nhận.</p>
           )}
+          {verify.data.status === 'SUCCESS' &&
+            (booking?.status === 'EXPIRED' || booking?.status === 'CANCELLED') && (
+              <Alert tone="warning">
+                Chúng tôi đã nhận thanh toán nhưng phòng không còn được giữ (tiền về sau thời hạn
+                giữ phòng). Khoản này sẽ được đối soát và hoàn lại; vui lòng liên hệ lễ tân để được
+                hỗ trợ.
+              </Alert>
+            )}
           {(verify.data.status === 'FAILED' || verify.data.status === 'CANCELLED') && (
             <p className="text-sm text-stone-700">
               Thanh toán chưa hoàn tất. Nếu phòng vẫn đang được giữ, bạn có thể thử lại từ trang chi

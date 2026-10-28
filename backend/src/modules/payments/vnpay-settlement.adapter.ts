@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { BookingStatus } from '../../common/constants/booking-status.enum.js';
+import { ServiceOrdersService } from '../service-orders/service-orders.service.js';
+import {
+  BookingStatus,
+  UNCONFIRMED_BOOKING_STATUSES,
+} from '../../common/constants/booking-status.enum.js';
 import { Booking } from '../bookings/schemas/booking.schema.js';
 import { RoomHold } from '../bookings/schemas/room-hold.schema.js';
 import {
@@ -49,6 +54,7 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
     @InjectModel(RoomHold.name) private readonly holds: Model<RoomHold>,
     @InjectModel(Invoice.name) private readonly invoices: Model<Invoice>,
+    private readonly moduleRef: ModuleRef,
   ) {
     super();
   }
@@ -108,6 +114,8 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
           result.transactionRef,
         );
         if (!confirmed) return 'committed';
+        // Booking vừa CONFIRMED: tự sinh ServiceOrder từ dịch vụ khách chọn khi đặt.
+        await this.generateServiceOrders(expected.booking.id);
       }
       await this.reconcileInvoice(expected);
     }
@@ -117,8 +125,10 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
 
   /**
    * Chuyển booking PENDING_DEPOSIT -> CONFIRMED và chấm dứt hold khi cọc thành công.
-   * Kiểm tra kết quả update (không tin mù): nếu không chuyển được vì booking đã
-   * EXPIRED/CANCELLED (tiền về muộn) thì đánh dấu payment để đối soát và trả false.
+   * Chốt hạn giữ phòng là RoomHold.expiresAt (nguồn sự thật duy nhất), nên adapter tự
+   * kiểm tra hạn ở đây thay vì chỉ tin status booking: sweep có thể chưa kịp chuyển
+   * booking sang EXPIRED khi tiền về ngay sau hạn. Nếu hold không còn hợp lệ thì nhả
+   * phòng, đánh dấu payment để đối soát và trả false (tiền về muộn).
    * Idempotent: cọc giao lại cho booking đã CONFIRMED/CHECKED_* vẫn coi là thành công.
    */
   private async confirmDeposit(
@@ -126,19 +136,8 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
     transactionRef: string,
   ): Promise<boolean> {
     const bookingId = new Types.ObjectId(expected.booking.id);
-    const updated = await this.bookings.updateOne(
-      {
-        _id: bookingId,
-        status: BookingStatus.PendingDeposit,
-        isActive: true,
-      },
-      { $set: { status: BookingStatus.Confirmed } },
-    );
-    if (updated.modifiedCount === 1) {
-      await this.deactivateHold(bookingId);
-      return true;
-    }
 
+    // Idempotent: cọc giao lại cho booking đã xác nhận -> coi là thành công, hold đã nhả.
     const booking = await this.bookings
       .findById(bookingId)
       .select('status isActive')
@@ -148,18 +147,50 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
       booking.isActive &&
       CONFIRMED_STATUSES.includes(booking.status)
     ) {
-      // Cọc giao lại cho booking đã xác nhận: không đổi gì thêm, hold đã nhả.
       await this.deactivateHold(bookingId);
       return true;
     }
 
+    // Chỉ confirm khi hold còn hiệu lực VÀ chưa quá hạn (không tin mỗi status booking).
+    const hold = await this.holds
+      .findOne({ booking: bookingId })
+      .sort({ createdAt: -1 })
+      .lean();
+    const holdValid =
+      !!hold && hold.isActive && hold.expiresAt.getTime() > Date.now();
+    if (holdValid) {
+      const updated = await this.bookings.updateOne(
+        {
+          _id: bookingId,
+          status: BookingStatus.PendingDeposit,
+          isActive: true,
+        },
+        { $set: { status: BookingStatus.Confirmed } },
+      );
+      if (updated.modifiedCount === 1) {
+        await this.deactivateHold(bookingId);
+        return true;
+      }
+    }
+
+    // Hold hết hạn/mất hiệu lực (tiền về muộn): nhả phòng như requireValidHold rồi đánh
+    // dấu đối soát. Tiền đã về thật nên vẫn ACK VNPay (trả false -> bỏ reconcileInvoice).
+    await this.bookings.updateOne(
+      {
+        _id: bookingId,
+        status: { $in: UNCONFIRMED_BOOKING_STATUSES },
+        isActive: true,
+      },
+      { $set: { status: BookingStatus.Expired } },
+    );
+    await this.deactivateHold(bookingId);
     await this.payments.updateOne(
       { transactionRef },
       { $set: { needsReconciliation: true } },
     );
     this.logger.warn(
       `Deposit ${transactionRef} settled but booking ${expected.booking.id} ` +
-        `is not confirmable (${booking?.status ?? 'missing'}); flagged for reconciliation`,
+        `hold is not valid (${booking?.status ?? 'missing'}); expired and flagged for reconciliation`,
     );
     return false;
   }
@@ -169,6 +200,26 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
       { booking: bookingId, isActive: true },
       { $set: { isActive: false } },
     );
+  }
+
+  /**
+   * Best-effort sinh ServiceOrder từ dịch vụ khách chọn, khi booking vừa CONFIRMED.
+   * Phân giải lazy qua ModuleRef để tránh phụ thuộc vòng (payments nằm dưới service-orders);
+   * lỗi sinh đơn không được làm hỏng việc settlement (tiền đã ghi nhận).
+   */
+  private async generateServiceOrders(bookingId: string): Promise<void> {
+    try {
+      const serviceOrders = this.moduleRef.get(ServiceOrdersService, {
+        strict: false,
+      });
+      await serviceOrders.generateForConfirmedBooking(bookingId);
+    } catch (error) {
+      this.logger.warn(
+        `Auto service-order generation failed for booking ${bookingId}: ${
+          (error as Error).message
+        }`,
+      );
+    }
   }
 
   /**

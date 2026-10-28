@@ -47,6 +47,16 @@ import {
   type ServiceOrderDocument,
 } from './schemas/service-order.schema.js';
 
+/**
+ * Khách đặt được dịch vụ từ khi booking được xác nhận (CONFIRMED) cho tới khi còn ở
+ * (CHECKED_IN). Riêng việc nhận/ghi phí dịch vụ (accept) vẫn yêu cầu khách đang ở
+ * (CHECKED_IN) để không giao dịch vụ trước khi khách nhận phòng.
+ */
+const ORDERABLE_BOOKING_STATUSES: readonly BookingStatus[] = [
+  BookingStatus.Confirmed,
+  BookingStatus.CheckedIn,
+];
+
 @Injectable()
 export class ServiceOrdersService implements OnModuleInit {
   constructor(
@@ -83,15 +93,35 @@ export class ServiceOrdersService implements OnModuleInit {
     return new Types.ObjectId(value);
   }
 
+  /**
+   * Lấy booking của chính khách. `require` chọn mức trạng thái cần có:
+   *  - 'orderable': đặt dịch vụ, cho phép từ CONFIRMED trở đi (CONFIRMED/CHECKED_IN).
+   *  - 'in-house': nhận/ghi phí dịch vụ, chỉ khi khách đang ở (CHECKED_IN).
+   * Bỏ trống `require` thì chỉ kiểm tra quyền sở hữu (không ràng buộc trạng thái).
+   */
   private async ownedBooking(
     booking: Types.ObjectId,
-    customer: Types.ObjectId,
-    active = false,
+    customer: Types.ObjectId | undefined,
+    require?: 'orderable' | 'in-house',
   ) {
-    const row = await this.bookings.findOne({ _id: booking, customer }).exec();
+    // Đơn auto-sinh cho khách vãng lai không có customer: lúc đó chỉ định danh theo booking.
+    const row = await this.bookings
+      .findOne(customer ? { _id: booking, customer } : { _id: booking })
+      .exec();
     if (!row) throw new NotFoundException('Booking not found');
-    if (active && (!row.isActive || row.status !== BookingStatus.CheckedIn))
-      throw new ConflictException('Booking must be active and CHECKED_IN');
+    if (require) {
+      const allowed =
+        row.isActive &&
+        (require === 'in-house'
+          ? row.status === BookingStatus.CheckedIn
+          : ORDERABLE_BOOKING_STATUSES.includes(row.status));
+      if (!allowed)
+        throw new ConflictException(
+          require === 'in-house'
+            ? 'Booking must be active and CHECKED_IN'
+            : 'Booking must be active and CONFIRMED or CHECKED_IN',
+        );
+    }
     return row;
   }
 
@@ -148,7 +178,7 @@ export class ServiceOrdersService implements OnModuleInit {
       .select('+requestFingerprint')
       .exec();
     if (!row) return null;
-    await this.ownedBooking(row.booking, customer, true);
+    await this.ownedBooking(row.booking, customer, 'orderable');
     if (row.requestFingerprint !== fingerprint)
       throw new ConflictException(
         'requestId already used with a different payload',
@@ -160,7 +190,7 @@ export class ServiceOrdersService implements OnModuleInit {
     const customer = this.customer(user);
     const booking = this.id(dto.bookingId);
     const serviceId = this.id(dto.serviceId);
-    await this.ownedBooking(booking, customer, true);
+    await this.ownedBooking(booking, customer, 'orderable');
     if (!Number.isSafeInteger(dto.quantity) || dto.quantity < 1)
       throw new BadRequestException('quantity must be a positive safe integer');
     const requestedTime =
@@ -223,6 +253,79 @@ export class ServiceOrdersService implements OnModuleInit {
       }
       throw error;
     }
+  }
+
+  /**
+   * Tự sinh ServiceOrder từ dịch vụ khách đã chọn khi đặt, gọi khi booking qua CONFIRMED.
+   * Idempotent qua requestId tất định (booking+service) nên callback thanh toán lặp hay
+   * gọi lại nhiều lần không tạo trùng. Khách vãng lai (booking không có customer) vẫn sinh
+   * đơn với customer để trống — lễ tân xem qua hàng đợi review, gắn tài khoản sau nếu cần.
+   * Best-effort: bỏ qua dịch vụ đã ngừng/không hợp lệ. Trả số đơn vừa tạo.
+   */
+  async generateForConfirmedBooking(bookingId: string): Promise<number> {
+    if (!/^[a-f\d]{24}$/i.test(bookingId)) return 0;
+    const booking = await this.bookings
+      .findById(bookingId)
+      .select('customer serviceSelections checkIn')
+      .lean();
+    if (!booking?.serviceSelections?.length) return 0;
+    const bookingObjectId = new Types.ObjectId(bookingId);
+    let created = 0;
+    for (const selection of booking.serviceSelections) {
+      const service = await this.services.findById(selection.service).exec();
+      if (!service || service.isActive !== true) continue;
+      const price = service.billable === false ? 0 : service.price;
+      if (
+        typeof price !== 'number' ||
+        !Number.isSafeInteger(price) ||
+        price < 0
+      )
+        continue;
+      const amount = price * selection.quantity;
+      if (!Number.isSafeInteger(amount)) continue;
+      const requestId = `booking:${bookingId}:service:${String(selection.service)}`;
+      try {
+        await this.orders.create({
+          ...(booking.customer ? { customer: booking.customer } : {}),
+          booking: bookingObjectId,
+          service: selection.service,
+          serviceName: service.name,
+          unit: service.unit ?? '',
+          quantity: selection.quantity,
+          unitPriceVND: price,
+          amount,
+          requestedTime: booking.checkIn ?? new Date(),
+          reviewStatus: ServiceOrderReviewStatus.PendingReview,
+          executionStatus: ServiceOrderExecutionStatus.NotStarted,
+          requestId,
+          requestFingerprint: requestId,
+        });
+        created++;
+      } catch (error) {
+        // Đã sinh trước đó (unique requestId): bỏ qua để idempotent.
+        if ((error as { code?: number }).code === 11000) continue;
+        throw error;
+      }
+    }
+    return created;
+  }
+
+  /**
+   * Gắn các đơn auto-sinh cho khách vãng lai (chưa có customer) vào một tài khoản, ví dụ
+   * khi khách tạo tài khoản sau. Chỉ đụng đơn của booking đó còn để trống customer.
+   */
+  async linkBookingOrdersToCustomer(
+    bookingId: Types.ObjectId | string,
+    customerId: Types.ObjectId | string,
+  ): Promise<number> {
+    const result = await this.orders.updateMany(
+      {
+        booking: new Types.ObjectId(String(bookingId)),
+        customer: { $exists: false },
+      },
+      { $set: { customer: new Types.ObjectId(String(customerId)) } },
+    );
+    return result.modifiedCount;
   }
 
   async list(query: ListServiceOrdersQuery, user: AuthUser) {
@@ -291,7 +394,9 @@ export class ServiceOrdersService implements OnModuleInit {
         .findById(row.booking)
         .select('code status checkIn checkOut')
         .exec(),
-      this.users.findById(row.customer).select('fullName').exec(),
+      row.customer
+        ? this.users.findById(row.customer).select('fullName').exec()
+        : null,
     ]);
     return {
       ...(await this.response(row)),
@@ -308,7 +413,7 @@ export class ServiceOrdersService implements OnModuleInit {
           }
         : {}),
       customer: {
-        id: String(row.customer),
+        id: row.customer ? String(row.customer) : null,
         fullName: customer?.fullName ?? null,
       },
       booking: booking
@@ -464,7 +569,7 @@ export class ServiceOrdersService implements OnModuleInit {
     if (row.reviewStatus === ServiceOrderReviewStatus.PendingReview) {
       this.validateAmount(row);
       if (dto.decision === 'ACCEPT')
-        await this.ownedBooking(row.booking, row.customer, true);
+        await this.ownedBooking(row.booking, row.customer, 'in-house');
       const claimed = await this.orders
         .findOneAndUpdate(
           {
@@ -517,7 +622,7 @@ export class ServiceOrdersService implements OnModuleInit {
           String(row.booking),
         );
         if (!this.matchingCharge(invoice, row)) {
-          await this.ownedBooking(row.booking, row.customer, true);
+          await this.ownedBooking(row.booking, row.customer, 'in-house');
           try {
             await this.invoices.addCharge({
               bookingId: String(row.booking),
@@ -819,7 +924,11 @@ export class ServiceOrdersService implements OnModuleInit {
   async orderContexts(user: AuthUser) {
     const customer = this.customer(user);
     const rows = await this.bookings
-      .find({ customer, isActive: true, status: BookingStatus.CheckedIn })
+      .find({
+        customer,
+        isActive: true,
+        status: { $in: ORDERABLE_BOOKING_STATUSES },
+      })
       .select('_id code checkIn checkOut')
       .sort({ checkIn: -1, _id: 1 })
       .exec();

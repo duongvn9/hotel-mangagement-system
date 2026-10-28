@@ -199,4 +199,25 @@ export class ServicesService {
       limit: query.limit,
     };
   }
+
+  /**
+   * Danh mục dịch vụ công khai cho luồng đặt phòng (khách chưa đăng nhập vẫn xem được).
+   * Chỉ dịch vụ đang hoạt động; giá hiển thị để khách chọn kèm khi đặt.
+   */
+  async publicCatalog() {
+    const rows = await this.services
+      .find({ isActive: true })
+      .select('name unit billable price')
+      .sort({ name: 1 })
+      .lean();
+    return {
+      items: rows.map((row) => ({
+        id: String(row._id),
+        name: row.name,
+        unit: row.unit ?? '',
+        billable: row.billable,
+        unitPriceVND: row.billable === false ? 0 : (row.price ?? null),
+      })),
+    };
+  }
 }
