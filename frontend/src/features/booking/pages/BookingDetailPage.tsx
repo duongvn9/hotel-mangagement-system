@@ -145,7 +145,10 @@ export function BookingDetailPage() {
             </div>
             <div>
               <dt className="text-xs tracking-wider text-stone-700 uppercase">Số khách</dt>
-              <dd className="mt-1 font-semibold">{booking.guests}</dd>
+              <dd className="mt-1 font-semibold">
+                {booking.adultCount} người lớn
+                {booking.childCount > 0 ? `, ${booking.childCount} trẻ em` : ''}
+              </dd>
             </div>
             <div>
               <dt className="text-xs tracking-wider text-stone-700 uppercase">Tiền phòng</dt>

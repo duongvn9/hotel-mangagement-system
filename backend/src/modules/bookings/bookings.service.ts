@@ -16,7 +16,11 @@ import {
 import { Role } from '../../common/constants/role.enum.js';
 import { RoomStatus } from '../../common/constants/room-status.enum.js';
 import { Room } from '../rooms/schemas/room.schema.js';
-import { Booking, BookingStatus } from './schemas/booking.schema.js';
+import {
+  Booking,
+  BookingStatus,
+  BookingSource,
+} from './schemas/booking.schema.js';
 import { RoomHold, type RoomHoldDocument } from './schemas/room-hold.schema.js';
 import { AvailabilityClock } from './availability.adapters.js';
 import {
@@ -77,15 +81,21 @@ export class BookingsService {
 
     const { roomTotal, rates } = await this.priceRooms(
       roomIds,
-      dto.guests,
+      { adultCount: dto.adultCount, childCount: dto.childCount },
       stay,
     );
     const now = this.clock.now();
     await this.assertRoomsFree(roomIds, stay, now);
 
+    // Guest/Customer đặt online; vai trò nhân viên coi như đặt hộ tại quầy.
+    const source =
+      user && user.role !== Role.Customer
+        ? BookingSource.FrontDesk
+        : BookingSource.Online;
     const booking = await this.createBookingDocument(dto, roomIds, stay, {
       roomTotal,
       rates,
+      source,
       customer:
         user?.role === Role.Customer ? new Types.ObjectId(user.id) : undefined,
     });
@@ -121,7 +131,8 @@ export class BookingsService {
       rooms: dto.rooms,
       checkIn: stay.checkIn.toISOString(),
       checkOut: stay.checkOut.toISOString(),
-      guests: booking.guests,
+      adultCount: booking.adultCount,
+      childCount: booking.childCount,
       roomTotal: booking.roomTotal,
       depositAmount: booking.depositAmount,
       holdExpiresAt: hold.expiresAt.toISOString(),
@@ -169,7 +180,7 @@ export class BookingsService {
   /** Giá server-side: tổng basePrice các phòng × số đêm. Cũng xác thực phòng đặt được. */
   private async priceRooms(
     roomIds: Types.ObjectId[],
-    guests: number,
+    occupancy: { adultCount: number; childCount: number },
     stay: StayInterval,
   ): Promise<{ roomTotal: number; rates: RoomRate[] }> {
     const rows = await this.rooms
@@ -191,7 +202,8 @@ export class BookingsService {
       throw new BadRequestException('Stay must cover at least one night');
     }
 
-    let capacity = 0;
+    let adultCapacity = 0;
+    let childCapacity = 0;
     let perNight = 0;
     const rates: RoomRate[] = [];
     for (const room of rows) {
@@ -201,11 +213,15 @@ export class BookingsService {
       if (!room.roomType || !room.roomType.isActive) {
         throw new ConflictException(`Room ${room._id} has no active room type`);
       }
-      capacity += room.roomType.adultCapacity + room.roomType.childCapacity;
+      adultCapacity += room.roomType.adultCapacity;
+      childCapacity += room.roomType.childCapacity;
       perNight += room.roomType.basePrice;
       rates.push({ room: room._id, ratePerNight: room.roomType.basePrice });
     }
-    if (guests > capacity) {
+    if (
+      occupancy.adultCount > adultCapacity ||
+      occupancy.childCount > childCapacity
+    ) {
       throw new BadRequestException(
         'Selected rooms cannot hold the party size',
       );
@@ -307,7 +323,12 @@ export class BookingsService {
     dto: CreateBookingDto,
     roomIds: Types.ObjectId[],
     stay: StayInterval,
-    extra: { roomTotal: number; rates: RoomRate[]; customer?: Types.ObjectId },
+    extra: {
+      roomTotal: number;
+      rates: RoomRate[];
+      source: BookingSource;
+      customer?: Types.ObjectId;
+    },
   ) {
     // Cọc = 30% tiền phòng (placeholder chờ SRS), làm tròn về VND nguyên.
     const depositAmount = Math.round(extra.roomTotal * DEPOSIT_RATE);
@@ -322,7 +343,9 @@ export class BookingsService {
           rooms: roomIds,
           checkIn: stay.checkIn,
           checkOut: stay.checkOut,
-          guests: dto.guests,
+          adultCount: dto.adultCount,
+          childCount: dto.childCount,
+          source: extra.source,
           status: BookingStatus.PendingDeposit,
           roomTotal: extra.roomTotal,
           depositAmount,

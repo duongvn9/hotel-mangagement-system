@@ -40,7 +40,7 @@ describe('Create booking (e2e)', () => {
     rooms: roomIds.map(String),
     checkIn,
     checkOut,
-    guests,
+    adultCount: guests,
     ...guest,
   });
 
@@ -132,7 +132,7 @@ describe('Create booking (e2e)', () => {
       status: 'PENDING_DEPOSIT',
       roomTotal: 2000000, // 1 phòng x 2 đêm x 1.000.000
       depositAmount: 600000, // cọc 30%
-      guests: 2,
+      adultCount: 2,
     });
     expect(response.body.code).toMatch(/^BK/);
     const saved = await bookings.findById(response.body.id).lean();

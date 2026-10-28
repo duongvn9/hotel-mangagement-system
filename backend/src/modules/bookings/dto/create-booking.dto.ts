@@ -30,10 +30,16 @@ export class CreateBookingDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'checkOut must be YYYY-MM-DD' })
   checkOut: string;
 
-  @ApiProperty({ minimum: 1 })
+  @ApiProperty({ minimum: 1, description: 'Số người lớn' })
   @IsInt()
   @Min(1)
-  guests: number;
+  adultCount: number;
+
+  @ApiProperty({ minimum: 0, default: 0, description: 'Số trẻ em' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  childCount: number = 0;
 
   @ApiProperty()
   @IsString()
@@ -80,8 +86,11 @@ export class BookingResponse {
   @ApiProperty()
   checkOut: string;
 
-  @ApiProperty()
-  guests: number;
+  @ApiProperty({ description: 'Số người lớn' })
+  adultCount: number;
+
+  @ApiProperty({ description: 'Số trẻ em' })
+  childCount: number;
 
   @ApiProperty({ description: 'Tiền phòng (VND)' })
   roomTotal: number;

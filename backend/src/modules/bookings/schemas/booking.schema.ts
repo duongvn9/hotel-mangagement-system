@@ -1,9 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Types, type HydratedDocument } from 'mongoose';
 import { BookingStatus } from '../../../common/constants/booking-status.enum.js';
+import { BookingSource } from '../../../common/constants/booking-source.enum.js';
 import { isMoneyVnd } from '../../../common/database/conventions.js';
 
-export { BookingStatus };
+export { BookingStatus, BookingSource };
 export type BookingDocument = HydratedDocument<Booking>;
 
 export const validRooms = (rooms: Types.ObjectId[]): boolean =>
@@ -48,7 +49,18 @@ export class Booking {
   checkOut: Date;
 
   @Prop({ required: true, min: 1, validate: Number.isSafeInteger })
-  guests: number;
+  adultCount: number;
+
+  @Prop({ required: true, min: 0, default: 0, validate: Number.isSafeInteger })
+  childCount: number;
+
+  @Prop({
+    type: String,
+    enum: BookingSource,
+    required: true,
+    default: BookingSource.Online,
+  })
+  source: BookingSource;
 
   @Prop({
     type: String,

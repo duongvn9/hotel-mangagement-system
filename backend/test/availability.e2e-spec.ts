@@ -54,7 +54,7 @@ describe('H6 real booking and hold queries', () => {
       guestEmail: 'h6@example.test',
       guestPhone: '0900000000',
       ...normalizeStay(query),
-      guests: 2,
+      adultCount: 2,
       roomTotal: 0,
       depositAmount: 0,
       status: BookingStatus.PendingDeposit,

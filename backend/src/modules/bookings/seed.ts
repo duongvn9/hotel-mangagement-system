@@ -104,7 +104,8 @@ export const seedBookings: Seed = async (app) => {
       checkedInAt: checkIn,
       checkedOutAt:
         sample.status === BookingStatus.CheckedOut ? checkOut : undefined,
-      guests: 1,
+      adultCount: 1,
+      childCount: 0,
       status: sample.status,
       roomTotal,
       depositAmount: Math.round(roomTotal * DEPOSIT_RATE),

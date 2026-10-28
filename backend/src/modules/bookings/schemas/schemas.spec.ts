@@ -16,7 +16,8 @@ const booking = () => ({
   rooms: [new Types.ObjectId(), new Types.ObjectId()],
   checkIn: new Date('2026-10-23T07:00:00Z'),
   checkOut: new Date('2026-10-24T05:00:00Z'),
-  guests: 2,
+  adultCount: 2,
+  childCount: 0,
   roomTotal: 1000000,
   depositAmount: 500000,
 });
@@ -54,7 +55,7 @@ describe('H5 schema validation', () => {
     ).rejects.toThrow();
   });
 
-  it('requires guest details, dates, guests and valid enums', async () => {
+  it('requires guest details, dates, occupancy and valid enums', async () => {
     await expect(new Booking({}).validate()).rejects.toThrow();
     for (const patch of [
       { guestName: '' },
@@ -62,8 +63,9 @@ describe('H5 schema validation', () => {
       { guestPhone: '' },
       { checkIn: null },
       { checkOut: null },
-      { guests: 0 },
-      { guests: 1.5 },
+      { adultCount: 0 },
+      { adultCount: 1.5 },
+      { childCount: -1 },
       { status: 'EXPIRED' },
       { checkOut: booking().checkIn },
     ]) {

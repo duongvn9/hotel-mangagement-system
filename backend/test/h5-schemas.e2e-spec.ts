@@ -62,7 +62,7 @@ describe('H5 persistence (e2e)', () => {
       rooms: [roomId, new Types.ObjectId()],
       checkIn: new Date('2026-10-23T07:00:00Z'),
       checkOut: new Date('2026-10-24T05:00:00Z'),
-      guests: 2,
+      adultCount: 2,
       roomTotal: 0,
       depositAmount: 0,
     };

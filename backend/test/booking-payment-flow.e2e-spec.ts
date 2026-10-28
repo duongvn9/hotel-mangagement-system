@@ -113,7 +113,7 @@ describe('Booking to payment full flow (e2e)', () => {
         rooms: [String(roomId)],
         checkIn: '2094-01-10',
         checkOut: '2094-01-12',
-        guests: 2,
+        adultCount: 2,
         guestName: 'Flow',
         guestEmail: 'flow@example.test',
         guestPhone: '0900000000',

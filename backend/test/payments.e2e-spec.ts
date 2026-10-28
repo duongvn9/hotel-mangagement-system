@@ -71,7 +71,7 @@ describe('Payments VNPay endpoints (e2e)', () => {
       guestPhone: '0900000000',
       checkIn: new Date('2026-10-23'),
       checkOut: new Date('2026-10-25'),
-      guests: 2,
+      adultCount: 2,
       roomTotal: 1000000,
       depositAmount: 300000,
       status: 'PENDING_DEPOSIT',

@@ -36,7 +36,8 @@ export interface CreateBookingInput {
   rooms: string[]
   checkIn: string
   checkOut: string
-  guests: number
+  adultCount: number
+  childCount: number
   guestName: string
   guestEmail: string
   guestPhone: string
@@ -61,7 +62,10 @@ export interface Booking {
   rooms: string[]
   checkIn: string
   checkOut: string
-  guests: number
+  /** Số người lớn. */
+  adultCount: number
+  /** Số trẻ em. */
+  childCount: number
   /** Tiền phòng server tính (VND). */
   roomTotal: number
   /** Tiền cọc cần thanh toán (VND). */

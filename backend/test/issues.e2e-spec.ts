@@ -81,7 +81,7 @@ describe('Report issue (e2e)', () => {
         rooms: [room, missing],
         checkIn: new Date('2020-01-01'),
         checkOut: new Date('2020-01-02'),
-        guests: 1,
+        adultCount: 1,
         status: BookingStatus.CheckedOut,
         roomTotal: 100000,
         depositAmount: 100000,

@@ -45,7 +45,7 @@ describe('H7 invoice persistence', () => {
       guestPhone: '0900000000',
       checkIn: new Date('2026-10-23'),
       checkOut: new Date('2026-10-25'),
-      guests: 2,
+      adultCount: 2,
       roomTotal: 0,
       depositAmount: 900000,
       status: 'CHECKED_IN',

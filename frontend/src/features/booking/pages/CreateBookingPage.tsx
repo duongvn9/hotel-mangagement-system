@@ -65,6 +65,10 @@ export function CreateBookingPage() {
   const [guestName, setGuestName] = useState(me?.fullName ?? '')
   const [guestEmail, setGuestEmail] = useState(me?.email ?? '')
   const [guestPhone, setGuestPhone] = useState(me?.phone ?? '')
+  // Mặc định coi số khách đã tìm là người lớn; khách có thể tách trẻ em.
+  const [adultCount, setAdultCount] = useState(Math.max(1, guests))
+  const [childCount, setChildCount] = useState(0)
+  const occupancy = adultCount + childCount
 
   // Lấy lại giá các phòng đã chọn từ endpoint công khai để hiện bảng tạm tính.
   const availability = useAvailability(invalid ? null : { checkIn, checkOut, guests })
@@ -91,7 +95,8 @@ export function CreateBookingPage() {
         rooms,
         checkIn,
         checkOut,
-        guests,
+        adultCount,
+        childCount,
         guestName: guestName.trim(),
         guestEmail: guestEmail.trim(),
         guestPhone: guestPhone.trim(),
@@ -154,6 +159,29 @@ export function CreateBookingPage() {
             </p>
           </div>
 
+          <div className="space-y-4 rounded-xl border border-stone-300 bg-white p-6">
+            <h2 className="font-display text-xl font-semibold text-pearl-900">Số khách</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextField
+                label="Người lớn"
+                type="number"
+                min={1}
+                max={20}
+                required
+                value={String(adultCount)}
+                onChange={(event) => setAdultCount(Math.max(1, Number(event.target.value) || 1))}
+              />
+              <TextField
+                label="Trẻ em"
+                type="number"
+                min={0}
+                max={20}
+                value={String(childCount)}
+                onChange={(event) => setChildCount(Math.max(0, Number(event.target.value) || 0))}
+              />
+            </div>
+          </div>
+
           {create.isError && <Alert tone="danger">{getErrorMessage(create.error)}</Alert>}
 
           <Link
@@ -188,7 +216,7 @@ export function CreateBookingPage() {
           <div className="space-y-2 border-t border-stone-300 pt-4 text-sm">
             {summary.items.length === 0 ? (
               <p className="inline-flex items-center gap-1.5 text-stone-700">
-                <BedIcon className="size-4 text-primary" /> {rooms.length} phòng · {guests} khách
+                <BedIcon className="size-4 text-primary" /> {rooms.length} phòng · {occupancy} khách
               </p>
             ) : (
               summary.items.map((line) => (
