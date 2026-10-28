@@ -61,14 +61,12 @@ export function PaymentReturnPage() {
             )}
           </dl>
 
-          {bookingId &&
-            booking?.status !== 'CONFIRMED' &&
-            verify.data.status === 'SUCCESS' && (
-              <p className="text-sm text-stone-700" role="status">
-                Hệ thống đang hoàn tất xác nhận booking từ cổng thanh toán. Trạng thái sẽ tự cập nhật
-                trong giây lát.
-              </p>
-            )}
+          {bookingId && booking?.status !== 'CONFIRMED' && verify.data.status === 'SUCCESS' && (
+            <p className="text-sm text-stone-700" role="status">
+              Hệ thống đang hoàn tất xác nhận booking từ cổng thanh toán. Trạng thái sẽ tự cập nhật
+              trong giây lát.
+            </p>
+          )}
           {booking?.status === 'CONFIRMED' && (
             <p className="text-sm text-success">Đặt phòng của bạn đã được xác nhận.</p>
           )}

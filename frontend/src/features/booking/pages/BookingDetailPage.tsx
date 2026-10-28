@@ -7,12 +7,7 @@ import { TextField } from '@/components/TextField'
 import { getErrorMessage } from '@/lib/api-client'
 import { useAuth } from '@/features/auth/auth-context'
 import { BOOKING_STATUS_DISPLAY, type InitiatePaymentInput } from '../api'
-import {
-  useBooking,
-  useCancelBooking,
-  useInitiateDeposit,
-  useInitiateFinal,
-} from '../hooks'
+import { useBooking, useCancelBooking, useInitiateDeposit, useInitiateFinal } from '../hooks'
 import { rememberPaymentRef, upsertStoredBooking } from '../storage'
 import { formatDate, formatDateTime, money, nightsBetween } from '../utils'
 import { formatRemaining, useHoldCountdown } from './useHoldCountdown'
@@ -99,7 +94,9 @@ export function BookingDetailPage() {
       {query.isPending && !needsCode && <p role="status">Đang tải thông tin đặt phòng…</p>}
 
       {query.isError && !needsCode && (
-        <Alert tone="danger">{getErrorMessage(query.error, 'Không đọc được thông tin đặt phòng.')}</Alert>
+        <Alert tone="danger">
+          {getErrorMessage(query.error, 'Không đọc được thông tin đặt phòng.')}
+        </Alert>
       )}
 
       {needsCode && (
@@ -198,11 +195,7 @@ export function BookingDetailPage() {
             </Button>
           )}
           {(status === 'CONFIRMED' || status === 'CHECKED_OUT') && (
-            <Button
-              variant="secondary"
-              loading={final.isPending}
-              onClick={() => void pay('final')}
-            >
+            <Button variant="secondary" loading={final.isPending} onClick={() => void pay('final')}>
               Thanh toán phần còn lại
             </Button>
           )}

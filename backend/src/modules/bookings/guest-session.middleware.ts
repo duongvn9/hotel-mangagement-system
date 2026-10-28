@@ -12,7 +12,10 @@ const COOKIE = 'hms_sid';
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const VALID = /^[A-Za-z0-9_-]{16,}$/;
 
-function readCookie(header: string | undefined, name: string): string | undefined {
+function readCookie(
+  header: string | undefined,
+  name: string,
+): string | undefined {
   if (!header) return undefined;
   for (const part of header.split(';')) {
     const eq = part.indexOf('=');
@@ -44,8 +47,11 @@ export class GuestSessionMiddleware implements NestMiddleware {
     }
     req.guestSessionId = sid;
     const forwarded = req.headers['x-forwarded-for'];
-    const first = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0];
-    req.guestClientIp = first?.trim() || req.ip || req.socket?.remoteAddress || undefined;
+    const first = Array.isArray(forwarded)
+      ? forwarded[0]
+      : forwarded?.split(',')[0];
+    req.guestClientIp =
+      first?.trim() || req.ip || req.socket?.remoteAddress || undefined;
     next();
   }
 }

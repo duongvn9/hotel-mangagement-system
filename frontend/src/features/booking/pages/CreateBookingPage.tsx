@@ -121,8 +121,8 @@ export function CreateBookingPage() {
           <div className="space-y-5">
             {holdExpired ? (
               <Alert tone="danger">
-                Đã quá thời gian giữ phòng. Phòng có thể đã được mở lại cho khách khác — vui lòng tìm
-                phòng lại.
+                Đã quá thời gian giữ phòng. Phòng có thể đã được mở lại cho khách khác — vui lòng
+                tìm phòng lại.
               </Alert>
             ) : (
               remaining !== null && (
@@ -169,8 +169,8 @@ export function CreateBookingPage() {
                 />
               </div>
               <p className="text-xs text-stone-700">
-                Chúng tôi gửi mã đặt phòng (vé) tới email/số điện thoại này để bạn thanh toán và quản
-                lý đơn.
+                Chúng tôi gửi mã đặt phòng (vé) tới email/số điện thoại này để bạn thanh toán và
+                quản lý đơn.
               </p>
             </div>
 
@@ -228,7 +228,12 @@ export function CreateBookingPage() {
               Số tiền do hệ thống xác nhận tại thời điểm giữ phòng. Bạn chưa bị trừ tiền ở bước này.
             </p>
 
-            <Button type="submit" className="w-full" loading={submit.isPending} disabled={holdExpired}>
+            <Button
+              type="submit"
+              className="w-full"
+              loading={submit.isPending}
+              disabled={holdExpired}
+            >
               Tiếp tục đặt cọc
             </Button>
           </aside>

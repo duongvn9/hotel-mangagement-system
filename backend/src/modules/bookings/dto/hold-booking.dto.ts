@@ -13,7 +13,10 @@ import {
 
 /** Cấp hold khi khách bấm "Đặt phòng" (chưa cần thông tin liên hệ). */
 export class HoldBookingDto {
-  @ApiProperty({ type: [String], description: 'Danh sách ObjectId phòng cần giữ' })
+  @ApiProperty({
+    type: [String],
+    description: 'Danh sách ObjectId phòng cần giữ',
+  })
   @IsArray()
   @ArrayNotEmpty()
   @IsMongoId({ each: true })

@@ -143,7 +143,11 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
       .findById(bookingId)
       .select('status isActive')
       .lean();
-    if (booking && booking.isActive && CONFIRMED_STATUSES.includes(booking.status)) {
+    if (
+      booking &&
+      booking.isActive &&
+      CONFIRMED_STATUSES.includes(booking.status)
+    ) {
       // Cọc giao lại cho booking đã xác nhận: không đổi gì thêm, hold đã nhả.
       await this.deactivateHold(bookingId);
       return true;
