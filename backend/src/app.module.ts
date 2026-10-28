@@ -17,6 +17,7 @@ import { HealthModule } from './modules/health/health.module.js';
 import { RolesModule } from './modules/roles/roles.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { BookingsModule } from './modules/bookings/bookings.module.js';
+import { GuestsModule } from './modules/guests/guests.module.js';
 import { InvoicesModule } from './modules/invoices/invoices.module.js';
 import { PaymentsModule } from './modules/payments/payments.module.js';
 import { PaymentsApiModule } from './modules/payments/payments-api.module.js';
@@ -28,6 +29,11 @@ import { IssuesModule } from './modules/issues/issues.module.js';
 import { ServicesModule } from './modules/services/services.module.js';
 import { ServiceOrdersModule } from './modules/service-orders/service-orders.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
+import { EquipmentModule } from './modules/equipment/equipment.module.js';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module.js';
+import { TaskSupervisionModule } from './modules/task-supervision/task-supervision.module.js';
+import { ReportsModule } from './modules/reports/reports.module.js';
+import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 
 @Module({
   imports: [
@@ -51,6 +57,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     FeedbackModule,
     IssuesModule,
     BookingsModule,
+    GuestsModule,
     InvoicesModule,
     PaymentsModule,
     PaymentsApiModule,
@@ -61,6 +68,11 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     ServicesModule,
     ServiceOrdersModule,
     NotificationsModule,
+    EquipmentModule,
+    MaintenanceModule,
+    TaskSupervisionModule,
+    ReportsModule,
+    DashboardModule,
     // Module nghiệp vụ thêm vào đây, xem src/modules/README.md
   ],
   // Khai báo ở đây (không dùng app.useGlobal* trong main.ts) để test e2e cũng có.

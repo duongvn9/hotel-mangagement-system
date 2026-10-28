@@ -81,7 +81,7 @@ describe('Payment consistency with room hold (e2e)', () => {
       .post('/api/v1/bookings/details')
       .set('x-forwarded-for', ip)
       .send({ holdToken: held.body.holdToken, ...details })
-      .expect(201);
+      .expect(200);
     return { bookingId: held.body.bookingId, holdToken: held.body.holdToken };
   }
 

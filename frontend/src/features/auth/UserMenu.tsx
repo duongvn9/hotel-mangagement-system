@@ -1,45 +1,56 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router'
+import { flatLinks, isStaffRole, navGroupsFor, roleHome } from '@/app/navigation'
 import { useAuth } from './auth-context'
 
-// shortcut: menu tạm theo role, chuyển vào layout theo role khi có H10 (Khoa).
-const ROLE_LINKS: Record<string, { to: string; label: string }[]> = {
-  CUSTOMER: [
-    { to: '/customer/service-orders', label: 'Dịch vụ của tôi' },
-    { to: '/customer/service-orders/new', label: 'Yêu cầu dịch vụ' },
-    { to: '/customer/issues', label: 'Sự cố của tôi' },
-    { to: '/customer/issues/report', label: 'Báo sự cố' },
-  ],
-  MANAGER: [
-    { to: '/manager/issues', label: 'Danh sách sự cố' },
-    { to: '/manager/rooms', label: 'Phòng' },
-    { to: '/manager/room-types', label: 'Loại phòng' },
-    { to: '/manager/amenities', label: 'Tiện nghi' },
-    { to: '/manager/services', label: 'Dịch vụ' },
-    { to: '/manager/accounts', label: 'Tài khoản' },
-    { to: '/manager/roles', label: 'Vai trò' },
-    { to: '/staff/feedback', label: 'Phản hồi' },
-  ],
-  RECEPTIONIST: [
-    { to: '/staff/service-orders', label: 'Yêu cầu dịch vụ' },
-    { to: '/staff/issues', label: 'Yêu cầu sự cố' },
-    { to: '/staff/feedback', label: 'Phản hồi' },
-  ],
-  SERVICE_STAFF: [
-    { to: '/staff/service/dashboard', label: 'Bảng điều khiển dịch vụ' },
-    { to: '/staff/service-history', label: 'Lịch sử thực hiện dịch vụ' },
-  ],
-  OPERATIONS_STAFF: [{ to: '/staff/operations/dashboard', label: 'Bảng điều khiển vận hành' }],
-}
+const compactLink =
+  'inline-flex min-h-11 items-center hover:text-primary focus-visible:text-primary'
 
-/** Góc phải header: link đăng nhập, hoặc tên người dùng + đăng xuất (UC03). */
-export function UserMenu() {
+/**
+ * Góc phải header: link đăng nhập, hoặc tên người dùng + đăng xuất (UC03).
+ * Mặc định liệt kê mọi link của role theo hàng ngang. `compact` dùng cho header khách: Customer
+ * gom các trang của mình vào một menu, nhân viên chỉ thấy nút "Khu làm việc".
+ */
+export function UserMenu({ compact = false }: { compact?: boolean }) {
   const { me, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [error, setError] = useState('')
+  // Menu gắn với trang đang mở nên tự đóng khi chuyển trang.
+  const [openOn, setOpenOn] = useState<string | null>(null)
+  const open = openOn === location.pathname
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setOpenOn(null)
+      buttonRef.current?.focus()
+    }
+    const onPointerDown = (event: MouseEvent) => {
+      if (!wrapperRef.current?.contains(event.target as Node)) setOpenOn(null)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('mousedown', onPointerDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('mousedown', onPointerDown)
+    }
+  }, [open])
 
   if (!me) {
-    return (
+    return compact ? (
+      <span className="flex flex-col gap-1 md:flex-row md:items-center md:gap-6">
+        <Link to="/login" className={compactLink}>
+          Đăng nhập
+        </Link>
+        <Link to="/register" className={compactLink}>
+          Đăng ký
+        </Link>
+      </span>
+    ) : (
       <Link to="/login" className="hover:text-primary">
         Đăng nhập
       </Link>
@@ -56,27 +67,19 @@ export function UserMenu() {
     }
   }
 
-  return (
-    <span className="flex flex-wrap items-center gap-4">
-      {ROLE_LINKS[me.role]?.map((link) => (
-        <Link
-          key={link.to}
-          to={link.to}
-          className="inline-flex min-h-11 items-center hover:text-primary"
-        >
-          {link.label}
-        </Link>
-      ))}
-      {(['SERVICE_STAFF', 'OPERATIONS_STAFF'].includes(me.role) ||
-        me.permissions.includes('task:execute')) && (
-        <Link to="/staff/tasks" className="inline-flex min-h-11 items-center hover:text-primary">
-          Công việc được giao
-        </Link>
-      )}
-      <Link to="/profile" className="tracking-normal text-pearl-900 normal-case hover:text-primary">
+  const account = (
+    <>
+      <Link
+        to="/profile"
+        className={`${compact ? compactLink : ''} tracking-normal text-pearl-900 normal-case hover:text-primary`}
+      >
         {me.fullName}
       </Link>
-      <button type="button" onClick={onLogout} className="uppercase hover:text-primary">
+      <button
+        type="button"
+        onClick={onLogout}
+        className={`${compact ? `${compactLink} uppercase` : 'uppercase hover:text-primary'}`}
+      >
         Đăng xuất
       </button>
       {error && (
@@ -84,6 +87,70 @@ export function UserMenu() {
           {error}
         </span>
       )}
+    </>
+  )
+
+  if (!compact) {
+    return (
+      <span className="flex flex-wrap items-center gap-4">
+        {flatLinks(me).map((link) => (
+          <Link
+            key={link.to}
+            to={link.to}
+            className="inline-flex min-h-11 items-center hover:text-primary"
+          >
+            {link.label}
+          </Link>
+        ))}
+        {account}
+      </span>
+    )
+  }
+
+  const groups = navGroupsFor(me)
+  return (
+    <span className="flex flex-col gap-1 md:flex-row md:items-center md:gap-6">
+      {isStaffRole(me.role) ? (
+        <Link to={roleHome(me.role)} className={compactLink}>
+          Khu làm việc
+        </Link>
+      ) : (
+        groups.length > 0 && (
+          <div ref={wrapperRef} className="relative">
+            <button
+              type="button"
+              ref={buttonRef}
+              aria-expanded={open}
+              aria-controls="account-links"
+              onClick={() => setOpenOn(open ? null : location.pathname)}
+              className={`${compactLink} gap-2 uppercase`}
+            >
+              {groups[0]?.label}
+              <span aria-hidden className="text-xs">
+                {open ? '▲' : '▼'}
+              </span>
+            </button>
+            {open && (
+              <ul
+                id="account-links"
+                className="mt-1 pl-3 md:absolute md:top-full md:right-0 md:z-30 md:mt-2 md:w-64 md:rounded-lg md:border md:border-stone-300 md:bg-white md:p-2 md:pl-2 md:shadow-md"
+              >
+                {flatLinks(me).map((link) => (
+                  <li key={link.to}>
+                    <Link
+                      to={link.to}
+                      className="flex min-h-11 items-center rounded px-3 tracking-normal text-pearl-900 normal-case transition-colors duration-150 hover:bg-primary-soft motion-reduce:transition-none"
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
+      )}
+      {account}
     </span>
   )
 }

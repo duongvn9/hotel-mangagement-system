@@ -12,35 +12,49 @@ import { serviceRoutes } from '@/features/services/routes'
 import { serviceOrderRoutes } from '@/features/service-orders/routes'
 import { taskRoutes } from '@/features/tasks/routes'
 import { staffDashboardRoutes } from '@/features/staff-dashboards/routes'
+import { maintenanceRoutes } from '@/features/maintenance/routes'
+import { taskSupervisionRoutes } from '@/features/task-supervision/routes'
+import { reportRoutes } from '@/features/reports/routes'
+import { dashboardRoutes } from '@/features/dashboard/routes'
 
 import { PublicLayout } from '@/layouts/PublicLayout'
+import { StaffLayout } from '@/layouts/StaffLayout'
 import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { partitionStaffRoutes } from './navigation'
 
 /**
- * Khung routing. Route theo role (Customer, Receptionist, Service Staff,
- * Operations Staff, Manager) thêm trong task "Layout chung, routing theo role".
- * Gợi ý: mỗi feature export mảng route riêng rồi gộp vào đây.
+ * Mỗi feature export mảng route riêng rồi gộp ở đây. Route thuộc khu nhân viên (/staff, /manager,
+ * /reception, /operations) được đặt trong khung nhân viên, phần còn lại trong khung khách; việc
+ * tách theo tiền tố đường dẫn nên URL và RequireAuth của từng feature không đổi.
  */
+const { staff, other } = partitionStaffRoutes([
+  ...bookingRoutes,
+  ...authRoutes,
+  ...accountRoutes,
+  ...roleRoutes,
+  ...roomTypeRoutes,
+  ...roomRoutes,
+  ...amenityRoutes,
+  ...serviceRoutes,
+  ...serviceOrderRoutes,
+  ...feedbackRoutes,
+  ...issueRoutes,
+  ...taskRoutes,
+  ...staffDashboardRoutes,
+  ...maintenanceRoutes,
+  ...taskSupervisionRoutes,
+  ...reportRoutes,
+  ...dashboardRoutes,
+])
+
 export const router = createBrowserRouter([
+  { element: <StaffLayout />, children: staff },
   {
     element: <PublicLayout />,
     children: [
       { index: true, element: <HomePage /> },
-      ...bookingRoutes,
-      ...authRoutes,
-      ...accountRoutes,
-      ...roleRoutes,
-      ...roomTypeRoutes,
-      ...roomRoutes,
-      ...amenityRoutes,
-      ...serviceRoutes,
-      ...serviceOrderRoutes,
-      ...feedbackRoutes,
-      ...issueRoutes,
-      ...taskRoutes,
-      // TODO(#18): Move staff dashboards into the H10 role layout when available.
-      ...staffDashboardRoutes,
+      ...other,
       { path: '*', element: <NotFoundPage /> },
     ],
   },

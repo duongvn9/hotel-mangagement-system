@@ -20,7 +20,8 @@ export const validRooms = (rooms: Types.ObjectId[]): boolean =>
 function requiredAfterHold(this: Booking): boolean {
   return (
     this.status !== BookingStatus.RoomHeld &&
-    this.status !== BookingStatus.Expired
+    this.status !== BookingStatus.Expired &&
+    this.status !== BookingStatus.Cancelled
   );
 }
 
@@ -31,6 +32,10 @@ export class Booking {
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   customer?: Types.ObjectId;
+
+  // Nhân viên tạo booking tại quầy (walk-in); booking online không có trường này.
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  createdBy?: Types.ObjectId;
 
   // Thông tin liên hệ chỉ bắt buộc từ khi nhập form (>= PENDING_DEPOSIT);
   // ở trạng thái ROOM_HELD (mới giữ phòng, chưa nhập form) có thể chưa có.

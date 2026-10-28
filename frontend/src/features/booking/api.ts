@@ -57,6 +57,8 @@ export const BOOKING_STATUS_DISPLAY: Record<
 }
 
 /** Booking vừa tạo (UC07/UC46). */
+export type BookingSource = 'ONLINE' | 'FRONT_DESK'
+
 export interface Booking {
   id: string
   code: string
@@ -68,6 +70,7 @@ export interface Booking {
   adultCount: number
   /** Số trẻ em. */
   childCount: number
+  source: BookingSource
   /** Tiền phòng server tính (VND). */
   roomTotal: number
   /** Tiền cọc cần thanh toán (VND). */
@@ -121,9 +124,7 @@ export interface SubmitBookingDetailsInput {
   guestPhone: string
 }
 
-export async function submitBookingDetails(
-  input: SubmitBookingDetailsInput,
-): Promise<HeldBooking> {
+export async function submitBookingDetails(input: SubmitBookingDetailsInput): Promise<HeldBooking> {
   return (await api.post<HeldBooking>('/bookings/details', input)).data
 }
 
@@ -133,6 +134,300 @@ export async function submitBookingDetails(
  */
 export async function getBooking(id: string, params: { code?: string } = {}): Promise<Booking> {
   return (await api.get<Booking>(`/bookings/${id}`, { params })).data
+}
+
+/** Booking walk-in lễ tân vừa tạo (UC08): vào thẳng CONFIRMED, không cọc/giữ phòng. */
+export interface WalkInBooking {
+  id: string
+  code: string
+  status: string
+  rooms: string[]
+  checkIn: string
+  checkOut: string
+  adultCount: number
+  childCount: number
+  source: BookingSource
+  /** Tiền phòng server tính (VND). */
+  roomTotal: number
+}
+
+/** UC08 — Lễ tân/Quản lý tạo booking cho khách vãng lai tại quầy. */
+export type CreateWalkInBookingInput = CreateBookingInput
+
+export async function createWalkInBooking(input: CreateWalkInBookingInput): Promise<WalkInBooking> {
+  return (await api.post<WalkInBooking>('/bookings/walk-in', input)).data
+}
+
+export interface BookingListParams {
+  page: number
+  limit: number
+  status?: string
+  /** Tìm theo mã booking, tên, email hoặc số điện thoại khách. */
+  q?: string
+  /** YYYY-MM-DD, giờ Việt Nam, gồm cả hai đầu. */
+  checkInFrom?: string
+  checkInTo?: string
+}
+
+export interface BookingListRoom {
+  id: string
+  roomNumber?: string
+  roomTypeName?: string
+}
+
+export interface BookingListItem {
+  id: string
+  code: string
+  status: string
+  guestName?: string
+  guestEmail?: string
+  guestPhone?: string
+  rooms: BookingListRoom[]
+  checkIn: string
+  checkOut: string
+  adultCount: number
+  childCount: number
+  source: BookingSource
+  roomTotal: number
+  createdAt: string
+  /** Booking do nhân viên tạo tại quầy (UC08). */
+  walkIn: boolean
+}
+
+export interface BookingListPage {
+  items: BookingListItem[]
+  total: number
+  page: number
+  limit: number
+}
+
+/** UC10 — Danh sách booking cho lễ tân/quản lý, lọc và phân trang phía server. */
+export async function listBookings(params: BookingListParams): Promise<BookingListPage> {
+  return (await api.get<BookingListPage>('/bookings', { params })).data
+}
+
+export interface InvoiceTotals {
+  roomTotal: number
+  serviceTotal: number
+  additionalTotal: number
+  discountTotal: number
+  taxTotal: number
+  totalAmount: number
+  depositPaid: number
+  finalPaid: number
+  balanceDue: number
+}
+
+export interface BookingCharge {
+  type: string
+  amount: number
+  reason: string
+  sourceId?: string
+}
+
+export interface BookingCharges {
+  bookingId: string
+  code: string
+  status: string
+  /** Trạng thái hóa đơn: UNPAID, PARTIALLY_PAID hoặc PAID. */
+  invoiceStatus: string
+  totals: InvoiceTotals
+  charges: BookingCharge[]
+}
+
+export interface AddChargeInput {
+  /** Số tiền (VND, số nguyên dương). */
+  amount: number
+  reason: string
+  /** Mã chống trùng cho một lần ghi; gửi lại cùng mã thì không ghi thêm khoản mới. */
+  requestId: string
+}
+
+/** UC17 — Các khoản phí và tổng hợp hóa đơn của booking. */
+export async function getBookingCharges(id: string): Promise<BookingCharges> {
+  return (await api.get<BookingCharges>(`/bookings/${id}/charges`)).data
+}
+
+/** UC17 — Ghi phụ phí cho khách đang ở (booking CHECKED_IN). */
+export async function addCheckoutCharge(
+  id: string,
+  input: AddChargeInput,
+): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${id}/charges`, input)).data
+}
+
+/** UC18 — Lễ tân xác nhận đã thu tiền mặt thanh toán cuối; số tiền do server tính từ hóa đơn. */
+export async function recordCashPayment(id: string, requestId: string): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${id}/payments/cash`, { requestId })).data
+}
+
+export interface CheckOutResult {
+  id: string
+  code: string
+  status: string
+  checkedOutAt: string
+  rooms: { id: string; roomNumber: string; status: string }[]
+  /** Hóa đơn cuối đã thanh toán đủ. */
+  invoice: BookingCharges
+}
+
+/** UC18 — Trả phòng cho khách đã thanh toán đủ; phòng chuyển sang chờ dọn. */
+export async function checkOutBooking(id: string): Promise<CheckOutResult> {
+  return (await api.post<CheckOutResult>(`/bookings/${id}/check-out`)).data
+}
+
+export interface RoomReplacement {
+  /** Phòng đang thuộc booking cần đổi đi. */
+  from: string
+  /** Phòng thay thế: cùng loại phòng, sẵn sàng và còn trống. */
+  to: string
+}
+
+export interface CheckInResult {
+  id: string
+  code: string
+  status: string
+  checkedInAt: string
+  rooms: { id: string; roomNumber: string }[]
+}
+
+/** UC16 — Nhận phòng; phòng chưa sẵn sàng có thể đổi sang phòng khác cùng loại (giá không đổi). */
+export async function checkInBooking(
+  id: string,
+  replacements: RoomReplacement[] = [],
+): Promise<CheckInResult> {
+  const body = replacements.length > 0 ? { replacements } : {}
+  return (await api.post<CheckInResult>(`/bookings/${id}/check-in`, body)).data
+}
+
+export interface CheckInRoomOption {
+  id: string
+  roomNumber: string
+  roomTypeName: string
+  /** Phòng đang hoạt động và có trạng thái vật lý AVAILABLE. */
+  ready: boolean
+  /** Trạng thái vật lý, hoặc INACTIVE nếu phòng bị vô hiệu hoá. */
+  status: string
+  /** Phòng thay thế hợp lệ; rỗng nếu phòng đã sẵn sàng. */
+  replacements: { id: string; roomNumber: string; floor: number }[]
+}
+
+export interface CheckInOptions {
+  bookingId: string
+  code: string
+  rooms: CheckInRoomOption[]
+}
+
+/** UC16 — Từng phòng của booking đã sẵn sàng chưa và có thể đổi sang phòng nào. */
+export async function getCheckInOptions(id: string): Promise<CheckInOptions> {
+  return (await api.get<CheckInOptions>(`/bookings/${id}/check-in-options`)).data
+}
+
+export interface SameDayList {
+  date: string
+  summary: {
+    arrivals: { total: number; awaitingDeposit: number; ready: number; checkedIn: number }
+    departures: { total: number; awaitingCheckOut: number; checkedOut: number }
+  }
+  /** Khách đến trong ngày (chưa cọc, đã xác nhận, đã nhận phòng). */
+  arrivals: BookingListItem[]
+  /** Khách đi trong ngày (đang ở, đã trả phòng). */
+  departures: BookingListItem[]
+}
+
+/** UC15 — Danh sách khách đến và đi trong ngày (mặc định hôm nay, giờ Việt Nam). */
+export async function getSameDayList(params: { date?: string }): Promise<SameDayList> {
+  return (await api.get<SameDayList>('/front-desk/same-day', { params })).data
+}
+
+export interface GuestProfile {
+  name: string
+  email: string
+  phone: string
+  /** Khách từng đặt khi đã đăng nhập tài khoản. */
+  hasAccount: boolean
+  totalBookings: number
+  /** Số booking đã trả phòng. */
+  completedStays: number
+  /** Ngày nhận phòng gần nhất (ISO), không tính booking đã huỷ. */
+  lastCheckIn: string | null
+}
+
+export interface GuestListParams {
+  q: string
+  page: number
+  limit: number
+}
+
+export interface GuestListPage {
+  items: GuestProfile[]
+  total: number
+  page: number
+  limit: number
+}
+
+/** UC14 — Tìm hồ sơ khách (gộp từ booking) theo tên, email, số điện thoại hoặc mã booking. */
+export async function searchGuests(params: GuestListParams): Promise<GuestListPage> {
+  return (await api.get<GuestListPage>('/guests', { params })).data
+}
+
+export type RoomOccupancy = 'FREE' | 'HELD' | 'RESERVED' | 'IN_HOUSE'
+
+export interface RoomBoardBooking {
+  code: string
+  guestName: string
+  status: string
+  checkIn: string
+  checkOut: string
+}
+
+export interface RoomBoardEntry {
+  id: string
+  roomNumber: string
+  floor: number
+  roomTypeId: string
+  roomTypeName: string
+  capacity: number
+  /** Trạng thái vật lý hiện tại của phòng. */
+  status: string
+  /** Mức chiếm trong ngày đang xem. */
+  occupancy: RoomOccupancy
+  /** Trạng thái vật lý đáng hiển thị cho ngày đang xem (OCCUPIED/CLEANING chỉ hôm nay), null nếu không có. */
+  physicalStatus: string | null
+  booking: RoomBoardBooking | null
+}
+
+export interface RoomStatusBoard {
+  date: string
+  summary: {
+    total: number
+    free: number
+    held: number
+    reserved: number
+    inHouse: number
+    maintenance: number
+    cleaning: number
+  }
+  rooms: RoomBoardEntry[]
+}
+
+export interface RoomStatusBoardParams {
+  /** YYYY-MM-DD, giờ Việt Nam; bỏ trống = hôm nay. */
+  date?: string
+  floor?: number
+  roomTypeId?: string
+}
+
+/** UC13 — Sơ đồ trạng thái phòng theo ngày cho lễ tân/quản lý. */
+export async function getRoomStatusBoard(params: RoomStatusBoardParams): Promise<RoomStatusBoard> {
+  return (await api.get<RoomStatusBoard>('/room-status-board', { params })).data
+}
+
+export type UpdateBookingInput = Partial<CreateBookingInput>
+
+/** UC11 — Lễ tân/Quản lý sửa booking; server kiểm tra lại phòng trống và tính lại giá. */
+export async function updateBooking(id: string, input: UpdateBookingInput): Promise<WalkInBooking> {
+  return (await api.patch<WalkInBooking>(`/bookings/${id}`, input)).data
 }
 
 /** Phản hồi tối thiểu khi huỷ (service trả booking đã CANCELLED). */

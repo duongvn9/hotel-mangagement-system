@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { renderWithAuth } from '@/features/auth/test-utils'
 import { bookingRoutes } from './routes'
-import type { AvailableRoom } from './api'
+import type { AvailableRoom, Booking } from './api'
 import {
   getStoredBooking,
   listStoredBookings,
@@ -14,7 +14,7 @@ import {
 } from './storage'
 import { nightsBetween, todayISO } from './utils'
 
-const booking = {
+const booking: Booking = {
   id: 'b1',
   code: 'BK123',
   status: 'PENDING_DEPOSIT',
@@ -25,6 +25,7 @@ const booking = {
   childCount: 0,
   roomTotal: 2_000_000,
   depositAmount: 600_000,
+  source: 'ONLINE',
   holdExpiresAt: '2099-01-10T00:00:00.000Z',
 }
 
@@ -205,8 +206,6 @@ describe('BookingDetailPage (server-authoritative)', () => {
     renderWithAuth(bookingRoutes, { path: '/booking/b2' })
 
     expect(await screen.findByText('Hết hạn giữ phòng')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Đặt cọc qua VNPay' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Đặt cọc qua VNPay' })).not.toBeInTheDocument()
   })
 })

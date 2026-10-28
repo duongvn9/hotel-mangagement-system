@@ -124,7 +124,7 @@ describe('Booking hold flow (e2e)', () => {
         guestEmail: 'held@example.test',
         guestPhone: '0900000000',
       })
-      .expect(201);
+      .expect(200);
     expect(response.body.status).toBe('PENDING_DEPOSIT');
     // Cùng một cửa sổ: không gia hạn khi nộp thông tin.
     expect(response.body.holdExpiresAt).toBe(held.body.holdExpiresAt);

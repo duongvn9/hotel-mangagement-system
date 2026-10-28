@@ -70,3 +70,49 @@ jobs:
           MONGO_ROOT_USERNAME: ci
           MONGO_ROOT_PASSWORD: ci
           CORS_ORIGINS: http://localhost
+
+  maintenance-smoke:
+    # Runtime Compose verification for UC35/36/55/56 and Manager dashboard, isolated from every development database.
+    runs-on: ubuntu-22.04
+    needs: [backend, frontend]
+    timeout-minutes: 15
+    env:
+      COMPOSE_PROJECT_NAME: hms-uc36-ci
+      MONGO_DB: hms_uc36_compose_test
+      MONGO_PORT: 27038
+      BACKEND_PORT: 3038
+      FRONTEND_PORT: 5138
+      NOTIFICATIONS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v5
+      - name: Start real development stack
+        run: docker compose up --build -d --wait --wait-timeout 120
+      - name: Wait for API and frontend proxy
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3038/api/v1/health && curl --fail --silent http://localhost:5138/api/v1/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Seed twice and verify UC36 API, Swagger and idempotency
+        run: |
+          docker compose exec -T backend npm run seed
+          docker compose exec -T backend node test/maintenance-history.smoke.mjs snapshot
+          docker compose exec -T backend npm run seed
+          docker compose exec -T backend node test/maintenance-history.smoke.mjs verify
+      - name: Verify UC55 live task queues and read-only supervision
+        run: docker compose exec -T backend node test/task-supervision.smoke.mjs
+      - name: Verify UC56 recorded revenue and read-only reporting
+        run: docker compose exec -T backend node test/revenue-report.smoke.mjs
+      - name: Verify Manager dashboard reuses live sources without writes
+        run: docker compose exec -T backend node test/manager-dashboard.smoke.mjs
+      - name: Verify UC57 operational report reads all six sources
+        run: docker compose exec -T backend node test/operational-report.smoke.mjs
+      - name: Runtime logs on failure
+        if: failure()
+        run: docker compose logs --tail 120
+      - name: Stop disposable stack
+        if: always()
+        run: docker compose down --volumes

@@ -1,12 +1,20 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Types, type Model } from 'mongoose';
+import type { AuthUser } from '../../common/auth/auth-user.js';
+import { Booking, BookingStatus } from '../bookings/schemas/booking.schema.js';
 import { User } from '../users/schemas/user.schema.js';
-import type { ListFeedbackQuery } from './dto/feedback.dto.js';
+import type {
+  ListFeedbackQuery,
+  MyStaysResponse,
+  SubmitFeedbackDto,
+  SubmittedFeedback,
+} from './dto/feedback.dto.js';
 import { Feedback } from './schemas/feedback.schema.js';
 
 interface PopulatedUser {
@@ -56,7 +64,100 @@ export class FeedbackService {
   constructor(
     @InjectModel(Feedback.name) private readonly feedback: Model<Feedback>,
     @InjectModel(User.name) private readonly users: Model<User>,
+    @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
   ) {}
+
+  /**
+   * UC39 Submit Feedback: khách gửi phản hồi cho lần lưu trú đã trả phòng của chính mình
+   * (BR-FB-01), điểm 1-5 không bắt buộc (BR-FB-02), mỗi booking một phản hồi (BR-FB-03).
+   */
+  async submit(
+    dto: SubmitFeedbackDto,
+    user: AuthUser,
+  ): Promise<SubmittedFeedback> {
+    const booking = await this.bookings
+      .findById(dto.bookingId)
+      .select('customer status isActive')
+      .lean();
+    if (!booking || !booking.isActive) {
+      throw new NotFoundException('Booking not found');
+    }
+    if (!booking.customer || String(booking.customer) !== user.id) {
+      throw new ForbiddenException('Not your booking');
+    }
+    if (booking.status !== BookingStatus.CheckedOut) {
+      throw new ConflictException('Feedback can only be sent after check-out');
+    }
+    try {
+      const created = await this.feedback.create({
+        customer: booking.customer,
+        booking: booking._id,
+        content: dto.content,
+        ...(dto.rating === undefined ? {} : { rating: dto.rating }),
+      });
+      return {
+        id: String(created._id),
+        bookingId: String(created.booking),
+        ...(created.rating === undefined ? {} : { rating: created.rating }),
+        content: created.content,
+        createdAt: (
+          (created as { createdAt?: Date }).createdAt ?? new Date()
+        ).toISOString(),
+      };
+    } catch (error) {
+      if ((error as { code?: number }).code === 11000) {
+        throw new ConflictException(
+          'Feedback for this stay has already been sent',
+        );
+      }
+      throw error;
+    }
+  }
+
+  /** Các lần lưu trú đã trả phòng của khách kèm phản hồi đã gửi và câu trả lời của lễ tân. */
+  async mine(user: AuthUser): Promise<MyStaysResponse> {
+    const customer = new Types.ObjectId(user.id);
+    const stays = await this.bookings
+      .find({ customer, status: BookingStatus.CheckedOut, isActive: true })
+      .sort({ checkOut: -1, _id: -1 })
+      .select('code checkIn checkOut')
+      .lean();
+    const sent = await this.feedback
+      .find({
+        customer,
+        booking: { $in: stays.map((stay) => stay._id) },
+        isActive: true,
+      })
+      .lean<(Feedback & { _id: Types.ObjectId; createdAt?: Date })[]>();
+    const byBooking = new Map(sent.map((item) => [String(item.booking), item]));
+    return {
+      items: stays.map((stay) => {
+        const item = byBooking.get(String(stay._id));
+        return {
+          bookingId: String(stay._id),
+          code: stay.code,
+          checkIn: stay.checkIn.toISOString(),
+          checkOut: stay.checkOut.toISOString(),
+          feedback: item
+            ? {
+                id: String(item._id),
+                ...(item.rating === undefined ? {} : { rating: item.rating }),
+                content: item.content,
+                createdAt: (item.createdAt ?? new Date(0)).toISOString(),
+                ...(item.reply
+                  ? {
+                      reply: {
+                        content: item.reply.content,
+                        repliedAt: item.reply.repliedAt.toISOString(),
+                      },
+                    }
+                  : {}),
+              }
+            : null,
+        };
+      }),
+    };
+  }
 
   /** UC40 View Feedback List. */
   async list({ search, rating, replied, page, limit }: ListFeedbackQuery) {
