@@ -6,6 +6,7 @@ import { createHmac } from 'node:crypto';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { Booking } from '../src/modules/bookings/schemas/booking.schema.js';
+import { RoomHold } from '../src/modules/bookings/schemas/room-hold.schema.js';
 import { Invoice } from '../src/modules/invoices/schemas/invoice.schema.js';
 import { InvoicePricingAdapter } from '../src/modules/invoices/invoice-adapters.js';
 import { PaymentTransaction } from '../src/modules/payments/schemas/payment-transaction.schema.js';
@@ -49,10 +50,12 @@ function ipnCallback(
 describe('Payments VNPay endpoints (e2e)', () => {
   let app: INestApplication;
   let bookings: Model<Booking>;
+  let holds: Model<RoomHold>;
   let invoices: Model<Invoice>;
   let payments: Model<PaymentTransaction>;
   const customerId = new Types.ObjectId();
   const bookingId = new Types.ObjectId();
+  const roomId = new Types.ObjectId();
   const http = () => request(app.getHttpServer());
   const CUSTOMER = {
     'x-dev-role': 'CUSTOMER',
@@ -60,22 +63,33 @@ describe('Payments VNPay endpoints (e2e)', () => {
     'x-forwarded-for': '203.0.113.9',
   };
 
-  const seedBooking = () =>
-    bookings.create({
+  // Booking PENDING_DEPOSIT luôn đi kèm một RoomHold còn hạn (cọc chỉ hợp lệ khi còn giữ phòng).
+  const seedBooking = async () => {
+    await bookings.create({
       _id: bookingId,
       code: `PAY-${bookingId}`,
       customer: customerId,
-      rooms: [new Types.ObjectId()],
+      rooms: [roomId],
       guestName: 'Payment test',
       guestEmail: 'pay@example.test',
       guestPhone: '0900000000',
       checkIn: new Date('2026-10-23'),
       checkOut: new Date('2026-10-25'),
-      guests: 2,
+      adultCount: 2,
       roomTotal: 1000000,
       depositAmount: 300000,
       status: 'PENDING_DEPOSIT',
     });
+    await holds.create({
+      booking: bookingId,
+      holdToken: `PAY-HOLD-${bookingId}`,
+      rooms: [roomId],
+      checkIn: new Date('2026-10-23'),
+      checkOut: new Date('2026-10-25'),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      isActive: true,
+    });
+  };
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
@@ -96,6 +110,7 @@ describe('Payments VNPay endpoints (e2e)', () => {
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
     await app.init();
     bookings = app.get(getModelToken(Booking.name));
+    holds = app.get(getModelToken(RoomHold.name));
     invoices = app.get(getModelToken(Invoice.name));
     payments = app.get(getModelToken(PaymentTransaction.name));
     await Promise.all([bookings.init(), invoices.init(), payments.init()]);
@@ -104,12 +119,14 @@ describe('Payments VNPay endpoints (e2e)', () => {
   beforeEach(async () => {
     await payments.deleteMany({ booking: bookingId });
     await invoices.deleteMany({ booking: bookingId });
+    await holds.deleteMany({ booking: bookingId });
     await bookings.deleteMany({ _id: bookingId });
   });
 
   afterAll(async () => {
     await payments.deleteMany({ booking: bookingId });
     await invoices.deleteMany({ booking: bookingId });
+    await holds.deleteMany({ booking: bookingId });
     await bookings.deleteMany({ _id: bookingId });
     await app.close();
   });

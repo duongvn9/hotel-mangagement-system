@@ -2,11 +2,13 @@ import { VersioningType, type INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { Model, Types } from 'mongoose';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomInt } from 'node:crypto';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { Booking } from '../src/modules/bookings/schemas/booking.schema.js';
+import { RoomHold } from '../src/modules/bookings/schemas/room-hold.schema.js';
 import { Invoice } from '../src/modules/invoices/schemas/invoice.schema.js';
+import { PaymentTransaction } from '../src/modules/payments/schemas/payment-transaction.schema.js';
 import { Room } from '../src/modules/rooms/schemas/room.schema.js';
 import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
 import { VnpayService } from '../src/modules/payments/vnpay.service.js';
@@ -48,6 +50,8 @@ describe('Booking to payment full flow (e2e)', () => {
   let app: INestApplication;
   let bookings: Model<Booking>;
   let invoices: Model<Invoice>;
+  let payments: Model<PaymentTransaction>;
+  let holds: Model<RoomHold>;
   let rooms: Model<Room>;
   let roomTypes: Model<RoomType>;
   const typeId = new Types.ObjectId();
@@ -71,11 +75,15 @@ describe('Booking to payment full flow (e2e)', () => {
     await app.init();
     bookings = app.get(getModelToken(Booking.name));
     invoices = app.get(getModelToken(Invoice.name));
+    payments = app.get(getModelToken(PaymentTransaction.name));
+    holds = app.get(getModelToken(RoomHold.name));
     rooms = app.get(getModelToken(Room.name));
     roomTypes = app.get(getModelToken(RoomType.name));
     await Promise.all([
       bookings.init(),
       invoices.init(),
+      payments.init(),
+      holds.init(),
       rooms.init(),
       roomTypes.init(),
     ]);
@@ -97,7 +105,10 @@ describe('Booking to payment full flow (e2e)', () => {
 
   afterAll(async () => {
     const docs = await bookings.find({ rooms: roomId }).select('_id').lean();
-    await invoices.deleteMany({ booking: { $in: docs.map((d) => d._id) } });
+    const filter = { booking: { $in: docs.map((d) => d._id) } };
+    await payments.deleteMany(filter);
+    await holds.deleteMany(filter);
+    await invoices.deleteMany(filter);
     await bookings.deleteMany({ rooms: roomId });
     await rooms.deleteOne({ _id: roomId });
     await roomTypes.deleteOne({ _id: typeId });
@@ -113,7 +124,7 @@ describe('Booking to payment full flow (e2e)', () => {
         rooms: [String(roomId)],
         checkIn: '2094-01-10',
         checkOut: '2094-01-12',
-        guests: 2,
+        adultCount: 2,
         guestName: 'Flow',
         guestEmail: 'flow@example.test',
         guestPhone: '0900000000',
@@ -133,7 +144,7 @@ describe('Booking to payment full flow (e2e)', () => {
     // 3. VNPay IPN báo cọc thành công -> booking CONFIRMED.
     const depositIpn = await http()
       .get(
-        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 'DEPOSIT', 600000, '700001')}`,
+        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 'DEPOSIT', 600000, String(randomInt(1e13, 1e14)))}`,
       )
       .expect(200);
     expect(depositIpn.body.RspCode).toBe('00');
@@ -157,7 +168,7 @@ describe('Booking to payment full flow (e2e)', () => {
     // 5. IPN thanh toán cuối -> hoá đơn PAID.
     const finalIpn = await http()
       .get(
-        `/api/v1/payments/vnpay/ipn?${ipn(final.body.transactionRef, 'FINAL', 1400000, '700002')}`,
+        `/api/v1/payments/vnpay/ipn?${ipn(final.body.transactionRef, 'FINAL', 1400000, String(randomInt(1e13, 1e14)))}`,
       )
       .expect(200);
     expect(finalIpn.body.RspCode).toBe('00');

@@ -33,7 +33,7 @@ describe('Guest booking and code-based deposit (e2e)', () => {
     rooms: [String(roomId)],
     checkIn: '2092-01-10',
     checkOut: '2092-01-12',
-    guests: 2,
+    adultCount: 2,
     guestName: 'Anon Guest',
     guestEmail: 'anon@example.test',
     guestPhone: '0900000000',

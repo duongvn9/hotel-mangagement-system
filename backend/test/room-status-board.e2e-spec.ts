@@ -66,7 +66,8 @@ describe('Room status board (e2e)', () => {
       rooms: [roomId],
       checkIn: vn(checkIn),
       checkOut: vn(checkOut),
-      guests: 2,
+      adultCount: 2,
+      childCount: 0,
       status,
       roomTotal: 1000000,
       depositAmount: 300000,
@@ -150,6 +151,26 @@ describe('Room status board (e2e)', () => {
     );
     await holds.create({
       booking: pending._id,
+      holdToken: `board-${pending._id}`,
+      rooms: [ids.held],
+      checkIn: vn('2095-03-10'),
+      checkOut: vn('2095-03-12'),
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+    const draft = await seed(
+      'RH',
+      ids.held,
+      BookingStatus.RoomHeld,
+      '2095-03-10',
+      '2095-03-12',
+    );
+    await bookings.updateOne(
+      { _id: draft._id },
+      { $unset: { guestName: 1, guestEmail: 1, guestPhone: 1 } },
+    );
+    await holds.create({
+      booking: draft._id,
+      holdToken: `board-${draft._id}`,
       rooms: [ids.held],
       checkIn: vn('2095-03-10'),
       checkOut: vn('2095-03-12'),

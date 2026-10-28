@@ -91,6 +91,7 @@ export class RoomStatusBoardService {
             BookingStatus.CheckedIn,
             BookingStatus.Confirmed,
             BookingStatus.PendingDeposit,
+            BookingStatus.RoomHeld,
           ],
         },
         checkIn: { $lt: dayEnd },
@@ -101,7 +102,9 @@ export class RoomStatusBoardService {
       .exec();
 
     const pending = bookingRows.filter(
-      (booking) => booking.status === BookingStatus.PendingDeposit,
+      (booking) =>
+        booking.status === BookingStatus.PendingDeposit ||
+        booking.status === BookingStatus.RoomHeld,
     );
     const liveHolds = pending.length
       ? await this.holds

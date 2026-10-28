@@ -10,11 +10,13 @@ export const TASK_LABELS = {
   COMPLETED: 'Hoàn thành',
 }
 export const BOOKING_LABELS = {
+  ROOM_HELD: 'Đang giữ phòng',
   PENDING_DEPOSIT: 'Chờ cọc',
   CONFIRMED: 'Đã xác nhận',
   CHECKED_IN: 'Đã nhận phòng',
   CHECKED_OUT: 'Đã trả phòng',
   CANCELLED: 'Đã hủy',
+  EXPIRED: 'Hết hạn giữ phòng',
 }
 export const ISSUE_LABELS = {
   PENDING_REVIEW: 'Chờ xem xét',

@@ -11,6 +11,7 @@ import {
   Min,
 } from 'class-validator';
 import { BookingStatus } from '../schemas/booking.schema.js';
+import { BookingSource } from '../../../common/constants/booking-source.enum.js';
 
 const toInteger = ({ value }: { value: unknown }) =>
   typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
@@ -73,13 +74,15 @@ export class BookingListItem {
   id: string;
   code: string;
   status: string;
-  guestName: string;
-  guestEmail: string;
-  guestPhone: string;
+  guestName?: string | undefined;
+  guestEmail?: string | undefined;
+  guestPhone?: string | undefined;
   rooms: BookingListRoom[];
   checkIn: string;
   checkOut: string;
-  guests: number;
+  adultCount: number;
+  childCount: number;
+  source: BookingSource;
   roomTotal: number;
   createdAt: string;
   /** true nếu booking do nhân viên tạo tại quầy (UC08). */

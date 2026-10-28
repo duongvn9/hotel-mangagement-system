@@ -1,6 +1,14 @@
-import { Module } from '@nestjs/common';
+import {
+  Module,
+  type MiddlewareConsumer,
+  type NestModule,
+} from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RoomsModule } from '../rooms/rooms.module.js';
+import {
+  PaymentTransaction,
+  PaymentTransactionSchema,
+} from '../payments/schemas/payment-transaction.schema.js';
 import { Booking, BookingSchema } from './schemas/booking.schema.js';
 import { RoomHold, RoomHoldSchema } from './schemas/room-hold.schema.js';
 import { AvailabilityController } from './availability.controller.js';
@@ -12,6 +20,8 @@ import {
 import { MongoAvailabilityRoomSource } from './mongo-availability-room-source.js';
 import { BookingsController } from './bookings.controller.js';
 import { BookingsService } from './bookings.service.js';
+import { GuestSessionMiddleware } from './guest-session.middleware.js';
+import { HoldExpiryService } from './hold-expiry.service.js';
 import { CheckInService } from './check-in.service.js';
 import { FrontDeskController } from './front-desk.controller.js';
 import { FrontDeskService } from './front-desk.service.js';
@@ -24,6 +34,7 @@ import { RoomStatusBoardService } from './room-status-board.service.js';
     MongooseModule.forFeature([
       { name: Booking.name, schema: BookingSchema },
       { name: RoomHold.name, schema: RoomHoldSchema },
+      { name: PaymentTransaction.name, schema: PaymentTransactionSchema },
     ]),
   ],
   controllers: [
@@ -36,6 +47,7 @@ import { RoomStatusBoardService } from './room-status-board.service.js';
     AvailabilityService,
     AvailabilityClock,
     BookingsService,
+    HoldExpiryService,
     RoomStatusBoardService,
     FrontDeskService,
     CheckInService,
@@ -53,4 +65,8 @@ import { RoomStatusBoardService } from './room-status-board.service.js';
     RoomStatusBoardService,
   ],
 })
-export class BookingsModule {}
+export class BookingsModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(GuestSessionMiddleware).forRoutes(BookingsController);
+  }
+}

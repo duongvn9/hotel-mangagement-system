@@ -147,7 +147,7 @@ export function BookingListPage() {
                             {booking.code}
                           </span>
                           <Badge tone={display.tone}>{display.label}</Badge>
-                          {booking.walkIn && <Badge tone="info">Tại quầy</Badge>}
+                          {booking.source === 'FRONT_DESK' && <Badge tone="info">Tại quầy</Badge>}
                         </div>
                         <p className="text-sm text-stone-700">{booking.guestName}</p>
                         <p className="text-xs text-stone-500">
@@ -158,7 +158,9 @@ export function BookingListPage() {
                         <p className="font-semibold">
                           {formatDate(booking.checkIn)} – {formatDate(booking.checkOut)}
                         </p>
-                        <p className="text-stone-700">{booking.guests} khách</p>
+                        <p className="text-stone-700">
+                          {booking.adultCount + booking.childCount} khách
+                        </p>
                       </div>
                       <p className="text-sm text-stone-700">
                         {booking.rooms

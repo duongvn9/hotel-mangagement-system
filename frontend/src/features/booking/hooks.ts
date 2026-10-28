@@ -6,6 +6,8 @@ import {
   checkOutBooking,
   createBooking,
   createWalkInBooking,
+  getBooking,
+  holdBooking,
   initiateDeposit,
   getBookingCharges,
   getCheckInOptions,
@@ -16,6 +18,7 @@ import {
   recordCashPayment,
   searchGuests,
   searchAvailability,
+  submitBookingDetails,
   updateBooking,
   verifyVnpayReturn,
   type AddChargeInput,
@@ -74,14 +77,67 @@ export function useCreateBooking() {
   return useMutation({ mutationFn: createBooking })
 }
 
+export function useHoldBooking() {
+  return useMutation({ mutationFn: holdBooking })
+}
+
+export function useSubmitBookingDetails() {
+  return useMutation({ mutationFn: submitBookingDetails })
+}
+
+/**
+ * Đọc trạng thái authoritative của booking từ backend. `refetchInterval` để trang
+ * kết quả thanh toán tự cập nhật khi IPN chốt CONFIRMED; dừng khi đã ở trạng thái cuối.
+ */
+export function useBooking(
+  id: string,
+  options: { code?: string; enabled?: boolean; poll?: boolean } = {},
+) {
+  const { code, enabled = true, poll = false } = options
+  return useQuery({
+    queryKey: ['booking', id, code ?? null],
+    queryFn: () => getBooking(id, code === undefined ? {} : { code }),
+    enabled: enabled && id.length > 0,
+    retry: false,
+    refetchInterval: poll
+      ? (query) => {
+          const status = query.state.data?.status
+          const settled =
+            status === 'CONFIRMED' ||
+            status === 'CANCELLED' ||
+            status === 'EXPIRED' ||
+            status === 'CHECKED_IN' ||
+            status === 'CHECKED_OUT'
+          return settled ? false : 3000
+        }
+      : false,
+  })
+}
+
 export function useCreateWalkInBooking() {
-  return useMutation({ mutationFn: createWalkInBooking })
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: createWalkInBooking,
+    onSuccess: () =>
+      Promise.all(
+        ['availability', 'bookings', 'same-day', 'room-status-board', 'guests'].map((key) =>
+          queryClient.invalidateQueries({ queryKey: [key] }),
+        ),
+      ),
+  })
 }
 
 export function useUpdateBooking() {
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateBookingInput }) =>
       updateBooking(id, input),
+    onSuccess: () =>
+      Promise.all(
+        ['availability', 'bookings', 'same-day', 'room-status-board', 'guests'].map((key) =>
+          queryClient.invalidateQueries({ queryKey: [key] }),
+        ),
+      ),
   })
 }
 

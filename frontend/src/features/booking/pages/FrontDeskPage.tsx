@@ -167,7 +167,7 @@ function BookingRow({
           {booking.rooms
             .map((room) => [room.roomNumber, room.roomTypeName].filter(Boolean).join(' · '))
             .join(', ')}{' '}
-          · {booking.guests} khách
+          · {booking.adultCount + booking.childCount} khách
         </p>
         {booking.status === 'PENDING_DEPOSIT' && (
           <p className="text-xs font-semibold text-warning">Chưa đặt cọc</p>

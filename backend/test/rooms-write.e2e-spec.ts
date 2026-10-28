@@ -282,13 +282,14 @@ describe('UC48 room write API', () => {
       rooms: [id],
       checkIn: new Date('2030-01-01'),
       checkOut: new Date('2030-01-02'),
-      guests: 1,
+      adultCount: 1,
       status: BookingStatus.Confirmed,
       roomTotal: 850000,
       depositAmount: 0,
     });
     await holds.create({
       booking: booking._id,
+      holdToken: 'ROOMS-WRITE-HOLD-1',
       rooms: [id],
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,

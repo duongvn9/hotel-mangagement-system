@@ -1,4 +1,5 @@
 import type { Types } from 'mongoose';
+import { BookingSource } from '../../common/constants/booking-source.enum.js';
 import type { BookingListItem } from './dto/list-bookings.dto.js';
 
 export interface PopulatedListRoom {
@@ -18,13 +19,15 @@ export interface ListableBooking {
   _id: Types.ObjectId;
   code: string;
   status: string;
-  guestName: string;
-  guestEmail: string;
-  guestPhone: string;
+  guestName?: string | undefined;
+  guestEmail?: string | undefined;
+  guestPhone?: string | undefined;
   rooms: PopulatedListRoom[];
   checkIn: Date;
   checkOut: Date;
-  guests: number;
+  adultCount: number;
+  childCount: number;
+  source: BookingSource;
   roomTotal: number;
   createdBy?: Types.ObjectId | undefined;
   createdAt?: Date | undefined;
@@ -46,7 +49,9 @@ export function toBookingListItem(booking: ListableBooking): BookingListItem {
     })),
     checkIn: booking.checkIn.toISOString(),
     checkOut: booking.checkOut.toISOString(),
-    guests: booking.guests,
+    adultCount: booking.adultCount,
+    childCount: booking.childCount,
+    source: booking.source,
     roomTotal: booking.roomTotal,
     createdAt: (booking.createdAt ?? booking.checkIn).toISOString(),
     walkIn: booking.createdBy !== undefined,

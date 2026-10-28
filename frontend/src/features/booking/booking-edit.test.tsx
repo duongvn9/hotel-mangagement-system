@@ -17,7 +17,9 @@ const item = (overrides: Partial<BookingListItem> = {}): BookingListItem => ({
   rooms: [{ id: 'r1', roomNumber: '101', roomTypeName: 'Deluxe' }],
   checkIn: '2099-01-09T17:00:00.000Z', // 2099-01-10 giờ VN
   checkOut: '2099-01-11T17:00:00.000Z', // 2099-01-12 giờ VN
-  guests: 2,
+  adultCount: 2,
+  childCount: 0,
+  source: 'FRONT_DESK',
   roomTotal: 2_000_000,
   createdAt: '2099-01-01T00:00:00.000Z',
   walkIn: true,
@@ -75,6 +77,9 @@ describe('EditBookingPage', () => {
     expect(screen.getByRole('checkbox', { name: /101 · Deluxe/ })).toBeChecked()
     expect(get).toHaveBeenCalledWith('/bookings', { params: { page: 1, limit: 20, q: 'BKEDIT1' } })
 
+    expect(screen.getByLabelText(/Người lớn/)).toHaveValue(2)
+    expect(screen.getByLabelText(/Trẻ em/)).toHaveValue(0)
+    fireEvent.change(screen.getByLabelText(/Trẻ em/), { target: { value: '1' } })
     fireEvent.change(screen.getByLabelText(/Trả phòng/), { target: { value: '2099-01-13' } })
     fireEvent.click(await screen.findByRole('checkbox', { name: /Suite/ }))
     fireEvent.click(screen.getByRole('checkbox', { name: /101 · Deluxe/ }))
@@ -86,7 +91,8 @@ describe('EditBookingPage', () => {
         rooms: ['r2'],
         checkIn: '2099-01-10',
         checkOut: '2099-01-13',
-        guests: 2,
+        adultCount: 2,
+        childCount: 1,
         guestName: 'Nguyễn Văn B',
         guestEmail: 'a@example.test',
         guestPhone: '0900000001',

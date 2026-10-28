@@ -13,6 +13,7 @@ import type { BookingListItem } from './dto/list-bookings.dto.js';
 import type { SameDayQuery, SameDayResponse } from './dto/same-day.dto.js';
 import { businessDay } from './room-status-board.core.js';
 import { Booking } from './schemas/booking.schema.js';
+import { RoomHold } from './schemas/room-hold.schema.js';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -28,6 +29,7 @@ export class FrontDeskService {
   constructor(
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
     @Inject(AvailabilityClock) private readonly clock: AvailabilityClock,
+    @InjectModel(RoomHold.name) private readonly holds: Model<RoomHold>,
   ) {}
 
   /**
@@ -58,7 +60,27 @@ export class FrontDeskService {
         .populate<{ rooms: PopulatedListRoom[] }>(BOOKING_ROOMS_POPULATE)
         .lean()
         .exec();
-      return rows.map(toBookingListItem).sort(byRoomThenCode);
+      const held = rows.filter((row) => row.status === BookingStatus.RoomHeld);
+      const live = held.length
+        ? await this.holds
+            .find({
+              booking: { $in: held.map((row) => row._id) },
+              isActive: true,
+              expiresAt: { $gt: this.clock.now() },
+            })
+            .select('booking')
+            .lean()
+            .exec()
+        : [];
+      const liveIds = new Set(live.map((hold) => String(hold.booking)));
+      return rows
+        .filter(
+          (row) =>
+            row.status !== BookingStatus.RoomHeld ||
+            liveIds.has(String(row._id)),
+        )
+        .map(toBookingListItem)
+        .sort(byRoomThenCode);
     };
     const [arrivals, departures] = await Promise.all([
       load({
@@ -66,6 +88,7 @@ export class FrontDeskService {
         status: {
           $in: [
             BookingStatus.PendingDeposit,
+            BookingStatus.RoomHeld,
             BookingStatus.Confirmed,
             BookingStatus.CheckedIn,
           ],

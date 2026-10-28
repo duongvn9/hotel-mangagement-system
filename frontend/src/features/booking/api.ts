@@ -36,7 +36,8 @@ export interface CreateBookingInput {
   rooms: string[]
   checkIn: string
   checkOut: string
-  guests: number
+  adultCount: number
+  childCount: number
   guestName: string
   guestEmail: string
   guestPhone: string
@@ -46,14 +47,18 @@ export const BOOKING_STATUS_DISPLAY: Record<
   string,
   { label: string; tone: 'success' | 'info' | 'warning' | 'danger' | 'neutral' }
 > = {
+  ROOM_HELD: { label: 'Đang giữ phòng', tone: 'info' },
   PENDING_DEPOSIT: { label: 'Chờ đặt cọc', tone: 'warning' },
   CONFIRMED: { label: 'Đã xác nhận', tone: 'success' },
   CHECKED_IN: { label: 'Đã nhận phòng', tone: 'info' },
   CHECKED_OUT: { label: 'Đã trả phòng', tone: 'neutral' },
   CANCELLED: { label: 'Đã huỷ', tone: 'danger' },
+  EXPIRED: { label: 'Hết hạn giữ phòng', tone: 'danger' },
 }
 
 /** Booking vừa tạo (UC07/UC46). */
+export type BookingSource = 'ONLINE' | 'FRONT_DESK'
+
 export interface Booking {
   id: string
   code: string
@@ -61,18 +66,74 @@ export interface Booking {
   rooms: string[]
   checkIn: string
   checkOut: string
-  guests: number
+  /** Số người lớn. */
+  adultCount: number
+  /** Số trẻ em. */
+  childCount: number
+  source: BookingSource
   /** Tiền phòng server tính (VND). */
   roomTotal: number
   /** Tiền cọc cần thanh toán (VND). */
   depositAmount: number
-  /** Thời điểm giữ phòng hết hạn nếu chưa đặt cọc (ISO). */
-  holdExpiresAt: string
+  /** Thời điểm giữ phòng hết hạn (ISO); vắng khi booking không còn giữ phòng. */
+  holdExpiresAt?: string
 }
 
 /** UC07/UC46 — Tạo booking. Nếu đang đăng nhập Customer, booking tự gắn với tài khoản. */
 export async function createBooking(input: CreateBookingInput): Promise<Booking> {
   return (await api.post<Booking>('/bookings', input)).data
+}
+
+/** Yêu cầu giữ phòng khi khách bấm "Đặt phòng" (chưa cần thông tin liên hệ). */
+export interface HoldBookingInput {
+  rooms: string[]
+  checkIn: string
+  checkOut: string
+  adultCount: number
+  childCount?: number
+}
+
+/** Phản hồi khi giữ phòng (ROOM_HELD) — nguồn chuẩn để hiện tạm tính và đếm ngược. */
+export interface HeldBooking {
+  bookingId: string
+  holdToken: string
+  status: string
+  rooms: string[]
+  checkIn: string
+  checkOut: string
+  adultCount: number
+  childCount: number
+  roomTotal: number
+  depositAmount: number
+  holdExpiresAt: string
+}
+
+/**
+ * Giữ phòng ngay khi bắt đầu đặt: backend tạo Booking nháp ROOM_HELD + RoomHold,
+ * khoá phòng 15 phút. Một phiên chỉ giữ một booking; bấm lại trả hold cũ (không gia hạn).
+ */
+export async function holdBooking(input: HoldBookingInput): Promise<HeldBooking> {
+  return (await api.post<HeldBooking>('/bookings/hold', input)).data
+}
+
+/** Nhập thông tin liên hệ cho hold còn hạn: ROOM_HELD → PENDING_DEPOSIT (không gia hạn). */
+export interface SubmitBookingDetailsInput {
+  holdToken: string
+  guestName: string
+  guestEmail: string
+  guestPhone: string
+}
+
+export async function submitBookingDetails(input: SubmitBookingDetailsInput): Promise<HeldBooking> {
+  return (await api.post<HeldBooking>('/bookings/details', input)).data
+}
+
+/**
+ * Đọc trạng thái authoritative của một booking từ backend (thay vì localStorage).
+ * Guest cùng trình duyệt được nhận diện qua cookie phiên; từ thiết bị khác cần mã booking.
+ */
+export async function getBooking(id: string, params: { code?: string } = {}): Promise<Booking> {
+  return (await api.get<Booking>(`/bookings/${id}`, { params })).data
 }
 
 /** Booking walk-in lễ tân vừa tạo (UC08): vào thẳng CONFIRMED, không cọc/giữ phòng. */
@@ -83,13 +144,17 @@ export interface WalkInBooking {
   rooms: string[]
   checkIn: string
   checkOut: string
-  guests: number
+  adultCount: number
+  childCount: number
+  source: BookingSource
   /** Tiền phòng server tính (VND). */
   roomTotal: number
 }
 
 /** UC08 — Lễ tân/Quản lý tạo booking cho khách vãng lai tại quầy. */
-export async function createWalkInBooking(input: CreateBookingInput): Promise<WalkInBooking> {
+export type CreateWalkInBookingInput = CreateBookingInput
+
+export async function createWalkInBooking(input: CreateWalkInBookingInput): Promise<WalkInBooking> {
   return (await api.post<WalkInBooking>('/bookings/walk-in', input)).data
 }
 
@@ -114,13 +179,15 @@ export interface BookingListItem {
   id: string
   code: string
   status: string
-  guestName: string
-  guestEmail: string
-  guestPhone: string
+  guestName?: string
+  guestEmail?: string
+  guestPhone?: string
   rooms: BookingListRoom[]
   checkIn: string
   checkOut: string
-  guests: number
+  adultCount: number
+  childCount: number
+  source: BookingSource
   roomTotal: number
   createdAt: string
   /** Booking do nhân viên tạo tại quầy (UC08). */
@@ -359,11 +426,8 @@ export async function getRoomStatusBoard(params: RoomStatusBoardParams): Promise
 export type UpdateBookingInput = Partial<CreateBookingInput>
 
 /** UC11 — Lễ tân/Quản lý sửa booking; server kiểm tra lại phòng trống và tính lại giá. */
-export async function updateBooking(
-  id: string,
-  input: UpdateBookingInput,
-): Promise<{ id: string; status: string }> {
-  return (await api.patch<{ id: string; status: string }>(`/bookings/${id}`, input)).data
+export async function updateBooking(id: string, input: UpdateBookingInput): Promise<WalkInBooking> {
+  return (await api.patch<WalkInBooking>(`/bookings/${id}`, input)).data
 }
 
 /** Phản hồi tối thiểu khi huỷ (service trả booking đã CANCELLED). */

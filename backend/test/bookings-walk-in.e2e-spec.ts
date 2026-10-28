@@ -34,12 +34,12 @@ describe('Create booking for walk-in guest (e2e)', () => {
     roomIds: Types.ObjectId[],
     checkIn: string,
     checkOut: string,
-    guests = 2,
+    adultCount = 2,
   ) => ({
     rooms: roomIds.map(String),
     checkIn,
     checkOut,
-    guests,
+    adultCount,
     ...guest,
   });
 
@@ -114,7 +114,7 @@ describe('Create booking for walk-in guest (e2e)', () => {
     expect(response.body).toMatchObject({
       status: 'CONFIRMED',
       roomTotal: 2000000, // 1 phòng x 2 đêm x 1.000.000
-      guests: 2,
+      adultCount: 2,
     });
     expect(response.body.code).toMatch(/^BK/);
     const saved = await bookings.findById(response.body.id).lean();

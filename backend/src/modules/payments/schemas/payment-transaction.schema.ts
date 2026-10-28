@@ -55,6 +55,13 @@ export class PaymentTransaction {
   @Prop()
   paidAt?: Date;
 
+  /**
+   * Tiền đã về (SUCCESS) nhưng booking không còn ở trạng thái nhận cọc được
+   * (EXPIRED/CANCELLED do về muộn). Đánh dấu để đối soát/hoàn thủ công, KHÔNG confirm.
+   */
+  @Prop({ default: false })
+  needsReconciliation: boolean;
+
   @Prop({ default: true })
   isActive: boolean;
 }

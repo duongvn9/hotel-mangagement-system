@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -13,6 +15,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import type { AuthUser } from '../../common/auth/auth-user.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
@@ -27,6 +30,15 @@ import {
   UpdatedBookingResponse,
   WalkInBookingResponse,
 } from './dto/create-booking.dto.js';
+import {
+  HoldBookingDto,
+  HoldResponse,
+  SubmitBookingDetailsDto,
+} from './dto/hold-booking.dto.js';
+import {
+  GuestSession,
+  type GuestSessionContext,
+} from './guest-session.decorator.js';
 import {
   CheckInDto,
   CheckInOptionsResponse,
@@ -46,6 +58,38 @@ export class BookingsController {
     private readonly bookings: BookingsService,
     private readonly checkIns: CheckInService,
   ) {}
+
+  @Post('hold')
+  @Public()
+  @ApiOperation({
+    summary:
+      'Hold rooms when the guest starts booking (ROOM_HELD, 15-min hold)',
+  })
+  @ApiCreatedResponse({ type: HoldResponse })
+  @ApiConflictResponse({ description: 'Rooms are unavailable or just taken' })
+  @ApiTooManyRequestsResponse({
+    description: 'Too many holds from this session',
+  })
+  hold(
+    @Body() dto: HoldBookingDto,
+    @GuestSession() session: GuestSessionContext,
+    @CurrentUser() user?: AuthUser,
+  ) {
+    return this.bookings.hold(dto, session, user);
+  }
+
+  @Post('details')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Submit contact details for a held booking (ROOM_HELD → PENDING_DEPOSIT)',
+  })
+  @ApiOkResponse({ type: HoldResponse })
+  @ApiConflictResponse({ description: 'Hold expired or not awaiting details' })
+  submitDetails(@Body() dto: SubmitBookingDetailsDto) {
+    return this.bookings.submitDetails(dto);
+  }
 
   @Post()
   @Public()
@@ -79,6 +123,26 @@ export class BookingsController {
   @ApiConflictResponse({ description: 'Rooms are unavailable or just taken' })
   createWalkIn(@Body() dto: CreateBookingDto, @CurrentUser() user: AuthUser) {
     return this.bookings.createWalkIn(dto, user);
+  }
+
+  @Get(':id')
+  @Public()
+  @ApiOperation({
+    summary:
+      'Read authoritative booking state and hold deadline from the server',
+  })
+  @ApiOkResponse({ description: 'Authoritative booking state' })
+  getBooking(
+    @Param('id') id: string,
+    @GuestSession() session: GuestSessionContext,
+    @CurrentUser() user?: AuthUser,
+    @Query('code') code?: string,
+  ) {
+    return this.bookings.getBooking(id, {
+      ...(user ? { user } : {}),
+      ...(code === undefined ? {} : { code }),
+      ...(session.sessionId ? { sessionId: session.sessionId } : {}),
+    });
   }
 
   @Patch(':id')

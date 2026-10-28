@@ -24,7 +24,7 @@ export interface BoardRoom {
 export interface BoardBooking {
   code: string;
   status: BookingStatus;
-  guestName: string;
+  guestName?: string | undefined;
   rooms: readonly string[];
   checkIn: Date;
   checkOut: Date;
@@ -32,7 +32,7 @@ export interface BoardBooking {
 
 export interface BoardBookingSummary {
   code: string;
-  guestName: string;
+  guestName?: string | undefined;
   status: BookingStatus;
   checkIn: string;
   checkOut: string;
@@ -95,6 +95,7 @@ function occupancyOf(
       return Occupancy.InHouse;
     case BookingStatus.Confirmed:
       return Occupancy.Reserved;
+    case BookingStatus.RoomHeld:
     case BookingStatus.PendingDeposit:
       return liveHoldCodes.has(booking.code) ? Occupancy.Held : Occupancy.Free;
     default:

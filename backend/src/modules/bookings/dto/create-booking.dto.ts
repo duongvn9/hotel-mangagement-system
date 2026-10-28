@@ -30,10 +30,16 @@ export class CreateBookingDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'checkOut must be YYYY-MM-DD' })
   checkOut: string;
 
-  @ApiProperty({ minimum: 1 })
+  @ApiProperty({ minimum: 1, description: 'Số người lớn' })
   @IsInt()
   @Min(1)
-  guests: number;
+  adultCount: number;
+
+  @ApiProperty({ minimum: 0, default: 0, description: 'Số trẻ em' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  childCount: number = 0;
 
   @ApiProperty()
   @IsString()
@@ -76,7 +82,13 @@ export class UpdateBookingDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  guests?: number;
+  adultCount?: number;
+
+  @ApiPropertyOptional({ minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  childCount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -115,17 +127,23 @@ export class UpdatedBookingResponse {
   @ApiProperty()
   checkOut: string;
 
-  @ApiProperty()
-  guests: number;
+  @ApiProperty({ minimum: 1 })
+  adultCount: number;
 
-  @ApiProperty()
-  guestName: string;
+  @ApiProperty({ minimum: 0 })
+  childCount: number;
 
-  @ApiProperty()
-  guestEmail: string;
+  @ApiProperty({ enum: ['ONLINE', 'FRONT_DESK'] })
+  source: string;
 
-  @ApiProperty()
-  guestPhone: string;
+  @ApiPropertyOptional()
+  guestName?: string;
+
+  @ApiPropertyOptional()
+  guestEmail?: string;
+
+  @ApiPropertyOptional()
+  guestPhone?: string;
 
   @ApiProperty({ description: 'Tiền phòng (VND)' })
   roomTotal: number;
@@ -164,8 +182,14 @@ export class BookingResponse {
   @ApiProperty()
   checkOut: string;
 
-  @ApiProperty()
-  guests: number;
+  @ApiProperty({ description: 'Số người lớn' })
+  adultCount: number;
+
+  @ApiProperty({ description: 'Số trẻ em' })
+  childCount: number;
+
+  @ApiProperty({ enum: ['ONLINE', 'FRONT_DESK'] })
+  source: string;
 
   @ApiProperty({ description: 'Tiền phòng (VND)' })
   roomTotal: number;
@@ -196,8 +220,14 @@ export class WalkInBookingResponse {
   @ApiProperty()
   checkOut: string;
 
-  @ApiProperty()
-  guests: number;
+  @ApiProperty({ minimum: 1 })
+  adultCount: number;
+
+  @ApiProperty({ minimum: 0 })
+  childCount: number;
+
+  @ApiProperty({ enum: ['ONLINE', 'FRONT_DESK'] })
+  source: string;
 
   @ApiProperty({ description: 'Tiền phòng (VND)' })
   roomTotal: number;

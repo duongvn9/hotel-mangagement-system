@@ -64,7 +64,7 @@ export function MyBookingsPage() {
                     </div>
                     <p className="text-sm text-stone-700">
                       {formatDate(booking.checkIn)} → {formatDate(booking.checkOut)} ·{' '}
-                      {booking.rooms.length} phòng · {booking.guests} khách
+                      {booking.rooms.length} phòng · {booking.adultCount + booking.childCount} khách
                     </p>
                   </div>
                   <div className="text-right">

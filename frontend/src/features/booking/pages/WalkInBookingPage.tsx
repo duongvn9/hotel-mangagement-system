@@ -5,7 +5,7 @@ import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { getErrorMessage } from '@/lib/api-client'
-import { BOOKING_STATUS_DISPLAY, type SearchAvailabilityParams, type WalkInBooking } from '../api'
+import { BOOKING_STATUS_DISPLAY, type CreateWalkInBookingInput, type WalkInBooking } from '../api'
 import { useAvailability, useCreateWalkInBooking } from '../hooks'
 import { formatDate, money, nightsBetween, todayISO } from '../utils'
 
@@ -15,9 +15,13 @@ export function WalkInBookingPage() {
   const [params] = useSearchParams()
   const [checkIn, setCheckIn] = useState('')
   const [checkOut, setCheckOut] = useState('')
-  const [guests, setGuests] = useState('2')
+  const [adultCount, setAdultCount] = useState('2')
+  const [childCount, setChildCount] = useState('0')
   const [formError, setFormError] = useState('')
-  const [criteria, setCriteria] = useState<SearchAvailabilityParams | null>(null)
+  const [criteria, setCriteria] = useState<Pick<
+    CreateWalkInBookingInput,
+    'checkIn' | 'checkOut' | 'adultCount' | 'childCount'
+  > | null>(null)
   const [selected, setSelected] = useState<string[]>([])
 
   const [guestName, setGuestName] = useState(params.get('guestName') ?? '')
@@ -25,7 +29,15 @@ export function WalkInBookingPage() {
   const [guestPhone, setGuestPhone] = useState(params.get('guestPhone') ?? '')
   const [created, setCreated] = useState<WalkInBooking | null>(null)
 
-  const availability = useAvailability(criteria)
+  const availability = useAvailability(
+    criteria
+      ? {
+          checkIn: criteria.checkIn,
+          checkOut: criteria.checkOut,
+          guests: criteria.adultCount + criteria.childCount,
+        }
+      : null,
+  )
   const create = useCreateWalkInBooking()
   const nights = criteria ? nightsBetween(criteria.checkIn, criteria.checkOut) : 0
 
@@ -50,13 +62,15 @@ export function WalkInBookingPage() {
       setFormError('Ngày trả phòng phải sau ngày nhận phòng.')
       return
     }
-    if (!(Number(guests) >= 1)) {
-      setFormError('Số khách phải từ 1 trở lên.')
+    const adults = Number(adultCount)
+    const children = Number(childCount)
+    if (!Number.isInteger(adults) || adults < 1 || !Number.isInteger(children) || children < 0) {
+      setFormError('Cần ít nhất 1 người lớn và số trẻ em không âm.')
       return
     }
     setSelected([])
     create.reset()
-    setCriteria({ checkIn, checkOut, guests: Number(guests) })
+    setCriteria({ checkIn, checkOut, adultCount: adults, childCount: children })
   }
 
   function toggle(id: string) {
@@ -142,7 +156,7 @@ export function WalkInBookingPage() {
 
       <form
         onSubmit={submitSearch}
-        className="grid gap-4 rounded-lg border border-stone-300 bg-white p-6 md:grid-cols-4"
+        className="grid gap-4 rounded-lg border border-stone-300 bg-white p-6 md:grid-cols-5"
         aria-label="Tìm phòng trống"
       >
         <TextField
@@ -162,12 +176,22 @@ export function WalkInBookingPage() {
           onChange={(event) => setCheckOut(event.target.value)}
         />
         <TextField
-          label="Số khách"
+          label="Người lớn"
           type="number"
           required
           min={1}
-          value={guests}
-          onChange={(event) => setGuests(event.target.value)}
+          step={1}
+          value={adultCount}
+          onChange={(event) => setAdultCount(event.target.value)}
+        />
+        <TextField
+          label="Trẻ em"
+          type="number"
+          required
+          min={0}
+          step={1}
+          value={childCount}
+          onChange={(event) => setChildCount(event.target.value)}
         />
         <div className="flex items-end">
           <Button type="submit" className="w-full" loading={availability.isFetching}>
@@ -175,7 +199,7 @@ export function WalkInBookingPage() {
           </Button>
         </div>
         {formError && (
-          <div className="md:col-span-4">
+          <div className="md:col-span-5">
             <Alert tone="danger">{formError}</Alert>
           </div>
         )}

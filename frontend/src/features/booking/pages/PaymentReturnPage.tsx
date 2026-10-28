@@ -1,36 +1,34 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { Link } from 'react-router'
 import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
 import { getErrorMessage } from '@/lib/api-client'
-import { PAYMENT_RESULT_DISPLAY } from '../api'
-import { useVerifyReturn } from '../hooks'
-import { lookupPaymentRef, patchStoredBooking } from '../storage'
+import { BOOKING_STATUS_DISPLAY, PAYMENT_RESULT_DISPLAY } from '../api'
+import { useBooking, useVerifyReturn } from '../hooks'
+import { lookupPaymentRef, upsertStoredBooking } from '../storage'
 
 /**
- * Đích VNPay redirect về sau khi thanh toán (khớp VNPAY_RETURN_URL = /payment/vnpay-return).
- * Chỉ để hiển thị kết quả — việc chốt thanh toán thật do IPN của backend xử lý.
+ * Đích VNPay redirect về sau khi thanh toán. Trang Return CHỈ hiển thị — bằng chứng confirm
+ * thật là trạng thái Booking authoritative từ backend (IPN chốt), không coi redirect là đã xong.
  */
 export function PaymentReturnPage() {
   const rawQuery = window.location.search.replace(/^\?/, '')
   const verify = useVerifyReturn(rawQuery)
-  const applied = useRef(false)
 
-  const bookingId = verify.data && lookupPaymentRef(verify.data.transactionRef)
+  // Map giao dịch → booking để đọc lại trạng thái thật từ server (poll tới khi chốt).
+  const bookingId = verify.data ? lookupPaymentRef(verify.data.transactionRef) : undefined
+  const bookingQuery = useBooking(bookingId ?? '', {
+    enabled: Boolean(bookingId),
+    poll: true,
+  })
+  const booking = bookingQuery.data
 
-  // Cập nhật trạng thái booking đã lưu ở client theo kết quả quan sát được.
   useEffect(() => {
-    if (!verify.data || applied.current) return
-    const id = lookupPaymentRef(verify.data.transactionRef)
-    if (!id) return
-    applied.current = true
-    patchStoredBooking(id, {
-      depositResult: verify.data.status,
-      ...(verify.data.status === 'SUCCESS' ? { status: 'CONFIRMED' } : {}),
-    })
-  }, [verify.data])
+    if (booking) upsertStoredBooking(booking)
+  }, [booking])
 
-  const display = verify.data ? PAYMENT_RESULT_DISPLAY[verify.data.status] : undefined
+  const payDisplay = verify.data ? PAYMENT_RESULT_DISPLAY[verify.data.status] : undefined
+  const bookingDisplay = booking ? BOOKING_STATUS_DISPLAY[booking.status] : undefined
 
   return (
     <section className="mx-auto max-w-container space-y-6 px-4 py-16 text-center font-body">
@@ -41,9 +39,9 @@ export function PaymentReturnPage() {
       {verify.isPending && rawQuery && <p role="status">Đang xác minh kết quả…</p>}
       {verify.isError && <Alert tone="danger">{getErrorMessage(verify.error)}</Alert>}
 
-      {verify.data && display && (
+      {verify.data && payDisplay && (
         <div className="mx-auto max-w-md space-y-4 rounded-lg border border-stone-300 bg-white p-8">
-          <Badge tone={display.tone}>{display.label}</Badge>
+          <Badge tone={payDisplay.tone}>{payDisplay.label}</Badge>
           <dl className="space-y-2 text-left text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-stone-700">Mã giao dịch</dt>
@@ -53,16 +51,29 @@ export function PaymentReturnPage() {
               <dt className="text-stone-700">Mã phản hồi VNPay</dt>
               <dd className="font-semibold">{verify.data.responseCode}</dd>
             </div>
+            {bookingDisplay && (
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-stone-700">Trạng thái đặt phòng</dt>
+                <dd>
+                  <Badge tone={bookingDisplay.tone}>{bookingDisplay.label}</Badge>
+                </dd>
+              </div>
+            )}
           </dl>
-          {verify.data.status === 'SUCCESS' && (
-            <p className="text-sm text-stone-700">
-              Hệ thống đang hoàn tất xác nhận booking. Trạng thái cuối cùng sẽ được cập nhật trong
-              giây lát.
+
+          {bookingId && booking?.status !== 'CONFIRMED' && verify.data.status === 'SUCCESS' && (
+            <p className="text-sm text-stone-700" role="status">
+              Hệ thống đang hoàn tất xác nhận booking từ cổng thanh toán. Trạng thái sẽ tự cập nhật
+              trong giây lát.
             </p>
+          )}
+          {booking?.status === 'CONFIRMED' && (
+            <p className="text-sm text-success">Đặt phòng của bạn đã được xác nhận.</p>
           )}
           {(verify.data.status === 'FAILED' || verify.data.status === 'CANCELLED') && (
             <p className="text-sm text-stone-700">
-              Thanh toán chưa hoàn tất. Bạn có thể thử lại từ trang chi tiết booking.
+              Thanh toán chưa hoàn tất. Nếu phòng vẫn đang được giữ, bạn có thể thử lại từ trang chi
+              tiết booking.
             </p>
           )}
         </div>

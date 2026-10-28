@@ -90,7 +90,7 @@ describe('UC05 search available rooms (e2e)', () => {
       guestPhone: '0900000000',
       checkIn: new Date('2090-01-10T00:00:00+07:00'),
       checkOut: new Date('2090-01-15T00:00:00+07:00'),
-      guests: 2,
+      adultCount: 2,
       status: 'CONFIRMED',
       roomTotal: 1000000,
       depositAmount: 300000,

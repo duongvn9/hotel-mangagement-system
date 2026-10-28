@@ -1,9 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Types, type HydratedDocument } from 'mongoose';
 import { BookingStatus } from '../../../common/constants/booking-status.enum.js';
+import { BookingSource } from '../../../common/constants/booking-source.enum.js';
 import { isMoneyVnd } from '../../../common/database/conventions.js';
 
-export { BookingStatus };
+export { BookingStatus, BookingSource };
 export type BookingDocument = HydratedDocument<Booking>;
 
 export const validRooms = (rooms: Types.ObjectId[]): boolean =>
@@ -11,6 +12,18 @@ export const validRooms = (rooms: Types.ObjectId[]): boolean =>
   rooms.length > 0 &&
   rooms.every((room) => room instanceof Types.ObjectId) &&
   new Set(rooms.map(String)).size === rooms.length;
+
+/**
+ * Thông tin liên hệ bắt buộc từ khi nhập form (>= PENDING_DEPOSIT). Chưa bắt buộc ở
+ * ROOM_HELD (chưa nhập) và EXPIRED (hold hết hạn trước khi kịp nhập form).
+ */
+function requiredAfterHold(this: Booking): boolean {
+  return (
+    this.status !== BookingStatus.RoomHeld &&
+    this.status !== BookingStatus.Expired &&
+    this.status !== BookingStatus.Cancelled
+  );
+}
 
 @Schema({ timestamps: true, collection: 'bookings' })
 export class Booking {
@@ -24,14 +37,16 @@ export class Booking {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   createdBy?: Types.ObjectId;
 
-  @Prop({ required: true, trim: true })
-  guestName: string;
+  // Thông tin liên hệ chỉ bắt buộc từ khi nhập form (>= PENDING_DEPOSIT);
+  // ở trạng thái ROOM_HELD (mới giữ phòng, chưa nhập form) có thể chưa có.
+  @Prop({ required: requiredAfterHold, trim: true })
+  guestName?: string;
 
-  @Prop({ required: true, trim: true })
-  guestEmail: string;
+  @Prop({ required: requiredAfterHold, trim: true })
+  guestEmail?: string;
 
-  @Prop({ required: true, trim: true })
-  guestPhone: string;
+  @Prop({ required: requiredAfterHold, trim: true })
+  guestPhone?: string;
 
   @Prop({
     type: [{ type: Types.ObjectId, ref: 'Room' }],
@@ -52,7 +67,18 @@ export class Booking {
   checkOut: Date;
 
   @Prop({ required: true, min: 1, validate: Number.isSafeInteger })
-  guests: number;
+  adultCount: number;
+
+  @Prop({ required: true, min: 0, default: 0, validate: Number.isSafeInteger })
+  childCount: number;
+
+  @Prop({
+    type: String,
+    enum: BookingSource,
+    required: true,
+    default: BookingSource.Online,
+  })
+  source: BookingSource;
 
   @Prop({
     type: String,

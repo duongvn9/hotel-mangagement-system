@@ -38,12 +38,12 @@ describe('Update booking (e2e)', () => {
     roomIds: Types.ObjectId[],
     checkIn: string,
     checkOut: string,
-    guests = 2,
+    adultCount = 2,
   ) => ({
     rooms: roomIds.map(String),
     checkIn,
     checkOut,
-    guests,
+    adultCount,
     ...guest,
   });
   const walkIn = async (
@@ -158,11 +158,11 @@ describe('Update booking (e2e)', () => {
         'x-dev-role': 'CUSTOMER',
         'x-dev-user-id': String(new Types.ObjectId()),
       })
-      .send({ guests: 1 })
+      .send({ adultCount: 1 })
       .expect(403);
     await http()
       .patch(`/api/v1/bookings/${created.id}`)
-      .send({ guests: 1 })
+      .send({ adultCount: 1 })
       .expect(401);
   });
 
@@ -238,6 +238,37 @@ describe('Update booking (e2e)', () => {
       .expect(409);
   });
 
+  it('updates child occupancy independently and preserves adults and hold deadline', async () => {
+    const created = await online([roomA], '2094-05-10', '2094-05-12');
+    const before = await holds
+      .findOne({ booking: new Types.ObjectId(created.id) })
+      .lean();
+    const { body } = await patch(created.id, { childCount: 1 }).expect(200);
+    expect(body).toMatchObject({
+      adultCount: 2,
+      childCount: 1,
+      source: 'ONLINE',
+    });
+    expect(body).not.toHaveProperty('guests');
+    const after = await holds
+      .findOne({ booking: new Types.ObjectId(created.id) })
+      .lean();
+    expect(after?.expiresAt).toEqual(before?.expiresAt);
+    await patch(created.id, { childCount: 2 }).expect(400);
+  });
+
+  it('rejects contact and stay edits after the pending hold expires', async () => {
+    const created = await online([roomA], '2094-05-10', '2094-05-12');
+    await holds.updateOne(
+      { booking: new Types.ObjectId(created.id) },
+      { $set: { expiresAt: new Date(0) } },
+    );
+    await patch(created.id, { guestName: 'Too late' }).expect(409);
+    expect((await bookings.findById(created.id).lean())?.status).toBe(
+      BookingStatus.Expired,
+    );
+  });
+
   it('updates contact details only, without touching the stay', async () => {
     const created = await walkIn([roomA], '2094-06-10', '2094-06-12');
     const { body } = await patch(created.id, {
@@ -262,14 +293,14 @@ describe('Update booking (e2e)', () => {
       BookingStatus.CheckedOut,
     ]) {
       await bookings.updateOne({ _id: created.id }, { $set: { status } });
-      await patch(created.id, { guests: 1 }).expect(409);
+      await patch(created.id, { adultCount: 1 }).expect(409);
     }
   });
 
   it('validates the request', async () => {
     const created = await walkIn([roomA], '2094-08-10', '2094-08-12');
     await patch(created.id, {}).expect(400);
-    await patch(created.id, { guests: 10 }).expect(400); // vượt sức chứa
+    await patch(created.id, { adultCount: 10 }).expect(400); // vượt sức chứa
     await patch(created.id, { checkIn: '10/08/2094' }).expect(400);
     await patch(created.id, { checkIn: '2094-08-12' }).expect(400); // = checkOut
     await patch(created.id, { rooms: [] }).expect(400);
@@ -277,7 +308,7 @@ describe('Update booking (e2e)', () => {
       400,
     );
     await patch(created.id, { unknown: 1 }).expect(400);
-    await patch('not-an-id', { guests: 1 }).expect(400);
-    await patch(String(new Types.ObjectId()), { guests: 1 }).expect(404);
+    await patch('not-an-id', { adultCount: 1 }).expect(400);
+    await patch(String(new Types.ObjectId()), { adultCount: 1 }).expect(404);
   });
 });

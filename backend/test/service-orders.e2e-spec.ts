@@ -74,7 +74,7 @@ describe('UC22/23 customer service orders', () => {
       rooms: [new Types.ObjectId()],
       checkIn: new Date('2026-01-01'),
       checkOut: new Date('2026-01-10'),
-      guests: 1,
+      adultCount: 1,
       status: BookingStatus.CheckedIn,
       roomTotal: 0,
       depositAmount: 0,

@@ -62,7 +62,7 @@ describe('H5 persistence (e2e)', () => {
       rooms: [roomId, new Types.ObjectId()],
       checkIn: new Date('2026-10-23T07:00:00Z'),
       checkOut: new Date('2026-10-24T05:00:00Z'),
-      guests: 2,
+      adultCount: 2,
       roomTotal: 0,
       depositAmount: 0,
     };
@@ -108,9 +108,10 @@ describe('H5 persistence (e2e)', () => {
     ]);
   });
 
-  it('creates the TTL index and excludes expired holds before asynchronous TTL cleanup', async () => {
+  it('excludes expired holds from availability without a TTL index', async () => {
     const data = {
       booking: bookingId,
+      holdToken: 'H5-HOLD-TOKEN-0001',
       rooms: [roomId],
       checkIn: new Date('2026-10-23'),
       checkOut: new Date('2026-10-24'),
@@ -133,11 +134,12 @@ describe('H5 persistence (e2e)', () => {
         expiresAt: { $gt: new Date() },
       }),
     ).toBe(0);
+    // TTL tự xoá đã bỏ: backend chủ động nhả hold quá hạn (sweep + lazy expire).
     expect(
       (await holds.collection.indexes()).some(
         (index) => index.key.expiresAt === 1 && index.expireAfterSeconds === 0,
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('skips absent dependencies and seeds idempotently without overwriting edits', async () => {

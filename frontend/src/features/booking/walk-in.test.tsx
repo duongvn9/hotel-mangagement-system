@@ -22,7 +22,8 @@ function renderPage(role = receptionist) {
 async function searchRooms() {
   fireEvent.change(screen.getByLabelText(/Nhận phòng/), { target: { value: '2099-01-10' } })
   fireEvent.change(screen.getByLabelText(/Trả phòng/), { target: { value: '2099-01-12' } })
-  fireEvent.change(screen.getByLabelText(/Số khách/), { target: { value: '2' } })
+  fireEvent.change(screen.getByLabelText(/Người lớn/), { target: { value: '2' } })
+  fireEvent.change(screen.getByLabelText(/Trẻ em/), { target: { value: '1' } })
   fireEvent.click(screen.getByRole('button', { name: 'Tìm phòng trống' }))
   return screen.findByRole('checkbox', { name: /Deluxe.*Phòng 1/ })
 }
@@ -49,13 +50,18 @@ describe('WalkInBookingPage', () => {
         rooms: ['r1'],
         checkIn: '2099-01-10',
         checkOut: '2099-01-12',
-        guests: 2,
+        adultCount: 2,
+        childCount: 1,
+        source: 'FRONT_DESK',
         roomTotal: 2_000_000,
       },
     })
     renderPage()
 
     fireEvent.click(await searchRooms())
+    expect(api.get).toHaveBeenCalledWith('/availability', {
+      params: { checkIn: '2099-01-10', checkOut: '2099-01-12', guests: 3 },
+    })
     fireEvent.change(screen.getByLabelText(/Họ tên/), { target: { value: 'Khách vãng lai' } })
     fireEvent.change(screen.getByLabelText(/Email/), { target: { value: 'k@example.test' } })
     fireEvent.change(screen.getByLabelText(/Số điện thoại/), { target: { value: '0911111111' } })
@@ -67,7 +73,8 @@ describe('WalkInBookingPage', () => {
       rooms: ['r1'],
       checkIn: '2099-01-10',
       checkOut: '2099-01-12',
-      guests: 2,
+      adultCount: 2,
+      childCount: 1,
       guestName: 'Khách vãng lai',
       guestEmail: 'k@example.test',
       guestPhone: '0911111111',

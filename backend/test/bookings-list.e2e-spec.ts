@@ -42,7 +42,8 @@ describe('View booking list (e2e)', () => {
       checkOut: new Date(
         new Date(`${checkIn}T00:00:00.000+07:00`).getTime() + 2 * 86_400_000,
       ),
-      guests: 2,
+      adultCount: 2,
+      childCount: 0,
       status,
       roomTotal: 2000000,
       depositAmount: 600000,
@@ -126,7 +127,8 @@ describe('View booking list (e2e)', () => {
     expect(walkIn).toMatchObject({
       status: 'CONFIRMED',
       guestName: `Guest ${tag} A`,
-      guests: 2,
+      adultCount: 2,
+      childCount: 0,
       roomTotal: 2000000,
       walkIn: true,
     });

@@ -92,7 +92,7 @@ describe('UC34 service task reports (HTTP + MongoDB)', () => {
       rooms: [new Types.ObjectId()],
       checkIn: new Date('2020-01-01'),
       checkOut: new Date('2020-01-02'),
-      guests: 1,
+      adultCount: 1,
       status: 'CHECKED_OUT',
       roomTotal: 0,
       depositAmount: 0,

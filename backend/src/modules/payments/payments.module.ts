@@ -2,6 +2,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Booking, BookingSchema } from '../bookings/schemas/booking.schema.js';
+import {
+  RoomHold,
+  RoomHoldSchema,
+} from '../bookings/schemas/room-hold.schema.js';
 import { Invoice, InvoiceSchema } from '../invoices/schemas/invoice.schema.js';
 import {
   PaymentTransaction,
@@ -16,6 +20,7 @@ import { MongoVnpaySettlementPort } from './vnpay-settlement.adapter.js';
     MongooseModule.forFeature([
       { name: PaymentTransaction.name, schema: PaymentTransactionSchema },
       { name: Booking.name, schema: BookingSchema },
+      { name: RoomHold.name, schema: RoomHoldSchema },
       { name: Invoice.name, schema: InvoiceSchema },
     ]),
   ],

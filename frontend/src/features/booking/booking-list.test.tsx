@@ -18,7 +18,9 @@ const page = (overrides: Partial<BookingListPage> = {}): BookingListPage => ({
       rooms: [{ id: 'r1', roomNumber: '101', roomTypeName: 'Deluxe' }],
       checkIn: '2099-01-09T17:00:00.000Z',
       checkOut: '2099-01-11T17:00:00.000Z',
-      guests: 2,
+      adultCount: 2,
+      childCount: 1,
+      source: 'FRONT_DESK',
       roomTotal: 2_000_000,
       createdAt: '2099-01-01T00:00:00.000Z',
       walkIn: true,
@@ -33,7 +35,9 @@ const page = (overrides: Partial<BookingListPage> = {}): BookingListPage => ({
       rooms: [{ id: 'r2', roomNumber: '102', roomTypeName: 'Suite' }],
       checkIn: '2099-02-09T17:00:00.000Z',
       checkOut: '2099-02-11T17:00:00.000Z',
-      guests: 1,
+      adultCount: 1,
+      childCount: 0,
+      source: 'ONLINE',
       roomTotal: 3_000_000,
       createdAt: '2099-01-02T00:00:00.000Z',
       walkIn: false,
@@ -70,6 +74,8 @@ describe('BookingListPage', () => {
     expect(rows.getByText('Chờ đặt cọc')).toBeInTheDocument()
     expect(rows.getByText(/101 · Deluxe/)).toBeInTheDocument()
     expect(rows.getAllByText('Tại quầy')).toHaveLength(1)
+    expect(rows.getByText('3 khách')).toBeInTheDocument()
+    expect(rows.getByText('1 khách')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /BKLIST1/ })).toHaveAttribute('href', '/booking/b1')
     expect(get).toHaveBeenCalledWith('/bookings', { params: { page: 1, limit: 20 } })
   })

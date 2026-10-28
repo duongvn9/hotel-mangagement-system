@@ -60,19 +60,27 @@ function EditBookingForm({ booking }: { booking: BookingListItem }) {
 
   const [checkIn, setCheckIn] = useState(toBusinessDate(booking.checkIn))
   const [checkOut, setCheckOut] = useState(toBusinessDate(booking.checkOut))
-  const [guests, setGuests] = useState(String(booking.guests))
-  const [guestName, setGuestName] = useState(booking.guestName)
-  const [guestEmail, setGuestEmail] = useState(booking.guestEmail)
-  const [guestPhone, setGuestPhone] = useState(booking.guestPhone)
+  const [adultCount, setAdultCount] = useState(String(booking.adultCount))
+  const [childCount, setChildCount] = useState(String(booking.childCount))
+  const [guestName, setGuestName] = useState(booking.guestName ?? '')
+  const [guestEmail, setGuestEmail] = useState(booking.guestEmail ?? '')
+  const [guestPhone, setGuestPhone] = useState(booking.guestPhone ?? '')
   const [selected, setSelected] = useState(booking.rooms.map((room) => room.id))
 
   const nights = nightsBetween(checkIn, checkOut)
-  const guestCount = Number(guests)
+  const adults = Number(adultCount)
+  const children = Number(childCount)
   const criteria =
-    nights > 0 && Number.isInteger(guestCount) && guestCount >= 1
-      ? { checkIn, checkOut, guests: guestCount }
+    nights > 0 &&
+    Number.isInteger(adults) &&
+    adults >= 1 &&
+    Number.isInteger(children) &&
+    children >= 0
+      ? { checkIn, checkOut, adultCount: adults, childCount: children }
       : null
-  const availability = useAvailability(criteria)
+  const availability = useAvailability(
+    criteria ? { checkIn, checkOut, guests: criteria.adultCount + criteria.childCount } : null,
+  )
 
   // Phòng hiện tại luôn chọn lại được (kết quả tìm phòng loại trừ chính booking đang giữ chúng);
   // server vẫn kiểm tra lại phòng trống khi lưu.
@@ -133,7 +141,7 @@ function EditBookingForm({ booking }: { booking: BookingListItem }) {
       <div className="space-y-5">
         <div className="space-y-4 rounded-xl border border-stone-300 bg-white p-6">
           <h2 className="font-display text-xl font-semibold text-pearl-900">Thời gian ở</h2>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <TextField
               label="Nhận phòng"
               type="date"
@@ -150,12 +158,22 @@ function EditBookingForm({ booking }: { booking: BookingListItem }) {
               onChange={(event) => setCheckOut(event.target.value)}
             />
             <TextField
-              label="Số khách"
+              label="Người lớn"
               type="number"
               required
               min={1}
-              value={guests}
-              onChange={(event) => setGuests(event.target.value)}
+              step={1}
+              value={adultCount}
+              onChange={(event) => setAdultCount(event.target.value)}
+            />
+            <TextField
+              label="Trẻ em"
+              type="number"
+              required
+              min={0}
+              step={1}
+              value={childCount}
+              onChange={(event) => setChildCount(event.target.value)}
             />
           </div>
         </div>

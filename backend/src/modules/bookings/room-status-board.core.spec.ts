@@ -60,6 +60,16 @@ describe('businessDay', () => {
 });
 
 describe('buildRoomStatusBoard', () => {
+  it('shows contactless ROOM_HELD only while its hold is live', () => {
+    const held = {
+      ...booking('DRAFT', BookingStatus.RoomHeld, '2026-10-27', '2026-10-28'),
+      guestName: undefined,
+    };
+    const live = board([room('r1')], [held], { hold: ['DRAFT'] });
+    expect(live.rooms[0]?.occupancy).toBe('HELD');
+    expect(live.rooms[0]?.booking?.guestName).toBeUndefined();
+    expect(board([room('r1')], [held]).rooms[0]?.occupancy).toBe('FREE');
+  });
   it('marks rooms without a booking as free', () => {
     const result = board([room('r1')], []);
     expect(result.rooms[0]).toMatchObject({

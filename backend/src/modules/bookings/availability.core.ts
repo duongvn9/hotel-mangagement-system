@@ -1,4 +1,8 @@
-import { BookingStatus } from '../../common/constants/booking-status.enum.js';
+import {
+  BookingStatus,
+  BLOCKING_BOOKING_STATUSES,
+  RELEASED_BOOKING_STATUSES,
+} from '../../common/constants/booking-status.enum.js';
 import { toBusinessDate } from '../../common/database/conventions.js';
 
 export interface AvailabilityQuery {
@@ -104,9 +108,7 @@ export function calculateAvailability(
   for (const booking of bookings) {
     if (
       booking.isActive &&
-      [BookingStatus.Confirmed, BookingStatus.CheckedIn].includes(
-        booking.status,
-      ) &&
+      BLOCKING_BOOKING_STATUSES.includes(booking.status) &&
       conflicts(booking)
     ) {
       booking.rooms.forEach((id) => blocked.add(id));
@@ -117,10 +119,7 @@ export function calculateAvailability(
     const parent = parents.get(hold.bookingId);
     if (
       parent &&
-      (!parent.isActive ||
-        [BookingStatus.Cancelled, BookingStatus.CheckedOut].includes(
-          parent.status,
-        ))
+      (!parent.isActive || RELEASED_BOOKING_STATUSES.includes(parent.status))
     )
       continue;
     hold.rooms.forEach((id) => blocked.add(id));

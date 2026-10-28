@@ -27,7 +27,7 @@ describe('Cancel booking (e2e)', () => {
     rooms: [String(roomId)],
     checkIn: '2093-01-10',
     checkOut: '2093-01-12',
-    guests: 2,
+    adultCount: 2,
     guestName: 'Canceller',
     guestEmail: 'cancel@example.test',
     guestPhone: '0900000000',
