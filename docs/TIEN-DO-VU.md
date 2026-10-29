@@ -2,7 +2,55 @@
 
 > Cập nhật mới nhất: **Issue Resolution Task Reassignment & Recovery — 30/10/2026** bên dưới. Các mục Final Acceptance 25/10 và evidence lịch sử giữ nguyên theo baseline đã chạy, không thay thế trạng thái của phần mở rộng mới.
 
-## Issue Resolution Task Reassignment & Recovery — 30/10/2026
+## Final Acceptance QA — PR #59 — 30/10/2026
+
+### Git và SRS đã xác minh lại
+
+- PR #59 OPEN/Draft, base main, baseline HEAD `4d454a7364ef240944396e47bda3e18bbbdd2c0c`, MERGEABLE/CLEAN. CI run `40939728586` trên đúng HEAD này: backend, frontend, docker, maintenance-smoke đều SUCCESS. Các fix QA sau đây cần CI trên HEAD mới, không mượn kết quả baseline.
+- Đã đọc lại file người dùng vừa cập nhật `D:\FULearning\Fall26\WDP301\docs\SRS - HMS.docx.md`: UC31:802–806, UC32:817–821, UC38:905–908, UC55:1142–1146, BR-ISS-11–13:1722–1724, BR-TASK-03/06–08:1733–1738. Văn bản hiện có đầy đủ Continue/Reassign, cancel audit/history, safe recovery, một active Task và explicit current-task closure. Nhận định thiếu SRS trong baseline bên dưới chỉ là evidence lịch sử, không còn mô tả văn bản hiện tại.
+- Markdown tham chiếu image8 embedded tại dòng 1869. Đã trích xuất TEMP và thực sự mở ảnh embedded; ảnh độ phân giải thấp, kể cả phóng lớn không đủ đọc chính xác labels/Yes-No. Không tuyên bố đã đọc được toàn bộ swimlane mới. PNG ngoài `issue_report.drawio.png` vẫn có staff-side Cancel/Resolved khác văn bản; không dùng ảnh cũ để đảo ngược quy tắc mới. Cần bản swimlane mới đủ nét để xác nhận diagram acceptance.
+- Trong phạm vi Issue đã khớp các quy tắc mới. BR-TASK-06/UC38 viết generic Task, trong khi Unable action hiện giới hạn ISSUE_RESOLUTION đúng phạm vi PR và yêu cầu không thay ServiceOrder/Maintenance; cần nhóm xác nhận scope này, không tự mở rộng nguồn khác.
+
+### Fix thực tế sau QA
+
+- Shared native `ConfirmationDialog` cho Report/Continue/Reassign: focus ban đầu, Tab/Shift+Tab wrapping, Escape cancel và restore đúng trigger đã capture trước khi disabled; không chỉ dựa native modal mặc định.
+- Optional dueAt hiển thị `Không có thời hạn`; ngày malformed vẫn hiển thị invalid thay vì che lỗi dữ liệu.
+- UC31 initial assignment thêm optional instructions trim/validation, persist frozen intent, replay cùng instructions và xác minh Task khớp; dữ liệu cũ không có instructions vẫn tương thích.
+- Continue không được rút ngắn deadline đang có; equal/omitted deadline vẫn cho cập nhật instructions, giữ task/assignee/progress. Không tự gia hạn hoặc auto-cancel overdue.
+
+### Authenticated browser QA đã thực thi
+
+- Chrome headless thật qua CDP, API/frontend/MongoDB persist thật, safe dev identities; không mock network hoặc dùng shared DB/real credentials.
+- A PASS: Staff start/report unable → Receptionist Continue/new deadline/instructions → cùng Staff complete cùng Task ID; blocker resolution/continuation audit persist.
+- B PASS: report unable → Receptionist reassign → old CANCELLED/new ASSIGNED → Staff mới start/complete; baseline browser có Manager explicit close và reload CLOSED/conclusion/actor đúng. Fix dialog sau đó rerun report/reassign/new-staff completion và history.
+- C PASS: overdue Continue giữ Task/progress, extension hết overdue; deadline sớm hơn bị từ chối qua browser và supplementary API 400, không mutation; equal deadline với instructions thành công. Không claim đã chạy overdue Reassign bằng browser.
+- Initial assignment với instructions đã submit bằng browser từ REVIEWED, reload chỉ một Task, staff detail thấy instructions; nhánh không deadline cũng persist đúng.
+- RBAC baseline: 5 browser checks (foreign Staff task, unrelated Customer Issue, owner Customer readonly, Manager/receptionist route denial); 4 supplementary API checks (Manager reassign403, Customer continue403, foreign task404, unrelated Issue404). Manager monitor không có Continue/Reassign, vẫn giữ UC32 close.
+- Baseline responsive: 12 protected-page checks ở 1440/768/375 (history, Manager, Staff, active recovery); không horizontal overflow. Offline 20s tạo report error thật, giữ reason, reconnect/retry thành công, có pending/disabled evidence.
+- Final keyboard/dialog rerun: 9/9 Report/Continue/Reassign × 3 widths initial modal focus, Escape cancellation/restore, blocked background focus và viewport fit PASS; **108/108 Tab/Shift+Tab contained**, zero escape; independent immediate-Escape restore **3/3**. Final persisted assertions **8/8**.
+- Evidence TEMP: `pr59-auth-qa` (29 screenshots), `pr59-dialog-qa` (13; có failed intermediate keyboard evidence), `pr59-final-dialog-qa` (24). Các ảnh được mở xem gồm responsive history375/Manager768/Staff1440, active recovery375, offline error, report-dialog375, initial-instructions-staff, equal-deadline-instructions, fresh-assignment-success. Machine JSON/JSONL giữ exact observations, không coi mọi ảnh đều đã được mở.
+- Intermediate dialog gate FAIL restore/trap đã được sửa và final retest PASS; các harness/disk/index/stale-process failures được loại khỏi final success counts. Chỉ dọn owned disposable DB/profile/processes. Browser instance đã dừng và DB riêng đã drop.
+
+### Final regression trên code sau tất cả fix
+
+| Command | Result |
+|---|---|
+| Backend `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run build` | PASS |
+| Backend `npm run test` | **1091/1091**, 50 files PASS |
+| Backend `npm run test:e2e` | **663/663**, 55 files PASS |
+| Frontend `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run build` | PASS |
+| Frontend `npm run test -- --maxWorkers=2` | **729/729**, 51 files PASS |
+| `git diff --check` | PASS |
+
+- Full E2E trên standalone Mongo riêng `127.0.0.1:27259/hms_pr59_final_test`, data trên D: do C: còn ít dung lượng; clean child env, chặn .env reads, không credentials/external integrations. Process stopped/data removed/port closed. Logs ngoài repo `D:\FULearning\Fall26\WDP301\project\pr59-verification-20261030-unique`.
+- Full suites gồm regression ServiceOrder/Maintenance/Booking/Issue, không có final failure. Lần invocations timeout tool đã rerun hoàn chỉnh, không gọi timeout là PASS. Nonfatal React act/router/jsdom, Mongoose deprecation/injected logs và bundle >500kB warning vẫn được ghi nhận.
+- Browser chưa exhaustively kiểm thử mọi partial-failure/concurrency path; các nhánh đó có automated coverage. Không claim Firebase/live mail/payment acceptance.
+
+### Verdict
+
+**NOT READY TO MERGE** tại thời điểm bàn giao: automated và browser scope đã chạy PASS, không còn application defect được chứng minh trong scope; cần CI trên HEAD mới, xác nhận scope generic inability rule và bản swimlane embedded đủ nét để chốt toàn bộ SRS diagram acceptance. Không tự merge; PR giữ Draft, SHA/CI mới báo theo GitHub thực tế.
+
+## Issue Resolution Task Reassignment & Recovery — 30/10/2026 (baseline trước Final QA)
 
 ### Git, phạm vi và nguồn yêu cầu
 
