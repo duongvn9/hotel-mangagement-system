@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { randomBytes } from 'node:crypto';
+import { withBookingFinancialOperation } from '../bookings/booking-financial-operation.js';
 import { Model, Types } from 'mongoose';
 import {
   BookingStatus,
@@ -116,9 +117,19 @@ export class PaymentsService {
     actor: BookingActor,
     options: InitiateOptions,
   ) {
+    return withBookingFinancialOperation(this.bookings, bookingId, () =>
+      this.initiateFinalLocked(bookingId, actor, options),
+    );
+  }
+
+  private async initiateFinalLocked(
+    bookingId: string,
+    actor: BookingActor,
+    options: InitiateOptions,
+  ) {
     const booking = await this.authorizedBooking(bookingId, actor);
     if (
-      [BookingStatus.Cancelled, BookingStatus.PendingDeposit].includes(
+      ![BookingStatus.Confirmed, BookingStatus.CheckedIn].includes(
         booking.status,
       )
     ) {
@@ -149,12 +160,13 @@ export class PaymentsService {
     );
 
     if (
-      await this.payments.exists({
+      purpose === PaymentPurpose.Deposit &&
+      (await this.payments.exists({
         booking: booking._id,
         purpose,
         status: PaymentStatus.Success,
         isActive: true,
-      })
+      }))
     ) {
       throw new ConflictException('This payment has already been settled');
     }
@@ -169,6 +181,17 @@ export class PaymentsService {
       throw new ConflictException('A pending payment already exists');
     }
 
+    await this.payments.collection.createIndex(
+      { booking: 1, purpose: 1 },
+      {
+        name: 'unique_active_pending_payment_per_booking_purpose',
+        unique: true,
+        partialFilterExpression: {
+          status: PaymentStatus.Pending,
+          isActive: true,
+        },
+      },
+    );
     const payment = await this.payments.create({
       booking: booking._id,
       invoice: invoice._id,
@@ -225,7 +248,14 @@ export class PaymentsService {
     try {
       const plan = this.vnpay.prepareIpn(rawQuery, expected);
       if (plan.action === 'duplicate') {
-        return { RspCode: '02', Message: 'Order already confirmed' };
+        const repaired = await this.settlement.commitAtomically(expected, {
+          action: 'compare-and-set',
+          expectedStatus: PaymentStatus.Pending,
+          result: plan.result,
+        });
+        return repaired === 'conflict'
+          ? { RspCode: '99', Message: 'Unknown error' }
+          : { RspCode: '02', Message: 'Order already confirmed' };
       }
       if (plan.action === 'review') {
         return { RspCode: '99', Message: 'Unknown error' };
@@ -233,7 +263,9 @@ export class PaymentsService {
       const outcome = await this.settlement.commitAtomically(expected, plan);
       return outcome === 'committed'
         ? { RspCode: '00', Message: 'Confirm Success' }
-        : { RspCode: '02', Message: 'Order already confirmed' };
+        : outcome === 'duplicate'
+          ? { RspCode: '02', Message: 'Order already confirmed' }
+          : { RspCode: '99', Message: 'Unknown error' };
     } catch (error) {
       if (error instanceof VnpayValidationError) {
         if (error.reason === 'signature') {

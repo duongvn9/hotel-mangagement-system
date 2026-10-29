@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { withBookingFinancialOperation } from '../bookings/booking-financial-operation.js';
 import {
   BadRequestException,
   ConflictException,
@@ -283,7 +284,7 @@ export class ServiceOrdersService implements OnModuleInit {
   }
 
   private staffSelection =
-    '+reviewedBy +reviewedAt +reviewDecision +reviewReason +billedInvoiceId +billedAt +assignmentAssignee +assignmentDueAt';
+    '+reviewedBy +reviewedAt +reviewDecision +reviewReason +acceptanceRecovery +billedInvoiceId +billedAt +assignmentAssignee +assignmentDueAt';
 
   private async staffResponse(row: ServiceOrderDocument) {
     const [booking, customer] = await Promise.all([
@@ -323,18 +324,26 @@ export class ServiceOrdersService implements OnModuleInit {
       billingStatus:
         row.billedInvoiceId && row.billedAt
           ? 'BILLED'
-          : row.amount > 0 && row.reviewDecision === 'ACCEPT'
+          : row.amount > 0 &&
+              row.reviewDecision === 'ACCEPT' &&
+              !row.acceptanceRecovery
             ? 'PENDING'
             : 'NOT_REQUIRED',
       ...(row.reviewDecision
         ? {
             review: {
               decision: row.reviewDecision,
-              reason: row.reviewReason ?? '',
+              reason:
+                row.acceptanceRecovery?.rejectionReason ??
+                row.reviewReason ??
+                '',
               reviewedBy: String(row.reviewedBy),
               reviewedAt: row.reviewedAt,
             },
           }
+        : {}),
+      ...(row.acceptanceRecovery
+        ? { acceptanceRecovery: row.acceptanceRecovery }
         : {}),
       ...(row.billedInvoiceId
         ? { invoiceId: String(row.billedInvoiceId), billedAt: row.billedAt }
@@ -430,7 +439,30 @@ export class ServiceOrdersService implements OnModuleInit {
 
   async review(id: string, dto: ReviewServiceOrderDto, user: AuthUser) {
     try {
-      return await this.reviewOrder(id, dto, user);
+      this.receptionist(user);
+      const orderId = this.id(id);
+      const order = await this.orders.findById(orderId).exec();
+      if (!order) throw new NotFoundException('Service order not found');
+      return await withBookingFinancialOperation(
+        this.bookings,
+        String(order.booking),
+        async () => {
+          try {
+            return await this.reviewOrder(id, dto, user);
+          } finally {
+            const current = await this.orders.findById(orderId).exec();
+            if (
+              current &&
+              current.reviewStatus !== ServiceOrderReviewStatus.Accepting
+            ) {
+              await this.bookings.updateOne(
+                { _id: order.booking },
+                { $pull: { acceptanceReservations: String(orderId) } },
+              );
+            }
+          }
+        },
+      );
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new ServiceUnavailableException(
@@ -461,10 +493,120 @@ export class ServiceOrdersService implements OnModuleInit {
       .select(this.staffSelection)
       .exec();
     if (!row) throw new NotFoundException('Service order not found');
+    if (dto.recoveryReason !== undefined) {
+      if (
+        typeof dto.recoveryReason !== 'string' ||
+        !dto.recoveryReason.trim() ||
+        dto.recoveryReason.trim().length > 2000 ||
+        dto.decision !== 'REJECT'
+      )
+        throw new BadRequestException(
+          'Recovery requires REJECT and a nonblank recovery reason',
+        );
+      const recoveryReason = dto.recoveryReason.trim();
+      if (row.acceptanceRecovery) {
+        if (
+          row.reviewStatus !== ServiceOrderReviewStatus.Rejected ||
+          row.acceptanceRecovery.reason !== recoveryReason ||
+          row.acceptanceRecovery.rejectionReason !== reason
+        )
+          throw new ConflictException(
+            'A different acceptance recovery already exists',
+          );
+        await this.bookings.updateOne(
+          { _id: row.booking },
+          { $pull: { financialReconciliationOrderIds: String(orderId) } },
+        );
+        return this.staffResponse(row);
+      }
+      if (
+        row.reviewStatus !== ServiceOrderReviewStatus.Accepting ||
+        row.reviewDecision !== 'ACCEPT' ||
+        !row.reviewedBy ||
+        !row.reviewedAt ||
+        row.executionStatus !== ServiceOrderExecutionStatus.NotStarted ||
+        row.billedInvoiceId ||
+        row.billedAt ||
+        row.linkedTask ||
+        row.assignmentTaskId
+      )
+        throw new ConflictException('Acceptance cannot be safely abandoned');
+      const booking = await this.ownedBooking(row.booking, row.customer);
+      if (
+        ![BookingStatus.CheckedOut, BookingStatus.Cancelled].includes(
+          booking.status,
+        )
+      )
+        throw new ConflictException(
+          'Acceptance recovery requires a closed booking',
+        );
+      const [charge, task] = await Promise.all([
+        this.invoiceRecords.exists({ 'charges.sourceId': String(orderId) }),
+        this.orders.db.model<Task>('Task').exists({
+          sourceType: TaskSourceType.ServiceOrder,
+          sourceId: orderId,
+        }),
+      ]);
+      if (charge || task)
+        throw new ConflictException(
+          'Existing charge or task prevents acceptance recovery',
+        );
+      const recovered = await this.orders
+        .findOneAndUpdate(
+          {
+            _id: orderId,
+            reviewStatus: ServiceOrderReviewStatus.Accepting,
+            reviewDecision: 'ACCEPT',
+            executionStatus: ServiceOrderExecutionStatus.NotStarted,
+            acceptanceRecovery: { $exists: false },
+            billedInvoiceId: { $exists: false },
+            billedAt: { $exists: false },
+            linkedTask: { $exists: false },
+            assignmentTaskId: { $exists: false },
+          },
+          {
+            $set: {
+              reviewStatus: ServiceOrderReviewStatus.Rejected,
+              executionStatus: ServiceOrderExecutionStatus.NotStarted,
+              acceptanceRecovery: {
+                decision: 'REJECT',
+                reason: recoveryReason,
+                rejectionReason: reason,
+                actor: reviewer,
+                at: new Date(),
+              },
+            },
+          },
+          { new: true, runValidators: true },
+        )
+        .select(this.staffSelection)
+        .exec();
+      if (!recovered) throw new ConflictException('Acceptance intent changed');
+      await this.bookings.updateOne(
+        { _id: row.booking },
+        { $pull: { financialReconciliationOrderIds: String(orderId) } },
+      );
+      return this.staffResponse(recovered);
+    }
+    if (row.acceptanceRecovery)
+      throw new ConflictException(
+        'Acceptance was abandoned by audited recovery',
+      );
     if (row.reviewStatus === ServiceOrderReviewStatus.PendingReview) {
       this.validateAmount(row);
-      if (dto.decision === 'ACCEPT')
-        await this.ownedBooking(row.booking, row.customer, true);
+      if (dto.decision === 'ACCEPT') {
+        const reserved = await this.bookings.updateOne(
+          {
+            _id: row.booking,
+            customer: row.customer,
+            isActive: true,
+            status: BookingStatus.CheckedIn,
+          },
+          { $addToSet: { acceptanceReservations: String(orderId) } },
+        );
+        if (reserved.matchedCount !== 1)
+          throw new ConflictException('Booking must be active and CHECKED_IN');
+      }
       const claimed = await this.orders
         .findOneAndUpdate(
           {
@@ -510,6 +652,10 @@ export class ServiceOrdersService implements OnModuleInit {
     if (row.reviewStatus !== ServiceOrderReviewStatus.Accepting)
       throw new ConflictException('Service order is no longer pending');
     this.validateAmount(row);
+    await this.bookings.updateOne(
+      { _id: row.booking, status: BookingStatus.CheckedIn, isActive: true },
+      { $addToSet: { acceptanceReservations: String(orderId) } },
+    );
     try {
       let invoice: InvoiceDocument | undefined;
       if (row.amount > 0) {
@@ -517,7 +663,20 @@ export class ServiceOrdersService implements OnModuleInit {
           String(row.booking),
         );
         if (!this.matchingCharge(invoice, row)) {
-          await this.ownedBooking(row.booking, row.customer, true);
+          const booking = await this.ownedBooking(row.booking, row.customer);
+          if (!booking.isActive || booking.status !== BookingStatus.CheckedIn) {
+            await this.bookings.updateOne(
+              { _id: row.booking },
+              {
+                $addToSet: {
+                  financialReconciliationOrderIds: String(orderId),
+                },
+              },
+            );
+            throw new ConflictException(
+              'Unbilled acceptance on closed booking requires reconciliation; no new charge created',
+            );
+          }
           try {
             await this.invoices.addCharge({
               bookingId: String(row.booking),
@@ -581,7 +740,7 @@ export class ServiceOrdersService implements OnModuleInit {
   }
 
   private assignmentSelection =
-    '+assignmentAssignee +assignmentRequestedBy +assignmentRequestedAt +assignmentDueAt +assignmentTitle';
+    '+assignmentAssignee +assignmentRequestedBy +assignmentRequestedAt +assignmentDueAt +assignmentTitle +assignmentRecoveryAudit';
 
   private async assignmentOrder(id: string) {
     const row = await this.orders
@@ -623,13 +782,95 @@ export class ServiceOrdersService implements OnModuleInit {
       .select('_id fullName role')
       .sort({ fullName: 1, _id: 1 })
       .lean();
+    let recoveryAllowed = false;
+    if (
+      row.executionStatus === ServiceOrderExecutionStatus.Assigning &&
+      row.assignmentAssignee &&
+      row.assignmentTaskId &&
+      !row.linkedTask
+    ) {
+      const [previous, existing] = await Promise.all([
+        this.users
+          .findOne({ _id: row.assignmentAssignee, isActive: false })
+          .lean(),
+        this.orders.db.model<Task>('Task').exists({
+          $or: [
+            { _id: row.assignmentTaskId },
+            { sourceType: TaskSourceType.ServiceOrder, sourceId: row._id },
+          ],
+        }),
+      ]);
+      recoveryAllowed = Boolean(previous && !existing);
+    }
     return {
+      recoveryAllowed,
       items: items.map((staff) => ({
         id: String(staff._id),
         displayName: staff.fullName,
         role: staff.role,
       })),
     };
+  }
+
+  private assertAssignmentIntent(
+    row: ServiceOrderDocument,
+    assigneeId: Types.ObjectId,
+    dueAt: Date | undefined,
+  ): asserts row is ServiceOrderDocument & {
+    assignmentTaskId: Types.ObjectId;
+    assignmentTitle: string;
+    assignmentRequestedAt: Date;
+  } {
+    if (
+      String(row.assignmentAssignee) !== String(assigneeId) ||
+      row.assignmentDueAt?.getTime() !== dueAt?.getTime()
+    )
+      throw new ConflictException(
+        'A different assignment intent already exists',
+      );
+    if (
+      !row.assignmentTaskId ||
+      !row.assignmentTitle ||
+      !row.assignmentRequestedAt
+    )
+      throw new ConflictException('Assignment intent is incomplete');
+  }
+
+  private assertAssignmentTask(
+    row: ServiceOrderDocument,
+    task: (Task & { _id: Types.ObjectId }) | null,
+  ) {
+    if (
+      !task ||
+      String(task._id) !== String(row.assignmentTaskId) ||
+      String(task.assignedTo) !== String(row.assignmentAssignee) ||
+      task.dueAt?.getTime() !== row.assignmentDueAt?.getTime() ||
+      task.title !== row.assignmentTitle ||
+      task.priority !== 'NORMAL' ||
+      task.assignedAt.getTime() !== row.assignmentRequestedAt?.getTime()
+    )
+      throw new ConflictException(
+        'Existing source work does not match assignment intent',
+      );
+  }
+
+  private async assignmentReplay(row: ServiceOrderDocument) {
+    if (
+      !row.linkedTask ||
+      String(row.linkedTask) !== String(row.assignmentTaskId) ||
+      ![
+        ServiceOrderExecutionStatus.Assigned,
+        ServiceOrderExecutionStatus.InProgress,
+        ServiceOrderExecutionStatus.Completed,
+      ].includes(row.executionStatus)
+    )
+      throw new ConflictException('Assignment is not canonically finalized');
+    const task = await this.tasks.findServiceOrderExecutionWork(
+      String(row._id),
+      row.linkedTask,
+    );
+    this.assertAssignmentTask(row, task);
+    return this.staffResponse(row);
   }
 
   async assign(id: string, input: AssignServiceOrderDto, user: AuthUser) {
@@ -647,8 +888,126 @@ export class ServiceOrdersService implements OnModuleInit {
     const dueAt = dto.dueAt === undefined ? undefined : new Date(dto.dueAt);
     if (dueAt && !Number.isFinite(dueAt.getTime()))
       throw new BadRequestException('Invalid dueAt');
+    const initial = await this.assignmentOrder(id);
+    await this.assertAssignable(initial);
+    return withBookingFinancialOperation(
+      this.bookings,
+      String(initial.booking),
+      () => this.assignLocked(id, dto, assigneeId, dueAt, actor),
+    );
+  }
+
+  private async assignLocked(
+    id: string,
+    dto: AssignServiceOrderDto,
+    assigneeId: Types.ObjectId,
+    dueAt: Date | undefined,
+    actor: Types.ObjectId,
+  ) {
     let row = await this.assignmentOrder(id);
     await this.assertAssignable(row);
+    const recovering =
+      row.executionStatus === ServiceOrderExecutionStatus.Assigning;
+    if (
+      dto.recoveryReason &&
+      String(row.assignmentAssignee) === String(assigneeId)
+    ) {
+      this.assertAssignmentIntent(row, assigneeId, dueAt);
+      const replacement = row.assignmentRecoveryAudit?.findLast(
+        (entry) => String(entry.previousAssignee) !== String(entry.assignee),
+      );
+      if (
+        !replacement ||
+        String(replacement.assignee) !== String(assigneeId) ||
+        replacement.reason !== dto.recoveryReason
+      )
+        throw new ConflictException(
+          'A different recovery intent already exists',
+        );
+      if (!recovering) return this.assignmentReplay(row);
+    } else if (dto.recoveryReason && !recovering) {
+      throw new ConflictException('Recovery requires a pending assignment');
+    }
+    if (recovering && String(row.assignmentAssignee) !== String(assigneeId)) {
+      if (!dto.recoveryReason)
+        throw new ConflictException('Reassignment requires a recovery reason');
+      if (!row.assignmentTaskId || !row.assignmentAssignee || row.linkedTask)
+        throw new ConflictException('Assignment cannot be safely replaced');
+      this.assertAssignmentIntent(row, row.assignmentAssignee, dueAt);
+      const existing = await this.orders.db.model<Task>('Task').exists({
+        $or: [
+          { _id: row.assignmentTaskId },
+          { sourceType: TaskSourceType.ServiceOrder, sourceId: row._id },
+        ],
+      });
+      if (existing)
+        throw new ConflictException(
+          'Existing task owner cannot be changed by recovery',
+        );
+      const previous = await this.users
+        .findOne({ _id: row.assignmentAssignee })
+        .lean();
+      if (!previous || previous.isActive !== false)
+        throw new ConflictException('Previous assignee must be inactive');
+      const replacement = await this.users
+        .findOne({ _id: assigneeId, isActive: true, role: Role.ServiceStaff })
+        .lean();
+      if (!replacement)
+        throw new BadRequestException('Assignee must be active SERVICE_STAFF');
+      if (row.assignmentDueAt?.getTime() !== dueAt?.getTime())
+        throw new ConflictException(
+          'Recovery must preserve the persisted due date',
+        );
+      const replaced = await this.orders
+        .findOneAndUpdate(
+          {
+            _id: row._id,
+            executionStatus: ServiceOrderExecutionStatus.Assigning,
+            reviewStatus: ServiceOrderReviewStatus.Accepted,
+            assignmentTaskId: row.assignmentTaskId,
+            assignmentAssignee: row.assignmentAssignee,
+            linkedTask: { $exists: false },
+          },
+          {
+            $set: { assignmentAssignee: assigneeId },
+            $push: {
+              assignmentRecoveryAudit: {
+                actor,
+                at: new Date(),
+                previousAssignee: row.assignmentAssignee,
+                assignee: assigneeId,
+                reason: dto.recoveryReason,
+              },
+            },
+          },
+          { new: true, runValidators: true },
+        )
+        .select(`${this.staffSelection} ${this.assignmentSelection}`)
+        .exec();
+      if (!replaced) throw new ConflictException('Assignment intent changed');
+      row = replaced;
+    } else if (recovering && !dto.recoveryReason) {
+      this.assertAssignmentIntent(row, assigneeId, dueAt);
+      await this.orders.updateOne(
+        {
+          _id: row._id,
+          executionStatus: ServiceOrderExecutionStatus.Assigning,
+          assignmentTaskId: row.assignmentTaskId,
+          assignmentAssignee: row.assignmentAssignee,
+        },
+        {
+          $push: {
+            assignmentRecoveryAudit: {
+              actor,
+              at: new Date(),
+              previousAssignee: row.assignmentAssignee,
+              assignee: row.assignmentAssignee,
+              reason: dto.recoveryReason ?? 'Retry persisted assignment',
+            },
+          },
+        },
+      );
+    }
     if (row.executionStatus === ServiceOrderExecutionStatus.NotStarted) {
       const staff = await this.users
         .findOne({ _id: assigneeId, isActive: true, role: Role.ServiceStaff })
@@ -681,23 +1040,10 @@ export class ServiceOrdersService implements OnModuleInit {
         .exec();
       row = locked ?? (await this.assignmentOrder(id));
     }
+    await this.assertAssignable(row);
+    this.assertAssignmentIntent(row, assigneeId, dueAt);
     if (row.executionStatus !== ServiceOrderExecutionStatus.Assigning)
-      throw new ConflictException(
-        'Assignment already finalized; reload service order',
-      );
-    if (
-      String(row.assignmentAssignee) !== String(assigneeId) ||
-      row.assignmentDueAt?.getTime() !== dueAt?.getTime()
-    )
-      throw new ConflictException(
-        'A different assignment intent is already pending',
-      );
-    if (
-      !row.assignmentTaskId ||
-      !row.assignmentTitle ||
-      !row.assignmentRequestedAt
-    )
-      throw new ConflictException('Assignment intent is incomplete');
+      return this.assignmentReplay(row);
     try {
       let task = await this.tasks.findServiceOrderExecutionWork(
         id,
@@ -728,16 +1074,7 @@ export class ServiceOrdersService implements OnModuleInit {
           if (!task) throw error;
         }
       }
-      if (
-        String(task.assignedTo) !== String(row.assignmentAssignee) ||
-        task.dueAt?.getTime() !== row.assignmentDueAt?.getTime() ||
-        task.title !== row.assignmentTitle ||
-        task.priority !== 'NORMAL' ||
-        task.assignedAt.getTime() !== row.assignmentRequestedAt.getTime()
-      )
-        throw new ConflictException(
-          'Existing source work does not match assignment intent',
-        );
+      this.assertAssignmentTask(row, task);
       const finalized = await this.orders
         .findOneAndUpdate(
           {
@@ -752,10 +1089,21 @@ export class ServiceOrdersService implements OnModuleInit {
         )
         .select(this.staffSelection)
         .exec();
-      if (!finalized)
-        throw new ConflictException(
-          'Assignment already finalized; reload service order',
-        );
+      if (!finalized) {
+        const canonical = await this.assignmentOrder(id);
+        await this.assertAssignable(canonical);
+        this.assertAssignmentIntent(canonical, assigneeId, dueAt);
+        if (
+          String(canonical.assignmentTaskId) !== String(row.assignmentTaskId) ||
+          String(canonical.assignmentRequestedBy) !==
+            String(row.assignmentRequestedBy) ||
+          canonical.assignmentTitle !== row.assignmentTitle ||
+          canonical.assignmentRequestedAt?.getTime() !==
+            row.assignmentRequestedAt?.getTime()
+        )
+          throw new ConflictException('Assignment intent changed');
+        return await this.assignmentReplay(canonical);
+      }
       return await this.staffResponse(finalized);
     } catch (error) {
       if (error instanceof HttpException) throw error;

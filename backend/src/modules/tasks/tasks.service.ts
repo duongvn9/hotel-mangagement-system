@@ -453,6 +453,26 @@ export class TasksService {
     const actor = await this.users.findById(actorUserId).lean();
     if (!actor) throw new NotFoundException('Assignee does not exist');
     await this.assertTransitionEligible(actor, task.sourceType);
+    if (
+      task.sourceType === TaskSourceType.ServiceOrder &&
+      task.taskType === SERVICE_ORDER_EXECUTION_TASK_TYPE
+    ) {
+      const order = await this.connection
+        .collection(TASK_SOURCE_COLLECTIONS[TaskSourceType.ServiceOrder])
+        .findOne(
+          {
+            _id: task.sourceId,
+            linkedTask: task._id,
+            reviewStatus: 'ACCEPTED',
+            executionStatus: { $in: Object.values(TaskStatus) },
+          },
+          { projection: { _id: 1 } },
+        );
+      if (!order)
+        throw new ConflictException(
+          'Service order assignment is not finalized for this task',
+        );
+    }
     await this.ensureWorkIndex();
     const updated = await this.tasks.findOneAndUpdate(
       scope,

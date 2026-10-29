@@ -89,6 +89,26 @@ export class ServiceOrder {
   @Prop({ select: false })
   reviewReason?: string;
 
+  @Prop({
+    type: {
+      _id: false,
+      decision: { type: String, enum: ['REJECT'], required: true },
+      reason: { type: String, required: true },
+      rejectionReason: { type: String, required: true },
+      actor: { type: Types.ObjectId, ref: 'User', required: true },
+      at: { type: Date, required: true },
+    },
+    default: undefined,
+    select: false,
+  })
+  acceptanceRecovery?: {
+    decision: 'REJECT';
+    reason: string;
+    rejectionReason: string;
+    actor: Types.ObjectId;
+    at: Date;
+  };
+
   @Prop({ type: Types.ObjectId, ref: 'Invoice', select: false })
   billedInvoiceId?: Types.ObjectId;
 
@@ -109,6 +129,28 @@ export class ServiceOrder {
 
   @Prop({ select: false })
   assignmentTitle?: string;
+
+  @Prop({
+    type: [
+      {
+        _id: false,
+        actor: { type: Types.ObjectId, ref: 'User', required: true },
+        at: { type: Date, required: true },
+        previousAssignee: { type: Types.ObjectId, ref: 'User', required: true },
+        assignee: { type: Types.ObjectId, ref: 'User', required: true },
+        reason: { type: String, required: true },
+      },
+    ],
+    default: undefined,
+    select: false,
+  })
+  assignmentRecoveryAudit?: {
+    actor: Types.ObjectId;
+    at: Date;
+    previousAssignee: Types.ObjectId;
+    assignee: Types.ObjectId;
+    reason: string;
+  }[];
 
   @Prop({ type: Types.ObjectId, ref: 'Task' })
   assignmentTaskId?: Types.ObjectId;

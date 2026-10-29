@@ -108,10 +108,25 @@ export class Booking {
   rateSnapshot: { room: Types.ObjectId; ratePerNight: number }[];
 
   @Prop()
+  financialOperationToken?: string;
+
+  @Prop()
+  financialOperationStartedAt?: Date;
+
+  @Prop({ type: [String], default: [] })
+  acceptanceReservations: string[];
+
+  @Prop({ type: [String], default: [] })
+  financialReconciliationOrderIds: string[];
+
+  @Prop()
   checkedInAt?: Date;
 
   @Prop()
   checkedOutAt?: Date;
+
+  @Prop()
+  checkoutRoomProjectionCompletedAt?: Date;
 
   @Prop()
   cancelledAt?: Date;

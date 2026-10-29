@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { withBookingFinancialOperation } from '../bookings/booking-financial-operation.js';
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema.js';
 import {
   PaymentMethod,
@@ -27,12 +28,16 @@ export class CashPaymentService {
     private readonly invoices: InvoicesService,
   ) {}
 
-  /**
-   * UC18: lễ tân xác nhận đã thu tiền mặt thanh toán cuối. Số tiền luôn là số còn phải trả do
-   * server tính lại từ hóa đơn. `requestId` làm khoá chống trùng. Chỉ một thanh toán cuối được
-   * ghi nhận cho mỗi booking (giống VNPay) và không ghi khi còn giao dịch VNPay đang chờ.
-   */
   async record(
+    bookingId: string,
+    dto: RecordCashPaymentDto,
+  ): Promise<BookingChargesResponse> {
+    return withBookingFinancialOperation(this.bookings, bookingId, () =>
+      this.recordLocked(bookingId, dto),
+    );
+  }
+
+  private async recordLocked(
     bookingId: string,
     dto: RecordCashPaymentDto,
   ): Promise<BookingChargesResponse> {
@@ -43,15 +48,14 @@ export class CashPaymentService {
     if (!booking || !booking.isActive) {
       throw new NotFoundException('Booking not found');
     }
+    const transactionRef = `CASH-${dto.requestId}`;
+    const replay = await this.payments.findOne({ transactionRef });
+    if (replay) return this.replayed(booking, replay);
     if (booking.status !== BookingStatus.CheckedIn) {
       throw new ConflictException(
         'Cash can only be taken for a guest who is checked in',
       );
     }
-
-    const transactionRef = `CASH-${dto.requestId}`;
-    const replay = await this.payments.findOne({ transactionRef });
-    if (replay) return this.replayed(booking, replay);
 
     const invoice = await this.invoices.recalculate(bookingId);
     const filter = {
@@ -59,11 +63,6 @@ export class CashPaymentService {
       purpose: PaymentPurpose.Final,
       isActive: true,
     };
-    if (
-      await this.payments.exists({ ...filter, status: PaymentStatus.Success })
-    ) {
-      throw new ConflictException('The final payment has already been settled');
-    }
     if (
       await this.payments.exists({ ...filter, status: PaymentStatus.Pending })
     ) {
@@ -75,9 +74,8 @@ export class CashPaymentService {
       throw new ConflictException('Nothing left to pay on this invoice');
     }
 
-    let payment;
     try {
-      payment = await this.payments.create({
+      await this.payments.create({
         booking: booking._id,
         invoice: invoice._id,
         transactionRef,
@@ -92,18 +90,6 @@ export class CashPaymentService {
       const winner = await this.payments.findOne({ transactionRef });
       if (winner) return this.replayed(booking, winner);
       throw error;
-    }
-
-    // Hai lễ tân thu cùng lúc: khoản tạo trước (_id nhỏ hơn) được giữ, khoản còn lại bị xoá.
-    const settled = await this.payments
-      .find({ ...filter, status: PaymentStatus.Success })
-      .sort({ _id: 1 })
-      .select('_id')
-      .lean()
-      .exec();
-    if (settled[0] && !settled[0]._id.equals(payment._id)) {
-      await this.payments.deleteOne({ _id: payment._id });
-      throw new ConflictException('The final payment has already been settled');
     }
 
     return toBookingChargesResponse(

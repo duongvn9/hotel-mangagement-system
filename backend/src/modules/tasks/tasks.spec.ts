@@ -15,6 +15,7 @@ import { CreateTaskDto } from './dto/create-task.dto.js';
 import { Task, TaskSchema } from './schemas/task.schema.js';
 import {
   canTransitionTaskStatus,
+  SERVICE_ORDER_EXECUTION_TASK_TYPE,
   TaskSourceType,
   TaskStatus,
 } from './task-contract.js';
@@ -508,6 +509,103 @@ describe('H8 task contract', () => {
       ),
     ).rejects.toThrow('Work result must not exceed 2000 characters');
     expect(tasks.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  describe.each([
+    [TaskStatus.Assigned, TaskStatus.InProgress],
+    [TaskStatus.InProgress, TaskStatus.Completed],
+  ])('service order execution %s -> %s', (from, to) => {
+    const sourceId = new Types.ObjectId();
+    const taskId = new Types.ObjectId(ID);
+    const executionTask = {
+      _id: taskId,
+      sourceId,
+      sourceType: TaskSourceType.ServiceOrder,
+      taskType: SERVICE_ORDER_EXECUTION_TASK_TYPE,
+      status: from,
+    };
+
+    it.each([
+      null,
+      { reviewStatus: 'ACCEPTED', executionStatus: 'ASSIGNING' },
+      {
+        linkedTask: taskId,
+        reviewStatus: 'ACCEPTED',
+        executionStatus: 'ASSIGNING',
+      },
+      {
+        linkedTask: new Types.ObjectId(),
+        reviewStatus: 'ACCEPTED',
+        executionStatus: 'ASSIGNED',
+      },
+      {
+        linkedTask: taskId,
+        reviewStatus: 'REJECTED',
+        executionStatus: 'ASSIGNED',
+      },
+      {
+        linkedTask: taskId,
+        reviewStatus: 'ACCEPTED',
+        executionStatus: 'NOT_STARTED',
+      },
+    ])('rejects noncanonical or pending order %j before CAS', async (order) => {
+      const { service, tasks, findOne } = setup();
+      tasks.findOne.mockReturnValue({ lean: async () => executionTask });
+      findOne.mockImplementation(async (...args: unknown[]) => {
+        const filter = args[0] as {
+          linkedTask: Types.ObjectId;
+          reviewStatus: string;
+          executionStatus: { $in: string[] };
+        };
+        return order &&
+          order.linkedTask?.equals(filter.linkedTask) &&
+          order.reviewStatus === filter.reviewStatus &&
+          filter.executionStatus.$in.includes(order.executionStatus)
+          ? { _id: ID }
+          : null!;
+      });
+      await expect(
+        service.transitionAssignedTask(
+          ID,
+          ID,
+          from,
+          to,
+          to === TaskStatus.Completed ? 'Done' : undefined,
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(findOne).toHaveBeenCalledWith(
+        {
+          _id: sourceId,
+          linkedTask: taskId,
+          reviewStatus: 'ACCEPTED',
+          executionStatus: { $in: Object.values(TaskStatus) },
+        },
+        { projection: { _id: 1 } },
+      );
+      expect(tasks.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('allows finalized canonical work even when its progress projection lags', async () => {
+      const { service, tasks, findOne } = setup();
+      tasks.findOne.mockReturnValue({ lean: async () => executionTask });
+      const repair = vi
+        .spyOn(service, 'repairServiceOrderExecution')
+        .mockResolvedValue(undefined);
+      tasks.findOneAndUpdate.mockImplementation(async () => {
+        expect(findOne).toHaveBeenCalledTimes(1);
+        return { ...executionTask, status: to };
+      });
+      await expect(
+        service.transitionAssignedTask(
+          ID,
+          ID,
+          from,
+          to,
+          to === TaskStatus.Completed ? 'Done' : undefined,
+        ),
+      ).resolves.toMatchObject({ status: to });
+      expect(repair).toHaveBeenCalledWith({ ...executionTask, status: to });
+    });
   });
 
   it('rejects a concurrent status or assignee change at the final CAS', async () => {

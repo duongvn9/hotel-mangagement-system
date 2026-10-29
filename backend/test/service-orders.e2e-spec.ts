@@ -136,6 +136,162 @@ describe('UC22/23 customer service orders', () => {
     return String(user._id);
   };
 
+  it('R2 concurrently abandons only closed unbilled technical acceptance with immutable audit and intent', async () => {
+    const id = (await post(body())).body.id;
+    const reviewedAt = new Date('2026-01-02');
+    const reviewedBy = new Types.ObjectId();
+    await orders.updateOne(
+      { _id: id },
+      {
+        $set: {
+          reviewStatus: 'ACCEPTING',
+          reviewDecision: 'ACCEPT',
+          reviewReason: 'Original acceptance',
+          reviewedBy,
+          reviewedAt,
+        },
+      },
+    );
+    const payload = {
+      decision: 'REJECT',
+      reason: 'Unbilled acceptance abandoned',
+      recoveryReason: 'Legacy closed stay reconciliation',
+    };
+    const recover = () =>
+      http()
+        .patch(`/api/v1/service-orders/${id}/review`)
+        .set(staff)
+        .send(payload);
+    await recover().expect(409);
+    await bookings.updateOne(
+      { _id: bookingId },
+      {
+        $set: {
+          status: BookingStatus.CheckedOut,
+          checkedOutAt: new Date(),
+          financialReconciliationOrderIds: [id],
+          acceptanceReservations: [id],
+        },
+      },
+    );
+    for (const role of [
+      'CUSTOMER',
+      'MANAGER',
+      'SERVICE_STAFF',
+      'OPERATIONS_STAFF',
+    ])
+      await recover().set({ 'x-dev-role': role }).expect(403);
+    await http()
+      .patch(`/api/v1/service-orders/${id}/review`)
+      .send(payload)
+      .expect(401);
+    const results = await Promise.all(Array.from({ length: 6 }, recover));
+    expect(results.map((result) => result.status)).toEqual(Array(6).fill(200));
+    const first = results[0].body;
+    expect(first).toMatchObject({
+      reviewStatus: 'REJECTED',
+      executionStatus: 'NOT_STARTED',
+      billingStatus: 'NOT_REQUIRED',
+      review: {
+        decision: 'ACCEPT',
+        reason: payload.reason,
+        reviewedBy: String(reviewedBy),
+        reviewedAt: reviewedAt.toISOString(),
+      },
+      acceptanceRecovery: {
+        decision: 'REJECT',
+        reason: payload.recoveryReason,
+        rejectionReason: payload.reason,
+        actor: staff['x-dev-user-id'],
+      },
+    });
+    const before = await orders
+      .findById(id)
+      .select(
+        '+reviewDecision +reviewReason +reviewedBy +reviewedAt +acceptanceRecovery',
+      )
+      .orFail();
+    await recover()
+      .set({ 'x-dev-user-id': String(new Types.ObjectId()) })
+      .expect(200);
+    const after = await orders
+      .findById(id)
+      .select(
+        '+reviewDecision +reviewReason +reviewedBy +reviewedAt +acceptanceRecovery',
+      )
+      .orFail();
+    expect(JSON.stringify(after.acceptanceRecovery)).toBe(
+      JSON.stringify(before.acceptanceRecovery),
+    );
+    expect(after.reviewDecision).toBe('ACCEPT');
+    expect(after.reviewReason).toBe('Original acceptance');
+    expect(after.reviewedAt).toEqual(reviewedAt);
+    expect(String(after.reviewedBy)).toBe(String(reviewedBy));
+    await review(id, 'ACCEPT', 'Original acceptance').expect(409);
+    await recover()
+      .send({ ...payload, recoveryReason: 'Different' })
+      .expect(409);
+    const booking = await bookings.findById(bookingId).orFail();
+    expect(booking.financialReconciliationOrderIds).not.toContain(id);
+    expect(booking.acceptanceReservations).not.toContain(id);
+    expect(
+      await app
+        .get<Model<Invoice>>(getModelToken(Invoice.name))
+        .countDocuments(),
+    ).toBe(0);
+    expect(
+      await app.get<Model<Task>>(getModelToken(Task.name)).countDocuments(),
+    ).toBe(0);
+  });
+
+  it('R2 refuses recovery for any persisted source charge, task, or ordinary pending rejection', async () => {
+    await prepareBilling();
+    const id = (await post(body())).body.id;
+    const payload = {
+      decision: 'REJECT',
+      reason: 'Abandon',
+      recoveryReason: 'Reconcile',
+    };
+    const recover = () =>
+      http()
+        .patch(`/api/v1/service-orders/${id}/review`)
+        .set(staff)
+        .send(payload);
+    await recover().expect(409);
+    await review(id).expect(200);
+    await orders.updateOne(
+      { _id: id },
+      {
+        $set: { reviewStatus: 'ACCEPTING' },
+        $unset: { billedAt: '', billedInvoiceId: '' },
+      },
+    );
+    await bookings.updateOne(
+      { _id: bookingId },
+      { status: BookingStatus.CheckedOut },
+    );
+    await recover().expect(409);
+    const invoices = app.get<Model<Invoice>>(getModelToken(Invoice.name));
+    await invoices.collection.updateMany(
+      {},
+      { $set: { isActive: false, 'charges.0.amount': 1 } },
+    );
+    await recover().expect(409);
+    await invoices.deleteMany({});
+    const tasks = app.get<Model<Task>>(getModelToken(Task.name));
+    const taskId = new Types.ObjectId();
+    await tasks.collection.insertOne({
+      _id: taskId,
+      sourceType: 'SERVICE_ORDER',
+      sourceId: new Types.ObjectId(id),
+    } as never);
+    await recover().expect(409);
+    expect(
+      (await orders.findById(id).select('+acceptanceRecovery').orFail())
+        .acceptanceRecovery,
+    ).toBeUndefined();
+  });
+
   it('UC26 gates exact roles, accepted state, persisted billing and eligible staff', async () => {
     const assignee = await createWorker();
     const id = (await post(body())).body.id;
@@ -187,6 +343,232 @@ describe('UC22/23 customer service orders', () => {
     );
   });
 
+  it('R3 lets another receptionist retry persisted intent without overwriting its requester', async () => {
+    await services.updateOne({ _id: serviceId }, { billable: false });
+    const assignee = await createWorker();
+    const id = (await post(body())).body.id;
+    await review(id).expect(200);
+    const create = vi
+      .spyOn(app.get(TasksService), 'create')
+      .mockRejectedValueOnce(new Error('unavailable'));
+    await assignment(id, assignee).expect(503);
+    create.mockRestore();
+    const before = await orders
+      .findById(id)
+      .select('+assignmentRequestedBy +assignmentRequestedAt')
+      .orFail();
+    const recoveryActor = String(new Types.ObjectId());
+    const results = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        assignment(id, assignee).set({ 'x-dev-user-id': recoveryActor }),
+      ),
+    );
+    expect(results.map((result) => result.status)).toEqual(Array(6).fill(201));
+    const after = await orders
+      .findById(id)
+      .select(
+        '+assignmentRequestedBy +assignmentRequestedAt +assignmentRecoveryAudit',
+      )
+      .orFail();
+    expect(String(after.assignmentRequestedBy)).toBe(
+      String(before.assignmentRequestedBy),
+    );
+    expect(after.assignmentRequestedAt).toEqual(before.assignmentRequestedAt);
+    expect(after.assignmentRecoveryAudit).toHaveLength(1);
+    expect(String(after.assignmentRecoveryAudit![0].actor)).toBe(recoveryActor);
+    expect(after.assignmentRecoveryAudit![0].at).toBeInstanceOf(Date);
+    expect(
+      await app.get<Model<Task>>(getModelToken(Task.name)).countDocuments(),
+    ).toBe(1);
+  });
+
+  it('R3 audits inactive-assignee replacement only before canonical or source work exists', async () => {
+    await services.updateOne({ _id: serviceId }, { billable: false });
+    const assignee = await createWorker();
+    const replacement = await createWorker();
+    const id = (await post(body())).body.id;
+    await review(id).expect(200);
+    const create = vi
+      .spyOn(app.get(TasksService), 'create')
+      .mockRejectedValueOnce(new Error('unavailable'));
+    await assignment(id, assignee).expect(503);
+    create.mockRestore();
+    await assignment(id, replacement, {
+      recoveryReason: 'Staff unavailable',
+    }).expect(409);
+    await app
+      .get<Model<User>>(getModelToken(User.name))
+      .updateOne({ _id: assignee }, { isActive: false });
+    expect(
+      (
+        await http()
+          .get(`/api/v1/service-orders/${id}/assignees`)
+          .set(staff)
+          .expect(200)
+      ).body.recoveryAllowed,
+    ).toBe(true);
+    await assignment(id, replacement).expect(409);
+    for (const recoveryReason of ['', '   ', null])
+      await assignment(id, replacement, { recoveryReason }).expect(400);
+    const recoveryActor = String(new Types.ObjectId());
+    await assignment(id, replacement, {
+      recoveryReason: 'Staff deactivated before creation',
+    })
+      .set({ 'x-dev-user-id': recoveryActor })
+      .expect(201);
+    const row = await orders
+      .findById(id)
+      .select('+assignmentRequestedBy +assignmentRecoveryAudit')
+      .orFail();
+    expect(String(row.assignmentRequestedBy)).toBe(staff['x-dev-user-id']);
+    expect(row.assignmentRecoveryAudit).toHaveLength(1);
+    expect(row.assignmentRecoveryAudit![0]).toMatchObject({
+      reason: 'Staff deactivated before creation',
+    });
+    expect(String(row.assignmentRecoveryAudit![0].previousAssignee)).toBe(
+      assignee,
+    );
+    expect(String(row.assignmentRecoveryAudit![0].assignee)).toBe(replacement);
+    expect(String(row.assignmentRecoveryAudit![0].actor)).toBe(recoveryActor);
+    const tasks = app.get<Model<Task>>(getModelToken(Task.name));
+    expect(await tasks.countDocuments()).toBe(1);
+    expect(String((await tasks.findOne().orFail()).assignedTo)).toBe(
+      replacement,
+    );
+    const task = await tasks.findOne().orFail();
+    for (const status of ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED']) {
+      if (status !== 'ASSIGNED')
+        await http()
+          .patch(`/api/v1/tasks/${task._id}/progress`)
+          .set(worker(replacement))
+          .send({
+            status,
+            ...(status === 'COMPLETED' ? { workResult: 'Done' } : {}),
+          })
+          .expect(200);
+      const replay = await assignment(id, replacement, {
+        recoveryReason: 'Staff deactivated before creation',
+      })
+        .set({ 'x-dev-user-id': String(new Types.ObjectId()) })
+        .expect(201);
+      expect(replay.body.task.id).toBe(String(task._id));
+      expect(replay.body.executionStatus).toBe(status);
+      await assignment(id, replacement, {
+        recoveryReason: 'Different reason',
+      }).expect(409);
+      await assignment(id, replacement, {
+        recoveryReason: 'Staff deactivated before creation',
+        dueAt: '2026-12-01T00:00:00.000Z',
+      }).expect(409);
+      await assignment(id, assignee, {
+        recoveryReason: 'Staff deactivated before creation',
+      }).expect(409);
+    }
+    expect(
+      (await orders.findById(id).select('+assignmentRecoveryAudit').orFail())
+        .assignmentRecoveryAudit,
+    ).toHaveLength(1);
+    expect(await tasks.countDocuments()).toBe(1);
+  });
+
+  it('R3 fences recovery behind an in-flight old-owner task creation', async () => {
+    await services.updateOne({ _id: serviceId }, { billable: false });
+    const assignee = await createWorker();
+    const replacement = await createWorker();
+    const id = (await post(body())).body.id;
+    await review(id).expect(200);
+    const tasksService = app.get(TasksService);
+    const original = tasksService.create.bind(tasksService);
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const spy = vi
+      .spyOn(tasksService, 'create')
+      .mockImplementation(
+        async (...args: Parameters<typeof tasksService.create>) => {
+          const task = await original(...args);
+          entered();
+          await blocked;
+          return task;
+        },
+      );
+    const assigning = assignment(id, assignee).then((result) => result);
+    await started;
+    await app
+      .get<Model<User>>(getModelToken(User.name))
+      .updateOne({ _id: assignee }, { isActive: false });
+    const recovery = assignment(id, replacement, {
+      recoveryReason: 'Inactive during creation',
+    }).then((result) => result);
+    release();
+    try {
+      expect((await assigning).status).toBe(201);
+      expect((await recovery).status).toBe(409);
+    } finally {
+      release();
+      spy.mockRestore();
+    }
+    const tasks = app.get<Model<Task>>(getModelToken(Task.name));
+    expect(await tasks.countDocuments()).toBe(1);
+    expect(String((await tasks.findOne().orFail()).assignedTo)).toBe(assignee);
+  });
+
+  it.each(['canonical', 'source'])(
+    'R3 refuses recovery owner changes with existing %s work while ASSIGNING',
+    async (identity) => {
+      await services.updateOne({ _id: serviceId }, { billable: false });
+      const assignee = await createWorker();
+      const replacement = await createWorker();
+      const id = (await post(body())).body.id;
+      await review(id).expect(200);
+      const original = orders.findOneAndUpdate.bind(orders);
+      const spy = vi
+        .spyOn(orders, 'findOneAndUpdate')
+        .mockImplementation(
+          (...args: Parameters<typeof orders.findOneAndUpdate>) => {
+            if (
+              (args[0] as { executionStatus?: string }).executionStatus ===
+              'ASSIGNING'
+            )
+              throw new Error('link unavailable');
+            return original(...args);
+          },
+        );
+      await assignment(id, assignee).expect(503);
+      spy.mockRestore();
+      await app
+        .get<Model<User>>(getModelToken(User.name))
+        .updateOne({ _id: assignee }, { isActive: false });
+      if (identity === 'source')
+        await orders.updateOne(
+          { _id: id },
+          { assignmentTaskId: new Types.ObjectId() },
+        );
+      await assignment(id, replacement, {
+        recoveryReason: 'Staff inactive',
+      }).expect(409);
+      const existing = await app
+        .get<Model<Task>>(getModelToken(Task.name))
+        .findOne()
+        .orFail();
+      if (identity === 'source')
+        await orders.updateOne({ _id: id }, { assignmentTaskId: existing._id });
+      await assignment(id, assignee)
+        .set({ 'x-dev-user-id': String(new Types.ObjectId()) })
+        .expect(201);
+      const tasks = app.get<Model<Task>>(getModelToken(Task.name));
+      expect(await tasks.countDocuments()).toBe(1);
+      expect(String((await tasks.findOne().orFail()).assignedTo)).toBe(
+        assignee,
+      );
+    },
+  );
+
   it('UC26 races create one canonical task; UC38 progress feeds private UC27 history', async () => {
     await prepareBilling();
     const assignee = await createWorker();
@@ -197,8 +579,7 @@ describe('UC22/23 customer service orders', () => {
     const results = await Promise.all(
       Array.from({ length: 6 }, () => assignment(id, assignee, { dueAt })),
     );
-    expect(results.every((r) => [201, 409].includes(r.status))).toBe(true);
-    expect(results.some((r) => r.status === 201)).toBe(true);
+    expect(results.every((r) => r.status === 201)).toBe(true);
     const tasks = app.get<Model<Task>>(getModelToken(Task.name));
     expect(await tasks.countDocuments()).toBe(1);
     const task = await tasks.findOne().orFail();
@@ -208,7 +589,16 @@ describe('UC22/23 customer service orders', () => {
       status: 'ASSIGNED',
     });
     expect(String(task.sourceId)).toBe(id);
-    await assignment(id, assignee, { dueAt }).expect(409);
+    const replay = await assignment(id, assignee, { dueAt }).expect(201);
+    expect(replay.body.task.id).toBe(String(task._id));
+    expect(results.every((r) => r.body.task.id === String(task._id))).toBe(
+      true,
+    );
+    expect(await tasks.countDocuments()).toBe(1);
+    await assignment(id, stranger, { dueAt }).expect(409);
+    await assignment(id, assignee, {
+      dueAt: '2026-12-02T10:00:00.000Z',
+    }).expect(409);
     expect((await history(assignee).expect(200)).body.total).toBe(0);
     const progress = (status: string, workResult?: string) =>
       http()
@@ -220,6 +610,14 @@ describe('UC22/23 customer service orders', () => {
       'IN_PROGRESS',
     );
     await progress('COMPLETED', 'Laundry delivered').expect(200);
+    const completedReplay = await assignment(id, assignee, { dueAt }).expect(
+      201,
+    );
+    expect(completedReplay.body).toMatchObject({
+      executionStatus: 'COMPLETED',
+      task: { id: String(task._id), status: 'COMPLETED' },
+    });
+    expect(await tasks.countDocuments()).toBe(1);
     expect((await orders.findById(id).orFail()).executionStatus).toBe(
       'COMPLETED',
     );
@@ -270,7 +668,7 @@ describe('UC22/23 customer service orders', () => {
     expect((await history(assignee).expect(200)).body.total).toBe(0);
   });
 
-  it('recovers completed pending intent after link failure without another Task and repairs failed projections on reads', async () => {
+  it('blocks pending execution until assignment retry links the same Task and repairs failed projections on reads', async () => {
     await services.updateOne({ _id: serviceId }, { billable: false });
     const assignee = await createWorker();
     const id = (await post(body())).body.id;
@@ -294,18 +692,39 @@ describe('UC22/23 customer service orders', () => {
       .get<Model<Task>>(getModelToken(Task.name))
       .findOne()
       .orFail();
-    const core = app.get(TasksService);
-    await core.updateAssignedProgress(assignee, String(task._id), {
-      status: 'IN_PROGRESS' as never,
-    });
-    await core.updateAssignedProgress(assignee, String(task._id), {
-      status: 'COMPLETED' as never,
-      workResult: 'Done',
-    });
+    const progress = (status: string, workResult?: string) =>
+      http()
+        .patch(`/api/v1/tasks/${task._id}/progress`)
+        .set(worker(assignee))
+        .send({ status, ...(workResult ? { workResult } : {}) });
+    await progress('IN_PROGRESS').expect(409);
+    await progress('COMPLETED', 'Done').expect(409);
+    const unchanged = await app
+      .get<Model<Task>>(getModelToken(Task.name))
+      .findById(task._id)
+      .orFail();
+    expect(unchanged.status).toBe('ASSIGNED');
+    expect(unchanged.completedAt).toBeUndefined();
+    expect(unchanged.workResult).toBeUndefined();
+    const pending = await orders.findById(id).orFail();
+    expect(pending.executionStatus).toBe('ASSIGNING');
+    expect(pending.linkedTask).toBeUndefined();
     expect((await history(assignee).expect(200)).body.total).toBe(0);
     await assignment(id, await createWorker()).expect(409);
     const recovered = await assignment(id, assignee).expect(201);
-    expect(recovered.body.executionStatus).toBe('COMPLETED');
+    expect(recovered.body.executionStatus).toBe('ASSIGNED');
+    expect(String((await orders.findById(id).orFail()).linkedTask)).toBe(
+      String(task._id),
+    );
+    await progress('IN_PROGRESS').expect(200);
+    expect((await orders.findById(id).orFail()).executionStatus).toBe(
+      'IN_PROGRESS',
+    );
+    await progress('COMPLETED', 'Done').expect(200);
+    expect((await orders.findById(id).orFail()).executionStatus).toBe(
+      'COMPLETED',
+    );
+    expect((await history(assignee).expect(200)).body.total).toBe(1);
     expect(
       await app.get<Model<Task>>(getModelToken(Task.name)).countDocuments(),
     ).toBe(1);
@@ -597,7 +1016,7 @@ describe('UC22/23 customer service orders', () => {
     const result = (await detail(id)).body;
     const invoice = await app
       .get<Model<Invoice>>(getModelToken(Invoice.name))
-      .findOne({ booking: bookingId });
+      .findOne({ booking: new Types.ObjectId(bookingId) });
     expect(invoice?.charges.length ?? 0).toBe(
       result.reviewStatus === 'ACCEPTED' ? 1 : 0,
     );

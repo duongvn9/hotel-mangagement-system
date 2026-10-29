@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { BookingStatus } from '../../common/constants/booking-status.enum.js';
 import { Booking } from '../bookings/schemas/booking.schema.js';
+import { withBookingFinancialOperation } from '../bookings/booking-financial-operation.js';
 import { RoomHold } from '../bookings/schemas/room-hold.schema.js';
 import {
   Invoice,
@@ -57,6 +58,17 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
     expected: ExpectedVnpayPayment,
     plan: CompareAndSet,
   ): Promise<'committed' | 'duplicate' | 'conflict'> {
+    return withBookingFinancialOperation(
+      this.bookings,
+      expected.booking.id,
+      () => this.commitLocked(expected, plan),
+    );
+  }
+
+  private async commitLocked(
+    expected: ExpectedVnpayPayment,
+    plan: CompareAndSet,
+  ): Promise<'committed' | 'duplicate' | 'conflict'> {
     const { result } = plan;
     const update: Record<string, unknown> = {
       status: result.status,
@@ -94,6 +106,13 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
         current.status === result.status &&
         current.providerTransactionRef === result.providerTransactionRef
       ) {
+        if (result.status === PaymentStatus.Success) {
+          if (current.purpose === PaymentPurpose.Deposit) {
+            if (!(await this.confirmDeposit(expected, result.transactionRef)))
+              return 'duplicate';
+          }
+          await this.reconcileInvoice(expected);
+        }
         return 'duplicate';
       }
       return 'conflict';

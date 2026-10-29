@@ -220,7 +220,7 @@ describe('Record checkout additional charge (e2e)', () => {
     }
   });
 
-  it('stops taking charges once the final payment is settled', async () => {
+  it('allows new charges after a final payment while still checked in', async () => {
     const booking = await seed();
     await add(booking.id, charge('req-12345678')).expect(201);
     const invoice = await invoices.findOne({ booking: booking._id });
@@ -234,10 +234,10 @@ describe('Record checkout additional charge (e2e)', () => {
       amount: 2150000,
       paidAt: new Date(),
     });
-    const { body } = await add(booking.id, charge('req-87654321')).expect(409);
-    expect(body.message).toMatch(/already been paid/i);
+    const { body } = await add(booking.id, charge('req-87654321')).expect(201);
+    expect(body.totals.balanceDue).toBe(150000);
     const again = await list(booking.id).expect(200);
-    expect(again.body.charges).toHaveLength(1);
+    expect(again.body.charges).toHaveLength(2);
   });
 
   it('validates the charge', async () => {
