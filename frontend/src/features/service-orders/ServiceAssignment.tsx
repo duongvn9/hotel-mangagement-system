@@ -15,7 +15,11 @@ export function ServiceAssignment({
   const eligible =
     order.reviewStatus === 'ACCEPTED' && (!order.feeRequired || order.billingStatus === 'BILLED')
   const open = eligible && !order.task && order.executionStatus === 'NOT_STARTED'
-  const assignees = useServiceAssignees(order.id, open)
+  const pending = order.executionStatus === 'ASSIGNING'
+  const assignees = useServiceAssignees(
+    order.id,
+    open || (eligible && pending && !order.task && Boolean(order.assignmentIntent)),
+  )
   const mutation = useAssignServiceOrder(order.id)
   const [assigneeId, setAssigneeId] = useState('')
   const [due, setDue] = useState('')
@@ -24,17 +28,44 @@ export function ServiceAssignment({
   const [validation, setValidation] = useState('')
   const sending = useRef(false)
   const staff = (assignees.data?.items ?? []).filter((item) => item.role === 'SERVICE_STAFF')
-  const pending = order.executionStatus === 'ASSIGNING'
+  const [recoveryMode, setRecoveryMode] = useState(false)
+  const [recoveryReason, setRecoveryReason] = useState('')
+  const canRecover =
+    eligible &&
+    pending &&
+    !order.task &&
+    Boolean(order.assignmentIntent) &&
+    assignees.data?.recoveryAllowed === true
+  const editingRecovery = recoveryMode && canRecover && !intent?.recoveryReason
   const activeIntent = intent ?? (pending ? order.assignmentIntent : undefined)
   const disabled = mutation.isPending || refreshing
   function prepare(event: FormEvent) {
     event.preventDefault()
     if (disabled || sending.current || !eligible || order.task || (!open && !pending)) return
-    if (activeIntent) {
+    if (editingRecovery) {
+      if (
+        assignees.isFetching ||
+        assignees.isError ||
+        !staff.some((item) => item.id === assigneeId) ||
+        assigneeId === order.assignmentIntent?.assigneeId ||
+        !recoveryReason.trim() ||
+        recoveryReason.trim().length > 2000
+      ) {
+        setValidation('Chọn nhân viên thay thế và nhập lý do khôi phục (tối đa 2000 ký tự).')
+        return
+      }
+      setValidation('')
       setConfirmation({
-        assigneeId: activeIntent.assigneeId,
-        ...(activeIntent.dueAt !== undefined ? { dueAt: activeIntent.dueAt } : {}),
+        assigneeId,
+        ...(order.assignmentIntent?.dueAt !== undefined
+          ? { dueAt: order.assignmentIntent.dueAt }
+          : {}),
+        recoveryReason: recoveryReason.trim(),
       })
+      return
+    }
+    if (activeIntent) {
+      setConfirmation({ ...activeIntent })
       return
     }
     if (
@@ -109,7 +140,21 @@ export function ServiceAssignment({
               <p>Hạn đã lưu: {activeIntent.dueAt ? dateTime(activeIntent.dueAt) : 'Không có'}</p>
             </div>
           )}
-          {!activeIntent && (
+          {canRecover && !intent?.recoveryReason && (
+            <label className="block">
+              <input
+                type="checkbox"
+                checked={recoveryMode}
+                disabled={disabled || Boolean(confirmation)}
+                onChange={(event) => {
+                  setRecoveryMode(event.target.checked)
+                  setValidation('')
+                }}
+              />
+              Thay nhân viên đã ngừng hoạt động
+            </label>
+          )}
+          {(!activeIntent || editingRecovery) && (
             <>
               {assignees.isPending && <p role="status">Đang tải nhân viên dịch vụ…</p>}
               {assignees.isError && (
@@ -139,16 +184,29 @@ export function ServiceAssignment({
                   ))}
                 </select>
               </label>
-              <label className="block">
-                Hạn hoàn thành (không bắt buộc)
-                <input
-                  className="min-h-11 w-full rounded border border-stone-300 p-2"
-                  type="datetime-local"
-                  value={due}
-                  disabled={disabled}
-                  onChange={(event) => setDue(event.target.value)}
-                />
-              </label>
+              {editingRecovery ? (
+                <label className="block">
+                  Lý do khôi phục
+                  <textarea
+                    className="w-full rounded border border-stone-300 p-2"
+                    value={recoveryReason}
+                    maxLength={2000}
+                    disabled={disabled}
+                    onChange={(event) => setRecoveryReason(event.target.value)}
+                  />
+                </label>
+              ) : (
+                <label className="block">
+                  Hạn hoàn thành (không bắt buộc)
+                  <input
+                    className="min-h-11 w-full rounded border border-stone-300 p-2"
+                    type="datetime-local"
+                    value={due}
+                    disabled={disabled}
+                    onChange={(event) => setDue(event.target.value)}
+                  />
+                </label>
+              )}
             </>
           )}
           {validation && <p role="alert">{validation}</p>}
@@ -164,7 +222,7 @@ export function ServiceAssignment({
             disabled={
               disabled ||
               Boolean(confirmation) ||
-              (!activeIntent &&
+              ((!activeIntent || editingRecovery) &&
                 (assignees.isFetching ||
                   assignees.isError ||
                   !assigneeId ||
@@ -173,7 +231,7 @@ export function ServiceAssignment({
           >
             {mutation.isPending
               ? 'Đang phân công…'
-              : activeIntent
+              : activeIntent && !editingRecovery
                 ? 'Thử lại cùng phân công'
                 : 'Xem lại phân công'}
           </Button>
@@ -194,6 +252,7 @@ export function ServiceAssignment({
               <p>
                 Hạn hoàn thành: {confirmation.dueAt ? dateTime(confirmation.dueAt) : 'Không có'}
               </p>
+              {confirmation.recoveryReason && <p>Lý do khôi phục: {confirmation.recoveryReason}</p>}
               <p>Tạo công việc liên kết cho yêu cầu này, không thay đổi ghi phí.</p>
               <Button type="button" disabled={disabled} onClick={() => void confirm()}>
                 Xác nhận phân công

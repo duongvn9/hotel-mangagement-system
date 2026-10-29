@@ -163,7 +163,8 @@ describe('assignment', () => {
     expect(screen.queryByText(/Máy chủ chưa cung cấp/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Nhân viên dịch vụ')).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/Hạn hoàn thành/)).not.toBeInTheDocument()
-    expect(api.get).not.toHaveBeenCalledWith('/service-orders/order-1/assignees')
+    expect(api.get).toHaveBeenCalledWith('/service-orders/order-1/assignees')
+    expect(screen.queryByLabelText('Thay nhân viên đã ngừng hoạt động')).not.toBeInTheDocument()
     expect(api.post).not.toHaveBeenCalled()
     fireEvent.click(retry)
     const dialog = await screen.findByRole('dialog')
@@ -175,6 +176,69 @@ describe('assignment', () => {
       assignmentIntent,
     )
   })
+  it('explicitly recovers inactive staff with a reason and frozen due date, retaining exact retry payload after loss', async () => {
+    current = {
+      ...current,
+      executionStatus: 'ASSIGNING',
+      assignmentIntent: { assigneeId: 'inactive', dueAt: '2026-12-01T10:00:00.000Z' },
+    }
+    const get = vi.mocked(api.get).getMockImplementation()!
+    vi.mocked(api.get).mockImplementation(async (...args) =>
+      args[0].toString().endsWith('/assignees')
+        ? {
+            data: {
+              recoveryAllowed: true,
+              items: [{ id: 'staff-1', displayName: 'Nhân viên thật', role: 'SERVICE_STAFF' }],
+            },
+          }
+        : get(...args),
+    )
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('Lost response'))
+    page()
+    fireEvent.click(await screen.findByLabelText('Thay nhân viên đã ngừng hoạt động'))
+    await screen.findByRole('option', { name: 'Nhân viên thật' })
+    fireEvent.change(screen.getByLabelText('Nhân viên dịch vụ'), { target: { value: 'staff-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Xem lại phân công' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('nhập lý do khôi phục')
+    expect(api.post).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText(/Hạn hoàn thành/)).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Lý do khôi phục'), {
+      target: { value: '  Staff deactivated  ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Xem lại phân công' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Lý do khôi phục: Staff deactivated')).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Xác nhận phân công' }))
+    const retry = await screen.findByRole('button', { name: 'Thử lại cùng phân công' })
+    await waitFor(() => expect(retry).toBeEnabled())
+    expect(screen.queryByLabelText('Nhân viên dịch vụ')).not.toBeInTheDocument()
+    fireEvent.click(retry)
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Xác nhận phân công' }),
+    )
+    await screen.findByText('Công việc liên kết: task-1')
+    const payload = {
+      assigneeId: 'staff-1',
+      dueAt: '2026-12-01T10:00:00.000Z',
+      recoveryReason: 'Staff deactivated',
+    }
+    expect(vi.mocked(api.post).mock.calls.map((call) => call[1])).toEqual([payload, payload])
+    expect(screen.queryByLabelText('Thay nhân viên đã ngừng hoạt động')).not.toBeInTheDocument()
+  })
+
+  it('never offers replacement when a Task already exists', async () => {
+    current = {
+      ...current,
+      executionStatus: 'ASSIGNING',
+      assignmentIntent: { assigneeId: 'inactive' },
+      task,
+    }
+    page()
+    await screen.findByText('Công việc liên kết: task-1')
+    expect(screen.queryByLabelText('Thay nhân viên đã ngừng hoạt động')).not.toBeInTheDocument()
+    expect(api.get).not.toHaveBeenCalledWith('/service-orders/order-1/assignees')
+  })
+
   it('does not invent intent after reload in ASSIGNING', async () => {
     current = { ...current, executionStatus: 'ASSIGNING' }
     page()

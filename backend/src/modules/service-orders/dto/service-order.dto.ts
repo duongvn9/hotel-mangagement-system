@@ -10,6 +10,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateIf,
 } from 'class-validator';
 import {
@@ -65,6 +66,13 @@ export class ReviewServiceOrderDto {
   @IsString()
   @MaxLength(2000)
   reason?: string;
+
+  @ValidateIf(optional)
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  recoveryReason?: string;
 }
 
 export class AssignServiceOrderDto {
@@ -74,6 +82,13 @@ export class AssignServiceOrderDto {
   @ValidateIf(optional)
   @IsISO8601({ strict: true, strictSeparator: true })
   dueAt?: string;
+
+  @ValidateIf(optional)
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  recoveryReason?: string;
 }
 
 export class ServiceHistoryQuery {
