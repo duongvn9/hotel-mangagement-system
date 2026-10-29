@@ -1,6 +1,22 @@
 import { isAxiosError } from 'axios'
 import { Link } from 'react-router'
-import { money, dateTime, reviewLabels, executionLabels, type ServiceOrder } from './api'
+import {
+  money,
+  dateTime,
+  reviewLabels,
+  executionLabels,
+  serviceOrderState,
+  type ServiceOrder,
+} from './api'
+
+export function OrderBusinessState({ order }: { order: ServiceOrder }) {
+  const status = serviceOrderState(order)
+  return (
+    <p className={status.tone === 'success' ? 'font-medium text-success' : 'text-stone-700'}>
+      Trạng thái yêu cầu: {status.label}
+    </p>
+  )
+}
 
 export function OrderError({ error, retry }: { error: unknown; retry?: () => void }) {
   const status = isAxiosError(error) ? error.response?.status : undefined
@@ -29,6 +45,7 @@ export function OrderReceipt({ order }: { order: ServiceOrder }) {
   return (
     <div className="space-y-4 rounded border border-stone-300 bg-white p-4 break-words sm:p-6">
       <h2 className="font-display text-2xl">{order.service.name}</h2>
+      <OrderBusinessState order={order} />
       <dl className="grid gap-4 sm:grid-cols-2">
         {[
           ['Mã yêu cầu', order.id],
@@ -49,13 +66,17 @@ export function OrderReceipt({ order }: { order: ServiceOrder }) {
         ))}
       </dl>
       <p className="text-sm text-stone-700">
-        {order.reviewStatus === 'PENDING_REVIEW'
-          ? 'Yêu cầu đang chờ duyệt, chưa được chấp nhận và chưa ghi thu phí.'
-          : order.reviewStatus === 'ACCEPTING'
-            ? 'Đang xử lý chấp nhận, chờ hoàn tất ghi phí; chưa được chấp nhận.'
-            : order.reviewStatus === 'REJECTED'
-              ? 'Yêu cầu đã bị từ chối.'
-              : 'Yêu cầu đã được chấp nhận. Trạng thái này không xác nhận đã thanh toán.'}
+        {serviceOrderState(order).state === 'UNKNOWN'
+          ? 'Chưa xác định trạng thái yêu cầu. Vui lòng tải lại để kiểm tra.'
+          : serviceOrderState(order).state === 'PROCESSING'
+            ? order.reviewStatus === 'ACCEPTING'
+              ? 'Đang xử lý chấp nhận, chờ hoàn tất ghi phí; chưa được chấp nhận.'
+              : 'Đang xử lý phân công; chưa xác nhận đã phân công.'
+            : order.reviewStatus === 'PENDING_REVIEW'
+              ? 'Yêu cầu đang chờ duyệt, chưa được chấp nhận và chưa ghi thu phí.'
+              : order.reviewStatus === 'REJECTED'
+                ? 'Yêu cầu đã bị từ chối.'
+                : 'Yêu cầu đã được chấp nhận. Trạng thái này không xác nhận đã thanh toán.'}
       </p>
     </div>
   )

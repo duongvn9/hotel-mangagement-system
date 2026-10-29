@@ -1,11 +1,18 @@
-import { configure, fireEvent, screen, waitFor } from '@testing-library/react'
+import { configure, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 configure({ asyncUtilTimeout: 5000 })
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
-import { createOrder, estimateAmount, normalizeOrderQuery, type ServiceOrder } from './api'
+import {
+  createOrder,
+  estimateAmount,
+  normalizeOrderQuery,
+  serviceOrderState,
+  type ServiceOrder,
+} from './api'
 import { orderKeys } from './hooks'
 import { serviceOrderRoutes } from './routes'
+import { OrderReceipt } from './presentation'
 
 vi.mock('@/lib/api-client', () => ({ api: { get: vi.fn(), post: vi.fn() } }))
 const bookingId = 'a'.repeat(24)
@@ -68,6 +75,66 @@ beforeEach(() => {
   vi.resetAllMocks()
   choices()
   vi.mocked(api.post).mockResolvedValue({ data: receipt })
+})
+
+describe('shared service-order business states', () => {
+  it.each([
+    ['PENDING_REVIEW', 'NOT_STARTED', 'PENDING_REVIEW', 'Chờ duyệt'],
+    ['REJECTED', 'NOT_STARTED', 'REJECTED', 'Đã từ chối'],
+    ['ACCEPTED', 'NOT_STARTED', 'ACCEPTED', 'Đã chấp nhận'],
+    ['ACCEPTED', 'ASSIGNED', 'ASSIGNED', 'Đã phân công'],
+    ['ACCEPTED', 'IN_PROGRESS', 'IN_PROGRESS', 'Đang thực hiện'],
+    ['ACCEPTED', 'COMPLETED', 'COMPLETED', 'Đã hoàn thành'],
+    ['ACCEPTING', 'NOT_STARTED', 'PROCESSING', 'Đang xử lý'],
+    ['ACCEPTED', 'ASSIGNING', 'PROCESSING', 'Đang xử lý'],
+  ] as const)('maps %s / %s to %s', (reviewStatus, executionStatus, state, label) => {
+    expect(serviceOrderState({ reviewStatus, executionStatus })).toMatchObject({ state, label })
+  })
+
+  it.each(['PENDING_REVIEW', 'ACCEPTING', 'REJECTED'] as const)(
+    'keeps invalid execution combinations neutral for %s',
+    (reviewStatus) => {
+      for (const executionStatus of [
+        'ASSIGNING',
+        'ASSIGNED',
+        'IN_PROGRESS',
+        'COMPLETED',
+      ] as const) {
+        expect(serviceOrderState({ reviewStatus, executionStatus })).toEqual({
+          state: 'UNKNOWN',
+          label: 'Chưa xác định',
+          tone: 'neutral',
+        })
+      }
+    },
+  )
+
+  it.each([
+    { reviewStatus: 'UNKNOWN', executionStatus: 'NOT_STARTED' },
+    { reviewStatus: 'ACCEPTED', executionStatus: 'UNKNOWN' },
+  ])('keeps unknown API values neutral: %j', (statuses) => {
+    expect(serviceOrderState(statuses as ServiceOrder)).toMatchObject({
+      state: 'UNKNOWN',
+      tone: 'neutral',
+    })
+  })
+
+  it.each([
+    ['ACCEPTING', 'NOT_STARTED'],
+    ['ACCEPTED', 'ASSIGNING'],
+    ['REJECTED', 'COMPLETED'],
+  ] as const)('renders safe receipt summary for %s / %s', (reviewStatus, executionStatus) => {
+    render(<OrderReceipt order={{ ...receipt, reviewStatus, executionStatus }} />)
+    expect(
+      screen.getByText(
+        `Trạng thái yêu cầu: ${reviewStatus === 'REJECTED' ? 'Chưa xác định' : 'Đang xử lý'}`,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Trạng thái duyệt')).toBeInTheDocument()
+    expect(screen.getByText('Trạng thái thực hiện')).toBeInTheDocument()
+    expect(screen.queryByText(/Yêu cầu đã được chấp nhận\./)).not.toBeInTheDocument()
+    expect(screen.queryByText('Đã phân công')).not.toBeInTheDocument()
+  })
 })
 
 describe('Customer service-order access', () => {
@@ -237,8 +304,44 @@ describe('list and detail', () => {
         },
       }),
     )
-    expect(await screen.findByText('Chờ duyệt · Chưa bắt đầu')).toBeInTheDocument()
+    expect(await screen.findByText('Trạng thái yêu cầu: Chờ duyệt')).toBeInTheDocument()
   })
+  it.each(['ACCEPTED', 'REJECTED'] as const)(
+    'filters customer reviews by %s',
+    async (reviewStatus) => {
+      renderPage('/customer/service-orders')
+      await screen.findByRole('link', { name: 'Giặt ủi' })
+      fireEvent.change(screen.getByLabelText('Trạng thái duyệt'), {
+        target: { value: reviewStatus },
+      })
+      await waitFor(() =>
+        expect(api.get).toHaveBeenLastCalledWith('/service-orders/me', {
+          params: { page: 1, limit: 20, reviewStatus },
+        }),
+      )
+      expect(screen.getByLabelText('Trạng thái duyệt')).toHaveValue(reviewStatus)
+    },
+  )
+  it.each([
+    ['ACCEPTING', 'NOT_STARTED', 'Đang xử lý'],
+    ['ACCEPTED', 'ASSIGNING', 'Đang xử lý'],
+    ['ACCEPTED', 'COMPLETED', 'Đã hoàn thành'],
+    ['REJECTED', 'COMPLETED', 'Chưa xác định'],
+  ] as const)(
+    'shows customer list summary for %s / %s',
+    async (reviewStatus, executionStatus, label) => {
+      vi.mocked(api.get).mockResolvedValue({
+        data: {
+          items: [{ ...receipt, reviewStatus, executionStatus }],
+          total: 1,
+          page: 1,
+          limit: 20,
+        },
+      })
+      renderPage('/customer/service-orders')
+      expect(await screen.findByText(`Trạng thái yêu cầu: ${label}`)).toBeInTheDocument()
+    },
+  )
   it('renders empty list', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { items: [], total: 0, page: 1, limit: 20 } })
     renderPage('/customer/service-orders')

@@ -123,6 +123,19 @@ describe('Receptionist service-order access', () => {
   })
 })
 describe('staff list and detail', () => {
+  it.each([
+    ['ACCEPTING', 'NOT_STARTED', 'Đang xử lý'],
+    ['ACCEPTED', 'ASSIGNING', 'Đang xử lý'],
+    ['ACCEPTED', 'ASSIGNED', 'Đã phân công'],
+    ['REJECTED', 'COMPLETED', 'Chưa xác định'],
+  ] as const)(
+    'shows shared staff list summary for %s / %s',
+    async (reviewStatus, executionStatus, label) => {
+      current = { ...current, reviewStatus, executionStatus }
+      page('/staff/service-orders')
+      expect(await screen.findByText(`Trạng thái yêu cầu: ${label}`)).toBeInTheDocument()
+    },
+  )
   it('defaults pending and filters, searches and paginates with the staff endpoint', async () => {
     page('/staff/service-orders')
     await screen.findByRole('link', { name: 'Giặt ủi' })

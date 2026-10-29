@@ -15,6 +15,7 @@ import {
 import { useStaffOrders } from '../staff-hooks'
 import { billingLabel } from '../staff-api'
 import { StaffOrderError } from '../staff-presentation'
+import { OrderBusinessState } from '../presentation'
 
 export function StaffServiceOrdersPage() {
   const [query, setQuery] = useState<OrderQuery>({
@@ -99,9 +100,7 @@ export function StaffServiceOrdersPage() {
                   <p>
                     {order.quantity} {order.service.unit} · {money(order.amount)}
                   </p>
-                  <p>
-                    {reviewLabels[order.reviewStatus]} · {executionLabels[order.executionStatus]}
-                  </p>
+                  <OrderBusinessState order={order} />
                   <p>{billingLabel(order)}</p>
                   <p>Thời gian yêu cầu: {dateTime(order.requestedTime)}</p>
                 </li>
