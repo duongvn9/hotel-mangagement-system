@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { isAxiosError } from 'axios'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/Button'
+import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import { useAuth } from '@/features/auth/auth-context'
 import { reportUnableToResolve, type AssignedTask, type TaskResolution } from './api'
 import { taskDate } from './presentation'
@@ -50,6 +51,7 @@ export function UnableToResolve({ task, fetching }: { task: AssignedTask; fetchi
   const client = useQueryClient()
   const [reason, setReason] = useState('')
   const [confirmation, setConfirmation] = useState('')
+  const [confirmationTrigger, setConfirmationTrigger] = useState<HTMLElement | null>(null)
   const [validation, setValidation] = useState('')
   const refresh = () =>
     Promise.all([
@@ -105,6 +107,9 @@ export function UnableToResolve({ task, fetching }: { task: AssignedTask; fetchi
             return
           }
           setValidation('')
+          setConfirmationTrigger(
+            event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'),
+          )
           setConfirmation(reason.trim())
         }}
       >
@@ -136,11 +141,11 @@ export function UnableToResolve({ task, fetching }: { task: AssignedTask; fetchi
         </Button>
       </form>
       {confirmation && (
-        <section
-          role="dialog"
-          aria-modal="true"
-          aria-label="Xác nhận báo không thể xử lý"
-          className="space-y-3 rounded border border-stone-300 p-4"
+        <ConfirmationDialog
+          label="Xác nhận báo không thể xử lý"
+          returnFocus={confirmationTrigger}
+          busy={busy}
+          onCancel={() => setConfirmation('')}
         >
           <p className="whitespace-pre-wrap">{confirmation}</p>
           <Button
@@ -153,7 +158,7 @@ export function UnableToResolve({ task, fetching }: { task: AssignedTask; fetchi
           <Button variant="secondary" disabled={busy} onClick={() => setConfirmation('')}>
             Quay lại
           </Button>
-        </section>
+        </ConfirmationDialog>
       )}
     </section>
   )

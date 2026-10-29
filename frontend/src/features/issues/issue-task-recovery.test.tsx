@@ -63,6 +63,20 @@ function error(status: number) {
   } as AxiosResponse)
 }
 beforeEach(() => {
+  for (const name of ['showModal', 'close'] as const)
+    if (!HTMLDialogElement.prototype[name])
+      Object.defineProperty(HTMLDialogElement.prototype, name, { configurable: true, value() {} })
+  vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (
+    this: HTMLDialogElement,
+  ) {
+    this.setAttribute('open', '')
+    this.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+  })
+  vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (
+    this: HTMLDialogElement,
+  ) {
+    this.removeAttribute('open')
+  })
   vi.spyOn(api, 'get').mockResolvedValue({ data: users })
 })
 afterEach(() => vi.restoreAllMocks())
@@ -110,6 +124,76 @@ it.each([400, 403, 404, 409, 500])(
     expect(
       screen.queryByText('Đã báo không thể xử lý. Chờ lễ tân xem xét.'),
     ).not.toBeInTheDocument()
+  },
+)
+
+it('opens report confirmation as a native modal and restores keyboard focus on cancellation', async () => {
+  vi.mocked(api.get).mockResolvedValue({ data: task })
+  const patch = vi.spyOn(api, 'patch')
+  renderWithAuth([{ path: '/tasks/:id', element: <AssignedTaskDetailPage /> }], {
+    path: `/tasks/${task.id}`,
+    auth: { status: 'authenticated', me: { ...ME, role: 'OPERATIONS_STAFF' } },
+  })
+  fireEvent.change(await screen.findByLabelText('Lý do không thể xử lý (bắt buộc)'), {
+    target: { value: 'Thiếu dụng cụ' },
+  })
+  const trigger = screen.getByRole('button', { name: 'Báo không thể xử lý' })
+  trigger.focus()
+  fireEvent.submit(trigger.closest('form')!)
+  const dialog = screen.getByRole('dialog', { name: 'Xác nhận báo không thể xử lý' })
+  expect(dialog.tagName).toBe('DIALOG')
+  expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalledOnce()
+  expect(screen.getByRole('button', { name: 'Xác nhận báo cáo' })).toHaveFocus()
+  fireEvent(dialog, new Event('cancel', { cancelable: true }))
+  await waitFor(() => expect(trigger).toHaveFocus())
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(patch).not.toHaveBeenCalled()
+  expect(screen.getByLabelText('Lý do không thể xử lý (bắt buộc)')).toHaveValue('Thiếu dụng cụ')
+})
+
+it.each(['continue', 'reassign'] as const)(
+  'opens %s confirmation as a native modal and restores focus on cancellation',
+  async (kind) => {
+    const post = vi.spyOn(api, 'post')
+    mount()
+    await screen.findByRole('option', { name: 'Mới' })
+    if (kind === 'reassign') {
+      fireEvent.change(screen.getByLabelText('Nhân viên thay thế'), { target: { value: 'new' } })
+      fireEvent.change(screen.getByLabelText('Lý do phân công lại (bắt buộc)'), {
+        target: { value: 'Cần chuyên môn' },
+      })
+    }
+    const trigger = screen.getByRole('button', {
+      name: kind === 'continue' ? 'Tiếp tục xử lý' : 'Phân công lại',
+    })
+    trigger.focus()
+    fireEvent.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: 'Xác nhận xử lý công việc' })
+    expect(dialog.tagName).toBe('DIALOG')
+    expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: 'Xác nhận xử lý công việc' })).toHaveFocus()
+    fireEvent(dialog, new Event('cancel', { cancelable: true }))
+    await waitFor(() => expect(trigger).toHaveFocus())
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('button', { name: 'Quay lại' }))
+    await waitFor(() => expect(trigger).toHaveFocus())
+  },
+)
+
+it.each([undefined, 'not-a-date', ''])(
+  'distinguishes absent deadline from invalid deadline %s',
+  (dueAt) => {
+    mount({
+      ...issue,
+      resolutionTasks: [{ ...issue.resolutionTasks![0], dueAt }],
+    })
+    expect(
+      screen.getByText(
+        dueAt == null ? /Thời hạn: Không có thời hạn/ : /Thời hạn: Không có thời gian hợp lệ/,
+      ),
+    ).toBeInTheDocument()
   },
 )
 

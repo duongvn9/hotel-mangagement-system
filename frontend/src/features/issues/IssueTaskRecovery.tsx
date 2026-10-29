@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { isAxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/Button'
+import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import { SelectField } from '@/components/SelectField'
 import { TextField } from '@/components/TextField'
 import { useAuth } from '@/features/auth/auth-context'
@@ -30,6 +31,7 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
   const [instructions, setInstructions] = useState('')
   const [validation, setValidation] = useState('')
   const [confirmation, setConfirmation] = useState<Action>()
+  const [confirmationTrigger, setConfirmationTrigger] = useState<HTMLElement | null>(null)
   const [retryIntent, setRetryIntent] = useState<ReassignIssueInput>()
   const pending = issue.pendingReassignment
   const current = issue.linkedTasks[0]
@@ -190,7 +192,8 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
             Nhân viên: {task.assigneeId} · Trạng thái: {task.status}
           </p>
           <p>
-            Ngày giao: {issueDate(task.assignedAt)} · Thời hạn: {issueDate(task.dueAt ?? '')}
+            Ngày giao: {issueDate(task.assignedAt)} · Thời hạn:{' '}
+            {task.dueAt == null ? 'Không có thời hạn' : issueDate(task.dueAt)}
           </p>
           {task.completedAt && <p>Hoàn tất: {issueDate(task.completedAt)}</p>}
           {'workResult' in task && typeof task.workResult === 'string' && (
@@ -209,7 +212,8 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
           </p>
           <p className="whitespace-pre-wrap">Lý do: {pending.reason}</p>
           <p>
-            Thời hạn: {issueDate(pending.dueAt ?? '')} · Người yêu cầu: {pending.actorId}
+            Thời hạn: {pending.dueAt == null ? 'Không có thời hạn' : issueDate(pending.dueAt)} ·
+            Người yêu cầu: {pending.actorId}
           </p>
         </div>
       )}
@@ -268,7 +272,14 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
                   value={instructions}
                   onChange={(event) => setInstructions(event.target.value)}
                 />
-                <Button onClick={() => prepare('continue')}>Tiếp tục xử lý</Button>
+                <Button
+                  onClick={(event) => {
+                    setConfirmationTrigger(event.currentTarget)
+                    prepare('continue')
+                  }}
+                >
+                  Tiếp tục xử lý
+                </Button>
               </>
             )}
             {((!pending && !retryIntent) || replacementAllowed) && (
@@ -293,7 +304,12 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
                   Nhân viên đích không còn phù hợp và chưa có công việc đích trong lịch sử. Có thể
                   chọn nhân viên khác; máy chủ kiểm tra lại trước khi thay thế.
                 </p>
-                <Button onClick={() => prepare('reassign', true)}>
+                <Button
+                  onClick={(event) => {
+                    setConfirmationTrigger(event.currentTarget)
+                    prepare('reassign', true)
+                  }}
+                >
                   Khôi phục với nhân viên thay thế
                 </Button>
               </>
@@ -305,25 +321,35 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
                 onChange={(event) => setReason(event.target.value)}
               />
             )}
-            <Button onClick={() => prepare('reassign')}>
+            <Button
+              onClick={(event) => {
+                setConfirmationTrigger(event.currentTarget)
+                prepare('reassign')
+              }}
+            >
               {pending || retryIntent ? 'Khôi phục phân công lại' : 'Phân công lại'}
             </Button>
           </fieldset>
         </>
       )}
       {receptionist && confirmation && (
-        <section
-          role="dialog"
-          aria-modal="true"
-          aria-label="Xác nhận xử lý công việc"
-          className="space-y-3 rounded border border-stone-300 p-4"
+        <ConfirmationDialog
+          label="Xác nhận xử lý công việc"
+          returnFocus={confirmationTrigger}
+          busy={busy}
+          onCancel={() => setConfirmation(undefined)}
         >
           <p>
             {confirmation.kind === 'continue'
               ? 'Tiếp tục cùng công việc, nhân viên và tiến độ.'
               : 'Phân công cho nhân viên khác; công việc cũ được giữ trong lịch sử.'}
           </p>
-          <p>Thời hạn: {issueDate(confirmation.input.dueAt ?? '')}</p>
+          <p>
+            Thời hạn:{' '}
+            {confirmation.input.dueAt == null
+              ? 'Không có thời hạn'
+              : issueDate(confirmation.input.dueAt)}
+          </p>
           <p className="whitespace-pre-wrap">
             {confirmation.kind === 'reassign'
               ? `${confirmation.input.assigneeId} · ${confirmation.input.reason}`
@@ -342,7 +368,7 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
           <Button variant="secondary" disabled={busy} onClick={() => setConfirmation(undefined)}>
             Quay lại
           </Button>
-        </section>
+        </ConfirmationDialog>
       )}
       {mutation.isPending && <p role="status">Đang cập nhật xử lý…</p>}
     </section>
