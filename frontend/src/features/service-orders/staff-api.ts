@@ -2,7 +2,7 @@ import { api } from '@/lib/api-client'
 import { normalizeOrderQuery, type OrderQuery, type ServiceOrder } from './api'
 
 export interface StaffServiceOrder extends ServiceOrder {
-  customer: { id: string; fullName: string | null }
+  customer: { id: string | null; fullName: string | null }
   booking: { code: string; status: string; checkIn: string; checkOut: string } | null
   feeRequired: boolean
   billingStatus: 'NOT_REQUIRED' | 'PENDING' | 'BILLED'

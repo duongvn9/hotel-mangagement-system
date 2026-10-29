@@ -5,8 +5,8 @@ import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { getErrorMessage } from '@/lib/api-client'
 import { useAuth } from '@/features/auth/auth-context'
-import type { HeldBooking } from '../api'
-import { useHoldBooking, useSubmitBookingDetails } from '../hooks'
+import type { HeldBooking, ServiceSelectionInput } from '../api'
+import { useHoldBooking, useServiceCatalog, useSubmitBookingDetails } from '../hooks'
 import { MoonIcon } from '../icons'
 import { formatDate, money, nightsBetween } from '../utils'
 import { formatRemaining, useHoldCountdown } from './useHoldCountdown'
@@ -39,6 +39,35 @@ export function CreateBookingPage() {
   const [guestName, setGuestName] = useState(me?.fullName ?? '')
   const [guestEmail, setGuestEmail] = useState(me?.email ?? '')
   const [guestPhone, setGuestPhone] = useState(me?.phone ?? '')
+
+  // Dịch vụ chọn kèm (tuỳ chọn): serviceId -> số lượng. Hệ thống tự tạo yêu cầu dịch vụ
+  // khi booking được xác nhận (qua CONFIRMED).
+  const catalog = useServiceCatalog()
+  const [selectedServices, setSelectedServices] = useState<Record<string, number>>({})
+
+  function toggleService(id: string, on: boolean) {
+    setSelectedServices((current) => {
+      const next = { ...current }
+      if (on) next[id] = next[id] ?? 1
+      else delete next[id]
+      return next
+    })
+  }
+  function setServiceQuantity(id: string, value: number) {
+    setSelectedServices((current) => ({
+      ...current,
+      [id]: Math.max(1, Math.floor(value) || 1),
+    }))
+  }
+
+  const serviceSelections: ServiceSelectionInput[] = Object.entries(selectedServices).map(
+    ([serviceId, quantity]) => ({ serviceId, quantity }),
+  )
+  const servicesSubtotal = (catalog.data ?? []).reduce(
+    (sum, svc) =>
+      sum + (selectedServices[svc.id] ? (svc.unitPriceVND ?? 0) * selectedServices[svc.id] : 0),
+    0,
+  )
 
   // Giữ phòng một lần khi vào trang (trước khi nhập form). Backend chỉ cho 1 hold/phiên nên
   // bấm lại/refresh trả đúng hold cũ qua cookie phiên — không tạo thêm và không gia hạn.
@@ -83,6 +112,7 @@ export function CreateBookingPage() {
         guestName: guestName.trim(),
         guestEmail: guestEmail.trim(),
         guestPhone: guestPhone.trim(),
+        ...(serviceSelections.length ? { serviceSelections } : {}),
       })
       navigate(`/booking/${updated.bookingId}`, { replace: true })
     } catch {
@@ -174,6 +204,55 @@ export function CreateBookingPage() {
               </p>
             </div>
 
+            {catalog.data && catalog.data.length > 0 && (
+              <div className="space-y-4 rounded-xl border border-stone-300 bg-white p-6">
+                <h2 className="font-display text-xl font-semibold text-pearl-900">
+                  Dịch vụ thêm (tuỳ chọn)
+                </h2>
+                <p className="text-sm text-stone-700">
+                  Chọn trước, hệ thống tạo yêu cầu dịch vụ khi đặt phòng được xác nhận. Phí dịch vụ
+                  thanh toán trong thời gian lưu trú.
+                </p>
+                <ul className="space-y-3">
+                  {catalog.data.map((svc) => {
+                    const on = svc.id in selectedServices
+                    return (
+                      <li
+                        key={svc.id}
+                        className="flex flex-wrap items-center justify-between gap-3"
+                      >
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={(event) => toggleService(svc.id, event.target.checked)}
+                          />
+                          <span className="font-semibold text-pearl-900">{svc.name}</span>
+                          <span className="text-stone-700">
+                            {svc.unitPriceVND
+                              ? `${money.format(svc.unitPriceVND)}/${svc.unit || 'lần'}`
+                              : 'Miễn phí'}
+                          </span>
+                        </label>
+                        {on && (
+                          <input
+                            type="number"
+                            min={1}
+                            aria-label={`Số lượng ${svc.name}`}
+                            value={selectedServices[svc.id]}
+                            onChange={(event) =>
+                              setServiceQuantity(svc.id, Number(event.target.value))
+                            }
+                            className="h-10 w-20 rounded border border-stone-300 px-2"
+                          />
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
+
             {submit.isError && <Alert tone="danger">{getErrorMessage(submit.error)}</Alert>}
 
             <Link
@@ -216,6 +295,12 @@ export function CreateBookingPage() {
                 <dt className="text-stone-700">Tiền phòng</dt>
                 <dd className="font-semibold tabular-nums">{money.format(held.roomTotal)}</dd>
               </div>
+              {servicesSubtotal > 0 && (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-stone-700">Dịch vụ thêm (trả khi lưu trú)</dt>
+                  <dd className="font-semibold tabular-nums">{money.format(servicesSubtotal)}</dd>
+                </div>
+              )}
               <div className="flex justify-between gap-4">
                 <dt className="font-semibold text-pearl-900">Cọc cần trả</dt>
                 <dd className="font-display text-lg font-semibold text-primary tabular-nums">

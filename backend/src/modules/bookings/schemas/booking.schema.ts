@@ -107,6 +107,25 @@ export class Booking {
   })
   rateSnapshot: { room: Types.ObjectId; ratePerNight: number }[];
 
+  // Dịch vụ khách chọn kèm khi đặt (tuỳ chọn). Khi booking qua CONFIRMED, hệ thống tự
+  // sinh ServiceOrder tương ứng (idempotent). Giá chốt lúc sinh đơn, không lưu ở đây.
+  @Prop({
+    type: [
+      {
+        _id: false,
+        service: { type: Types.ObjectId, ref: 'Service', required: true },
+        quantity: {
+          type: Number,
+          required: true,
+          min: 1,
+          validate: Number.isSafeInteger,
+        },
+      },
+    ],
+    default: [],
+  })
+  serviceSelections: { service: Types.ObjectId; quantity: number }[];
+
   @Prop()
   financialOperationToken?: string;
 

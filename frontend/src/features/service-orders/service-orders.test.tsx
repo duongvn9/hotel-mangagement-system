@@ -62,7 +62,7 @@ function choices(bookings = [context], services = [service]) {
 }
 async function fill() {
   await screen.findByRole('option', { name: /Giặt ủi/ })
-  fireEvent.change(screen.getByLabelText(/Đặt phòng đã nhận phòng/), {
+  fireEvent.change(screen.getByLabelText(/Kỳ lưu trú/), {
     target: { value: bookingId },
   })
   fireEvent.change(screen.getByLabelText(/^Dịch vụ/), { target: { value: serviceId } })
@@ -251,7 +251,7 @@ describe('service-order form', () => {
     choices(kind === 'contexts' ? [] : [context], kind === 'catalog' ? [] : [service])
     renderPage()
     await screen.findByText(
-      kind === 'contexts' ? /Bạn không có kỳ lưu trú/ : /Hiện không có dịch vụ/,
+      kind === 'contexts' ? /Bạn chưa có kỳ lưu trú/ : /Hiện không có dịch vụ/,
     )
     expect(screen.getByRole('button', { name: 'Gửi yêu cầu' })).toBeDisabled()
     submit()
@@ -269,7 +269,7 @@ describe('service-order form', () => {
   it('validates query prefill against real choices without selecting another booking', async () => {
     renderPage(`/customer/service-orders/new?bookingId=foreign&serviceId=${serviceId}`)
     await screen.findByText(/trong liên kết không có/)
-    expect(screen.getByLabelText(/Đặt phòng đã nhận phòng/)).toHaveValue('')
+    expect(screen.getByLabelText(/Kỳ lưu trú/)).toHaveValue('')
     expect(screen.getByLabelText(/^Dịch vụ/)).toHaveValue(serviceId)
     expect(screen.getByRole('button', { name: 'Gửi yêu cầu' })).toBeDisabled()
   })
@@ -373,7 +373,7 @@ describe('list and detail', () => {
         : status === 404
           ? 'Không tìm thấy'
           : status === 409
-            ? 'không còn ở trạng thái'
+            ? 'không còn nhận dịch vụ'
             : 'Không thể kết nối',
     )
     expect(screen.queryByText('Thành tiền ghi nhận từ máy chủ')).not.toBeInTheDocument()

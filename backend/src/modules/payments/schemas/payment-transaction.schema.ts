@@ -62,6 +62,17 @@ export class PaymentTransaction {
   @Prop({ default: false })
   needsReconciliation: boolean;
 
+  /** Ai đã đối soát khoản tiền về muộn (Manager); gắn khi tắt cờ needsReconciliation. */
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  reconciledBy?: Types.ObjectId;
+
+  @Prop()
+  reconciledAt?: Date;
+
+  /** Ghi chú xử lý đối soát, vd: đã hoàn tiền thủ công qua cổng VNPay. */
+  @Prop({ trim: true })
+  reconciliationNote?: string;
+
   @Prop({ default: true })
   isActive: boolean;
 }

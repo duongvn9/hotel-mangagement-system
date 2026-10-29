@@ -11,6 +11,7 @@ import {
 } from '../src/modules/bookings/schemas/booking.schema.js';
 import { Service } from '../src/modules/services/schemas/service.schema.js';
 import { ServiceOrder } from '../src/modules/service-orders/schemas/service-order.schema.js';
+import { ServiceOrdersService } from '../src/modules/service-orders/service-orders.service.js';
 import { InvoicesService } from '../src/modules/invoices/invoices.service.js';
 import { TasksService } from '../src/modules/tasks/tasks.service.js';
 import { Task } from '../src/modules/tasks/schemas/task.schema.js';
@@ -291,6 +292,153 @@ describe('UC22/23 customer service orders', () => {
         .acceptanceRecovery,
     ).toBeUndefined();
   });
+
+  it('Issue ① lets a guest order from CONFIRMED but still accepts only in-house', async () => {
+    // Chưa xác nhận (PENDING_DEPOSIT): chưa đặt được dịch vụ.
+    await bookings.updateOne(
+      { _id: bookingId },
+      { status: BookingStatus.PendingDeposit },
+    );
+    await post(body()).expect(409);
+
+    // Đã xác nhận nhưng chưa nhận phòng: ĐẶT được dịch vụ.
+    await bookings.updateOne(
+      { _id: bookingId },
+      { status: BookingStatus.Confirmed },
+    );
+    const created = await post(body()).expect(201);
+    const id = created.body.id as string;
+
+    // ...nhưng lễ tân chưa NHẬN (accept) được khi khách chưa nhận phòng.
+    await prepareBilling();
+    await review(id).expect(409);
+
+    // Khi khách đã nhận phòng thì accept được.
+    await bookings.updateOne(
+      { _id: bookingId },
+      { status: BookingStatus.CheckedIn },
+    );
+    await review(id).expect(200);
+
+    // Hàng đợi đặt dịch vụ của khách cũng liệt kê booking CONFIRMED.
+    await bookings.updateOne(
+      { _id: bookingId },
+      { status: BookingStatus.Confirmed },
+    );
+    expect((await get('/order-contexts').expect(200)).body.items).toHaveLength(
+      1,
+    );
+  });
+
+  it.each([true, false])(
+    'processes guest auto-orders with stable retries and strict customer ownership (billable=%s)',
+    async (billable) => {
+      await services.updateOne({ _id: serviceId }, { billable });
+      await bookings.updateOne(
+        { _id: bookingId },
+        {
+          $unset: { customer: '' },
+          $set: {
+            status: BookingStatus.Confirmed,
+            serviceSelections: [
+              { service: new Types.ObjectId(serviceId), quantity: 2 },
+            ],
+          },
+        },
+      );
+      const core = app.get(ServiceOrdersService);
+      expect(await core.generateForConfirmedBooking(bookingId)).toBe(1);
+      const order = await orders
+        .findOne({ booking: new Types.ObjectId(bookingId) })
+        .orFail();
+      const id = String(order._id);
+      expect(order.customer).toBeUndefined();
+      expect(await core.generateForConfirmedBooking(bookingId)).toBe(0);
+      await post(body()).expect(404);
+      await get('/' + id).expect(404);
+      expect((await get('/me').expect(200)).body.total).toBe(0);
+      expect((await get('/order-contexts').expect(200)).body.items).toEqual([]);
+      expect((await detail(id).expect(200)).body.customer).toEqual({
+        id: null,
+        fullName: null,
+      });
+      await review(id).expect(409);
+      expect((await orders.findById(id).orFail()).reviewStatus).toBe(
+        'PENDING_REVIEW',
+      );
+      expect(
+        (await bookings.findById(bookingId).orFail()).acceptanceReservations,
+      ).not.toContain(id);
+      await prepareBilling();
+      await bookings.updateOne(
+        { _id: bookingId },
+        { status: BookingStatus.CheckedIn },
+      );
+      const original = orders.findOneAndUpdate.bind(orders);
+      const failure = vi.spyOn(orders, 'findOneAndUpdate');
+      failure.mockImplementationOnce(original).mockImplementationOnce(() => {
+        throw new Error('finalization unavailable');
+      });
+      try {
+        await review(id).expect(503);
+      } finally {
+        failure.mockRestore();
+      }
+      const pending = (await detail(id).expect(200)).body;
+      expect(pending.reviewStatus).toBe('ACCEPTING');
+      expect(
+        (await bookings.findById(bookingId).orFail()).acceptanceReservations,
+      ).toContain(id);
+      const results = await Promise.all(
+        Array.from({ length: 4 }, () => review(id)),
+      );
+      expect(results.map((result) => result.status)).toEqual(
+        Array(4).fill(200),
+      );
+      for (const result of results) {
+        expect(result.body.review).toEqual(pending.review);
+        expect(result.body.reviewStatus).toBe('ACCEPTED');
+        expect(result.body.billingStatus).toBe(
+          billable ? 'BILLED' : 'NOT_REQUIRED',
+        );
+      }
+      expect(
+        (await bookings.findById(bookingId).orFail()).acceptanceReservations,
+      ).not.toContain(id);
+      const invoices = await app
+        .get<Model<Invoice>>(getModelToken(Invoice.name))
+        .find({ booking: new Types.ObjectId(bookingId) });
+      expect(invoices).toHaveLength(billable ? 1 : 0);
+      if (billable) {
+        expect(invoices[0].charges).toHaveLength(1);
+        expect(invoices[0].charges[0].sourceId).toBe(id);
+      }
+      const assignee = await createWorker();
+      const assigned = await assignment(id, assignee).expect(201);
+      expect((await assignment(id, assignee).expect(201)).body.task.id).toBe(
+        assigned.body.task.id,
+      );
+      expect(
+        await app.get<Model<Task>>(getModelToken(Task.name)).countDocuments(),
+      ).toBe(1);
+      expect(await core.linkBookingOrdersToCustomer(bookingId, customer)).toBe(
+        1,
+      );
+      await get('/' + id).expect(404);
+      expect(await core.generateForConfirmedBooking(bookingId)).toBe(0);
+      await bookings.updateOne({ _id: bookingId }, { customer });
+      expect(await core.generateForConfirmedBooking(bookingId)).toBe(0);
+      expect(
+        await orders.countDocuments({ booking: new Types.ObjectId(bookingId) }),
+      ).toBe(1);
+      await get('/' + id).expect(200);
+      expect((await get('/me').expect(200)).body.total).toBe(1);
+      await http()
+        .get('/api/v1/service-orders/' + id)
+        .set({ ...auth, 'x-dev-user-id': String(other) })
+        .expect(404);
+    },
+  );
 
   it('UC26 gates exact roles, accepted state, persisted billing and eligible staff', async () => {
     const assignee = await createWorker();

@@ -75,6 +75,8 @@ describe('invoice adapter contracts', () => {
       .useValue({})
       .overrideProvider(getModelToken('Amenity'))
       .useValue({})
+      .overrideProvider(getModelToken('Service'))
+      .useValue({})
       .compile();
     expect(module.get(InvoicePricingAdapter)).toBeInstanceOf(Pricing);
     expect(module.get(InvoicesService)).toBeInstanceOf(InvoicesService);

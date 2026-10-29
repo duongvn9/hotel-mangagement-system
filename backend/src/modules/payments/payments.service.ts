@@ -279,6 +279,84 @@ export class PaymentsService {
     }
   }
 
+  /**
+   * Danh sách các khoản tiền về muộn đã ghi nhận SUCCESS nhưng booking không còn nhận
+   * được (cần đối soát/hoàn thủ công). Kèm context booking để Manager xử lý.
+   */
+  async listReconciliation() {
+    const rows = await this.payments
+      .find({ needsReconciliation: true, isActive: true })
+      .sort({ createdAt: -1 })
+      .populate('booking', 'code status')
+      .lean();
+    const items = rows.map((row) => {
+      const booking = row.booking as unknown as {
+        _id: Types.ObjectId;
+        code?: string;
+        status?: string;
+      } | null;
+      return {
+        id: String(row._id),
+        transactionRef: row.transactionRef,
+        purpose: row.purpose,
+        amount: row.amount,
+        ...(row.providerTransactionRef
+          ? { providerTransactionRef: row.providerTransactionRef }
+          : {}),
+        ...(row.paidAt ? { paidAt: row.paidAt } : {}),
+        bookingId: String(booking?._id ?? row.booking),
+        ...(booking?.code ? { bookingCode: booking.code } : {}),
+        ...(booking?.status ? { bookingStatus: booking.status } : {}),
+        createdAt: (row as unknown as { createdAt: Date }).createdAt,
+      };
+    });
+    return { items, total: items.length };
+  }
+
+  /**
+   * Manager đánh dấu một khoản đã đối soát (tiền thật đã xử lý ngoài hệ thống, vd hoàn
+   * qua cổng VNPay): tắt cờ needsReconciliation, lưu người/thời điểm xử lý và ghi chú.
+   */
+  async reconcile(id: string, userId: string, note?: string) {
+    if (!/^[a-f\d]{24}$/i.test(id)) {
+      throw new BadRequestException('Invalid payment ID');
+    }
+    const trimmed = note?.trim();
+    const payment = await this.payments.findOneAndUpdate(
+      {
+        _id: id,
+        isActive: true,
+        needsReconciliation: true,
+        reconciledAt: { $exists: false },
+      },
+      {
+        $set: {
+          needsReconciliation: false,
+          reconciledAt: new Date(),
+          reconciledBy: new Types.ObjectId(userId),
+          ...(trimmed ? { reconciliationNote: trimmed } : {}),
+        },
+      },
+      { new: true },
+    );
+    if (!payment) {
+      if (!(await this.payments.exists({ _id: id, isActive: true }))) {
+        throw new NotFoundException('Payment not found');
+      }
+      throw new ConflictException('Payment does not need reconciliation');
+    }
+    return {
+      id: String(payment._id),
+      transactionRef: payment.transactionRef,
+      needsReconciliation: payment.needsReconciliation,
+      reconciledAt: payment.reconciledAt,
+      reconciledBy: String(payment.reconciledBy),
+      ...(payment.reconciliationNote
+        ? { reconciliationNote: payment.reconciliationNote }
+        : {}),
+    };
+  }
+
   private async loadExpected(rawQuery: string): Promise<ExpectedVnpayPayment> {
     const transactionRef = new URLSearchParams(rawQuery).get('vnp_TxnRef');
     if (!transactionRef || !/^[A-Za-z0-9]{1,100}$/.test(transactionRef)) {

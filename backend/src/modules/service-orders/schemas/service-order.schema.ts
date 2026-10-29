@@ -10,8 +10,10 @@ export type ServiceOrderDocument = HydratedDocument<ServiceOrder>;
 
 @Schema({ timestamps: true, collection: 'serviceorders' })
 export class ServiceOrder {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, immutable: true })
-  customer: Types.ObjectId;
+  // Tuỳ chọn + không immutable: đơn auto-sinh cho khách vãng lai (booking không có
+  // customer) để trống, có thể gắn vào tài khoản sau khi khách tạo/đăng nhập.
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  customer?: Types.ObjectId;
 
   @Prop({
     type: Types.ObjectId,

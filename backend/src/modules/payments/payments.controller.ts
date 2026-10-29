@@ -1,6 +1,17 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
 import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Req,
+} from '@nestjs/common';
+import {
+  ApiConflictResponse,
   ApiCreatedResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -8,13 +19,20 @@ import {
 } from '@nestjs/swagger';
 import type { Request } from 'express';
 import type { AuthUser } from '../../common/auth/auth-user.js';
+import { Role } from '../../common/constants/role.enum.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { Public } from '../../common/decorators/public.decorator.js';
+import { Roles } from '../../common/decorators/roles.decorator.js';
 import {
   InitiatePaymentDto,
   PaymentInitiationResponse,
   PaymentReturnResponse,
 } from './dto/initiate-payment.dto.js';
+import {
+  ReconciledPaymentResponse,
+  ReconciliationListResponse,
+  ReconcilePaymentDto,
+} from './dto/reconcile-payment.dto.js';
 import { PaymentsService, type InitiateOptions } from './payments.service.js';
 
 @ApiTags('payments')
@@ -75,6 +93,35 @@ export class PaymentsController {
   @ApiOperation({ summary: 'VNPay IPN callback (durable settlement)' })
   processIpn(@Req() req: Request) {
     return this.payments.processIpn(this.rawQuery(req));
+  }
+
+  @Get('reconciliation')
+  @Roles(Role.Manager)
+  @ApiOperation({
+    summary:
+      'List deposits that settled after their hold lapsed and need manual reconciliation (Manager)',
+  })
+  @ApiOkResponse({ type: ReconciliationListResponse })
+  listReconciliation() {
+    return this.payments.listReconciliation();
+  }
+
+  @Post(':id/reconcile')
+  @Roles(Role.Manager)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Mark a flagged payment as reconciled with a note after handling it (Manager)',
+  })
+  @ApiOkResponse({ type: ReconciledPaymentResponse })
+  @ApiNotFoundResponse({ description: 'Payment not found' })
+  @ApiConflictResponse({ description: 'Payment does not need reconciliation' })
+  reconcile(
+    @Param('id') id: string,
+    @Body() dto: ReconcilePaymentDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.payments.reconcile(id, user.id, dto.note);
   }
 
   private actor(dto: InitiatePaymentDto, user: AuthUser | undefined) {

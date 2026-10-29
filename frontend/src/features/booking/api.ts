@@ -116,12 +116,33 @@ export async function holdBooking(input: HoldBookingInput): Promise<HeldBooking>
   return (await api.post<HeldBooking>('/bookings/hold', input)).data
 }
 
+/** Dịch vụ khách chọn kèm khi đặt; tự sinh ServiceOrder khi booking xác nhận. */
+export interface ServiceSelectionInput {
+  serviceId: string
+  quantity: number
+}
+
 /** Nhập thông tin liên hệ cho hold còn hạn: ROOM_HELD → PENDING_DEPOSIT (không gia hạn). */
 export interface SubmitBookingDetailsInput {
   holdToken: string
   guestName: string
   guestEmail: string
   guestPhone: string
+  serviceSelections?: ServiceSelectionInput[]
+}
+
+/** Một dịch vụ trong danh mục công khai (cho khách chọn kèm lúc đặt). */
+export interface ServiceCatalogItem {
+  id: string
+  name: string
+  unit: string
+  billable: boolean
+  unitPriceVND: number | null
+}
+
+/** Danh mục dịch vụ công khai để khách chọn kèm khi đặt (không cần đăng nhập). */
+export async function getServiceCatalog(): Promise<ServiceCatalogItem[]> {
+  return (await api.get<{ items: ServiceCatalogItem[] }>('/bookings/service-catalog')).data.items
 }
 
 export async function submitBookingDetails(input: SubmitBookingDetailsInput): Promise<HeldBooking> {
@@ -494,4 +515,47 @@ export const PAYMENT_RESULT_DISPLAY: Record<
 export async function verifyVnpayReturn(rawQuery: string): Promise<PaymentReturn> {
   const suffix = rawQuery ? `?${rawQuery}` : ''
   return (await api.get<PaymentReturn>(`/payments/vnpay/return${suffix}`)).data
+}
+
+/** Issue ② — một khoản tiền về sau hạn giữ phòng, cần Manager đối soát/hoàn thủ công. */
+export interface ReconciliationItem {
+  id: string
+  transactionRef: string
+  purpose: 'DEPOSIT' | 'FINAL'
+  amount: number
+  providerTransactionRef?: string
+  paidAt?: string
+  bookingId: string
+  bookingCode?: string
+  bookingStatus?: string
+  createdAt: string
+}
+
+export interface ReconciliationList {
+  items: ReconciliationItem[]
+  total: number
+}
+
+/** Danh sách các khoản tiền về muộn cần đối soát (Manager). */
+export async function listReconciliation(): Promise<ReconciliationList> {
+  return (await api.get<ReconciliationList>('/payments/reconciliation')).data
+}
+
+export interface ReconciledPayment {
+  id: string
+  transactionRef: string
+  needsReconciliation: boolean
+  reconciledAt: string
+  reconciledBy: string
+  reconciliationNote?: string
+}
+
+/** Đánh dấu một khoản đã đối soát (tiền đã xử lý ngoài hệ thống) kèm ghi chú. */
+export async function reconcilePayment(id: string, note?: string): Promise<ReconciledPayment> {
+  return (
+    await api.post<ReconciledPayment>(
+      `/payments/${id}/reconcile`,
+      note === undefined ? {} : { note },
+    )
+  ).data
 }

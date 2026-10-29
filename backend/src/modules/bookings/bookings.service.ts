@@ -886,6 +886,20 @@ export class BookingsService {
     booking.guestName = dto.guestName.trim();
     booking.guestEmail = dto.guestEmail.trim();
     booking.guestPhone = dto.guestPhone.trim();
+    // Lưu dịch vụ chọn kèm (gộp trùng theo serviceId); tự sinh đơn khi booking qua CONFIRMED.
+    if (dto.serviceSelections?.length) {
+      const merged = new Map<string, number>();
+      for (const sel of dto.serviceSelections) {
+        merged.set(
+          sel.serviceId,
+          (merged.get(sel.serviceId) ?? 0) + sel.quantity,
+        );
+      }
+      booking.serviceSelections = [...merged].map(([service, quantity]) => ({
+        service: new Types.ObjectId(service),
+        quantity,
+      }));
+    }
     booking.status = BookingStatus.PendingDeposit;
     await booking.save();
     return this.holdResponse(booking, hold);
