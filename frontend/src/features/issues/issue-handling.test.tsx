@@ -176,6 +176,9 @@ test('review then assignment sends selected API user and timezone-converted ISO 
     priority: 'HIGH',
     needsStaffAction: true,
   })
+  fireEvent.change(screen.getByLabelText('Hướng dẫn xử lý'), {
+    target: { value: '  Kiểm tra dây điện  ' },
+  })
   fireEvent.change(screen.getByLabelText('Thời hạn xử lý'), {
     target: { value: '2026-10-26T15:30' },
   })
@@ -186,6 +189,7 @@ test('review then assignment sends selected API user and timezone-converted ISO 
     expect(post).toHaveBeenCalledWith(`/issues/${id}/assignment`, {
       assigneeId: staff,
       dueAt: new Date('2026-10-26T15:30').toISOString(),
+      instructions: 'Kiểm tra dây điện',
     }),
   )
   await waitFor(() =>
@@ -273,7 +277,14 @@ test.each([400, 403, 404, 409, 500])(
 
 test('durable ASSIGNING retries exact saved intent, disables pending, and final ASSIGNED has no replay', async () => {
   const dueAt = '2026-10-26T08:30:00.000Z'
-  const get = setup({ ...reviewed, status: 'ASSIGNING', assigneeId: staff, dueAt })
+  const instructions = 'Hướng dẫn đã cố định'
+  const get = setup({
+    ...reviewed,
+    status: 'ASSIGNING',
+    assigneeId: staff,
+    dueAt,
+    assignmentInstructions: instructions,
+  })
   let resolve!: (value: { data: IssueDetail }) => void
   const post = vi.spyOn(api, 'post').mockImplementation(
     () =>
@@ -290,7 +301,11 @@ test('durable ASSIGNING retries exact saved intent, disables pending, and final 
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
   await waitFor(() =>
-    expect(post).toHaveBeenCalledWith(`/issues/${id}/assignment`, { assigneeId: staff, dueAt }),
+    expect(post).toHaveBeenCalledWith(`/issues/${id}/assignment`, {
+      assigneeId: staff,
+      dueAt,
+      instructions,
+    }),
   )
   expect(screen.getByRole('button', { name: 'Xác nhận' })).toBeDisabled()
   const assigned: IssueDetail = { ...reviewed, status: 'ASSIGNED', assigneeId: staff }

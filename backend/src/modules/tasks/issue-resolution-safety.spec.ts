@@ -182,6 +182,36 @@ describe('Issue resolution task safety', () => {
     expect(task.continuationHistory).toHaveLength(1);
   });
 
+  it('rejects shortening a deadline without any writes', async () => {
+    task.blocked = true;
+    task.dueAt = new Date('2030-01-02T00:00:00Z');
+    const snapshot = structuredClone(task);
+    await expect(
+      service.continueIssueTask(task, actor, '2030-01-01T00:00:00Z', 'Changed'),
+    ).rejects.toThrow('Deadline cannot be shortened');
+    expect(tasks.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(structuredClone(task)).toEqual(snapshot);
+  });
+
+  it.each([undefined, '2030-01-02T00:00:00Z', '2030-01-03T00:00:00Z'])(
+    'allows omitted, equal or extended deadline %s with instructions',
+    async (dueAt) => {
+      task.blocked = true;
+      task.dueAt = new Date('2030-01-02T00:00:00Z');
+      await service.continueIssueTask(
+        task,
+        actor,
+        dueAt,
+        'Updated instructions',
+      );
+      expect(task.dueAt.toISOString()).toBe(
+        new Date(dueAt ?? '2030-01-02T00:00:00Z').toISOString(),
+      );
+      expect(task.instructions).toBe('Updated instructions');
+      expect(task.continuationHistory).toHaveLength(1);
+    },
+  );
+
   it('Continue requires blocked/overdue active work', async () => {
     await expect(service.continueIssueTask(task, actor)).rejects.toThrow(
       'blocked or overdue',

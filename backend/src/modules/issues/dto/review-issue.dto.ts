@@ -92,4 +92,13 @@ export class AssignIssueDto {
   @ValidateIf((_, value) => value !== undefined)
   @IsISO8601({ strict: true, strictSeparator: true })
   dueAt?: string;
+
+  @ValidateIf((_, value) => value !== undefined)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  instructions?: string;
 }

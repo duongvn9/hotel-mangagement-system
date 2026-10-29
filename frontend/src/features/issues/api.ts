@@ -41,6 +41,7 @@ export interface IssueRead extends IssueReceipt {
   reviewNotes?: string
   assignmentRequestedBy?: string
   assignmentRequestedAt?: string
+  assignmentInstructions?: string
   assigneeId?: string
   dueAt?: string
   assignedAt?: string
@@ -107,6 +108,7 @@ export interface ReviewIssueInput {
 export interface AssignmentInput {
   assigneeId: string
   dueAt?: string
+  instructions?: string
 }
 
 function validIssueDate(value?: string) {

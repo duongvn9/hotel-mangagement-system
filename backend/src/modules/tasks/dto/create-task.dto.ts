@@ -1,4 +1,7 @@
+import { Transform } from 'class-transformer';
 import {
+  MinLength,
+  MaxLength,
   IsDateString,
   IsEnum,
   IsMongoId,
@@ -33,4 +36,13 @@ export class CreateTaskDto {
   @ValidateIf((_object, value) => value !== undefined)
   @IsDateString({ strict: true })
   dueAt?: string;
+
+  @ValidateIf((_, value) => value !== undefined)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  instructions?: string;
 }

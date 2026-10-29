@@ -151,6 +151,68 @@ describe('Issue review and assignment Mongo protocol (e2e)', () => {
     });
   });
 
+  it('persists initial instructions and recovers only the frozen assignment contract', async () => {
+    const id = await report();
+    await review(id).expect(200);
+    for (const instructions of [null, '', '   ', 3, 'x'.repeat(2001)]) {
+      await assign(id, { ...assignment, instructions }).expect(400);
+    }
+    expect(
+      await tasks.countDocuments({ sourceId: new Types.ObjectId(id) }),
+    ).toBe(0);
+    const update = issues.findOneAndUpdate.bind(issues);
+    const finish = vi
+      .spyOn(issues, 'findOneAndUpdate')
+      .mockImplementation((...args: any[]) => {
+        if (args[1]?.$set?.status === 'ASSIGNED')
+          throw new Error('link unavailable');
+        return (update as any)(...args);
+      });
+    const input = { ...assignment, instructions: '  Inspect wiring  ' };
+    await assign(id, input).expect(500);
+    finish.mockRestore();
+    expect((await issues.findById(id).lean())!.assignmentInstructions).toBe(
+      'Inspect wiring',
+    );
+    const task = await tasks
+      .findOne({ sourceId: new Types.ObjectId(id) })
+      .lean();
+    expect(task!.instructions).toBe('Inspect wiring');
+    await assign(id, assignment).expect(409);
+    await assign(id, { ...assignment, instructions: 'Changed' }).expect(409);
+    await tasks.updateOne(
+      { _id: task!._id },
+      { $set: { instructions: 'Wrong' } },
+    );
+    await assign(id, input).expect(409);
+    await tasks.updateOne(
+      { _id: task!._id },
+      { $set: { instructions: 'Inspect wiring' } },
+    );
+    const assigned = await assign(id, input).expect(201);
+    expect(assigned.body.assignmentInstructions).toBe('Inspect wiring');
+    expect(
+      await tasks.countDocuments({ sourceId: new Types.ObjectId(id) }),
+    ).toBe(1);
+    const customer = await get(id, 'CUSTOMER', customerId).expect(200);
+    expect(customer.body.assignmentInstructions).toBeUndefined();
+    await tasks.updateOne({ _id: task!._id }, { $set: { blocked: true } });
+    const before = await tasks.findById(task!._id).lean();
+    const continuation = (dueAt: string) =>
+      request(app.getHttpServer())
+        .post(`/api/v1/issues/${id}/continue`)
+        .set(headers())
+        .send({ taskId: String(task!._id), dueAt, instructions: 'Updated' });
+    await continuation('2029-12-31T12:00:00.000Z').expect(400);
+    expect(await tasks.findById(task!._id).lean()).toEqual(before);
+    await continuation(assignment.dueAt).expect(201);
+    const continued = await tasks.findById(task!._id).lean();
+    expect(continued!.instructions).toBe('Updated');
+    expect(continued!.dueAt).toEqual(before!.dueAt);
+    expect(continued!.assignedTo).toEqual(before!.assignedTo);
+    expect(continued!.status).toBe(before!.status);
+  });
+
   afterEach(() => vi.restoreAllMocks());
   afterAll(async () => {
     if (!app) return;

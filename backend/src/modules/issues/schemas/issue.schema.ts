@@ -105,6 +105,9 @@ export class Issue {
   @Prop()
   assignmentDueAt?: Date;
 
+  @Prop({ minlength: 1, maxlength: 2000 })
+  assignmentInstructions?: string;
+
   @Prop()
   assignmentTitle?: string;
 

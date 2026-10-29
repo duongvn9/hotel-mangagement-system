@@ -394,6 +394,12 @@ export class TasksService {
     await this.assertCanonicalIssueTask(task);
     if (!this.actionableIssueTask(task))
       throw new ConflictException('Task must be blocked or overdue');
+    if (
+      dueAt !== undefined &&
+      task.dueAt &&
+      new Date(dueAt).getTime() < task.dueAt.getTime()
+    )
+      throw new BadRequestException('Deadline cannot be shortened');
     const now = new Date();
     const updated = await this.tasks.findOneAndUpdate(
       { _id: task._id, status: task.status, ...this.revisionFilter(task) },
@@ -599,6 +605,9 @@ export class TasksService {
         assignedAt: assignedAt ?? new Date(),
         status: TaskStatus.Assigned,
         ...(dto.dueAt === undefined ? {} : { dueAt: new Date(dto.dueAt) }),
+        ...(dto.instructions === undefined
+          ? {}
+          : { instructions: dto.instructions }),
       });
     } catch (error) {
       if (this.isDuplicate(error)) {

@@ -62,6 +62,7 @@ export interface IssueRead extends Omit<IssueResponse, 'reportedAt'> {
   concludedAt?: string;
   assignmentRequestedBy?: string;
   assignmentRequestedAt?: string;
+  assignmentInstructions?: string;
   assigneeId?: string;
   dueAt?: string;
   assignedAt?: string;
@@ -128,6 +129,7 @@ export class IssuesService {
     assignmentRequestedAt: 1,
     assignmentAssignee: 1,
     assignmentDueAt: 1,
+    assignmentInstructions: 1,
     assignedAt: 1,
     linkedTask: 1,
     pendingReassignment: 1,
@@ -332,6 +334,9 @@ export class IssuesService {
                     issue.assignmentRequestedAt.toISOString(),
                 }
               : {}),
+            ...(issue.assignmentInstructions === undefined
+              ? {}
+              : { assignmentInstructions: issue.assignmentInstructions }),
             ...(issue.assignmentAssignee
               ? { assigneeId: String(issue.assignmentAssignee) }
               : {}),
@@ -483,6 +488,9 @@ export class IssuesService {
               assignmentRequestedBy: new Types.ObjectId(user.id),
               assignmentRequestedAt: new Date(),
               assignmentTitle: issue.title,
+              ...(dto.instructions === undefined
+                ? {}
+                : { assignmentInstructions: dto.instructions }),
               assignmentTaskId: new Types.ObjectId(),
               ...(dueAt ? { assignmentDueAt: dueAt } : {}),
             },
@@ -501,7 +509,8 @@ export class IssuesService {
     if (
       String(issue.assignmentAssignee) !==
         String(new Types.ObjectId(dto.assigneeId)) ||
-      issue.assignmentDueAt?.getTime() !== dueAt?.getTime()
+      issue.assignmentDueAt?.getTime() !== dueAt?.getTime() ||
+      issue.assignmentInstructions !== dto.instructions
     )
       throw new ConflictException(
         'A different assignment intent is already pending',
@@ -514,6 +523,9 @@ export class IssuesService {
         task = await this.tasks.create(
           {
             title: issue.assignmentTitle,
+            ...(issue.assignmentInstructions === undefined
+              ? {}
+              : { instructions: issue.assignmentInstructions }),
             taskType: 'ISSUE_RESOLUTION',
             priority: issue.priority,
             sourceType: TaskSourceType.Issue,
@@ -534,6 +546,7 @@ export class IssuesService {
       String(task._id) !== String(issue.assignmentTaskId) ||
       String(task.assignedTo) !== String(issue.assignmentAssignee) ||
       task.dueAt?.getTime() !== issue.assignmentDueAt?.getTime() ||
+      task.instructions !== issue.assignmentInstructions ||
       task.title !== issue.assignmentTitle ||
       task.priority !== issue.priority
     )

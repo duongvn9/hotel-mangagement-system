@@ -312,6 +312,55 @@ describe('Issue review and durable assignment', () => {
     expect(issues.findById).not.toHaveBeenCalled();
   });
 
+  it.each(['', '   ', null, 3, 'x'.repeat(2001)])(
+    'rejects invalid initial instructions %j before writes',
+    async (instructions) => {
+      await expect(
+        service.assign(
+          String(id),
+          { ...assignment, instructions } as any,
+          actor,
+        ),
+      ).rejects.toThrow('Invalid input');
+      expect(issues.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(tasks.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('freezes trimmed instructions across failed linkage and retries', async () => {
+    await service.review(String(id), review, actor);
+    failFinish = true;
+    const input = { ...assignment, instructions: '  Check wiring  ' };
+    await expect(service.assign(String(id), input, actor)).rejects.toThrow();
+    expect(issue.assignmentInstructions).toBe('Check wiring');
+    expect(savedTask!.instructions).toBe('Check wiring');
+    const writes = issues.findOneAndUpdate.mock.calls.length;
+    for (const instructions of [undefined, 'Different']) {
+      await expect(
+        service.assign(String(id), { ...assignment, instructions }, actor),
+      ).rejects.toThrow('different assignment intent');
+    }
+    expect(issues.findOneAndUpdate).toHaveBeenCalledTimes(writes);
+    failFinish = false;
+    const result = await service.assign(String(id), input, actor);
+    expect(result.assignmentInstructions).toBe('Check wiring');
+    expect(tasks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects existing task with mismatched instructions without finalizing', async () => {
+    await service.review(String(id), review, actor);
+    failFinish = true;
+    const input = { ...assignment, instructions: 'Check wiring' };
+    await expect(service.assign(String(id), input, actor)).rejects.toThrow();
+    savedTask!.instructions = 'Different';
+    failFinish = false;
+    issues.findOneAndUpdate.mockClear();
+    await expect(service.assign(String(id), input, actor)).rejects.toThrow(
+      'does not match',
+    );
+    expect(issues.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
   it('uses active routing role and exposes names only', async () => {
     await service.review(String(id), review, actor);
     expect(await service.assignees(String(id), actor)).toEqual({
