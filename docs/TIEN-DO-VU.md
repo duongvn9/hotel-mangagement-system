@@ -42,7 +42,7 @@
 - Backend Issue: `schemas/issue.schema.ts`, `dto/review-issue.dto.ts`, `issues.controller.ts`, `issues.service.ts`, `issue-handling.spec.ts`, `issues.http.spec.ts`, `issue-task-reassignment.spec.ts` dưới `backend/src/modules/issues/`.
 - Backend Task: `schemas/task.schema.ts`, `task-contract.ts`, `tasks.controller.ts`, `tasks.service.ts`, `tasks.spec.ts`, `issue-resolution-safety.spec.ts`, `dto/assigned-task.dto.ts`, `dto/update-task-progress.dto.ts` dưới `backend/src/modules/tasks/`.
 - Backend supervision DTO/service và `backend/test/issue-handling.e2e-spec.ts`; contract JSON bên trên.
-- Frontend Issue: `IssueTaskRecovery.tsx`, `api.ts`, `IssueClosure.tsx`, `pages/IssueDetailPage.tsx`, `issue-task-recovery.test.tsx`, `issue-close.test.tsx`.
+- Frontend Issue: `IssueTaskRecovery.tsx`, `api.ts`, `pages/IssueDetailPage.tsx`, `issue-task-recovery.test.tsx`. `IssueClosure.tsx` và `issue-close.test.tsx` cuối cùng giữ nguyên contract UC32: Manager và Receptionist đều được close; Manager chỉ không được Continue/Reassign.
 - Frontend Task: `TaskResolution.tsx`, `api.ts`, `presentation.ts`, `pages/AssignedTaskDetailPage.tsx`.
 - Frontend supervision API/presentation/queue pages; staff-dashboard API, maintenance history và operational report presentation chỉ tương thích enum/count/labels.
 
