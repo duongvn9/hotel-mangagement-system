@@ -3,12 +3,13 @@ import type { AssignedTask, TaskList, TaskStatus } from '@/features/tasks/api'
 
 const PAGE_SIZE = 100
 const MAX_PAGES = 100
-const statuses: TaskStatus[] = ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED']
+type DashboardTaskStatus = Exclude<TaskStatus, 'CANCELLED'>
+const statuses: DashboardTaskStatus[] = ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED']
 
 export class DashboardReadError extends Error {}
 
 export interface StaffDashboardData {
-  counts: Record<TaskStatus, number>
+  counts: Record<DashboardTaskStatus, number>
   active: AssignedTask[]
   readAt: number
 }
@@ -33,7 +34,7 @@ export async function readStaffDashboard(signal: AbortSignal): Promise<StaffDash
   const totals = await Promise.all(statuses.map((status) => readPage(status, 1, 1, signal)))
   const counts = Object.fromEntries(
     statuses.map((status, index) => [status, totals[index]!.total]),
-  ) as Record<TaskStatus, number>
+  ) as Record<DashboardTaskStatus, number>
   const active: AssignedTask[] = []
   const ids = new Set<string>()
   for (const status of ['ASSIGNED', 'IN_PROGRESS'] as const) {

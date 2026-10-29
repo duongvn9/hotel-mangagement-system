@@ -2,6 +2,7 @@ export const HISTORY_LABELS = {
   ASSIGNED: 'Đã giao',
   IN_PROGRESS: 'Đang xử lý',
   COMPLETED: 'Hoàn thành',
+  CANCELLED: 'Đã hủy',
   NO_ACTION: 'Chỉ ghi nhận',
 }
 const clock = new Intl.DateTimeFormat('vi-VN', {

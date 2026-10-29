@@ -4,6 +4,7 @@ export const taskStatuses: Record<TaskStatus, string> = {
   ASSIGNED: 'Đã giao',
   IN_PROGRESS: 'Đang thực hiện',
   COMPLETED: 'Hoàn thành',
+  CANCELLED: 'Đã hủy',
 }
 
 export const taskSources = {
