@@ -59,6 +59,8 @@ describe('Issue review and durable assignment', () => {
   };
   const tasks = {
     findIssueResolutionWork: vi.fn(async () => savedTask),
+    issueTask: vi.fn(async () => savedTask),
+    issueTaskHistory: vi.fn(async () => (savedTask ? [savedTask] : [])),
     create: vi.fn(async (dto: any, identity: Types.ObjectId) => {
       if (failCreate) throw new Error('task unavailable');
       savedTask ??= {

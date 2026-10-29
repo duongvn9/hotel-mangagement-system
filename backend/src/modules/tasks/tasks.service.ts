@@ -13,7 +13,10 @@ import { Role as StaffRole } from '../../common/constants/role.enum.js';
 import { Role } from '../roles/schemas/role.schema.js';
 import { User } from '../users/schemas/user.schema.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
-import { UpdateTaskProgressDto } from './dto/update-task-progress.dto.js';
+import {
+  UnableToResolveDto,
+  UpdateTaskProgressDto,
+} from './dto/update-task-progress.dto.js';
 import { Task } from './schemas/task.schema.js';
 import {
   AssignedTaskDto,
@@ -53,6 +56,11 @@ export class TasksService {
     dueAt: 1,
     completedAt: 1,
     workResult: 1,
+    blocked: 1,
+    blockerHistory: 1,
+    instructions: 1,
+    continuationHistory: 1,
+    cancellation: 1,
     sourceType: 1,
     sourceId: 1,
   };
@@ -133,6 +141,22 @@ export class TasksService {
       sourceType: task.sourceType,
       sourceId: String(task.sourceId),
       sourceSummary: null,
+      ...(task.sourceType === TaskSourceType.Issue &&
+      task.taskType === 'ISSUE_RESOLUTION'
+        ? {
+            blocked: task.blocked === true,
+            overdue:
+              [TaskStatus.Assigned, TaskStatus.InProgress].includes(
+                task.status,
+              ) &&
+              !!task.dueAt &&
+              task.dueAt.getTime() < Date.now(),
+            blockerHistory: task.blockerHistory ?? [],
+            instructions: task.instructions,
+            continuationHistory: task.continuationHistory ?? [],
+            cancellation: task.cancellation,
+          }
+        : {}),
     };
   }
 
@@ -241,6 +265,7 @@ export class TasksService {
       task.taskType !== SERVICE_ORDER_EXECUTION_TASK_TYPE
     )
       return;
+    if (task.status === TaskStatus.Cancelled) return;
     const predecessors = {
       [TaskStatus.Assigned]: ['ASSIGNED'],
       [TaskStatus.InProgress]: ['ASSIGNED', 'IN_PROGRESS'],
@@ -256,6 +281,272 @@ export class TasksService {
           executionStatus: { $in: predecessors[task.status] },
         },
         { $set: { executionStatus: task.status } },
+      );
+  }
+
+  async assertCanonicalIssueTask(task: Task & { _id: Types.ObjectId }) {
+    if (
+      task.sourceType !== TaskSourceType.Issue ||
+      task.taskType !== 'ISSUE_RESOLUTION'
+    )
+      throw new ConflictException('Not issue resolution work');
+    const issue = await this.connection.collection('issues').findOne({
+      _id: task.sourceId,
+      status: 'ASSIGNED',
+      linkedTask: task._id,
+      pendingReassignment: { $exists: false },
+    });
+    if (!issue)
+      throw new ConflictException(
+        'Issue assignment is not finalized for this task',
+      );
+    return issue;
+  }
+
+  async reportUnable(
+    actorId: string,
+    taskId: string,
+    input: UnableToResolveDto,
+  ) {
+    const dto = plainToInstance(UnableToResolveDto, input);
+    if (
+      !input ||
+      (await validate(dto, { whitelist: true, forbidNonWhitelisted: true }))
+        .length
+    )
+      throw new BadRequestException('Invalid reason');
+    await this.findAssigned(actorId, taskId);
+    const task = await this.tasks.findById(taskId).lean();
+    if (
+      !task ||
+      ![TaskStatus.Assigned, TaskStatus.InProgress].includes(task.status)
+    )
+      throw new ConflictException('Task is not active');
+    const actor = await this.users.findById(actorId).lean();
+    if (
+      !actor ||
+      ![StaffRole.ServiceStaff, StaffRole.OperationsStaff].includes(
+        actor.role as StaffRole,
+      )
+    )
+      throw new BadRequestException('Staff required');
+    this.assertEligible(actor, TaskSourceType.Issue);
+    await this.assertCanonicalIssueTask(task);
+    const updated = await this.tasks.findOneAndUpdate(
+      {
+        _id: task._id,
+        assignedTo: new Types.ObjectId(actorId),
+        status: task.status,
+        ...this.revisionFilter(task),
+      },
+      {
+        $set: { blocked: true },
+        $inc: { revision: 1 },
+        $push: {
+          blockerHistory: {
+            id: String(new Types.ObjectId()),
+            reason: dto.reason,
+            reportedBy: actorId,
+            reportedAt: new Date(),
+          },
+        },
+      },
+      { new: true, runValidators: true },
+    );
+    if (!updated) throw new ConflictException('Task changed; reload');
+    return this.assignedResponse(updated);
+  }
+
+  private revisionFilter(task: Task) {
+    return task.revision === undefined
+      ? { revision: { $exists: false } }
+      : { revision: task.revision };
+  }
+
+  async issueTask(issueId: string, taskId: string) {
+    return this.tasks
+      .findOne({
+        _id: new Types.ObjectId(taskId),
+        sourceType: TaskSourceType.Issue,
+        sourceId: new Types.ObjectId(issueId),
+        taskType: 'ISSUE_RESOLUTION',
+      })
+      .lean();
+  }
+
+  async issueTaskHistory(issueId: string) {
+    return this.tasks
+      .find({
+        sourceType: TaskSourceType.Issue,
+        sourceId: new Types.ObjectId(issueId),
+        taskType: 'ISSUE_RESOLUTION',
+      })
+      .sort({ assignedAt: 1, _id: 1 })
+      .lean();
+  }
+
+  async continueIssueTask(
+    task: Task & { _id: Types.ObjectId },
+    actorId: string,
+    dueAt?: string,
+    instructions?: string,
+  ) {
+    await this.assertCanonicalIssueTask(task);
+    if (!this.actionableIssueTask(task))
+      throw new ConflictException('Task must be blocked or overdue');
+    const now = new Date();
+    const updated = await this.tasks.findOneAndUpdate(
+      { _id: task._id, status: task.status, ...this.revisionFilter(task) },
+      {
+        $set: {
+          blocked: false,
+          blockerHistory: (task.blockerHistory ?? []).map((report) =>
+            report.resolvedAt
+              ? report
+              : {
+                  ...report,
+                  resolvedAt: now,
+                  resolvedBy: actorId,
+                  resolution: 'CONTINUED',
+                },
+          ),
+          ...(dueAt === undefined ? {} : { dueAt: new Date(dueAt) }),
+          ...(instructions === undefined ? {} : { instructions }),
+        },
+        $inc: { revision: 1 },
+        $push: {
+          continuationHistory: {
+            actorId,
+            at: now,
+            ...(dueAt === undefined ? {} : { dueAt: new Date(dueAt) }),
+            ...(instructions === undefined ? {} : { instructions }),
+          },
+        },
+      },
+      { new: true, runValidators: true },
+    );
+    if (!updated) throw new ConflictException('Task changed; reload');
+  }
+
+  actionableIssueTask(task: Task) {
+    return (
+      [TaskStatus.Assigned, TaskStatus.InProgress].includes(task.status) &&
+      (task.blocked === true ||
+        (task.dueAt instanceof Date && task.dueAt.getTime() < Date.now()))
+    );
+  }
+
+  async cancelIssueTask(
+    issueId: string,
+    taskId: string,
+    revision: number,
+    audit: NonNullable<Task['cancellation']>,
+  ) {
+    const task = await this.issueTask(issueId, taskId);
+    if (!task) throw new ConflictException('Current task missing');
+    if (
+      task.status === TaskStatus.Cancelled &&
+      task.cancellation?.requestId === audit.requestId
+    )
+      return;
+    if (
+      ![TaskStatus.Assigned, TaskStatus.InProgress].includes(task.status) ||
+      (task.revision ?? 0) !== revision
+    )
+      throw new ConflictException('Task changed before cancellation');
+    const updated = await this.tasks.findOneAndUpdate(
+      { _id: task._id, status: task.status, ...this.revisionFilter(task) },
+      {
+        $set: {
+          status: TaskStatus.Cancelled,
+          blocked: false,
+          cancellation: audit,
+          blockerHistory: (task.blockerHistory ?? []).map((report) =>
+            report.resolvedAt
+              ? report
+              : {
+                  ...report,
+                  resolvedAt: audit.at,
+                  resolvedBy: audit.recoveryActorId,
+                  resolution: 'REASSIGNED',
+                },
+          ),
+        },
+        $inc: { revision: 1 },
+      },
+      { new: true, runValidators: true },
+    );
+    if (!updated)
+      throw new ConflictException('Task changed before cancellation');
+  }
+
+  async blockUnavailableIssueTarget(
+    issueId: string,
+    taskId: string,
+    actorId: string,
+  ) {
+    await this.tasks.updateOne(
+      {
+        _id: new Types.ObjectId(taskId),
+        sourceType: TaskSourceType.Issue,
+        sourceId: new Types.ObjectId(issueId),
+        taskType: 'ISSUE_RESOLUTION',
+        status: TaskStatus.Assigned,
+        blocked: { $ne: true },
+      },
+      {
+        $set: { blocked: true },
+        $inc: { revision: 1 },
+        $push: {
+          blockerHistory: {
+            id: String(new Types.ObjectId()),
+            reason: 'Assignee unavailable during reassignment recovery',
+            reportedBy: actorId,
+            reportedAt: new Date(),
+          },
+        },
+      },
+    );
+  }
+
+  async fenceUnusedIssueTarget(
+    issueId: string,
+    taskId: string,
+    assigneeId: string,
+    requestId: string,
+    actorId: string,
+    recoveryActorId: string,
+  ) {
+    try {
+      await this.tasks.create({
+        _id: new Types.ObjectId(taskId),
+        title: 'Abandoned reassignment target',
+        taskType: 'ISSUE_RESOLUTION',
+        priority: 'NORMAL',
+        status: TaskStatus.Cancelled,
+        sourceType: TaskSourceType.Issue,
+        sourceId: new Types.ObjectId(issueId),
+        assignedTo: new Types.ObjectId(assigneeId),
+        assignedAt: new Date(),
+        cancellation: {
+          reason: 'Inactive target replaced before creation',
+          actorId,
+          recoveryActorId,
+          requestId,
+          at: new Date(),
+        },
+      });
+      return;
+    } catch (error) {
+      if (!this.isDuplicate(error)) throw error;
+    }
+    const existing = await this.issueTask(issueId, taskId);
+    if (
+      existing?.status !== TaskStatus.Cancelled ||
+      existing.cancellation?.requestId !== requestId
+    )
+      throw new ConflictException(
+        'Target task already created; recover the original target first',
       );
   }
 
@@ -473,10 +764,30 @@ export class TasksService {
           'Service order assignment is not finalized for this task',
         );
     }
+    if (
+      task.sourceType === TaskSourceType.Issue &&
+      task.taskType === 'ISSUE_RESOLUTION'
+    ) {
+      await this.assertCanonicalIssueTask(task);
+      if (task.blocked)
+        throw new ConflictException(
+          'Task is blocked; receptionist action required',
+        );
+    }
     await this.ensureWorkIndex();
     const updated = await this.tasks.findOneAndUpdate(
-      scope,
       {
+        ...scope,
+        ...(task.sourceType === TaskSourceType.Issue &&
+        task.taskType === 'ISSUE_RESOLUTION'
+          ? this.revisionFilter(task)
+          : {}),
+      },
+      {
+        ...(task.sourceType === TaskSourceType.Issue &&
+        task.taskType === 'ISSUE_RESOLUTION'
+          ? { $inc: { revision: 1 } }
+          : {}),
         $set: {
           status: nextStatus,
           ...(nextStatus === TaskStatus.Completed

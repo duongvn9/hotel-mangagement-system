@@ -4,6 +4,7 @@ export enum TaskStatus {
   Assigned = 'ASSIGNED',
   InProgress = 'IN_PROGRESS',
   Completed = 'COMPLETED',
+  Cancelled = 'CANCELLED',
 }
 
 export enum TaskSourceType {

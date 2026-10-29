@@ -1,0 +1,20 @@
+{
+  "routes": {
+    "PATCH /api/v1/tasks/:id/unable-to-resolve": { "body": { "reason": "trimmed nonempty string <=2000" }, "success": "200 AssignedTaskDto; status unchanged; blocked true; report appended", "roles": ["SERVICE_STAFF", "OPERATIONS_STAFF"] },
+    "POST /api/v1/issues/:id/continue": { "body": { "taskId": "MongoId", "dueAt?": "ISO8601", "instructions?": "trimmed nonempty string <=2000" }, "success": "201 IssueDetail; same task/assignee/progress; blocked false; history retained", "roles": ["RECEPTIONIST"] },
+    "POST /api/v1/issues/:id/reassign": { "body": { "taskId": "current MongoId", "assigneeId": "different active category-matched MongoId", "reason": "trimmed nonempty string <=2000", "dueAt?": "ISO8601", "requestId": "stable nonempty string <=100" }, "success": "201 IssueDetail; Issue remains ASSIGNED; old task CANCELLED; new deterministic task linked", "recovery": "Repeat same requestId and body. Another receptionist may recover. assigneeId may change only when pending target is no longer eligible and no live target task was created. Abandoned deterministic IDs are fenced with CANCELLED tombstones to prevent stale recovery creating orphan active work.", "roles": ["RECEPTIONIST"] }
+  },
+  "concurrency": "Cancellation must match the intent taskRevision. A concurrent successful Continue/report/progress invalidates the pre-cancel intent: return 409 and clear that intent with issue CAS. If cleanup persistence fails, retry the same request to finish cleanup. Reload before deciding whether to submit a fresh request. Completed cancellation remains recoverable and is never rolled back.",
+  "deadlineReads": "Staff Issue detail and list dueAt derive from the exact linked task; Continue does not perform a second cross-document deadline write.",
+  "eligibility": "Continue/reassign require current linked active ISSUE_RESOLUTION task blocked or overdue. No auto close. Blocked tasks cannot progress until continued/reassigned. Orphan/unfinalized tasks cannot execute.",
+  "IssueDetail.staffOnly": {
+    "resolutionTasks": "chronological array: id,title,taskType,priority,status,assigneeId,assignedAt,dueAt?,completedAt?,workResult?,blocked,overdue,blockerHistory,instructions?,continuationHistory,cancellation?",
+    "pendingReassignment?": "requestId,taskId,taskRevision,targetTaskId,assigneeId,reason,dueAt?,actorId,requestedAt,recoveryActors,abandonedTargets",
+    "reassignmentHistory": "completed intent records with completedAt"
+  },
+  "TaskDetail.issueResolutionOnly": ["blocked", "overdue", "blockerHistory", "instructions?", "continuationHistory", "cancellation?"],
+  "blockerHistory": "id,reason,reportedBy,reportedAt,resolvedAt?,resolvedBy?,resolution? (CONTINUED or REASSIGNED)",
+  "continuationHistory": "actorId,at,dueAt?,instructions?",
+  "cancellation": "reason,actorId,recoveryActorId,at,requestId",
+  "errors": "400 invalid input/assignee, 403 unauthorized role, 404 missing/not-owned task, 409 stale/not eligible/conflicting intent. 500 transient persistence failure: reload IssueDetail then retry pending intent. Close refuses pending intent and requires exact current linked completed resolution task."
+}

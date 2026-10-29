@@ -69,7 +69,10 @@ describe('Report issue HTTP', () => {
       controllers: [IssuesController],
       providers: [
         IssuesService,
-        { provide: TasksService, useValue: {} },
+        {
+          provide: TasksService,
+          useValue: { issueTaskHistory: async () => [] },
+        },
         { provide: getModelToken(Role.name), useValue: {} },
         { provide: IssueContextAdapter, useValue: { resolve } },
         {

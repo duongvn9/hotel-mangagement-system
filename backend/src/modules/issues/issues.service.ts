@@ -19,12 +19,15 @@ import {
   Issue,
   IssuePriority,
   IssueStatus,
+  type ReassignmentIntent,
 } from './schemas/issue.schema.js';
 import { User } from '../users/schemas/user.schema.js';
 import { TasksService } from '../tasks/tasks.service.js';
 import { TaskSourceType, TaskStatus } from '../tasks/task-contract.js';
 import {
   AssignIssueDto,
+  ContinueIssueDto,
+  ReassignIssueDto,
   CloseIssueDto,
   ReviewIssueDto,
 } from './dto/review-issue.dto.js';
@@ -84,6 +87,9 @@ export interface IssueDetail extends IssueRead {
     completedAt?: string;
   }[];
   linkedTasksAvailable: boolean;
+  resolutionTasks?: Record<string, unknown>[];
+  pendingReassignment?: ReassignmentIntent;
+  reassignmentHistory?: Issue['reassignmentHistory'];
 }
 
 @Injectable()
@@ -124,6 +130,8 @@ export class IssuesService {
     assignmentDueAt: 1,
     assignedAt: 1,
     linkedTask: 1,
+    pendingReassignment: 1,
+    reassignmentHistory: 1,
   };
 
   private assertReader(user: AuthUser): void {
@@ -176,7 +184,21 @@ export class IssuesService {
       this.issues.countDocuments(filter),
     ]);
     return {
-      items: items.map((issue) => this.readResponse(issue, user)),
+      items: await Promise.all(
+        items.map(async (issue) => {
+          const task =
+            user.role !== Role.Customer && issue.linkedTask
+              ? await this.tasks.issueTask(
+                  String(issue._id),
+                  String(issue.linkedTask),
+                )
+              : null;
+          return this.readResponse(
+            task ? { ...issue, assignmentDueAt: task.dueAt } : issue,
+            user,
+          );
+        }),
+      ),
       total,
       page: query.page,
       limit: query.limit,
@@ -196,10 +218,13 @@ export class IssuesService {
     const staff = user.role !== Role.Customer;
     const task =
       staff && issue.linkedTask
-        ? await this.tasks.findIssueResolutionWork(id)
+        ? await this.tasks.issueTask(id, String(issue.linkedTask))
         : null;
     return {
-      ...this.readResponse(issue, user),
+      ...this.readResponse(
+        task ? { ...issue, assignmentDueAt: task.dueAt } : issue,
+        user,
+      ),
       linkedTasks:
         task && String(task._id) === String(issue.linkedTask)
           ? [
@@ -219,6 +244,37 @@ export class IssuesService {
             ]
           : [],
       linkedTasksAvailable: staff && Boolean(issue.linkedTask),
+      ...(staff
+        ? {
+            resolutionTasks: (await this.tasks.issueTaskHistory(id)).map(
+              (entry) => ({
+                id: String(entry._id),
+                title: entry.title,
+                taskType: entry.taskType,
+                priority: entry.priority,
+                status: entry.status,
+                assigneeId: String(entry.assignedTo),
+                assignedAt: entry.assignedAt.toISOString(),
+                dueAt: entry.dueAt?.toISOString(),
+                completedAt: entry.completedAt?.toISOString(),
+                workResult: entry.workResult,
+                blocked: entry.blocked === true,
+                overdue:
+                  [TaskStatus.Assigned, TaskStatus.InProgress].includes(
+                    entry.status,
+                  ) &&
+                  !!entry.dueAt &&
+                  entry.dueAt.getTime() < Date.now(),
+                blockerHistory: entry.blockerHistory ?? [],
+                instructions: entry.instructions,
+                continuationHistory: entry.continuationHistory ?? [],
+                cancellation: entry.cancellation,
+              }),
+            ),
+            pendingReassignment: issue.pendingReassignment,
+            reassignmentHistory: issue.reassignmentHistory ?? [],
+          }
+        : {}),
     };
   }
 
@@ -364,7 +420,11 @@ export class IssuesService {
     this.assertReceptionist(user);
     const issue = await this.operationalIssue(id);
     if (
-      ![IssueStatus.Reviewed, IssueStatus.Assigning].includes(issue.status) ||
+      ![
+        IssueStatus.Reviewed,
+        IssueStatus.Assigning,
+        IssueStatus.Assigned,
+      ].includes(issue.status) ||
       issue.needsStaffAction !== true
     )
       throw new ConflictException('Issue is not eligible for assignment');
@@ -500,6 +560,269 @@ export class IssuesService {
     return this.findOne(id, user);
   }
 
+  async continueResolution(
+    id: string,
+    input: ContinueIssueDto,
+    user: AuthUser,
+  ) {
+    this.assertReceptionist(user);
+    const dto = await this.validateInput(ContinueIssueDto, input);
+    dto.taskId = new Types.ObjectId(dto.taskId).toHexString();
+    const issue = await this.operationalIssue(id);
+    if (
+      issue.status !== IssueStatus.Assigned ||
+      issue.pendingReassignment ||
+      String(issue.linkedTask) !== dto.taskId
+    )
+      throw new ConflictException('Not the current finalized assignment');
+    const task = await this.tasks.issueTask(id, dto.taskId);
+    if (!task) throw new ConflictException('Current task missing');
+    await this.tasks.continueIssueTask(
+      task,
+      user.id,
+      dto.dueAt,
+      dto.instructions,
+    );
+    return this.findOne(id, user);
+  }
+
+  private async eligibleReplacement(issue: Issue, assigneeId: string) {
+    return this.users
+      .findOne({
+        _id: new Types.ObjectId(assigneeId),
+        isActive: true,
+        role: this.handlingRole(issue.handlingCategory),
+      })
+      .lean();
+  }
+
+  async reassign(id: string, input: ReassignIssueDto, user: AuthUser) {
+    this.assertReceptionist(user);
+    const dto = await this.validateInput(ReassignIssueDto, input);
+    dto.taskId = new Types.ObjectId(dto.taskId).toHexString();
+    dto.assigneeId = new Types.ObjectId(dto.assigneeId).toHexString();
+    let issue = await this.operationalIssue(id);
+    const completed = issue.reassignmentHistory?.find(
+      (entry) => entry.requestId === dto.requestId,
+    );
+    if (completed) {
+      if (
+        completed.taskId !== dto.taskId ||
+        completed.assigneeId !== dto.assigneeId ||
+        completed.reason !== dto.reason ||
+        completed.dueAt !== dto.dueAt
+      )
+        throw new ConflictException('Request ID was used for different input');
+      return this.findOne(id, user);
+    }
+    if (issue.status !== IssueStatus.Assigned)
+      throw new ConflictException('Issue is not assigned');
+    if (!issue.pendingReassignment) {
+      if (String(issue.linkedTask) !== dto.taskId)
+        throw new ConflictException('Not the current assignment');
+      const task = await this.tasks.issueTask(id, dto.taskId);
+      if (!task || !this.tasks.actionableIssueTask(task))
+        throw new ConflictException('Task must be blocked or overdue');
+      if (String(task.assignedTo) === dto.assigneeId)
+        throw new BadRequestException('Choose a different assignee');
+      if (!(await this.eligibleReplacement(issue, dto.assigneeId)))
+        throw new BadRequestException(
+          'Assignee must be active staff matching handlingCategory',
+        );
+      const intent: ReassignmentIntent = {
+        requestId: dto.requestId,
+        taskId: dto.taskId,
+        taskRevision: task.revision ?? 0,
+        targetTaskId: String(new Types.ObjectId()),
+        assigneeId: dto.assigneeId,
+        reason: dto.reason,
+        ...(dto.dueAt === undefined ? {} : { dueAt: dto.dueAt }),
+        actorId: user.id,
+        requestedAt: new Date().toISOString(),
+        recoveryActors: [],
+        abandonedTargets: [],
+      };
+      const locked = await this.issues
+        .findOneAndUpdate(
+          {
+            _id: issue._id,
+            status: IssueStatus.Assigned,
+            linkedTask: task._id,
+            pendingReassignment: { $exists: false },
+            'reassignmentHistory.requestId': { $ne: dto.requestId },
+          },
+          { $set: { pendingReassignment: intent } },
+          { new: true, runValidators: true },
+        )
+        .lean();
+      if (!locked)
+        throw new ConflictException('Issue changed; retry same request');
+      issue = locked;
+    }
+    let intent = issue.pendingReassignment!;
+    if (
+      intent.requestId !== dto.requestId ||
+      intent.taskId !== dto.taskId ||
+      intent.reason !== dto.reason ||
+      intent.dueAt !== dto.dueAt
+    )
+      throw new ConflictException('A different reassignment intent is pending');
+    if (intent.assigneeId !== dto.assigneeId) {
+      if (await this.eligibleReplacement(issue, intent.assigneeId))
+        throw new ConflictException('Pending target is still eligible');
+      const old = await this.tasks.issueTask(id, intent.taskId);
+      if (
+        !old ||
+        String(old.assignedTo) === dto.assigneeId ||
+        !(await this.eligibleReplacement(issue, dto.assigneeId))
+      )
+        throw new BadRequestException(
+          'Choose different active category-matched staff',
+        );
+      await this.tasks.fenceUnusedIssueTarget(
+        id,
+        intent.targetTaskId,
+        intent.assigneeId,
+        intent.requestId,
+        intent.actorId,
+        user.id,
+      );
+      const changed = await this.issues
+        .findOneAndUpdate(
+          {
+            _id: issue._id,
+            'pendingReassignment.requestId': intent.requestId,
+            'pendingReassignment.targetTaskId': intent.targetTaskId,
+          },
+          {
+            $set: {
+              'pendingReassignment.assigneeId': dto.assigneeId,
+              'pendingReassignment.targetTaskId': String(new Types.ObjectId()),
+            },
+            $push: {
+              'pendingReassignment.abandonedTargets': intent.targetTaskId,
+            },
+          },
+          { new: true },
+        )
+        .lean();
+      if (!changed)
+        throw new ConflictException('Recovery target changed; retry');
+      issue = changed;
+      intent = issue.pendingReassignment!;
+    }
+    await this.issues.updateOne(
+      {
+        _id: issue._id,
+        'pendingReassignment.targetTaskId': intent.targetTaskId,
+      },
+      { $addToSet: { 'pendingReassignment.recoveryActors': user.id } },
+    );
+    try {
+      await this.tasks.cancelIssueTask(id, intent.taskId, intent.taskRevision, {
+        reason: intent.reason,
+        actorId: intent.actorId,
+        recoveryActorId: user.id,
+        at: new Date(),
+        requestId: intent.requestId,
+      });
+    } catch (error) {
+      const old = await this.tasks.issueTask(id, intent.taskId);
+      if (
+        old &&
+        old.status !== TaskStatus.Cancelled &&
+        (old.status === TaskStatus.Completed ||
+          (old.revision ?? 0) !== intent.taskRevision)
+      ) {
+        await this.issues.updateOne(
+          {
+            _id: issue._id,
+            'pendingReassignment.targetTaskId': intent.targetTaskId,
+          },
+          { $unset: { pendingReassignment: 1 } },
+        );
+      }
+      throw error;
+    }
+    let target = await this.tasks.issueTask(id, intent.targetTaskId);
+    if (!target) {
+      if (!(await this.eligibleReplacement(issue, intent.assigneeId)))
+        throw new ConflictException(
+          'Pending target unavailable; retry same request with an active replacement assignee',
+        );
+      try {
+        target = await this.tasks.create(
+          {
+            title: issue.title,
+            taskType: 'ISSUE_RESOLUTION',
+            priority: issue.priority,
+            sourceType: TaskSourceType.Issue,
+            sourceId: id,
+            assigneeId: intent.assigneeId,
+            ...(intent.dueAt === undefined ? {} : { dueAt: intent.dueAt }),
+          },
+          new Types.ObjectId(intent.targetTaskId),
+        );
+      } catch (error) {
+        target = await this.tasks.issueTask(id, intent.targetTaskId);
+        if (!target) throw error;
+      }
+    }
+    if (
+      target.status !== TaskStatus.Assigned ||
+      String(target.assignedTo) !== intent.assigneeId ||
+      target.dueAt?.toISOString() !==
+        (intent.dueAt === undefined
+          ? undefined
+          : new Date(intent.dueAt).toISOString())
+    )
+      throw new ConflictException('Target does not match pending intent');
+    if (!(await this.eligibleReplacement(issue, intent.assigneeId)))
+      await this.tasks.blockUnavailableIssueTarget(
+        id,
+        intent.targetTaskId,
+        user.id,
+      );
+    const finalized = await this.issues.findOneAndUpdate(
+      {
+        _id: issue._id,
+        status: IssueStatus.Assigned,
+        linkedTask: new Types.ObjectId(intent.taskId),
+        'pendingReassignment.targetTaskId': intent.targetTaskId,
+      },
+      {
+        $set: {
+          linkedTask: target._id,
+          assignmentAssignee: target.assignedTo,
+          assignedAt: target.assignedAt,
+          ...(target.dueAt ? { assignmentDueAt: target.dueAt } : {}),
+        },
+        $unset: {
+          pendingReassignment: 1,
+          ...(target.dueAt ? {} : { assignmentDueAt: 1 }),
+        },
+        $push: {
+          reassignmentHistory: {
+            ...intent,
+            recoveryActors: [...new Set([...intent.recoveryActors, user.id])],
+            completedAt: new Date().toISOString(),
+          },
+        },
+      },
+      { new: true, runValidators: true },
+    );
+    if (!finalized) {
+      const current = await this.operationalIssue(id);
+      if (
+        !current.reassignmentHistory?.some(
+          (entry) => entry.requestId === intent.requestId,
+        )
+      )
+        throw new ConflictException('Recovery intent changed; reload');
+    }
+    return this.findOne(id, user);
+  }
+
   async close(
     id: string,
     input: CloseIssueDto,
@@ -511,6 +834,10 @@ export class IssuesService {
       throw new ForbiddenException();
     const dto = await this.validateInput(CloseIssueDto, input);
     const issue = await this.operationalIssue(id);
+    if (issue.pendingReassignment)
+      throw new ConflictException(
+        'Reassignment recovery must finish before closure',
+      );
     const validDate = (value: unknown): value is Date =>
       value instanceof Date && Number.isFinite(value.getTime());
     const reviewed =
@@ -535,7 +862,7 @@ export class IssuesService {
         throw new ConflictException(
           'Issue resolution is not ready for closure',
         );
-      const task = await this.tasks.findIssueResolutionWork(id);
+      const task = await this.tasks.issueTask(id, String(issue.linkedTask));
       if (
         !task ||
         String(task._id) !== String(issue.linkedTask) ||
@@ -574,6 +901,7 @@ export class IssuesService {
       {
         _id: issue._id,
         ...snapshot,
+        pendingReassignment: { $exists: false },
         closedAt: { $exists: false },
         closedBy: { $exists: false },
         closureConclusion: { $exists: false },

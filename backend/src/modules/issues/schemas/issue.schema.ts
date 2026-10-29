@@ -22,6 +22,20 @@ export enum IssuePriority {
   Urgent = 'URGENT',
 }
 
+export interface ReassignmentIntent {
+  requestId: string;
+  taskId: string;
+  taskRevision: number;
+  targetTaskId: string;
+  assigneeId: string;
+  reason: string;
+  dueAt?: string;
+  actorId: string;
+  requestedAt: string;
+  recoveryActors: string[];
+  abandonedTargets: string[];
+}
+
 @Schema({ timestamps: true, collection: 'issues' })
 export class Issue {
   @Prop({ required: true, trim: true, minlength: 1, maxlength: 200 })
@@ -120,6 +134,12 @@ export class Issue {
 
   @Prop({ type: Types.ObjectId, ref: 'Service' })
   service?: Types.ObjectId;
+
+  @Prop({ type: Object })
+  pendingReassignment?: ReassignmentIntent;
+
+  @Prop({ type: [Object], default: [] })
+  reassignmentHistory?: (ReassignmentIntent & { completedAt: string })[];
 
   @Prop({ select: false })
   requestId?: string;

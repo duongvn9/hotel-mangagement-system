@@ -7,7 +7,10 @@ import {
   Query,
   ValidationPipe,
 } from '@nestjs/common';
-import { UpdateTaskProgressDto } from './dto/update-task-progress.dto.js';
+import {
+  UnableToResolveDto,
+  UpdateTaskProgressDto,
+} from './dto/update-task-progress.dto.js';
 import {
   ApiBearerAuth,
   ApiNotFoundResponse,
@@ -48,6 +51,15 @@ export class TasksController {
     query: ListAssignedTasksQuery,
   ) {
     return this.tasks.listAssigned(user.id, query);
+  }
+
+  @Patch(':id/unable-to-resolve')
+  unableToResolve(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() input: UnableToResolveDto,
+  ) {
+    return this.tasks.reportUnable(user.id, id, input);
   }
 
   @Patch(':id/progress')

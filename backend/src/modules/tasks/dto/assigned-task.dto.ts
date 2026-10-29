@@ -1,7 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TaskSourceType, TaskStatus } from '../task-contract.js';
+import type { Task } from '../schemas/task.schema.js';
 
 export class AssignedTaskDto {
+  blocked?: boolean;
+  overdue?: boolean;
+  blockerHistory?: Task['blockerHistory'];
+  instructions?: string;
+  continuationHistory?: Task['continuationHistory'];
+  cancellation?: Task['cancellation'];
+
   @ApiProperty()
   id: string;
 
