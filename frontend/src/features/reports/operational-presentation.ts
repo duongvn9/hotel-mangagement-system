@@ -8,6 +8,7 @@ export const TASK_LABELS = {
   ASSIGNED: 'Đã giao',
   IN_PROGRESS: 'Đang xử lý',
   COMPLETED: 'Hoàn thành',
+  CANCELLED: 'Đã hủy',
 }
 export const BOOKING_LABELS = {
   ROOM_HELD: 'Đang giữ phòng',
@@ -35,7 +36,9 @@ export const REVIEW_LABELS = {
 export const EXECUTION_LABELS = {
   NOT_STARTED: 'Chưa bắt đầu',
   ASSIGNING: 'Đang phân công',
-  ...TASK_LABELS,
+  ASSIGNED: TASK_LABELS.ASSIGNED,
+  IN_PROGRESS: TASK_LABELS.IN_PROGRESS,
+  COMPLETED: TASK_LABELS.COMPLETED,
 }
 export const SOURCE_LABELS = {
   SERVICE_ORDER: 'Yêu cầu dịch vụ',

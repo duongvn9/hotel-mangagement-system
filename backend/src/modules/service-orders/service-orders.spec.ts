@@ -25,7 +25,252 @@ const model = (value: unknown) => ({
   findById: () => ({ exec: async () => value }),
 });
 
+const assignmentFixture = (status = 'ASSIGNED') => {
+  const actor = { ...user, role: 'RECEPTIONIST' };
+  const assigneeId = new Types.ObjectId();
+  const taskId = new Types.ObjectId();
+  const row = {
+    _id: new Types.ObjectId(),
+    booking: new Types.ObjectId(),
+    customer: new Types.ObjectId(),
+    service: new Types.ObjectId(),
+    serviceName: 'Laundry',
+    quantity: 1,
+    unitPriceVND: 100,
+    amount: 100,
+    reviewStatus: 'ACCEPTED',
+    executionStatus: status,
+    billedInvoiceId: new Types.ObjectId(),
+    billedAt: new Date(),
+    assignmentAssignee: assigneeId,
+    assignmentRequestedBy: new Types.ObjectId(actor.id),
+    assignmentRequestedAt: new Date('2026-10-01T10:00:00Z'),
+    assignmentDueAt: new Date('2026-12-01T10:00:00Z'),
+    assignmentTitle: 'Service order: Laundry',
+    assignmentTaskId: taskId,
+    linkedTask: taskId,
+    assignmentRecoveryAudit: [
+      {
+        actor: new Types.ObjectId(actor.id),
+        at: new Date(),
+        previousAssignee: new Types.ObjectId(),
+        assignee: assigneeId,
+        reason: 'Inactive worker replacement',
+      },
+    ],
+  };
+  const task = {
+    _id: taskId,
+    assignedTo: assigneeId,
+    assignedAt: row.assignmentRequestedAt,
+    dueAt: row.assignmentDueAt,
+    title: row.assignmentTitle,
+    priority: 'NORMAL',
+    status,
+  };
+  const query = (value: unknown) => ({
+    select: () => ({ exec: async () => value }),
+  });
+  const findById = vi.fn(() => query({ ...row }));
+  const findOneAndUpdate = vi.fn(() => query(null));
+  const create = vi.fn();
+  const findServiceOrderExecutionWork = vi.fn(async () => task);
+  const invoice = {
+    isActive: true,
+    booking: row.booking,
+    charges: [
+      {
+        sourceId: String(row._id),
+        type: 'SERVICE',
+        amount: row.amount,
+        reason: `Service order ${row._id}`,
+        approved: true,
+      },
+    ],
+  };
+  const invoiceLookup = vi.fn(() => ({ exec: async () => invoice }));
+  const service = new ServiceOrdersService(
+    {
+      findById,
+      findOneAndUpdate,
+      updateOne: vi.fn(async () => ({ modifiedCount: 1 })),
+    } as never,
+    {
+      findById: () => query(null),
+      updateOne: vi.fn(async () => ({ modifiedCount: 1 })),
+    } as never,
+    {} as never,
+    {} as never,
+    { findById: () => query(null) } as never,
+    {
+      create,
+      findServiceOrderExecutionWork,
+      repairServiceOrderExecution: vi.fn(),
+    } as never,
+    { findById: invoiceLookup } as never,
+  );
+  const input = {
+    assigneeId: String(assigneeId),
+    dueAt: row.assignmentDueAt.toISOString(),
+  };
+  return {
+    service,
+    row,
+    task,
+    actor,
+    input,
+    findById,
+    findOneAndUpdate,
+    create,
+    invoice,
+    invoiceLookup,
+  };
+};
+
 describe('service orders contract', () => {
+  it.each(['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'])(
+    'replays the same finalized assignment at %s without writes or regression',
+    async (status) => {
+      const f = assignmentFixture(status);
+      const result = await f.service.assign(
+        String(f.row._id),
+        f.input,
+        f.actor,
+      );
+      expect(result).toMatchObject({
+        id: String(f.row._id),
+        executionStatus: status,
+        billingStatus: 'BILLED',
+        task: {
+          id: String(f.task._id),
+          status,
+          assigneeId: f.input.assigneeId,
+          dueAt: f.row.assignmentDueAt,
+        },
+      });
+      expect(f.invoiceLookup).toHaveBeenCalled();
+      expect(f.create).not.toHaveBeenCalled();
+      expect(f.findOneAndUpdate).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'])(
+    'replays lost recovery responses at %s without another audit or Task',
+    async (status) => {
+      const f = assignmentFixture(status);
+      const before = [...f.row.assignmentRecoveryAudit];
+      await expect(
+        f.service.assign(
+          String(f.row._id),
+          { ...f.input, recoveryReason: 'Inactive worker replacement' },
+          { ...f.actor, id: String(new Types.ObjectId()) },
+        ),
+      ).resolves.toMatchObject({
+        executionStatus: status,
+        task: { id: String(f.task._id) },
+      });
+      await expect(
+        f.service.assign(
+          String(f.row._id),
+          { ...f.input, recoveryReason: 'Different intent' },
+          f.actor,
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(f.row.assignmentRecoveryAudit).toEqual(before);
+      expect(f.create).not.toHaveBeenCalled();
+      expect(f.findOneAndUpdate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('allows a different receptionist to replay the same finalized intent', async () => {
+    const f = assignmentFixture();
+    const requester = String(f.row.assignmentRequestedBy);
+    await expect(
+      f.service.assign(String(f.row._id), f.input, {
+        ...f.actor,
+        id: String(new Types.ObjectId()),
+      }),
+    ).resolves.toMatchObject({ executionStatus: 'ASSIGNED' });
+    expect(String(f.row.assignmentRequestedBy)).toBe(requester);
+    expect(f.create).not.toHaveBeenCalled();
+  });
+
+  it.each(['assignee', 'dueAt', 'billing', 'link', 'task'])(
+    'rejects finalized replay with different %s',
+    async (difference) => {
+      const f = assignmentFixture();
+      if (difference === 'assignee')
+        f.input.assigneeId = String(new Types.ObjectId());
+      if (difference === 'dueAt') f.input.dueAt = '2026-12-02T10:00:00.000Z';
+      if (difference === 'billing') f.invoice.charges = [];
+      if (difference === 'link') f.row.linkedTask = new Types.ObjectId();
+      if (difference === 'task') f.task.title = 'Different work';
+      await expect(
+        f.service.assign(String(f.row._id), f.input, f.actor),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(f.create).not.toHaveBeenCalled();
+      expect(f.findOneAndUpdate).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    'same',
+    'assignee',
+    'dueAt',
+    'actor',
+    'taskId',
+    'link',
+    'title',
+    'requestedAt',
+    'task',
+    'billing',
+  ])(
+    'verifies canonical intent and task after losing concurrent finalization: %s',
+    async (difference) => {
+      const f = assignmentFixture('COMPLETED');
+      const pending = () => ({
+        select: () => ({
+          exec: async () => ({
+            ...f.row,
+            executionStatus: 'ASSIGNING',
+            linkedTask: undefined,
+          }),
+        }),
+      });
+      f.findById
+        .mockImplementationOnce(pending)
+        .mockImplementationOnce(pending);
+      f.findOneAndUpdate.mockImplementationOnce(() => {
+        if (difference === 'assignee')
+          f.row.assignmentAssignee = new Types.ObjectId();
+        if (difference === 'dueAt')
+          f.row.assignmentDueAt = new Date('2026-12-03T10:00:00Z');
+        if (difference === 'actor')
+          f.row.assignmentRequestedBy = new Types.ObjectId();
+        if (difference === 'taskId') {
+          f.row.assignmentTaskId = new Types.ObjectId();
+          f.row.linkedTask = f.row.assignmentTaskId;
+        }
+        if (difference === 'link') f.row.linkedTask = new Types.ObjectId();
+        if (difference === 'title') f.row.assignmentTitle = 'Changed';
+        if (difference === 'requestedAt')
+          f.row.assignmentRequestedAt = new Date();
+        if (difference === 'task') f.task.title = 'Changed task';
+        if (difference === 'billing') f.invoice.charges = [];
+        return { select: () => ({ exec: async () => null }) };
+      });
+      const result = f.service.assign(String(f.row._id), f.input, f.actor);
+      if (difference === 'same')
+        await expect(result).resolves.toMatchObject({
+          executionStatus: 'COMPLETED',
+          task: { id: String(f.task._id), status: 'COMPLETED' },
+        });
+      else await expect(result).rejects.toMatchObject({ status: 409 });
+      expect(f.create).not.toHaveBeenCalled();
+      expect(f.findOneAndUpdate).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('validates assignment and history contracts without nullable or foreign fields', async () => {
     for (const payload of [
       { assigneeId: user.id, dueAt: null },

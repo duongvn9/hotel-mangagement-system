@@ -1,6 +1,120 @@
 # Tiến độ phần việc của Vũ
 
-> Bàn giao cập nhật 25/10/2026. Mục **Final Acceptance Closeout** là trạng thái mới nhất. Evidence Final Acceptance QA phía sau được giữ theo baseline đã chạy; các bảng PARTIAL lịch sử không thay thế phân loại closeout.
+> Cập nhật mới nhất: **Issue Resolution Task Reassignment & Recovery — 30/10/2026** bên dưới. Các mục Final Acceptance 25/10 và evidence lịch sử giữ nguyên theo baseline đã chạy, không thay thế trạng thái của phần mở rộng mới.
+
+## Final Acceptance QA — PR #59 — 30/10/2026
+
+### Git và SRS đã xác minh lại
+
+- PR #59 OPEN/Draft, base main, baseline HEAD `4d454a7364ef240944396e47bda3e18bbbdd2c0c`, MERGEABLE/CLEAN. CI run `40939728586` trên đúng HEAD này: backend, frontend, docker, maintenance-smoke đều SUCCESS. Các fix QA sau đây cần CI trên HEAD mới, không mượn kết quả baseline.
+- Đã đọc lại file người dùng vừa cập nhật `D:\FULearning\Fall26\WDP301\docs\SRS - HMS.docx.md`: UC31:802–806, UC32:817–821, UC38:905–908, UC55:1142–1146, BR-ISS-11–13:1722–1724, BR-TASK-03/06–08:1733–1738. Văn bản hiện có đầy đủ Continue/Reassign, cancel audit/history, safe recovery, một active Task và explicit current-task closure. Nhận định thiếu SRS trong baseline bên dưới chỉ là evidence lịch sử, không còn mô tả văn bản hiện tại.
+- Markdown tham chiếu image8 embedded tại dòng 1869. Đã trích xuất TEMP và thực sự mở ảnh embedded; ảnh độ phân giải thấp, kể cả phóng lớn không đủ đọc chính xác labels/Yes-No. Không tuyên bố đã đọc được toàn bộ swimlane mới. PNG ngoài `issue_report.drawio.png` vẫn có staff-side Cancel/Resolved khác văn bản; không dùng ảnh cũ để đảo ngược quy tắc mới. Cần bản swimlane mới đủ nét để xác nhận diagram acceptance.
+- Trong phạm vi Issue đã khớp các quy tắc mới. BR-TASK-06/UC38 viết generic Task, trong khi Unable action hiện giới hạn ISSUE_RESOLUTION đúng phạm vi PR và yêu cầu không thay ServiceOrder/Maintenance; cần nhóm xác nhận scope này, không tự mở rộng nguồn khác.
+
+### Fix thực tế sau QA
+
+- Shared native `ConfirmationDialog` cho Report/Continue/Reassign: focus ban đầu, Tab/Shift+Tab wrapping, Escape cancel và restore đúng trigger đã capture trước khi disabled; không chỉ dựa native modal mặc định.
+- Optional dueAt hiển thị `Không có thời hạn`; ngày malformed vẫn hiển thị invalid thay vì che lỗi dữ liệu.
+- UC31 initial assignment thêm optional instructions trim/validation, persist frozen intent, replay cùng instructions và xác minh Task khớp; dữ liệu cũ không có instructions vẫn tương thích.
+- Continue không được rút ngắn deadline đang có; equal/omitted deadline vẫn cho cập nhật instructions, giữ task/assignee/progress. Không tự gia hạn hoặc auto-cancel overdue.
+
+### Authenticated browser QA đã thực thi
+
+- Chrome headless thật qua CDP, API/frontend/MongoDB persist thật, safe dev identities; không mock network hoặc dùng shared DB/real credentials.
+- A PASS: Staff start/report unable → Receptionist Continue/new deadline/instructions → cùng Staff complete cùng Task ID; blocker resolution/continuation audit persist.
+- B PASS: report unable → Receptionist reassign → old CANCELLED/new ASSIGNED → Staff mới start/complete; baseline browser có Manager explicit close và reload CLOSED/conclusion/actor đúng. Fix dialog sau đó rerun report/reassign/new-staff completion và history.
+- C PASS: overdue Continue giữ Task/progress, extension hết overdue; deadline sớm hơn bị từ chối qua browser và supplementary API 400, không mutation; equal deadline với instructions thành công. Không claim đã chạy overdue Reassign bằng browser.
+- Initial assignment với instructions đã submit bằng browser từ REVIEWED, reload chỉ một Task, staff detail thấy instructions; nhánh không deadline cũng persist đúng.
+- RBAC baseline: 5 browser checks (foreign Staff task, unrelated Customer Issue, owner Customer readonly, Manager/receptionist route denial); 4 supplementary API checks (Manager reassign403, Customer continue403, foreign task404, unrelated Issue404). Manager monitor không có Continue/Reassign, vẫn giữ UC32 close.
+- Baseline responsive: 12 protected-page checks ở 1440/768/375 (history, Manager, Staff, active recovery); không horizontal overflow. Offline 20s tạo report error thật, giữ reason, reconnect/retry thành công, có pending/disabled evidence.
+- Final keyboard/dialog rerun: 9/9 Report/Continue/Reassign × 3 widths initial modal focus, Escape cancellation/restore, blocked background focus và viewport fit PASS; **108/108 Tab/Shift+Tab contained**, zero escape; independent immediate-Escape restore **3/3**. Final persisted assertions **8/8**.
+- Evidence TEMP: `pr59-auth-qa` (29 screenshots), `pr59-dialog-qa` (13; có failed intermediate keyboard evidence), `pr59-final-dialog-qa` (24). Các ảnh được mở xem gồm responsive history375/Manager768/Staff1440, active recovery375, offline error, report-dialog375, initial-instructions-staff, equal-deadline-instructions, fresh-assignment-success. Machine JSON/JSONL giữ exact observations, không coi mọi ảnh đều đã được mở.
+- Intermediate dialog gate FAIL restore/trap đã được sửa và final retest PASS; các harness/disk/index/stale-process failures được loại khỏi final success counts. Chỉ dọn owned disposable DB/profile/processes. Browser instance đã dừng và DB riêng đã drop.
+
+### Final regression trên code sau tất cả fix
+
+| Command | Result |
+|---|---|
+| Backend `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run build` | PASS |
+| Backend `npm run test` | **1091/1091**, 50 files PASS |
+| Backend `npm run test:e2e` | **663/663**, 55 files PASS |
+| Frontend `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run build` | PASS |
+| Frontend `npm run test -- --maxWorkers=2` | **729/729**, 51 files PASS |
+| `git diff --check` | PASS |
+
+- Full E2E trên standalone Mongo riêng `127.0.0.1:27259/hms_pr59_final_test`, data trên D: do C: còn ít dung lượng; clean child env, chặn .env reads, không credentials/external integrations. Process stopped/data removed/port closed. Logs ngoài repo `D:\FULearning\Fall26\WDP301\project\pr59-verification-20261030-unique`.
+- Full suites gồm regression ServiceOrder/Maintenance/Booking/Issue, không có final failure. Lần invocations timeout tool đã rerun hoàn chỉnh, không gọi timeout là PASS. Nonfatal React act/router/jsdom, Mongoose deprecation/injected logs và bundle >500kB warning vẫn được ghi nhận.
+- Browser chưa exhaustively kiểm thử mọi partial-failure/concurrency path; các nhánh đó có automated coverage. Không claim Firebase/live mail/payment acceptance.
+
+### Verdict
+
+**NOT READY TO MERGE** tại thời điểm bàn giao: automated và browser scope đã chạy PASS, không còn application defect được chứng minh trong scope; cần CI trên HEAD mới, xác nhận scope generic inability rule và bản swimlane embedded đủ nét để chốt toàn bộ SRS diagram acceptance. Không tự merge; PR giữ Draft, SHA/CI mới báo theo GitHub thực tế.
+
+## Issue Resolution Task Reassignment & Recovery — 30/10/2026 (baseline trước Final QA)
+
+### Git, phạm vi và nguồn yêu cầu
+
+- Triển khai trên `feature/issue-task-reassignment` trong Git worktree cô lập từ `origin/main@254e75e0e4ec2f7e8f36bdbefc96b923743237dd`; không mang các file phân tích untracked hoặc thay đổi từ checkout của thành viên khác vào nhánh.
+- Đã đọc lại README, tài liệu triển khai, SRS ngoài repo UC30/31/32/37/38/55 và BR-ISS/TASK/SUP; mở trực tiếp `D:\FULearning\Fall26\WDP301\docs\issue_report.drawio.png`. Bản SRS/hình tại đường dẫn hiện có vẫn là bản cũ (Cancel task quay về assignment), chưa mô tả Continue/blocker metadata/recovery. Yêu cầu chi tiết mới do người dùng cung cấp là TO-BE của thay đổi này; không sửa SRS hoặc gọi bản cũ là SRS đã cập nhật.
+- Không thay đổi nghiệp vụ Booking/Invoice/Payment/ServiceOrder/Maintenance, không tự mở quyền dispatch cho Manager. Các chỗ UI dùng chung TaskStatus được cập nhật tương thích `CANCELLED`.
+
+### Chức năng và public contract
+
+| Luồng | Hành vi và quyền |
+|---|---|
+| Report Unable to Resolve | `PATCH /api/v1/tasks/:id/unable-to-resolve` `{ reason }`; execution staff sở hữu current canonical ISSUE_RESOLUTION Task ASSIGNED/IN_PROGRESS; lưu blocker history/actor/time, không đổi status, không tạo Issue hoặc Task mới |
+| Continue | `POST /api/v1/issues/:id/continue` `{ taskId, dueAt?, instructions? }`; Receptionist review current blocked/overdue Task; giữ ID/assignee/progress, resolve blocker nhưng giữ lịch sử và continuation audit |
+| Reassign | `POST /api/v1/issues/:id/reassign` `{ taskId, assigneeId, reason, dueAt?, requestId }`; Receptionist chọn staff khác active đúng category; cancel Task cũ, tạo successor và thay current link; Issue vẫn ASSIGNED |
+| Recovery | Retry cùng requestId/input; Receptionist khác được tiếp tục, lưu original actor và recovery actors; UI luôn cho replay intent gốc, không ép đổi assignee khi target Task đã tồn tại |
+| Closure | Receptionist/Manager close riêng; từ chối pending reassignment; chỉ exact current linked Task COMPLETED có result hợp lệ, hoặc no-action CONCLUDED hợp lệ |
+| Supervision | Manager queue/detail hiển thị blocked, overdue, CANCELLED và lịch sử; chỉ đọc |
+
+- Task lifecycle cơ bản giữ `ASSIGNED → IN_PROGRESS → COMPLETED`; bổ sung cancellation ASSIGNED/IN_PROGRESS → CANCELLED chỉ cho Issue-resolution reassignment. CANCELLED terminal, không nhận progress; ServiceOrder/Maintenance không được cancel qua progress API.
+- Issue business states giữ nguyên; Continue/Reassign là self-loop ASSIGNED. Không có Issue IN_PROGRESS/COMPLETED/CANCELLED; không tự close khi Task completed.
+- Blocked Task phải được Receptionist Continue hoặc Reassign trước khi tiếp tục progress. Continue không tự reset progress hoặc tự gia hạn vì overdue.
+- Staff-only Issue detail có resolutionTasks history, pendingReassignment và reassignmentHistory; không lộ audit/result mới qua Customer DTO.
+- Contract tóm tắt: `backend/issue-task-reassignment-api.json`.
+
+### Concurrency, idempotency và recovery
+
+- Không yêu cầu replica-set transaction: durable Issue intent + CAS, revision trên Task, deterministic target ID và unique active-work index.
+- Cancellation so sánh đúng task revision đã lưu trong intent. Completion/Continue/report thắng trước cancellation làm intent stale được CAS-clear; không cancel công việc vừa được Continue thành công.
+- Task mới chưa finalize current backlink không được execute. Pending intent chặn close và thực thi không đúng canonical assignment.
+- Old Task đã CANCELLED nhưng create thất bại: retry giữ intent/identity; target đã tạo nhưng linkage thất bại: retry reuse target; completed requestId replay trả kết quả, payload khác bị conflict.
+- Target staff mất eligibility trước khi tạo: Receptionist có thể thay target bằng staff hợp lệ; deterministic ID bỏ được fence bằng CANCELLED tombstone để stale worker không tạo orphan active work. Nếu target đã tồn tại thì finalize original intent trước; target không còn eligible được đánh blocked để tiếp tục review/reassign, không kẹt vĩnh viễn.
+- Normalize ObjectId trước so sánh để uppercase không vượt guard different-assignee. Deadline list/detail đọc từ exact current Task để không stale sau Continue.
+- Recovery vẫn request-driven; không hứa tự background repair khi không có request. Không xóa Task cũ; history/tombstones giữ audit.
+
+### File thay đổi
+
+- Backend Issue: `schemas/issue.schema.ts`, `dto/review-issue.dto.ts`, `issues.controller.ts`, `issues.service.ts`, `issue-handling.spec.ts`, `issues.http.spec.ts`, `issue-task-reassignment.spec.ts` dưới `backend/src/modules/issues/`.
+- Backend Task: `schemas/task.schema.ts`, `task-contract.ts`, `tasks.controller.ts`, `tasks.service.ts`, `tasks.spec.ts`, `issue-resolution-safety.spec.ts`, `dto/assigned-task.dto.ts`, `dto/update-task-progress.dto.ts` dưới `backend/src/modules/tasks/`.
+- Backend supervision DTO/service và `backend/test/issue-handling.e2e-spec.ts`; contract JSON bên trên.
+- Frontend Issue: `IssueTaskRecovery.tsx`, `api.ts`, `pages/IssueDetailPage.tsx`, `issue-task-recovery.test.tsx`. `IssueClosure.tsx` và `issue-close.test.tsx` cuối cùng giữ nguyên contract UC32: Manager và Receptionist đều được close; Manager chỉ không được Continue/Reassign.
+- Frontend Task: `TaskResolution.tsx`, `api.ts`, `presentation.ts`, `pages/AssignedTaskDetailPage.tsx`.
+- Frontend supervision API/presentation/queue pages; staff-dashboard API, maintenance history và operational report presentation chỉ tương thích enum/count/labels.
+
+### Verification và giới hạn
+
+| Check | Kết quả |
+|---|---|
+| Backend `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run build` | PASS |
+| Backend `npm test -- --testTimeout=20000` | 50 files, **1080/1080 PASS** |
+| Backend `npm run test:e2e -- --testTimeout=20000 --hookTimeout=30000` | 55 files, **662/662 PASS** |
+| Frontend format/lint/typecheck/build | PASS; warning bundle-size hiện có, build không fail |
+| Frontend full unit suite | **718/718 PASS** |
+| `git diff --check` | PASS |
+
+- E2E dùng mongod standalone riêng `127.0.0.1:27944`, DB `hms_reassignment_final_retry_test`, temp data riêng; không có backend `.env`, NODE_ENV=test, tắt notification và credentials Firebase/mail/VNPay. Không dùng/xóa shared DB. MongoDB đã shutdown, port đóng, data temp đã dọn.
+- Lần full E2E đầu timeout tool 240s chưa có summary; rerun với timeout đủ dài PASS toàn bộ. Không coi timeout là một suite PASS và không sửa assertions để che lỗi.
+- Regression gồm ownership, completed/cancelled guards, Continue giữ identity/progress/deadline/instructions/audit, reassign ASSIGNED/IN_PROGRESS, cancel terminal, current-task closure, duplicate retry/concurrent reassign/completion, partial create/link failure, cross-receptionist recovery, inactive target, stale Continue/report interleavings và uppercase ID.
+- Review độc lập đã phát hiện và sửa cancellation revision race, uppercase same-assignee bypass, stale Issue deadline, frontend inactive-target replay dead-end và stale local intent sau conflict.
+- Chưa chạy live authenticated browser acceptance hoặc GitHub CI cho nhánh này tại thời điểm ghi nhận. Không suy unit/E2E PASS thành business sign-off. SRS ngoài repo chưa đồng bộ TO-BE; cần reviewer xác nhận trước merge. Không tự merge.
+
+### Trạng thái bàn giao
+
+- Implementation và local automated checks hoàn tất; **NOT READY TO MERGE** cho tới khi reviewer xác nhận TO-BE, CI trên PR và UI acceptance cần thiết. Không có blocking defect recovery đã biết sau review/fix và full isolated E2E.
+- Commit/push/Draft PR được thực hiện ở bước bàn giao nếu GitHub permissions cho phép; SHA/URL thực tế báo trong kết quả cuối, không đoán trước.
 
 ## Final Acceptance Closeout — team sign-off
 

@@ -4,6 +4,11 @@ import type { INestApplication } from '@nestjs/common';
 import { Model, Types } from 'mongoose';
 import { createHmac } from 'node:crypto';
 import { AppModule } from '../src/app.module.js';
+import { vi } from 'vitest';
+import { Service } from '../src/modules/services/schemas/service.schema.js';
+import { ServiceOrder } from '../src/modules/service-orders/schemas/service-order.schema.js';
+import { PaymentsService } from '../src/modules/payments/payments.service.js';
+import { assertTestDatabase } from './test-database.js';
 import { Booking } from '../src/modules/bookings/schemas/booking.schema.js';
 import { RoomHold } from '../src/modules/bookings/schemas/room-hold.schema.js';
 import { Invoice } from '../src/modules/invoices/schemas/invoice.schema.js';
@@ -62,6 +67,9 @@ describe('VNPay settlement persistence (e2e)', () => {
   let holds: Model<RoomHold>;
   let invoices: Model<Invoice>;
   let payments: Model<PaymentTransaction>;
+  let services: Model<Service>;
+  let orders: Model<ServiceOrder>;
+  const serviceIds = [new Types.ObjectId(), new Types.ObjectId()];
   const bookingId = new Types.ObjectId();
   const invoiceId = new Types.ObjectId();
   const roomId = new Types.ObjectId();
@@ -124,6 +132,7 @@ describe('VNPay settlement persistence (e2e)', () => {
   };
 
   beforeAll(async () => {
+    assertTestDatabase(process.env.MONGODB_URI);
     const module = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(VnpayService)
       .useValue(
@@ -140,6 +149,8 @@ describe('VNPay settlement persistence (e2e)', () => {
     holds = app.get(getModelToken(RoomHold.name));
     invoices = app.get(getModelToken(Invoice.name));
     payments = app.get(getModelToken(PaymentTransaction.name));
+    services = app.get(getModelToken(Service.name));
+    orders = app.get(getModelToken(ServiceOrder.name));
     await Promise.all([
       bookings.init(),
       holds.init(),
@@ -149,6 +160,8 @@ describe('VNPay settlement persistence (e2e)', () => {
   });
 
   beforeEach(async () => {
+    await orders.deleteMany({ booking: bookingId });
+    await services.deleteMany({ _id: { $in: serviceIds } });
     await payments.deleteMany({ booking: bookingId });
     await invoices.deleteMany({ booking: bookingId });
     await holds.deleteMany({ booking: bookingId });
@@ -156,6 +169,8 @@ describe('VNPay settlement persistence (e2e)', () => {
   });
 
   afterAll(async () => {
+    await orders.deleteMany({ booking: bookingId });
+    await services.deleteMany({ _id: { $in: serviceIds } });
     await payments.deleteMany({ booking: bookingId });
     await invoices.deleteMany({ booking: bookingId });
     await holds.deleteMany({ booking: bookingId });
@@ -210,6 +225,70 @@ describe('VNPay settlement persistence (e2e)', () => {
     expect(replay.action).toBe('duplicate');
     expect(await invoices.findById(invoiceId)).toMatchObject({
       depositPaid: 300000,
+      balanceDue: 700000,
+    });
+  });
+
+  it('repairs partial service generation on duplicate callbacks without duplicating money or orders', async () => {
+    const txnRef = `REPAIR${Date.now()}`;
+    await seed(txnRef);
+    await services.create(
+      serviceIds.map((_id, index) => ({
+        _id,
+        name: `Settlement service ${_id}`,
+        price: (index + 1) * 50000,
+      })),
+    );
+    await bookings.updateOne(
+      { _id: bookingId },
+      {
+        $set: {
+          serviceSelections: serviceIds.map((service) => ({
+            service,
+            quantity: 2,
+          })),
+        },
+      },
+    );
+    const create = orders.create.bind(orders);
+    let calls = 0;
+    const failure = vi
+      .spyOn(orders, 'create')
+      .mockImplementation((...args: unknown[]) => {
+        if (++calls === 2)
+          throw new Error('Injected partial generation failure');
+        return Reflect.apply(create, orders, args);
+      });
+    const raw = callback(txnRef, 300000);
+    const paymentService = app.get(PaymentsService);
+    try {
+      expect((await paymentService.processIpn(raw)).RspCode).toBe('00');
+      expect(await orders.countDocuments({ booking: bookingId })).toBe(1);
+    } finally {
+      failure.mockRestore();
+    }
+    expect((await bookings.findById(bookingId))?.status).toBe('CONFIRMED');
+    expect((await holds.findOne({ booking: bookingId }))?.isActive).toBe(false);
+    expect((await paymentService.processIpn(raw)).RspCode).toBe('02');
+    expect((await paymentService.processIpn(raw)).RspCode).toBe('02');
+    const generated = await orders
+      .find({ booking: bookingId })
+      .select('+requestId')
+      .lean();
+    expect(generated).toHaveLength(2);
+    expect(new Set(generated.map((order) => order.requestId)).size).toBe(2);
+    expect(
+      generated.map((order) => order.amount).sort((a, b) => a - b),
+    ).toEqual([100000, 200000]);
+    expect(
+      await payments.countDocuments({
+        booking: bookingId,
+        status: PaymentStatus.Success,
+      }),
+    ).toBe(1);
+    expect(await invoices.findById(invoiceId)).toMatchObject({
+      depositPaid: 300000,
+      finalPaid: 0,
       balanceDue: 700000,
     });
   });

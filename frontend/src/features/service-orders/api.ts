@@ -25,6 +25,36 @@ export const executionLabels: Record<(typeof executionStatuses)[number], string>
   IN_PROGRESS: 'Đang thực hiện',
   COMPLETED: 'Đã hoàn thành',
 }
+const businessStates = {
+  PENDING_REVIEW: { label: 'Chờ duyệt', tone: 'neutral' },
+  REJECTED: { label: 'Đã từ chối', tone: 'neutral' },
+  ACCEPTED: { label: 'Đã chấp nhận', tone: 'success' },
+  ASSIGNED: { label: 'Đã phân công', tone: 'success' },
+  IN_PROGRESS: { label: 'Đang thực hiện', tone: 'neutral' },
+  COMPLETED: { label: 'Đã hoàn thành', tone: 'success' },
+  PROCESSING: { label: 'Đang xử lý', tone: 'neutral' },
+  UNKNOWN: { label: 'Chưa xác định', tone: 'neutral' },
+} as const
+
+export function serviceOrderState(order: Pick<ServiceOrder, 'reviewStatus' | 'executionStatus'>) {
+  const { reviewStatus, executionStatus } = order
+  let state: keyof typeof businessStates = 'UNKNOWN'
+  if (executionStatus === 'NOT_STARTED') {
+    if (reviewStatus === 'PENDING_REVIEW' || reviewStatus === 'REJECTED') state = reviewStatus
+    if (reviewStatus === 'ACCEPTING') state = 'PROCESSING'
+    if (reviewStatus === 'ACCEPTED') state = 'ACCEPTED'
+  } else if (reviewStatus === 'ACCEPTED') {
+    if (executionStatus === 'ASSIGNING') state = 'PROCESSING'
+    if (
+      executionStatus === 'ASSIGNED' ||
+      executionStatus === 'IN_PROGRESS' ||
+      executionStatus === 'COMPLETED'
+    )
+      state = executionStatus
+  }
+  return { state, ...businessStates[state] }
+}
+
 export interface OrderContext {
   id: string
   code: string

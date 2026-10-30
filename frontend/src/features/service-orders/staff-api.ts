@@ -2,7 +2,7 @@ import { api } from '@/lib/api-client'
 import { normalizeOrderQuery, type OrderQuery, type ServiceOrder } from './api'
 
 export interface StaffServiceOrder extends ServiceOrder {
-  customer: { id: string; fullName: string | null }
+  customer: { id: string | null; fullName: string | null }
   booking: { code: string; status: string; checkIn: string; checkOut: string } | null
   feeRequired: boolean
   billingStatus: 'NOT_REQUIRED' | 'PENDING' | 'BILLED'
@@ -27,6 +27,7 @@ export interface StaffServiceOrder extends ServiceOrder {
 export interface AssignmentInput {
   assigneeId: string
   dueAt?: string
+  recoveryReason?: string
 }
 export interface ServiceAssignee {
   id: string
@@ -35,7 +36,7 @@ export interface ServiceAssignee {
 }
 export async function getServiceAssignees(id: string) {
   return (
-    await api.get<{ items: ServiceAssignee[] }>(
+    await api.get<{ items: ServiceAssignee[]; recoveryAllowed?: boolean }>(
       `/service-orders/${encodeURIComponent(id)}/assignees`,
     )
   ).data
@@ -44,6 +45,7 @@ export async function assignServiceOrder(id: string, input: AssignmentInput) {
   const body: AssignmentInput = {
     assigneeId: input.assigneeId,
     ...(input.dueAt !== undefined ? { dueAt: input.dueAt } : {}),
+    ...(input.recoveryReason !== undefined ? { recoveryReason: input.recoveryReason } : {}),
   }
   return (
     await api.post<StaffServiceOrder>(`/service-orders/${encodeURIComponent(id)}/assignment`, body)

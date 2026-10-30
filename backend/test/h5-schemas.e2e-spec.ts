@@ -85,6 +85,7 @@ describe('H5 persistence (e2e)', () => {
       providerTransactionRef: code,
       method: 'VNPAY',
       purpose: 'DEPOSIT',
+      status: 'SUCCESS',
       amount: 0,
     };
     await payments.create(payment);
@@ -106,6 +107,69 @@ describe('H5 persistence (e2e)', () => {
         providerTransactionRef: undefined,
       },
     ]);
+  });
+
+  it('keeps the legacy lookup index alongside named uniqueness for active pending payments only', async () => {
+    await payments.collection.createIndex({ booking: 1, purpose: 1 });
+    const indexes = await payments.collection.indexes();
+    expect(
+      indexes.find((index) => index.name === 'booking_1_purpose_1'),
+    ).toMatchObject({
+      key: { booking: 1, purpose: 1 },
+    });
+    expect(
+      indexes.find((index) => index.name === 'booking_1_purpose_1')?.unique,
+    ).not.toBe(true);
+    expect(
+      indexes.find(
+        (index) =>
+          index.name === 'unique_active_pending_payment_per_booking_purpose',
+      ),
+    ).toMatchObject({
+      key: { booking: 1, purpose: 1 },
+      unique: true,
+      partialFilterExpression: { status: 'PENDING', isActive: true },
+    });
+    const invoice = await invoices.findOne({ booking: bookingId }).orFail();
+    let sequence = 0;
+    const create = (extra = {}) =>
+      payments.create({
+        booking: bookingId,
+        invoice: invoice._id,
+        transactionRef: `${code}-pending-${++sequence}`,
+        method: 'VNPAY',
+        purpose: 'DEPOSIT',
+        amount: 1,
+        ...extra,
+      });
+    const attempts = await Promise.allSettled([create(), create()]);
+    expect(
+      attempts.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    expect(
+      attempts.find((result) => result.status === 'rejected'),
+    ).toMatchObject({ reason: { code: 11000 } });
+    await create({ purpose: 'FINAL' });
+    await create({ booking: new Types.ObjectId() });
+    await create({ isActive: false });
+    await create({ isActive: false });
+    for (const status of ['SUCCESS', 'FAILED', 'CANCELLED']) {
+      await create({ status });
+      await create({ status });
+    }
+    await payments.updateOne(
+      {
+        booking: bookingId,
+        purpose: 'DEPOSIT',
+        status: 'PENDING',
+        isActive: true,
+      },
+      { $set: { status: 'FAILED' } },
+    );
+    await create();
+    await payments.deleteMany({
+      transactionRef: new RegExp(`^${code}-pending-`),
+    });
   });
 
   it('excludes expired holds from availability without a TTL index', async () => {

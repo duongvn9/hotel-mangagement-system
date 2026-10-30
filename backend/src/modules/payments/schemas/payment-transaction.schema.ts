@@ -29,7 +29,7 @@ export class PaymentTransaction {
   @Prop({ type: Types.ObjectId, ref: 'Invoice', required: true, index: true })
   invoice: Types.ObjectId;
 
-  @Prop({ required: true, unique: true, trim: true })
+  @Prop({ required: true, unique: true, trim: true, immutable: true })
   transactionRef: string;
 
   @Prop({ trim: true, minlength: 1 })
@@ -49,7 +49,7 @@ export class PaymentTransaction {
   })
   status: PaymentStatus;
 
-  @Prop({ required: true, validate: isMoneyVnd })
+  @Prop({ required: true, validate: isMoneyVnd, immutable: true })
   amount: number;
 
   @Prop()
@@ -79,6 +79,14 @@ export class PaymentTransaction {
 
 export const PaymentTransactionSchema =
   SchemaFactory.createForClass(PaymentTransaction);
+PaymentTransactionSchema.index(
+  { booking: 1, purpose: 1 },
+  {
+    name: 'unique_active_pending_payment_per_booking_purpose',
+    unique: true,
+    partialFilterExpression: { status: PaymentStatus.Pending, isActive: true },
+  },
+);
 PaymentTransactionSchema.index(
   { method: 1, providerTransactionRef: 1 },
   {

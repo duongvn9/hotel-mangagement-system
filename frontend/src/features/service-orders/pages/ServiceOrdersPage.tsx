@@ -7,12 +7,13 @@ import {
   dateTime,
   money,
   reviewLabels,
+  reviewStatuses,
   executionLabels,
   executionStatuses,
   type OrderQuery,
 } from '../api'
 import { useOrders } from '../hooks'
-import { OrderError, OrderNavigation } from '../presentation'
+import { OrderBusinessState, OrderError, OrderNavigation } from '../presentation'
 
 export function ServiceOrdersPage() {
   const [query, setQuery] = useState<OrderQuery>({ page: 1, limit: 20 })
@@ -40,12 +41,12 @@ export function ServiceOrdersPage() {
             setQuery({
               ...query,
               page: 1,
-              reviewStatus: event.target.value === 'PENDING_REVIEW' ? 'PENDING_REVIEW' : undefined,
+              reviewStatus: (event.target.value || undefined) as OrderQuery['reviewStatus'],
             })
           }
           options={[
             { value: '', label: 'Tất cả' },
-            { value: 'PENDING_REVIEW', label: 'Chờ duyệt' },
+            ...reviewStatuses.map((value) => ({ value, label: reviewLabels[value] })),
           ]}
         />
         <SelectField
@@ -91,9 +92,7 @@ export function ServiceOrdersPage() {
                   <p>
                     {order.quantity} {order.service.unit} · {money(order.amount)}
                   </p>
-                  <p>
-                    {reviewLabels[order.reviewStatus]} · {executionLabels[order.executionStatus]}
-                  </p>
+                  <OrderBusinessState order={order} />
                   <p className="text-sm text-stone-700">Tạo lúc: {dateTime(order.createdAt)}</p>
                 </li>
               ))}

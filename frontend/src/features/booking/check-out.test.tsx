@@ -173,7 +173,7 @@ describe('Pay and check out from the same-day departures list', () => {
     const post = vi.spyOn(api, 'post').mockResolvedValue({ data: {} })
     await openPanel()
     expect(departure().getByText('Đã thanh toán đủ')).toBeInTheDocument()
-    expect(departure().queryByLabelText(/Số tiền/)).not.toBeInTheDocument()
+    expect(departure().getByLabelText(/Số tiền/)).toBeInTheDocument()
     const before = state.get.mock.calls.length
 
     fireEvent.click(departure().getByRole('button', { name: 'Check Out' }))

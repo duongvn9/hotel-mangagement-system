@@ -59,6 +59,8 @@ describe('Issue review and durable assignment', () => {
   };
   const tasks = {
     findIssueResolutionWork: vi.fn(async () => savedTask),
+    issueTask: vi.fn(async () => savedTask),
+    issueTaskHistory: vi.fn(async () => (savedTask ? [savedTask] : [])),
     create: vi.fn(async (dto: any, identity: Types.ObjectId) => {
       if (failCreate) throw new Error('task unavailable');
       savedTask ??= {
@@ -308,6 +310,55 @@ describe('Issue review and durable assignment', () => {
     ])
       await expect(call()).rejects.toThrow();
     expect(issues.findById).not.toHaveBeenCalled();
+  });
+
+  it.each(['', '   ', null, 3, 'x'.repeat(2001)])(
+    'rejects invalid initial instructions %j before writes',
+    async (instructions) => {
+      await expect(
+        service.assign(
+          String(id),
+          { ...assignment, instructions } as any,
+          actor,
+        ),
+      ).rejects.toThrow('Invalid input');
+      expect(issues.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(tasks.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('freezes trimmed instructions across failed linkage and retries', async () => {
+    await service.review(String(id), review, actor);
+    failFinish = true;
+    const input = { ...assignment, instructions: '  Check wiring  ' };
+    await expect(service.assign(String(id), input, actor)).rejects.toThrow();
+    expect(issue.assignmentInstructions).toBe('Check wiring');
+    expect(savedTask!.instructions).toBe('Check wiring');
+    const writes = issues.findOneAndUpdate.mock.calls.length;
+    for (const instructions of [undefined, 'Different']) {
+      await expect(
+        service.assign(String(id), { ...assignment, instructions }, actor),
+      ).rejects.toThrow('different assignment intent');
+    }
+    expect(issues.findOneAndUpdate).toHaveBeenCalledTimes(writes);
+    failFinish = false;
+    const result = await service.assign(String(id), input, actor);
+    expect(result.assignmentInstructions).toBe('Check wiring');
+    expect(tasks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects existing task with mismatched instructions without finalizing', async () => {
+    await service.review(String(id), review, actor);
+    failFinish = true;
+    const input = { ...assignment, instructions: 'Check wiring' };
+    await expect(service.assign(String(id), input, actor)).rejects.toThrow();
+    savedTask!.instructions = 'Different';
+    failFinish = false;
+    issues.findOneAndUpdate.mockClear();
+    await expect(service.assign(String(id), input, actor)).rejects.toThrow(
+      'does not match',
+    );
+    expect(issues.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it('uses active routing role and exposes names only', async () => {

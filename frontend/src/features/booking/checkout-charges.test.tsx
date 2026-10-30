@@ -154,6 +154,26 @@ describe('Additional charges from the same-day list', () => {
     expect(departure().getByLabelText(/Lý do/)).toHaveValue('')
   })
 
+  it('allows additional charges after a FINAL payment while checked in', async () => {
+    const paid = charges()
+    paid.totals.finalPaid = 1_400_000
+    paid.totals.balanceDue = 0
+    paid.invoiceStatus = 'PAID'
+    mockGet(paid)
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: {} })
+    await openPanel()
+    await departure().findByText('Chưa có phụ phí.')
+    fill('20000', 'Late minibar')
+    fireEvent.click(departure().getByRole('button', { name: 'Thêm phụ phí' }))
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/bookings/d1/charges', {
+        amount: 20000,
+        reason: 'Late minibar',
+        requestId: expect.any(String),
+      }),
+    )
+  })
+
   it('needs a positive amount and a reason before saving', async () => {
     mockGet(charges())
     const post = vi.spyOn(api, 'post')

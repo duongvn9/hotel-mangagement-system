@@ -39,6 +39,44 @@ export class Task {
   @Prop({ trim: true })
   workResult?: string;
 
+  @Prop({ default: false })
+  blocked?: boolean;
+
+  @Prop({ default: 0 })
+  revision?: number;
+
+  @Prop({ type: [Object], default: [] })
+  blockerHistory?: {
+    id: string;
+    reason: string;
+    reportedBy: string;
+    reportedAt: Date;
+    resolvedAt?: Date;
+    resolvedBy?: string;
+    resolution?: string;
+  }[];
+
+  @Prop({ maxlength: 2000 })
+  instructions?: string;
+
+  @Prop({ type: [Object], default: [] })
+  continuationHistory?: {
+    actorId: string;
+    at: Date;
+    dueAt?: Date;
+    instructions?: string;
+  }[];
+
+  @Prop({ type: Object })
+  cancellation?: {
+    reason: string;
+    actorId: string;
+    recoveryActorId: string;
+    at: Date;
+    requestId: string;
+    replacementTaskId?: string;
+  };
+
   @Prop({ type: String, enum: TaskSourceType, required: true })
   sourceType: TaskSourceType;
 

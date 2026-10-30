@@ -5,11 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
+import type { InvoiceDocument } from './schemas/invoice.schema.js';
+import { withBookingFinancialOperation } from '../bookings/booking-financial-operation.js';
 import { RoomStatus } from '../../common/constants/room-status.enum.js';
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema.js';
 import {
-  PaymentPurpose,
   PaymentStatus,
   PaymentTransaction,
 } from '../payments/schemas/payment-transaction.schema.js';
@@ -35,6 +36,12 @@ export class CheckOutService {
    * khác giữ nguyên. Hóa đơn được tính lại trước và sau khi đóng để không bỏ lọt khoản nợ mới.
    */
   async checkOut(bookingId: string): Promise<CheckOutResult> {
+    return withBookingFinancialOperation(this.bookings, bookingId, () =>
+      this.checkOutLocked(bookingId),
+    );
+  }
+
+  private async checkOutLocked(bookingId: string): Promise<CheckOutResult> {
     if (!/^[a-f\d]{24}$/i.test(bookingId)) {
       throw new BadRequestException('Invalid booking ID');
     }
@@ -42,13 +49,30 @@ export class CheckOutService {
     if (!booking || !booking.isActive) {
       throw new NotFoundException('Booking not found');
     }
+    if (booking.status === BookingStatus.CheckedOut && booking.checkedOutAt) {
+      const invoice = await this.invoices.getOrCreateForBooking(bookingId);
+      return this.finishCheckOut(booking, booking.checkedOutAt, invoice);
+    }
+    if (booking.acceptanceReservations?.length)
+      throw new ConflictException(
+        'Service order acceptance billing is pending',
+      );
+    const legacyAccepting = await this.bookings.db
+      .collection('serviceorders')
+      .findOne({
+        booking: booking._id,
+        reviewStatus: 'ACCEPTING',
+      });
+    if (legacyAccepting)
+      throw new ConflictException(
+        'Service order acceptance billing is pending',
+      );
     const statusError = checkOutStatusError(booking.status);
     if (statusError) throw new ConflictException(statusError);
 
     if (
       await this.payments.exists({
         booking: booking._id,
-        purpose: PaymentPurpose.Final,
         status: PaymentStatus.Pending,
         isActive: true,
       })
@@ -65,7 +89,12 @@ export class CheckOutService {
     const now = new Date();
     const closed = await this.bookings
       .findOneAndUpdate(
-        { _id: booking._id, status: BookingStatus.CheckedIn, isActive: true },
+        {
+          _id: booking._id,
+          status: BookingStatus.CheckedIn,
+          isActive: true,
+          'acceptanceReservations.0': { $exists: false },
+        },
         { $set: { status: BookingStatus.CheckedOut, checkedOutAt: now } },
         { returnDocument: 'before' },
       )
@@ -77,23 +106,37 @@ export class CheckOutService {
       );
     }
 
-    // Một khoản phí vừa lọt vào giữa hai lần tính: mở lại booking thay vì để khách ra mà còn nợ.
-    const after = await this.invoices.recalculate(bookingId);
-    if (after.balanceDue > 0) {
-      await this.bookings.updateOne(
-        { _id: booking._id },
-        {
-          $set: { status: BookingStatus.CheckedIn },
-          $unset: { checkedOutAt: 1 },
-        },
-      );
-      throw new ConflictException(unpaidBalanceMessage(after.balanceDue));
-    }
+    return this.finishCheckOut(booking, now, before, true);
+  }
 
-    await this.rooms.updateMany(
-      { _id: { $in: booking.rooms }, status: RoomStatus.Occupied },
-      { $set: { status: RoomStatus.Cleaning } },
-    );
+  private async finishCheckOut(
+    booking: Booking & { _id: Types.ObjectId },
+    checkedOutAt: Date,
+    invoice: InvoiceDocument,
+    initialProjection = false,
+  ): Promise<CheckOutResult> {
+    if (!booking.checkoutRoomProjectionCompletedAt) {
+      await this.rooms.updateMany(
+        {
+          _id: { $in: booking.rooms },
+          status: RoomStatus.Occupied,
+          $or: [
+            { updatedAt: { $type: 'date', $lte: checkedOutAt } },
+            ...(initialProjection ? [{ updatedAt: { $exists: false } }] : []),
+          ],
+        },
+        { $set: { status: RoomStatus.Cleaning } },
+      );
+      await this.bookings.updateOne(
+        {
+          _id: booking._id,
+          status: BookingStatus.CheckedOut,
+          checkedOutAt,
+          checkoutRoomProjectionCompletedAt: { $exists: false },
+        },
+        { $set: { checkoutRoomProjectionCompletedAt: new Date() } },
+      );
+    }
     const roomRows = await this.rooms
       .find({ _id: { $in: booking.rooms } })
       .select('roomNumber status')
@@ -105,7 +148,7 @@ export class CheckOutService {
       id: String(booking._id),
       code: booking.code,
       status: BookingStatus.CheckedOut,
-      checkedOutAt: now.toISOString(),
+      checkedOutAt: checkedOutAt.toISOString(),
       rooms: booking.rooms.map((id) => ({
         id: String(id),
         roomNumber: byId.get(String(id))?.roomNumber ?? '',
@@ -117,7 +160,7 @@ export class CheckOutService {
           code: booking.code,
           status: BookingStatus.CheckedOut,
         },
-        after,
+        invoice,
       ),
     };
   }

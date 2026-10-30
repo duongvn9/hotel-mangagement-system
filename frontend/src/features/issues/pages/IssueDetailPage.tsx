@@ -4,6 +4,7 @@ import { IssueBadges, IssueError } from '../IssuePresentation'
 import { issueDate, issueViews, handlingLabels, type IssueRole } from '../presentation'
 import { IssueHandling } from '../IssueHandling'
 import { IssueClosure } from '../IssueClosure'
+import { IssueTaskRecovery } from '../IssueTaskRecovery'
 
 export function IssueDetailPage({ role }: { role: IssueRole }) {
   const { id = '' } = useParams()
@@ -148,6 +149,9 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
           {role === 'RECEPTIONIST' && <IssueHandling key={issue.id} issue={issue} />}
           {(role === 'RECEPTIONIST' || role === 'MANAGER') && (
             <IssueClosure key={`close-${issue.id}`} issue={issue} />
+          )}
+          {(role === 'RECEPTIONIST' || role === 'MANAGER') && (
+            <IssueTaskRecovery key={`recovery-${issue.id}`} issue={issue} />
           )}
           <section
             className="space-y-3 rounded-lg bg-cream-50 p-4"

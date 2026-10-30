@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router'
 import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
 import { ROLE_LABELS } from '@/features/auth/api'
+import { ResolutionHistory } from '@/features/tasks/TaskResolution'
 import { useQueueTask } from '../hooks'
 import { queueDate, SOURCE_LABELS } from '../presentation'
 import { QueueError, QueuePriority, QueueStatusBadge } from '../components/QueuePresentation'
@@ -64,6 +65,7 @@ export function TaskQueueDetailPage() {
                 {SOURCE_LABELS[task.sourceType] ?? task.sourceType} · {task.sourceId}
               </dd>
             </dl>
+            <ResolutionHistory task={task} />
             <p className="text-stone-700">Chức năng giám sát chỉ xem, không thay đổi task.</p>
           </div>
           {task.sourceType === 'MAINTENANCE' && task.sourceSummary && (
