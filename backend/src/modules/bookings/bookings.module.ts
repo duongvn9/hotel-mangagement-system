@@ -10,10 +10,16 @@ import {
   PaymentTransaction,
   PaymentTransactionSchema,
 } from '../payments/schemas/payment-transaction.schema.js';
+import {
+  RoomType,
+  RoomTypeSchema,
+} from '../room-types/schemas/room-type.schema.js';
 import { Booking, BookingSchema } from './schemas/booking.schema.js';
 import { RoomHold, RoomHoldSchema } from './schemas/room-hold.schema.js';
 import { AvailabilityController } from './availability.controller.js';
 import { AvailabilityService } from './availability.service.js';
+import { RoomTypeOverviewController } from './room-type-overview.controller.js';
+import { RoomTypeOverviewService } from './room-type-overview.service.js';
 import {
   AvailabilityClock,
   AvailabilityRoomSource,
@@ -37,10 +43,13 @@ import { RoomStatusBoardService } from './room-status-board.service.js';
       { name: Booking.name, schema: BookingSchema },
       { name: RoomHold.name, schema: RoomHoldSchema },
       { name: PaymentTransaction.name, schema: PaymentTransactionSchema },
+      // Chỉ đọc RoomType cho endpoint chi tiết phòng công khai; không sửa module RoomType.
+      { name: RoomType.name, schema: RoomTypeSchema },
     ]),
   ],
   controllers: [
     AvailabilityController,
+    RoomTypeOverviewController,
     BookingsController,
     RoomStatusBoardController,
     FrontDeskController,
@@ -48,6 +57,7 @@ import { RoomStatusBoardService } from './room-status-board.service.js';
   providers: [
     AvailabilityService,
     AvailabilityClock,
+    RoomTypeOverviewService,
     BookingsService,
     HoldExpiryService,
     RoomStatusBoardService,

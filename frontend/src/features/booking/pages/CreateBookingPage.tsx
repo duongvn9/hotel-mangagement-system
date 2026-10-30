@@ -303,7 +303,7 @@ export function CreateBookingPage() {
               )}
               <div className="flex justify-between gap-4">
                 <dt className="font-semibold text-pearl-900">Cọc cần trả</dt>
-                <dd className="font-display text-lg font-semibold text-primary tabular-nums">
+                <dd className="text-lg font-semibold whitespace-nowrap text-primary tabular-nums">
                   {money.format(held.depositAmount)}
                 </dd>
               </div>
