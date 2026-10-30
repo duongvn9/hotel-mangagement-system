@@ -158,7 +158,7 @@ function RoomCard({ room }: { room: RoomBoardEntry }) {
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-display text-2xl font-semibold text-pearl-900">{room.roomNumber}</p>
+          <p className="text-2xl font-semibold text-pearl-900 tabular-nums">{room.roomNumber}</p>
           <p className="text-xs text-stone-700">
             {room.roomTypeName} · {room.capacity} khách
           </p>
