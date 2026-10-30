@@ -95,7 +95,7 @@ describe('Auto service-order generation on CONFIRMED (e2e)', () => {
       .expect(201);
     await http()
       .get(
-        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 600000, nextTxnNo())}`,
+        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 200000, nextTxnNo())}`,
       )
       .expect(200);
     return held.body.bookingId as string;

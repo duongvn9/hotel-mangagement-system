@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
@@ -8,7 +8,6 @@ import { getErrorMessage } from '@/lib/api-client'
 import { useAuth } from '@/features/auth/auth-context'
 import { BOOKING_STATUS_DISPLAY, type InitiatePaymentInput } from '../api'
 import { useBooking, useCancelBooking, useInitiateDeposit, useInitiateFinal } from '../hooks'
-import { rememberPaymentRef, upsertStoredBooking } from '../storage'
 import { formatDate, formatDateTime, money, nightsBetween } from '../utils'
 import { formatRemaining, useHoldCountdown } from './useHoldCountdown'
 
@@ -35,11 +34,6 @@ export function BookingDetailPage() {
   // Khách từ thiết bị khác (không có phiên/không đăng nhập) cần mã booking để đọc.
   const needsCode = query.isError && !me && !code
 
-  // Đồng bộ bản lưu client theo dữ liệu authoritative để màn "Đặt phòng của tôi" không lỗi thời.
-  useEffect(() => {
-    if (booking) upsertStoredBooking(booking)
-  }, [booking])
-
   const status = booking?.status
   const cancelled = status === 'CANCELLED'
   const expired = status === 'EXPIRED'
@@ -57,8 +51,6 @@ export function BookingDetailPage() {
     const mutation = kind === 'deposit' ? deposit : final
     try {
       const result = await mutation.mutateAsync(payload())
-      // Nhớ giao dịch này thuộc booking nào để trang Return đọc đúng trạng thái.
-      rememberPaymentRef(result.transactionRef, id)
       window.location.href = result.paymentUrl
     } catch {
       // Lỗi hiển thị qua mutation.isError.

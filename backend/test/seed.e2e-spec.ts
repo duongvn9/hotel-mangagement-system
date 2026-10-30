@@ -105,7 +105,7 @@ describe('Seed (e2e)', () => {
     expect(checkedIn.rooms[0].status).toBe('OCCUPIED');
     // Giá lấy theo RoomType hiện tại (e2e khác có thể đã sửa giá Standard).
     expect(checkedIn.roomTotal).toBe(rate * 2);
-    expect(checkedIn.depositAmount).toBe(Math.round(rate * 2 * 0.3));
+    expect(checkedIn.depositAmount).toBe(Math.round(rate * 2 * 0.1));
     expect(
       checkedIn.rateSnapshot.map(({ room, ratePerNight }) => ({
         room: String(room),

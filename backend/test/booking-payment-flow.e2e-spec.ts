@@ -116,7 +116,7 @@ describe('Booking to payment full flow (e2e)', () => {
   });
 
   it('runs create -> deposit -> confirm -> final -> paid', async () => {
-    // 1. Tạo booking: 2 đêm x 1.000.000 = 2.000.000; cọc 30% = 600.000.
+    // 1. Tạo booking: 2 đêm x 1.000.000 = 2.000.000; cọc 10% = 200.000.
     const created = await http()
       .post('/api/v1/bookings')
       .set(CUSTOMER)
@@ -131,7 +131,7 @@ describe('Booking to payment full flow (e2e)', () => {
       })
       .expect(201);
     const bookingId = created.body.id as string;
-    expect(created.body.depositAmount).toBe(600000);
+    expect(created.body.depositAmount).toBe(200000);
 
     // 2. Khởi tạo đặt cọc.
     const deposit = await http()
@@ -139,12 +139,12 @@ describe('Booking to payment full flow (e2e)', () => {
       .set(CUSTOMER)
       .send({ bookingId })
       .expect(201);
-    expect(deposit.body.amount).toBe(600000);
+    expect(deposit.body.amount).toBe(200000);
 
     // 3. VNPay IPN báo cọc thành công -> booking CONFIRMED.
     const depositIpn = await http()
       .get(
-        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 'DEPOSIT', 600000, String(randomInt(1e13, 1e14)))}`,
+        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 'DEPOSIT', 200000, String(randomInt(1e13, 1e14)))}`,
       )
       .expect(200);
     expect(depositIpn.body.RspCode).toBe('00');
@@ -152,28 +152,28 @@ describe('Booking to payment full flow (e2e)', () => {
     expect(
       await invoices.findOne({ booking: new Types.ObjectId(bookingId) }),
     ).toMatchObject({
-      depositPaid: 600000,
-      balanceDue: 1400000,
+      depositPaid: 200000,
+      balanceDue: 1800000,
       status: 'PARTIALLY_PAID',
     });
 
-    // 4. Thanh toán cuối cho dư nợ 1.400.000.
+    // 4. Thanh toán cuối cho dư nợ 1.800.000.
     const final = await http()
       .post('/api/v1/payments/final')
       .set(CUSTOMER)
       .send({ bookingId })
       .expect(201);
-    expect(final.body.amount).toBe(1400000);
+    expect(final.body.amount).toBe(1800000);
 
     // 5. IPN thanh toán cuối -> hoá đơn PAID.
     const finalIpn = await http()
       .get(
-        `/api/v1/payments/vnpay/ipn?${ipn(final.body.transactionRef, 'FINAL', 1400000, String(randomInt(1e13, 1e14)))}`,
+        `/api/v1/payments/vnpay/ipn?${ipn(final.body.transactionRef, 'FINAL', 1800000, String(randomInt(1e13, 1e14)))}`,
       )
       .expect(200);
     expect(finalIpn.body.RspCode).toBe('00');
     expect(
       await invoices.findOne({ booking: new Types.ObjectId(bookingId) }),
-    ).toMatchObject({ finalPaid: 1400000, balanceDue: 0, status: 'PAID' });
+    ).toMatchObject({ finalPaid: 1800000, balanceDue: 0, status: 'PAID' });
   });
 });

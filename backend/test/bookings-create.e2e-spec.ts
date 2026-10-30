@@ -131,7 +131,7 @@ describe('Create booking (e2e)', () => {
     expect(response.body).toMatchObject({
       status: 'PENDING_DEPOSIT',
       roomTotal: 2000000, // 1 phòng x 2 đêm x 1.000.000
-      depositAmount: 600000, // cọc 30%
+      depositAmount: 200000, // cọc 10%
       adultCount: 2,
     });
     expect(response.body.code).toMatch(/^BK/);

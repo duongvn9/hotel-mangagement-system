@@ -199,8 +199,7 @@ export function CreateBookingPage() {
                 />
               </div>
               <p className="text-xs text-stone-700">
-                Chúng tôi gửi mã đặt phòng (vé) tới email/số điện thoại này để bạn thanh toán và
-                quản lý đơn.
+                Chúng tôi gửi mã đặt phòng (vé) tới email này để bạn thanh toán và quản lý đơn.
               </p>
             </div>
 

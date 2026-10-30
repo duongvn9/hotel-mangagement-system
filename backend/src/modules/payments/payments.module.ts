@@ -7,6 +7,7 @@ import {
   RoomHoldSchema,
 } from '../bookings/schemas/room-hold.schema.js';
 import { Invoice, InvoiceSchema } from '../invoices/schemas/invoice.schema.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import {
   PaymentTransaction,
   PaymentTransactionSchema,
@@ -17,6 +18,7 @@ import { MongoVnpaySettlementPort } from './vnpay-settlement.adapter.js';
 @Module({
   imports: [
     ConfigModule,
+    NotificationsModule,
     MongooseModule.forFeature([
       { name: PaymentTransaction.name, schema: PaymentTransactionSchema },
       { name: Booking.name, schema: BookingSchema },

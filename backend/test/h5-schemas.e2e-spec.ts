@@ -184,7 +184,7 @@ describe('H5 persistence (e2e)', () => {
       expect(String(sample.customer)).toBe(String(user._id));
       expect(sample.rooms.map(String)).toEqual([String(roomId)]);
       expect(sample.roomTotal).toBe(rate * 2);
-      expect(sample.depositAmount).toBe(Math.round(rate * 2 * 0.3));
+      expect(sample.depositAmount).toBe(Math.round(rate * 2 * 0.1));
       expect(
         sample.rateSnapshot.map(({ room, ratePerNight }) => ({
           room: String(room),
