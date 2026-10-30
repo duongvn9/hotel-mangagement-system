@@ -1,5 +1,5 @@
 import { api } from '@/lib/api-client'
-import type { TaskStatus, AssignedTask } from '@/features/tasks/api'
+import type { TaskStatus, AssignedTask, TaskResolution } from '@/features/tasks/api'
 
 export type QueueStatus = TaskStatus
 export type QueueSource = AssignedTask['sourceType']
@@ -37,7 +37,7 @@ export interface QueueSummary {
   facets: { taskTypes: string[]; priorities: string[] }
   generatedAt: string
 }
-export interface QueueTask {
+export interface QueueTask extends TaskResolution {
   id: string
   title: string
   taskType: string

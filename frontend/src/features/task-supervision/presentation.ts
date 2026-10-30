@@ -1,10 +1,11 @@
 import type { QueueStatus, QueueSource } from './api'
 
-export const QUEUE_STATES: QueueStatus[] = ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED']
+export const QUEUE_STATES: QueueStatus[] = ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']
 export const QUEUE_LABELS: Record<QueueStatus, string> = {
   ASSIGNED: 'Chờ/Đã giao',
   IN_PROGRESS: 'Đang xử lý',
   COMPLETED: 'Hoàn thành',
+  CANCELLED: 'Đã hủy',
 }
 export const SOURCE_LABELS: Record<QueueSource, string> = {
   SERVICE_ORDER: 'Yêu cầu dịch vụ',

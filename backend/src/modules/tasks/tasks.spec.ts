@@ -72,6 +72,7 @@ describe('H8 task contract', () => {
       'ASSIGNED',
       'IN_PROGRESS',
       'COMPLETED',
+      'CANCELLED',
     ]);
     expect(TaskSchema.path('assignedTo').options.ref).toBe('User');
     expect(TaskSchema.options.timestamps).toBe(true);

@@ -9,6 +9,8 @@ import {
 } from '@nestjs/common';
 import {
   AssignIssueDto,
+  ContinueIssueDto,
+  ReassignIssueDto,
   CloseIssueDto,
   ReviewIssueDto,
 } from './dto/review-issue.dto.js';
@@ -62,6 +64,26 @@ export class IssuesController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.issues.assign(id, dto, user);
+  }
+
+  @Roles(Role.Receptionist)
+  @Post(':id/continue')
+  continueResolution(
+    @Param('id') id: string,
+    @Body() dto: ContinueIssueDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.issues.continueResolution(id, dto, user);
+  }
+
+  @Roles(Role.Receptionist)
+  @Post(':id/reassign')
+  reassign(
+    @Param('id') id: string,
+    @Body() dto: ReassignIssueDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.issues.reassign(id, dto, user);
   }
 
   @Roles(Role.Receptionist, Role.Manager)

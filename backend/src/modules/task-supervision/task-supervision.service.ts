@@ -31,7 +31,11 @@ export const taskOverdueExpression = (now: Date) => ({
   $and: [
     { $eq: [{ $type: '$dueAt' }, 'date'] },
     { $lt: ['$dueAt', now] },
-    { $ne: ['$status', TaskStatus.Completed] },
+    {
+      $not: [
+        { $in: ['$status', [TaskStatus.Completed, TaskStatus.Cancelled]] },
+      ],
+    },
   ],
 });
 
@@ -110,6 +114,7 @@ export class TaskSupervisionService {
         dueAt: { $ifNull: ['$dueAt', null] },
         completedAt: { $ifNull: ['$completedAt', null] },
         overdue: 1,
+        blocked: { $ifNull: ['$blocked', false] },
         ...(detail
           ? {
               workResult: {
@@ -119,6 +124,10 @@ export class TaskSupervisionService {
                   '$$REMOVE',
                 ],
               },
+              blockerHistory: { $ifNull: ['$blockerHistory', []] },
+              continuationHistory: { $ifNull: ['$continuationHistory', []] },
+              instructions: 1,
+              cancellation: 1,
               createdAt: 1,
               updatedAt: 1,
               source: {
@@ -219,6 +228,7 @@ export class TaskSupervisionService {
       total: 0,
     };
     let overdue = 0;
+    let cancelled = 0;
     for (const row of result?.metrics ?? []) {
       counts.total += row.count;
       overdue += row.overdue;
@@ -226,11 +236,12 @@ export class TaskSupervisionService {
       else if (row._id === TaskStatus.InProgress)
         counts.inProgress += row.count;
       else if (row._id === TaskStatus.Completed) counts.completed += row.count;
+      else if (row._id === TaskStatus.Cancelled) cancelled += row.count;
       else counts.other += row.count;
     }
     this.warnMissing(result?.workload ?? []);
     return {
-      counts,
+      counts: { ...counts, ...(cancelled ? { cancelled } : {}) },
       overdue,
       workload: (result?.workload ?? []).map(
         ({

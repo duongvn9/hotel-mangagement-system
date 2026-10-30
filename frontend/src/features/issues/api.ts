@@ -1,4 +1,5 @@
 import { api } from '@/lib/api-client'
+import type { TaskResolution } from '@/features/tasks/api'
 
 export interface IssueInput {
   title: string
@@ -40,12 +41,13 @@ export interface IssueRead extends IssueReceipt {
   reviewNotes?: string
   assignmentRequestedBy?: string
   assignmentRequestedAt?: string
+  assignmentInstructions?: string
   assigneeId?: string
   dueAt?: string
   assignedAt?: string
 }
 
-export interface LinkedIssueTask {
+export interface LinkedIssueTask extends TaskResolution {
   id: string
   title: string
   taskType: string
@@ -57,7 +59,41 @@ export interface LinkedIssueTask {
   completedAt?: string
 }
 
+export interface ContinueIssueInput {
+  taskId: string
+  dueAt?: string
+  instructions?: string
+}
+
+export interface ReassignIssueInput {
+  taskId: string
+  assigneeId: string
+  reason: string
+  dueAt?: string
+  requestId: string
+}
+
+export interface ReassignmentIntent extends ReassignIssueInput {
+  taskRevision: number
+  targetTaskId: string
+  actorId: string
+  requestedAt: string
+  recoveryActors: string[]
+  abandonedTargets: string[]
+}
+
+export async function continueIssue(id: string, input: ContinueIssueInput): Promise<IssueDetail> {
+  return (await api.post<IssueDetail>(`/issues/${encodeURIComponent(id)}/continue`, input)).data
+}
+
+export async function reassignIssue(id: string, input: ReassignIssueInput): Promise<IssueDetail> {
+  return (await api.post<IssueDetail>(`/issues/${encodeURIComponent(id)}/reassign`, input)).data
+}
+
 export interface IssueDetail extends IssueRead {
+  resolutionTasks?: (LinkedIssueTask & { workResult?: string })[]
+  pendingReassignment?: ReassignmentIntent
+  reassignmentHistory?: (ReassignmentIntent & { completedAt: string })[]
   linkedTasks: LinkedIssueTask[]
   linkedTasksAvailable: boolean
 }
@@ -72,6 +108,7 @@ export interface ReviewIssueInput {
 export interface AssignmentInput {
   assigneeId: string
   dueAt?: string
+  instructions?: string
 }
 
 function validIssueDate(value?: string) {
@@ -79,7 +116,13 @@ function validIssueDate(value?: string) {
 }
 
 export function canCloseIssue(issue: IssueDetail) {
-  if (issue.closedAt || issue.closedBy || issue.closureConclusion !== undefined) return false
+  if (
+    issue.pendingReassignment ||
+    issue.closedAt ||
+    issue.closedBy ||
+    issue.closureConclusion !== undefined
+  )
+    return false
   const reviewed = Boolean(
     issue.reviewedBy &&
     validIssueDate(issue.reviewedAt) &&

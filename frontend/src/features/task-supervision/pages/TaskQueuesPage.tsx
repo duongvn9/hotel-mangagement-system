@@ -317,6 +317,10 @@ export function TaskQueuesPage() {
                         </td>
                         <td className="space-y-1 px-4 py-3">
                           <p>{queueDate(task.dueAt)}</p>
+                          <Badge tone="neutral">
+                            {QUEUE_LABELS[task.status as QueueStatus] ?? task.status}
+                          </Badge>
+                          {task.blocked && <Badge tone="danger">Bị chặn</Badge>}
                           {task.overdue && <Badge tone="danger">Quá hạn</Badge>}
                         </td>
                         <td className="px-4 py-3">{queueDate(task.assignedAt)}</td>

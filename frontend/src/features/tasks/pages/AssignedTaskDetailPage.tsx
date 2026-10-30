@@ -8,6 +8,7 @@ import type { AssignedTask, TaskProgressInput } from '../api'
 import { useAssignedTask, useUpdateTaskProgress } from '../hooks'
 import { TaskError, TaskPriorityBadge, TaskStatusBadge } from '../TaskPresentation'
 import { taskDate, taskSources } from '../presentation'
+import { ResolutionHistory, UnableToResolve } from '../TaskResolution'
 
 function TaskProgress({ task, fetching }: { task: AssignedTask; fetching: boolean }) {
   const mutation = useUpdateTaskProgress(task.id)
@@ -15,7 +16,7 @@ function TaskProgress({ task, fetching }: { task: AssignedTask; fetching: boolea
   const [validation, setValidation] = useState('')
   const submitting = useRef(false)
   const status = isAxiosError(mutation.error) ? mutation.error.response?.status : undefined
-  const blocked = status === 403 || status === 404
+  const blocked = status === 403 || status === 404 || Boolean(task.blocked)
   const busy = mutation.isPending || fetching
   const errors: Record<number, string> = {
     400: 'Dữ liệu cập nhật không hợp lệ. Vui lòng kiểm tra và thử lại.',
@@ -156,7 +157,9 @@ export function AssignedTaskDetailPage() {
             Thông tin nguồn hiện không khả dụng. Công việc vẫn có thể được xem; mã nguồn chỉ dùng để
             đối chiếu.
           </p>
+          <ResolutionHistory task={task} />
           <TaskProgress key={task.id} task={task} fetching={isFetching} />
+          <UnableToResolve key={`unable-${task.id}`} task={task} fetching={isFetching} />
         </article>
       )}
       {me?.role === 'SERVICE_STAFF' && task && (
