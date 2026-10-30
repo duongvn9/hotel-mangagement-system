@@ -127,12 +127,12 @@ export function RoomDetailsPage() {
             </dl>
 
             <div>
-              <p className="font-display text-3xl font-semibold text-primary tabular-nums">
+              <p className="text-3xl font-bold whitespace-nowrap text-primary tabular-nums">
                 {money.format(room.pricePerNight)}
               </p>
               <p className="text-xs text-stone-700">mỗi đêm</p>
               {hasStay && (
-                <p className="mt-1 text-sm text-stone-700 tabular-nums">
+                <p className="mt-1 text-sm whitespace-nowrap text-stone-700 tabular-nums">
                   Tạm tính {nights} đêm: {money.format(room.pricePerNight * nights)}
                 </p>
               )}
