@@ -7,6 +7,7 @@ import {
   createBooking,
   createWalkInBooking,
   getBooking,
+  getRoomTypeOverview,
   getServiceCatalog,
   holdBooking,
   initiateDeposit,
@@ -39,6 +40,15 @@ export function useAvailability(params: SearchAvailabilityParams | null) {
     queryKey: ['availability', params],
     queryFn: () => searchAvailability(params as SearchAvailabilityParams),
     enabled: params !== null,
+  })
+}
+
+/** 2.2.2 — chi tiết loại phòng; chỉ chạy khi có id. */
+export function useRoomTypeOverview(id: string) {
+  return useQuery({
+    queryKey: ['room-type-overview', id],
+    queryFn: () => getRoomTypeOverview(id),
+    enabled: Boolean(id),
   })
 }
 

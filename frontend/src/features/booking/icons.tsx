@@ -45,3 +45,20 @@ export function MoonIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   )
 }
+
+export function CheckIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} aria-hidden {...props}>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  )
+}
+
+export function ChildIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} aria-hidden {...props}>
+      <circle cx="12" cy="5" r="2.5" />
+      <path d="M12 7.5V15m0 0-3 5m3-5 3 5M8 11h8" />
+    </svg>
+  )
+}

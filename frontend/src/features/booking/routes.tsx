@@ -11,6 +11,7 @@ import { FrontDeskPage } from './pages/FrontDeskPage'
 import { GuestSearchPage } from './pages/GuestSearchPage'
 import { PaymentReturnPage } from './pages/PaymentReturnPage'
 import { ReconciliationPage } from './pages/ReconciliationPage'
+import { RoomDetailsPage } from './pages/RoomDetailsPage'
 import { SearchRoomsPage } from './pages/SearchRoomsPage'
 import { WalkInBookingPage } from './pages/WalkInBookingPage'
 
@@ -22,6 +23,7 @@ import { WalkInBookingPage } from './pages/WalkInBookingPage'
  */
 export const bookingRoutes: RouteObject[] = [
   { path: 'search', element: <SearchRoomsPage /> },
+  { path: 'room-types/:id', element: <RoomDetailsPage /> },
   { path: 'booking/new', element: <CreateBookingPage /> },
   { path: 'booking/:id', element: <BookingDetailPage /> },
   { path: 'my-bookings', element: <MyBookingsPage /> },
