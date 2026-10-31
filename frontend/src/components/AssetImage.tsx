@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { assetUrl } from '@/lib/asset-url'
+import { ImageLightbox } from './ImageLightbox'
 
 interface Props {
   path?: string
@@ -50,25 +51,37 @@ export function AssetImage({
 }
 
 export function RoomGallery({ images = [], name }: { images?: string[]; name: string }) {
+  const [open, setOpen] = useState(false)
   return (
     <div className="flex items-center gap-2">
-      <AssetImage decorative path={images[0]} name={name} />
-      {images.length > 1 && (
-        <details>
-          <summary className="cursor-pointer text-xs text-primary">
-            +{images.length - 1} ảnh
-          </summary>
-          <div className="flex flex-wrap gap-2 py-2">
-            {images.map((path, index) => (
-              <AssetImage
-                key={path + index}
-                path={path}
-                name={`${name} — ${index + 1}`}
-                className="h-20 w-28 rounded object-cover"
-              />
-            ))}
-          </div>
-        </details>
+      {images.length ? (
+        <button
+          type="button"
+          aria-label={`Xem ảnh ${name}`}
+          onClick={() => setOpen(true)}
+          className="group relative shrink-0 overflow-hidden rounded-lg border border-stone-300 focus-visible:outline-2 focus-visible:outline-primary"
+        >
+          <AssetImage
+            decorative
+            path={images[0]}
+            name={name}
+            className="h-16 w-24 object-cover transition group-hover:scale-105"
+          />
+          {images.length > 1 && (
+            <span className="absolute bottom-1 right-1 rounded bg-pearl-900/80 px-1.5 py-0.5 text-xs text-white">
+              +{images.length - 1}
+            </span>
+          )}
+        </button>
+      ) : (
+        <AssetImage decorative name={name} />
+      )}
+      {open && (
+        <ImageLightbox
+          images={images.map((path) => assetUrl(path)!)}
+          name={name}
+          onClose={() => setOpen(false)}
+        />
       )}
     </div>
   )
