@@ -5,7 +5,16 @@ import { Alert } from '@/components/Alert'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { getErrorMessage } from '@/lib/api-client'
-import { createService, getService, updateService, type Service, type ServiceInput } from '../api'
+import { ImagePicker } from '@/components/ImagePicker'
+import { assetUrl } from '@/lib/asset-url'
+import {
+  createService,
+  getService,
+  updateService,
+  uploadServiceImage,
+  type Service,
+  type ServiceInput,
+} from '../api'
 
 export function ServiceEditor({
   id,
@@ -36,7 +45,7 @@ export function ServiceEditor({
     <dialog
       ref={dialog}
       aria-labelledby="service-form-title"
-      className="m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-xl overflow-y-auto rounded-lg border border-stone-300 bg-white p-6 font-body text-pearl-900 backdrop:bg-pearl-900/50"
+      className="m-auto max-h-[92dvh] w-[calc(100%_-_2rem)] max-w-2xl overflow-y-auto rounded-2xl border border-stone-300 bg-white p-5 font-body text-pearl-900 shadow-xl backdrop:bg-pearl-900/60 sm:p-8"
       onCancel={(event) => {
         event.preventDefault()
         if (!dialog.current?.querySelector('[aria-busy="true"]')) onClose()
@@ -95,6 +104,13 @@ export function ServiceForm({
     initialProp?.price == null ? '' : vnd.format(initialProp.price),
   )
   const [active, setActive] = useState(initialProp?.isActive ?? true)
+  const [imageUrl, setImageUrl] = useState(initialProp?.imageUrl ?? '')
+  const [imageFile, setImageFile] = useState<{ file: File; src: string } | null>(null)
+  const generatedUrls = useRef<string[]>([])
+  useEffect(() => {
+    const urls = generatedUrls.current
+    return () => urls.forEach((url) => URL.revokeObjectURL(url))
+  }, [])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [general, setGeneral] = useState('')
   const [conflict, setConflict] = useState(false)
@@ -112,8 +128,16 @@ export function ServiceForm({
     form.current?.querySelector<HTMLInputElement>('input')?.focus()
   }, [])
   const mutation = useMutation({
-    mutationFn: (input: Partial<ServiceInput>) =>
-      initial ? updateService(initial.id, input) : createService(input as ServiceInput),
+    mutationFn: async (input: Partial<ServiceInput>) => {
+      let payload = input
+      if (input.imageUrl !== undefined && imageFile) {
+        const path = await uploadServiceImage(imageFile.file)
+        setImageUrl(path)
+        setImageFile(null)
+        payload = { ...input, imageUrl: path }
+      }
+      return initial ? updateService(initial.id, payload) : createService(payload as ServiceInput)
+    },
     onSuccess: async () => {
       await Promise.all([
         client.invalidateQueries({ queryKey: ['services'] }),
@@ -178,6 +202,8 @@ export function ServiceForm({
       setBillable(fresh.billable)
       setPrice(fresh.price == null ? '' : vnd.format(fresh.price))
       setActive(fresh.isActive)
+      setImageUrl(fresh.imageUrl ?? '')
+      setImageFile(null)
       client.setQueryData(['service', fresh.id], fresh)
       setErrors({})
       setGeneral('')
@@ -218,6 +244,7 @@ export function ServiceForm({
     if (initial && active !== initial.isActive && !window.confirm(active ? reactivate : deactivate))
       return
     const input: ServiceInput = {
+      ...(imageUrl || initial?.imageUrl || imageFile ? { imageUrl } : {}),
       name: name.trim(),
       description: description.trim(),
       unit: unit.trim(),
@@ -230,6 +257,7 @@ export function ServiceForm({
           Object.entries(input).filter(([key, value]) => value !== initial[key as keyof Service]),
         )
       : input
+    if (imageFile) changes.imageUrl = imageUrl
     if (!Object.keys(changes).length) {
       onClose()
       return
@@ -246,7 +274,7 @@ export function ServiceForm({
         </Button>
       )}
       {reloading && <p role="status">Đang tải lại dữ liệu…</p>}
-      <fieldset disabled={busy} className="space-y-4">
+      <fieldset disabled={busy} className="min-w-0 space-y-5">
         <TextField
           label="Tên dịch vụ"
           required
@@ -277,6 +305,42 @@ export function ServiceForm({
             </p>
           )}
         </div>
+        <ImagePicker
+          label="Ảnh dịch vụ"
+          name={name}
+          images={
+            imageFile
+              ? [{ src: imageFile.src, label: imageFile.file.name }]
+              : imageUrl
+                ? [{ src: assetUrl(imageUrl)!, label: name || 'Ảnh dịch vụ' }]
+                : []
+          }
+          onChoose={(files) => {
+            if (!files.length) return
+            if (files.length > 1) {
+              setGeneral('Mỗi dịch vụ chỉ được chọn 1 ảnh.')
+              return
+            }
+            const file = files[0]
+            if (
+              !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
+              !file.size ||
+              file.size > 5 * 1024 * 1024
+            ) {
+              setGeneral('Chọn ảnh JPG, PNG hoặc WebP, tối đa 5 MB mỗi ảnh.')
+              return
+            }
+            const src = URL.createObjectURL(file)
+            generatedUrls.current.push(src)
+            setImageUrl('')
+            setImageFile({ file, src })
+            setGeneral('')
+          }}
+          onRemove={() => {
+            setImageUrl('')
+            setImageFile(null)
+          }}
+        />
         <TextField
           label="Đơn vị (tùy chọn)"
           value={unit}
@@ -331,7 +395,7 @@ export function ServiceForm({
           </p>
         )}
       </fieldset>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 border-t border-stone-300 pt-5">
         <Button type="submit" loading={mutation.isPending} disabled={reloading}>
           Lưu dịch vụ
         </Button>

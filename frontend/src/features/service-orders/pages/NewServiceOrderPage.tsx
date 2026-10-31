@@ -1,4 +1,4 @@
-import { AssetImage } from '@/components/AssetImage'
+import { RoomGallery } from '@/components/AssetImage'
 import { useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router'
 import { Button } from '@/components/Button'
@@ -172,7 +172,10 @@ export function NewServiceOrderPage() {
           />
           {service && (
             <div className="space-y-2 rounded bg-cream-50 p-4">
-              <AssetImage path={service.imageUrl} name={service.name} />
+              <RoomGallery
+                images={service.imageUrl ? [service.imageUrl] : []}
+                name={service.name}
+              />
               <p className="whitespace-pre-wrap break-words">{service.description}</p>
               <p>
                 Đơn giá dự kiến: {money(service.billable ? service.unitPriceVND : 0)} /{' '}

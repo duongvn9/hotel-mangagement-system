@@ -1,4 +1,4 @@
-import { AssetImage } from '@/components/AssetImage'
+import { RoomGallery } from '@/components/AssetImage'
 import { useEffect, useState } from 'react'
 import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
@@ -151,7 +151,10 @@ export function ServicesPage() {
                     <tr key={service.id} className="border-t border-stone-300 hover:bg-cream-50">
                       <th scope="row" className="px-4 py-4 font-semibold">
                         <span className="inline-flex items-center gap-2">
-                          <AssetImage decorative path={service.imageUrl} name={service.name} />
+                          <RoomGallery
+                            images={service.imageUrl ? [service.imageUrl] : []}
+                            name={service.name}
+                          />
                           {service.name}
                         </span>
                       </th>

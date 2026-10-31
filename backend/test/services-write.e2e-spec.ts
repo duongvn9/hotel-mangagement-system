@@ -10,6 +10,8 @@ import { Service } from '../src/modules/services/schemas/service.schema.js';
 import { ServicesService } from '../src/modules/services/services.service.js';
 import { seedServices } from '../src/modules/services/seed.js';
 import { assertTestDatabase } from './test-database.js';
+import { AssetImagesService } from '../src/common/asset-images.service.js';
+import { ServicesModule } from '../src/modules/services/services.module.js';
 describe('UC54 service writes with real AppModule', () => {
   let app: INestApplication;
   let model: Model<Service>;
@@ -50,6 +52,64 @@ describe('UC54 service writes with real AppModule', () => {
     await app?.close();
     if (originalUri === undefined) delete process.env.MONGODB_URI;
     else process.env.MONGODB_URI = originalUri;
+  });
+  it('restricts image upload and uses the service storage prefix', async () => {
+    const upload = vi
+      .spyOn(
+        app.select(ServicesModule).get(AssetImagesService, { strict: true }),
+        'upload',
+      )
+      .mockResolvedValue({ path: '/images/seeds/services/upload.jpg' });
+    try {
+      await http()
+        .post('/api/v1/services/images')
+        .attach('file', Buffer.from([255, 216, 255]), 'photo.jpg')
+        .expect(401);
+      await http()
+        .post('/api/v1/services/images')
+        .set('x-dev-role', 'CUSTOMER')
+        .attach('file', Buffer.from([255, 216, 255]), 'photo.jpg')
+        .expect(403);
+      expect(upload).not.toHaveBeenCalled();
+      const response = await http()
+        .post('/api/v1/services/images')
+        .set(manager)
+        .attach('file', Buffer.from([255, 216, 255]), 'photo.jpg')
+        .expect(201);
+      expect(response.body.path).toBe('/images/seeds/services/upload.jpg');
+      expect(upload).toHaveBeenCalledWith(
+        expect.objectContaining({ mimetype: 'image/jpeg' }),
+        'services',
+      );
+    } finally {
+      upload.mockRestore();
+    }
+  });
+  it('persists, replaces and clears the service photo while preserving other fields', async () => {
+    const created = await post({
+      name: prefix + 'Photo',
+      billable: true,
+      price: 50000,
+      imageUrl: '/images/seeds/services/first.jpg',
+    }).expect(201);
+    expect(created.body.imageUrl).toBe('/images/seeds/services/first.jpg');
+    expect((await detail(created.body.id).expect(200)).body.imageUrl).toBe(
+      created.body.imageUrl,
+    );
+    const replaced = await patch(created.body.id, {
+      imageUrl: '/images/seeds/services/second.png',
+    }).expect(200);
+    expect(replaced.body).toMatchObject({
+      imageUrl: '/images/seeds/services/second.png',
+      price: 50000,
+      billable: true,
+    });
+    const cleared = await patch(created.body.id, { imageUrl: '' }).expect(200);
+    expect(cleared.body).toMatchObject({ imageUrl: '', price: 50000 });
+    await patch(created.body.id, { imageUrl: ['a', 'b'] }).expect(400);
+    await patch(created.body.id, {
+      imageUrl: 'https://invalid.example.com/a.jpg',
+    }).expect(400);
   });
   it('requires 401 and rejects every other system role for all new routes', async () => {
     for (const role of [

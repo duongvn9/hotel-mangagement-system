@@ -57,7 +57,69 @@ describe('UC54 service form', () => {
         : { data: { items: [service], total: 21, page: 1, limit: 10 } },
     )
   })
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+  it('uploads one service photo before creating the service', async () => {
+    vi.stubGlobal(
+      'URL',
+      class extends URL {
+        static createObjectURL() {
+          return 'blob:service'
+        }
+        static revokeObjectURL() {}
+      },
+    )
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url) => ({
+      data: url === '/services/images' ? { path: '/images/seeds/services/new.jpg' } : service,
+    }))
+    const { success } = form()
+    change(/^Tên dịch vụ/, 'Laundry')
+    change(/^Giá VND/, '50.000')
+    expect(screen.getByLabelText('Ảnh dịch vụ')).not.toHaveAttribute('multiple')
+    fireEvent.change(screen.getByLabelText('Ảnh dịch vụ'), {
+      target: { files: [new File(['image'], 'service.jpg', { type: 'image/jpeg' })] },
+    })
+    save()
+    await waitFor(() => expect(success).toHaveBeenCalled())
+    expect(post).toHaveBeenNthCalledWith(1, '/services/images', expect.any(FormData), {
+      timeout: 120_000,
+    })
+    expect(post).toHaveBeenNthCalledWith(
+      2,
+      '/services',
+      expect.objectContaining({ imageUrl: '/images/seeds/services/new.jpg' }),
+    )
+  })
+  it('can clear the existing image without uploading another file', async () => {
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: service })
+    const { success } = form({ ...service, imageUrl: '/images/seeds/services/old.jpg' })
+    fireEvent.click(screen.getByRole('button', { name: 'Bỏ ảnh 1' }))
+    save()
+    await waitFor(() => expect(success).toHaveBeenCalled())
+    expect(patch).toHaveBeenCalledWith(`/services/${service.id}`, { imageUrl: '' })
+  })
+  it('rejects multiple or unsupported selected files', () => {
+    const post = vi.spyOn(api, 'post')
+    form()
+    fireEvent.change(screen.getByLabelText('Ảnh dịch vụ'), {
+      target: {
+        files: [
+          new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
+          new File(['b'], 'b.jpg', { type: 'image/jpeg' }),
+        ],
+      },
+    })
+    expect(screen.getByText('Mỗi dịch vụ chỉ được chọn 1 ảnh.')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Ảnh dịch vụ'), {
+      target: { files: [new File(['a'], 'bad.svg', { type: 'image/svg+xml' })] },
+    })
+    expect(
+      screen.getByText('Chọn ảnh JPG, PNG hoặc WebP, tối đa 5 MB mỗi ảnh.'),
+    ).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+  })
   it('validates required name/price, describes errors and focuses the first invalid field', async () => {
     const post = vi.spyOn(api, 'post')
     form()

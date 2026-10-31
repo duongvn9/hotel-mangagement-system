@@ -23,7 +23,7 @@ export class AssetImagesService {
 
   async upload(
     file?: AssetImageFile,
-    group: 'room-types' | 'amenities' = 'room-types',
+    group: 'room-types' | 'amenities' | 'services' = 'room-types',
   ) {
     if (!file || !file.size || file.size > 5 * 1024 * 1024) {
       throw new BadRequestException('Chọn ảnh tối đa 5 MB.');

@@ -1,4 +1,10 @@
 import { Controller, Get, Query } from '@nestjs/common';
+import { UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  AssetImagesService,
+  type AssetImageFile,
+} from '../../common/asset-images.service.js';
 import {
   ApiBadRequestResponse,
   ApiForbiddenResponse,
@@ -27,7 +33,21 @@ import { ServiceResponse } from './dto/service-response.dto.js';
 @Roles(Role.Manager)
 @Permissions('facility:manage')
 export class ServicesController {
-  constructor(private readonly services: ServicesService) {}
+  constructor(
+    private readonly services: ServicesService,
+    private readonly images: AssetImagesService,
+  ) {}
+
+  @Post('images')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 0 },
+    }),
+  )
+  @ApiOperation({ summary: 'Upload service image to local archive and S3' })
+  uploadImage(@UploadedFile() file?: AssetImageFile) {
+    return this.images.upload(file, 'services');
+  }
   @Post()
   @ApiOperation({
     summary:
