@@ -21,8 +21,6 @@ export function CheckoutCharges({ booking }: { booking: BookingListItem }) {
   const charges = useBookingCharges(open ? booking.id : null)
   const add = useAddCharge(booking.id)
 
-  // Đã thu xong thanh toán cuối thì hóa đơn chốt: không ghi thêm phụ phí (server cũng từ chối).
-  const settled = (charges.data?.totals.finalPaid ?? 0) > 0
   const value = Number(amount)
   const valid =
     amount !== '' &&
@@ -94,7 +92,7 @@ export function CheckoutCharges({ booking }: { booking: BookingListItem }) {
             </>
           )}
 
-          {!settled && (
+          {booking.status === 'CHECKED_IN' && (
             <form
               onSubmit={submit}
               className="grid gap-3 sm:grid-cols-[160px_1fr_auto] sm:items-end"

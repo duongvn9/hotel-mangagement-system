@@ -195,6 +195,74 @@ describe('Payment reconciliation queue (e2e)', () => {
     expect(after.body.total).toBe(0);
   });
 
+  it('keeps a resolved late deposit resolved after duplicate callbacks and preserves its audit', async () => {
+    const { bookingId, transactionRef } = await flagLatePayment(
+      '2096-03-10',
+      '2096-03-12',
+      '203.0.113.34',
+    );
+    const payment = await payments.findOne({ transactionRef }).lean();
+    const paymentId = String(payment!._id);
+    await http()
+      .post(`/api/v1/payments/${paymentId}/reconcile`)
+      .set(MANAGER)
+      .send({ note: 'Refund completed' })
+      .expect(200);
+    const resolved = await payments.findById(paymentId).lean();
+    const raw = ipn(transactionRef, 600000, payment!.providerTransactionRef!);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const duplicate = await http()
+        .get(`/api/v1/payments/vnpay/ipn?${raw}`)
+        .expect(200);
+      expect(duplicate.body.RspCode).toBe('02');
+    }
+    const after = await payments.findById(paymentId).lean();
+    expect(after).toMatchObject({
+      status: 'SUCCESS',
+      needsReconciliation: false,
+      reconciledAt: resolved!.reconciledAt,
+      reconciledBy: resolved!.reconciledBy,
+      reconciliationNote: 'Refund completed',
+      paidAt: payment!.paidAt,
+      providerTransactionRef: payment!.providerTransactionRef,
+    });
+    expect((await bookings.findById(bookingId))?.status).toBe('EXPIRED');
+    expect(
+      await holds.countDocuments({ booking: bookingId, isActive: true }),
+    ).toBe(0);
+    expect(await payments.countDocuments({ transactionRef })).toBe(1);
+    const queue = await http()
+      .get('/api/v1/payments/reconciliation')
+      .set(MANAGER)
+      .expect(200);
+    expect(queue.body.total).toBe(0);
+  });
+
+  it('allows only one concurrent manager resolution to write the audit', async () => {
+    const { transactionRef } = await flagLatePayment(
+      '2096-04-10',
+      '2096-04-12',
+      '203.0.113.35',
+    );
+    const payment = await payments.findOne({ transactionRef }).lean();
+    const paymentId = String(payment!._id);
+    const results = await Promise.all(
+      ['First refund', 'Second refund'].map((note) =>
+        http()
+          .post(`/api/v1/payments/${paymentId}/reconcile`)
+          .set(MANAGER)
+          .send({ note }),
+      ),
+    );
+    expect(results.map((result) => result.status).sort()).toEqual([200, 409]);
+    const winner = results.find((result) => result.status === 200)!;
+    const stored = await payments.findById(paymentId).lean();
+    expect(stored?.needsReconciliation).toBe(false);
+    expect(stored?.reconciliationNote).toBe(winner.body.reconciliationNote);
+    expect(stored?.reconciledAt?.toISOString()).toBe(winner.body.reconciledAt);
+    expect(String(stored?.reconciledBy)).toBe(winner.body.reconciledBy);
+  });
+
   it('rejects resolving a payment that is not flagged, and a bad id', async () => {
     const { transactionRef } = await flagLatePayment(
       '2096-02-10',

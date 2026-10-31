@@ -3,12 +3,24 @@ import { getModelToken } from '@nestjs/mongoose';
 import type { INestApplication } from '@nestjs/common';
 import { Model, Types } from 'mongoose';
 import { AppModule } from '../src/app.module.js';
-import { InvoicePricingAdapter } from '../src/modules/invoices/invoice-adapters.js';
+import {
+  InvoicePricingAdapter,
+  PersistedInvoiceChargesAdapter,
+} from '../src/modules/invoices/invoice-adapters.js';
 import { InvoicesService } from '../src/modules/invoices/invoices.service.js';
 import { InvoiceChargeType } from '../src/modules/invoices/schemas/invoice-charge.schema.js';
-import { Booking } from '../src/modules/bookings/schemas/booking.schema.js';
-import { Invoice } from '../src/modules/invoices/schemas/invoice.schema.js';
-import { PaymentTransaction } from '../src/modules/payments/schemas/payment-transaction.schema.js';
+import {
+  Booking,
+  BookingSchema,
+} from '../src/modules/bookings/schemas/booking.schema.js';
+import {
+  Invoice,
+  InvoiceSchema,
+} from '../src/modules/invoices/schemas/invoice.schema.js';
+import {
+  PaymentTransaction,
+  PaymentTransactionSchema,
+} from '../src/modules/payments/schemas/payment-transaction.schema.js';
 
 describe('H7 invoice persistence', () => {
   let app: INestApplication;
@@ -56,6 +68,84 @@ describe('H7 invoice persistence', () => {
     await invoices.deleteMany({ booking: id });
     await bookings.deleteOne({ _id: id });
     await app.close();
+  });
+  it('ensures booking uniqueness in an empty autoIndex:false database and deduplicates charge retries', async () => {
+    const connection = invoices.db.useDb(`invoice_idempotency_${id}`, {
+      useCache: false,
+    });
+    try {
+      const isolatedInvoices = connection.model(
+        Invoice.name,
+        InvoiceSchema.clone().set('autoIndex', false),
+      );
+      const isolatedBookings = connection.model(
+        Booking.name,
+        BookingSchema.clone().set('autoIndex', false),
+      );
+      const isolatedPayments = connection.model(
+        PaymentTransaction.name,
+        PaymentTransactionSchema.clone().set('autoIndex', false),
+      );
+      await Promise.all([
+        isolatedInvoices.init(),
+        isolatedBookings.init(),
+        isolatedPayments.init(),
+      ]);
+      expect(await isolatedInvoices.countDocuments()).toBe(0);
+      expect(
+        (await isolatedInvoices.collection.indexes()).filter(
+          (index) => index.unique,
+        ),
+      ).toHaveLength(0);
+      await isolatedBookings.create((await bookings.findById(id))!.toObject());
+      const isolatedService = new InvoicesService(
+        isolatedInvoices,
+        isolatedBookings,
+        isolatedPayments,
+        app.get(InvoicePricingAdapter),
+        new PersistedInvoiceChargesAdapter(),
+      );
+      const results = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          isolatedService.getOrCreateForBooking(String(id)),
+        ),
+      );
+      expect(new Set(results.map((invoice) => String(invoice._id))).size).toBe(
+        1,
+      );
+      expect(await isolatedInvoices.countDocuments({ booking: id })).toBe(1);
+      expect(await isolatedInvoices.collection.indexes()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'booking_1',
+            key: { booking: 1 },
+            unique: true,
+          }),
+        ]),
+      );
+      await expect(
+        isolatedInvoices.create({ booking: id, code: 'different-code' }),
+      ).rejects.toMatchObject({ code: 11000 });
+      const charge = {
+        bookingId: String(id),
+        type: InvoiceChargeType.Service,
+        amount: 10000,
+        reason: 'Laundry',
+        sourceId: 'invoice-retry:1',
+      };
+      await Promise.all([
+        isolatedService.addCharge(charge),
+        isolatedService.addCharge(charge),
+      ]);
+      const retried = await isolatedService.addCharge(charge);
+      expect(String(retried._id)).toBe(String(results[0]._id));
+      expect(retried.charges).toHaveLength(1);
+      expect(retried.serviceTotal).toBe(10000);
+      expect(await isolatedInvoices.countDocuments({ booking: id })).toBe(1);
+    } finally {
+      await connection.dropDatabase();
+      await invoices.db.removeDb(connection.name);
+    }
   });
   it('creates one invoice under concurrent calls', async () => {
     const results = await Promise.all(

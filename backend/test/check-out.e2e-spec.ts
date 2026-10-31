@@ -192,6 +192,7 @@ describe('Check out guest (e2e)', () => {
     const saved = await bookings.findById(booking.id).lean();
     expect(saved?.status).toBe(BookingStatus.CheckedOut);
     expect(saved?.checkedOutAt).toBeDefined();
+    expect(saved?.checkoutRoomProjectionCompletedAt).toBeInstanceOf(Date);
     expect(await roomStatus(r1)).toBe('CLEANING');
   });
 
@@ -253,16 +254,172 @@ describe('Check out guest (e2e)', () => {
     expect(await roomStatus(r2)).toBe('MAINTENANCE');
   });
 
-  it('lets only one of two simultaneous check-outs through', async () => {
+  it('replays two simultaneous check-outs idempotently', async () => {
     const { booking } = await prepare({ deposit: 1000000 });
     const results = await Promise.all([
       checkOut(booking.id),
       checkOut(booking.id),
     ]);
-    expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
+    expect(results.map((result) => result.status).sort()).toEqual([201, 201]);
+    expect(results[0].body.checkedOutAt).toBe(results[1].body.checkedOutAt);
     expect((await bookings.findById(booking.id).lean())?.status).toBe(
       BookingStatus.CheckedOut,
     );
+    expect(await roomStatus(r1)).toBe('CLEANING');
+  });
+
+  it('never projects a completed historical checkout onto a later occupied stay', async () => {
+    const { booking } = await prepare({ deposit: 1000000 });
+    await checkOut(booking.id).expect(201);
+    const closed = await bookings.findById(booking.id).orFail();
+    await prepare({ deposit: 1000000 });
+    await rooms.updateOne({ _id: r1 }, { $set: { status: 'OCCUPIED' } });
+    const occupied = await rooms.findById(r1).lean();
+    const update = vi.spyOn(rooms, 'updateMany');
+    try {
+      const result = await checkOut(booking.id).expect(201);
+      expect(result.body.checkedOutAt).toBe(closed.checkedOutAt!.toISOString());
+      expect(result.body.rooms[0].status).toBe('OCCUPIED');
+      expect(update).not.toHaveBeenCalled();
+      expect(await rooms.findById(r1).lean()).toEqual(occupied);
+      expect(
+        (await bookings.findById(booking.id).orFail())
+          .checkoutRoomProjectionCompletedAt,
+      ).toEqual(closed.checkoutRoomProjectionCompletedAt);
+    } finally {
+      update.mockRestore();
+    }
+  });
+
+  it('fences a concurrent room occupation during the initial projection', async () => {
+    const { booking } = await prepare({ deposit: 1000000 });
+    const original = rooms.updateMany.bind(rooms);
+    const update = vi
+      .spyOn(rooms, 'updateMany')
+      .mockImplementationOnce(async (...args) => {
+        const closed = await bookings.findById(booking.id).orFail();
+        await rooms.collection.updateOne(
+          { _id: r1 },
+          {
+            $set: {
+              status: 'OCCUPIED',
+              updatedAt: new Date(closed.checkedOutAt!.getTime() + 1000),
+            },
+          },
+        );
+        return original(...args);
+      });
+    try {
+      await checkOut(booking.id).expect(201);
+      expect(await roomStatus(r1)).toBe('OCCUPIED');
+    } finally {
+      update.mockRestore();
+    }
+  });
+
+  it('leaves later occupancy untouched while recovering only the original rooms', async () => {
+    await rooms.updateOne({ _id: r2 }, { $set: { status: 'OCCUPIED' } });
+    const { booking } = await prepare({ roomIds: [r1, r2], deposit: 2000000 });
+    const update = vi
+      .spyOn(rooms, 'updateMany')
+      .mockRejectedValueOnce(new Error('Room update unavailable'));
+    try {
+      await checkOut(booking.id).expect(500);
+    } finally {
+      update.mockRestore();
+    }
+    const closed = await bookings.findById(booking.id).orFail();
+    expect(closed.checkoutRoomProjectionCompletedAt).toBeUndefined();
+    await prepare({ roomIds: [r2], deposit: 1000000 });
+    await rooms.collection.updateOne(
+      { _id: r2 },
+      {
+        $set: {
+          status: 'OCCUPIED',
+          updatedAt: new Date(closed.checkedOutAt!.getTime() + 1000),
+        },
+      },
+    );
+    const later = await rooms.findById(r2).lean();
+    await checkOut(booking.id).expect(201);
+    expect(await roomStatus(r1)).toBe('CLEANING');
+    expect(await rooms.findById(r2).lean()).toEqual(later);
+    expect(
+      (await bookings.findById(booking.id).orFail())
+        .checkoutRoomProjectionCompletedAt,
+    ).toBeInstanceOf(Date);
+  });
+
+  it('fails closed on recovery when a room has no timestamp', async () => {
+    const { booking } = await prepare({ deposit: 1000000 });
+    const update = vi
+      .spyOn(rooms, 'updateMany')
+      .mockRejectedValueOnce(new Error('Room update unavailable'));
+    try {
+      await checkOut(booking.id).expect(500);
+    } finally {
+      update.mockRestore();
+    }
+    await rooms.collection.updateOne({ _id: r1 }, { $unset: { updatedAt: 1 } });
+    await checkOut(booking.id).expect(201);
+    expect(await roomStatus(r1)).toBe('OCCUPIED');
+  });
+
+  it('projects legacy rooms without timestamps only on the initial checkout', async () => {
+    const { booking } = await prepare({ deposit: 1000000 });
+    await rooms.collection.updateOne({ _id: r1 }, { $unset: { updatedAt: 1 } });
+    await checkOut(booking.id).expect(201);
+    expect(await roomStatus(r1)).toBe('CLEANING');
+  });
+
+  it('repairs failed room updates on retry without rerunning checkout gates or changing its timestamp', async () => {
+    const { booking } = await prepare({ roomIds: [r1, r2], deposit: 2000000 });
+    const update = vi
+      .spyOn(rooms, 'updateMany')
+      .mockRejectedValueOnce(new Error('Room update unavailable'));
+    await checkOut(booking.id).expect(500);
+    update.mockRestore();
+    const closed = await bookings.findById(booking.id).orFail();
+    expect(closed.status).toBe(BookingStatus.CheckedOut);
+    expect(closed.checkedOutAt).toBeDefined();
+    expect(await roomStatus(r1)).toBe('OCCUPIED');
+    await bookings.updateOne(
+      { _id: booking._id },
+      { $set: { acceptanceReservations: ['legacy'] } },
+    );
+    await payments.create({
+      booking: booking._id,
+      invoice: (await invoices.findOne({ booking: booking._id }).orFail())._id,
+      transactionRef: `RETRY-${tag}`,
+      method: 'VNPAY',
+      purpose: 'FINAL',
+      status: 'PENDING',
+      amount: 1,
+    });
+    const results = await Promise.all([
+      checkOut(booking.id),
+      checkOut(booking.id),
+    ]);
+    expect(results.map((result) => result.status)).toEqual([201, 201]);
+    for (const result of results)
+      expect(result.body.checkedOutAt).toBe(closed.checkedOutAt!.toISOString());
+    expect(await roomStatus(r1)).toBe('CLEANING');
+    expect(await roomStatus(r2)).toBe('MAINTENANCE');
+    expect((await bookings.findById(booking.id).orFail()).checkedOutAt).toEqual(
+      closed.checkedOutAt,
+    );
+  });
+
+  it('retries a failed room response read after checkout', async () => {
+    const { booking } = await prepare({ deposit: 1000000 });
+    const find = vi.spyOn(rooms, 'find').mockImplementationOnce(() => {
+      throw new Error('Room read unavailable');
+    });
+    await checkOut(booking.id).expect(500);
+    find.mockRestore();
+    const closed = await bookings.findById(booking.id).orFail();
+    const result = await checkOut(booking.id).expect(201);
+    expect(result.body.checkedOutAt).toBe(closed.checkedOutAt!.toISOString());
     expect(await roomStatus(r1)).toBe('CLEANING');
   });
 

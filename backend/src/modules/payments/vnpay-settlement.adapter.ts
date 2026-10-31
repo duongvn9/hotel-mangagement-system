@@ -8,6 +8,7 @@ import {
   UNCONFIRMED_BOOKING_STATUSES,
 } from '../../common/constants/booking-status.enum.js';
 import { Booking } from '../bookings/schemas/booking.schema.js';
+import { withBookingFinancialOperation } from '../bookings/booking-financial-operation.js';
 import { RoomHold } from '../bookings/schemas/room-hold.schema.js';
 import {
   Invoice,
@@ -63,6 +64,17 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
     expected: ExpectedVnpayPayment,
     plan: CompareAndSet,
   ): Promise<'committed' | 'duplicate' | 'conflict'> {
+    return withBookingFinancialOperation(
+      this.bookings,
+      expected.booking.id,
+      () => this.commitLocked(expected, plan),
+    );
+  }
+
+  private async commitLocked(
+    expected: ExpectedVnpayPayment,
+    plan: CompareAndSet,
+  ): Promise<'committed' | 'duplicate' | 'conflict'> {
     const { result } = plan;
     const update: Record<string, unknown> = {
       status: result.status,
@@ -91,6 +103,7 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
       throw error;
     }
 
+    const duplicate = !settled;
     if (!settled) {
       const current = await this.payments.findOne({
         transactionRef: result.transactionRef,
@@ -100,27 +113,28 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
         current.status === result.status &&
         current.providerTransactionRef === result.providerTransactionRef
       ) {
-        return 'duplicate';
+        settled = current;
+      } else {
+        return 'conflict';
       }
-      return 'conflict';
     }
 
     if (result.status === PaymentStatus.Success) {
-      if (expected.payment.purpose === PaymentPurpose.Deposit) {
+      if (settled.purpose === PaymentPurpose.Deposit) {
         // Tiền đã về nhưng chỉ confirm khi booking còn giữ phòng hợp lệ. Nếu không
         // (hết hạn/đã huỷ do callback về muộn) thì ghi nhận để đối soát, không confirm.
         const confirmed = await this.confirmDeposit(
           expected,
           result.transactionRef,
         );
-        if (!confirmed) return 'committed';
+        if (!confirmed) return duplicate ? 'duplicate' : 'committed';
         // Booking vừa CONFIRMED: tự sinh ServiceOrder từ dịch vụ khách chọn khi đặt.
         await this.generateServiceOrders(expected.booking.id);
       }
       await this.reconcileInvoice(expected);
     }
 
-    return 'committed';
+    return duplicate ? 'duplicate' : 'committed';
   }
 
   /**
@@ -185,7 +199,7 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
     );
     await this.deactivateHold(bookingId);
     await this.payments.updateOne(
-      { transactionRef },
+      { transactionRef, reconciledAt: { $exists: false } },
       { $set: { needsReconciliation: true } },
     );
     this.logger.warn(

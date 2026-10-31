@@ -1,6 +1,6 @@
 import { AssetImage, RoomGallery } from '@/components/AssetImage'
 import { useMemo, useState, type FormEvent } from 'react'
-import { useNavigate, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
@@ -239,6 +239,18 @@ export function SearchRoomsPage() {
                         <ClockIcon className="size-4 text-primary" /> Giữ phòng 15 phút
                       </span>
                     </div>
+                    {criteria && (
+                      <Link
+                        to={`/room-types/${group.roomTypeId}?${new URLSearchParams({
+                          checkIn: criteria.checkIn,
+                          checkOut: criteria.checkOut,
+                          guests: String(criteria.guests),
+                        }).toString()}`}
+                        className="inline-block text-sm font-semibold text-primary underline-offset-2 hover:underline"
+                      >
+                        Xem chi tiết
+                      </Link>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="text-xl font-semibold text-pearl-900 tabular-nums">

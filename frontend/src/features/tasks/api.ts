@@ -1,8 +1,32 @@
 import { api } from '@/lib/api-client'
 
-export type TaskStatus = 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED'
+export type TaskStatus = 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 
-export interface AssignedTask {
+export interface TaskResolution {
+  blocked?: boolean
+  overdue?: boolean
+  blockerHistory?: {
+    id: string
+    reason: string
+    reportedBy: string
+    reportedAt: string
+    resolvedAt?: string
+    resolvedBy?: string
+    resolution?: string
+  }[]
+  instructions?: string
+  continuationHistory?: { actorId: string; at: string; dueAt?: string; instructions?: string }[]
+  cancellation?: {
+    reason: string
+    actorId: string
+    recoveryActorId: string
+    at: string
+    requestId: string
+    replacementTaskId?: string
+  }
+}
+
+export interface AssignedTask extends TaskResolution {
   id: string
   title: string
   taskType: string
@@ -48,6 +72,16 @@ export async function updateTaskProgress(
       ? { status: input.status }
       : { status: input.status, workResult: input.workResult.trim() }
   return (await api.patch<AssignedTask>(`/tasks/${encodeURIComponent(id)}/progress`, body)).data
+}
+
+export async function reportUnableToResolve(id: string, reason: string): Promise<AssignedTask> {
+  const value = reason.trim()
+  if (!value || value.length > 2000) throw new Error('Lý do phải từ 1 đến 2000 ký tự.')
+  return (
+    await api.patch<AssignedTask>(`/tasks/${encodeURIComponent(id)}/unable-to-resolve`, {
+      reason: value,
+    })
+  ).data
 }
 
 export async function getAssignedTask(id: string): Promise<AssignedTask> {

@@ -46,10 +46,16 @@ function setup() {
     },
     {
       findOne: vi.fn(async () => (stored ? hydrate(stored) : null)),
-      init: vi.fn(async () => undefined),
+      collection: {
+        createIndex: vi.fn(async () => 'booking_1'),
+      },
     },
   );
-  const bookings = { findById: vi.fn(async () => booking) };
+  const bookings = {
+    findById: vi.fn(async () => booking),
+    updateOne: vi.fn(async () => ({ modifiedCount: 1 })),
+    exists: vi.fn(async () => ({ _id: booking._id })),
+  };
   const payments = {
     find: vi.fn(async () => [] as InstanceType<typeof PaymentModel>[]),
   };
@@ -90,6 +96,48 @@ describe('InvoicesService', () => {
     );
     expect(s.save).toHaveBeenCalledTimes(1);
   });
+  it('shares and caches the schema booking index creation before saving', async () => {
+    const s = setup();
+    let release!: (name: string) => void;
+    s.invoices.collection.createIndex.mockImplementationOnce(
+      () => new Promise<string>((resolve) => (release = resolve)),
+    );
+    const calls = Array.from({ length: 3 }, () =>
+      s.service.getOrCreateForBooking(s.id),
+    );
+    await vi.waitFor(() =>
+      expect(s.invoices.collection.createIndex).toHaveBeenCalledTimes(1),
+    );
+    expect(s.save).not.toHaveBeenCalled();
+    const index = InvoiceSchema.indexes().find(([keys]) => keys.booking === 1)!;
+    expect(s.invoices.collection.createIndex).toHaveBeenCalledWith(...index);
+    release('booking_1');
+    await Promise.all(calls);
+    s.invoices.findOne.mockResolvedValueOnce(null);
+    await s.service.getOrCreateForBooking(s.id);
+    expect(s.invoices.collection.createIndex).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    new Error('index permission denied'),
+    Object.assign(new Error('duplicate bookings'), { code: 11000 }),
+  ])(
+    'propagates index failure and retries index creation: %s',
+    async (error) => {
+      const s = setup();
+      s.invoices.collection.createIndex.mockRejectedValueOnce(error);
+      const results = await Promise.allSettled(
+        Array.from({ length: 3 }, () => s.service.getOrCreateForBooking(s.id)),
+      );
+      for (const result of results) {
+        expect(result).toEqual({ status: 'rejected', reason: error });
+      }
+      expect(s.invoices.collection.createIndex).toHaveBeenCalledTimes(1);
+      expect(s.save).not.toHaveBeenCalled();
+      await s.service.getOrCreateForBooking(s.id);
+      expect(s.invoices.collection.createIndex).toHaveBeenCalledTimes(2);
+      expect(s.save).toHaveBeenCalledTimes(1);
+    },
+  );
   it('recovers the unique-index winner on concurrent creation', async () => {
     const s = setup();
     const winner = await s.service.getOrCreateForBooking(s.id);

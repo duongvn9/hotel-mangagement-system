@@ -117,7 +117,9 @@ export function WalkInBookingPage() {
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-stone-700">Mã booking</dt>
-              <dd className="font-display text-2xl font-semibold text-primary">{created.code}</dd>
+              <dd className="text-2xl font-semibold tracking-wide text-primary tabular-nums">
+                {created.code}
+              </dd>
             </div>
             <div>
               <dt className="text-stone-700">Trạng thái</dt>

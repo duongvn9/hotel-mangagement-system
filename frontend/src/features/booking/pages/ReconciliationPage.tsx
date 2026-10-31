@@ -96,7 +96,7 @@ export function ReconciliationPage() {
                         Xem booking
                       </Link>
                     </div>
-                    <p className="font-display text-lg font-semibold text-primary tabular-nums">
+                    <p className="text-lg font-semibold whitespace-nowrap text-primary tabular-nums">
                       {money.format(item.amount)}
                     </p>
                   </div>

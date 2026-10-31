@@ -90,6 +90,7 @@ export class QueueAssignee {
   @ApiProperty() role: string;
 }
 class QueueCounts {
+  @ApiPropertyOptional() cancelled?: number;
   @ApiProperty() assigned: number;
   @ApiProperty() inProgress: number;
   @ApiProperty() completed: number;
@@ -126,6 +127,7 @@ export class TaskQueueSummary {
   @ApiProperty() generatedAt: string;
 }
 export class SupervisedTask {
+  @ApiProperty() blocked: boolean;
   @ApiProperty() id: string;
   @ApiProperty() title: string;
   @ApiProperty() taskType: string;

@@ -127,10 +127,25 @@ export class Booking {
   serviceSelections: { service: Types.ObjectId; quantity: number }[];
 
   @Prop()
+  financialOperationToken?: string;
+
+  @Prop()
+  financialOperationStartedAt?: Date;
+
+  @Prop({ type: [String], default: [] })
+  acceptanceReservations: string[];
+
+  @Prop({ type: [String], default: [] })
+  financialReconciliationOrderIds: string[];
+
+  @Prop()
   checkedInAt?: Date;
 
   @Prop()
   checkedOutAt?: Date;
+
+  @Prop()
+  checkoutRoomProjectionCompletedAt?: Date;
 
   @Prop()
   cancelledAt?: Date;

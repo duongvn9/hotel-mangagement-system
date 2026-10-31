@@ -39,6 +39,7 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
   const [notes, setNotes] = useState('')
   const [assigneeId, setAssigneeId] = useState('')
   const [due, setDue] = useState('')
+  const [instructions, setInstructions] = useState('')
   const [error, setError] = useState('')
   const [confirmation, setConfirmation] = useState<
     { kind: 'review'; input: ReviewIssueInput } | { kind: 'assignment'; input: AssignmentInput }
@@ -114,20 +115,31 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
       }
       setConfirmation({
         kind: 'assignment',
-        input: { assigneeId: issue.assigneeId, ...(issue.dueAt ? { dueAt: issue.dueAt } : {}) },
+        input: {
+          assigneeId: issue.assigneeId,
+          ...(issue.dueAt ? { dueAt: issue.dueAt } : {}),
+          ...(issue.assignmentInstructions === undefined
+            ? {}
+            : { instructions: issue.assignmentInstructions }),
+        },
       })
       return
     }
     if (
       !users.some((user) => user.id === assigneeId) ||
-      (due && !Number.isFinite(new Date(due).getTime()))
+      (due && !Number.isFinite(new Date(due).getTime())) ||
+      instructions.trim().length > 2000
     ) {
       setError('Vui lòng chọn nhân viên trong danh sách và thời hạn hợp lệ.')
       return
     }
     setConfirmation({
       kind: 'assignment',
-      input: { assigneeId, ...(due ? { dueAt: new Date(due).toISOString() } : {}) },
+      input: {
+        assigneeId,
+        ...(due ? { dueAt: new Date(due).toISOString() } : {}),
+        ...(instructions.trim() ? { instructions: instructions.trim() } : {}),
+      },
     })
   }
   return (
@@ -190,6 +202,9 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
                 </p>
                 <p>Nhân viên đã lưu: {issue.assigneeId ?? 'Chưa có thông tin'}</p>
                 <p>Thời hạn đã lưu: {issue.dueAt ? issueDate(issue.dueAt) : 'Không có'}</p>
+                <p className="break-words whitespace-pre-wrap">
+                  Hướng dẫn đã lưu: {issue.assignmentInstructions ?? 'Không có'}
+                </p>
                 <Button onClick={assignment} disabled={!issue.assigneeId}>
                   Thử lại phân công
                 </Button>
@@ -234,6 +249,12 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
                   Giờ địa phương của thiết bị ({Intl.DateTimeFormat().resolvedOptions().timeZone});
                   được chuyển sang ISO UTC khi gửi. Thời hạn không bắt buộc.
                 </p>
+                <TextField
+                  label="Hướng dẫn xử lý"
+                  value={instructions}
+                  maxLength={2000}
+                  onChange={(event) => setInstructions(event.target.value)}
+                />
                 <Button onClick={assignment} disabled={!assignees.isSuccess || users.length === 0}>
                   Phân công
                 </Button>
@@ -272,6 +293,7 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
                 Thời hạn:{' '}
                 {confirmation.input.dueAt ? issueDate(confirmation.input.dueAt) : 'Không có'}
               </p>
+              <p className="break-words whitespace-pre-wrap">{confirmation.input.instructions}</p>
             </>
           )}
           <Button disabled={mutation.isPending} onClick={() => mutation.mutate(confirmation)}>

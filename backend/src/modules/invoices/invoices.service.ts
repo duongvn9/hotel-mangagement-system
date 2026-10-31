@@ -6,7 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, type mongo } from 'mongoose';
+import { withBookingFinancialOperation } from '../bookings/booking-financial-operation.js';
 import { isMoneyVnd } from '../../common/database/conventions.js';
 import {
   Booking,
@@ -18,7 +19,11 @@ import {
   PaymentStatus,
   PaymentTransaction,
 } from '../payments/schemas/payment-transaction.schema.js';
-import { Invoice, type InvoiceDocument } from './schemas/invoice.schema.js';
+import {
+  Invoice,
+  InvoiceSchema,
+  type InvoiceDocument,
+} from './schemas/invoice.schema.js';
 import {
   InvoiceChargeType,
   type InvoiceCharge,
@@ -39,6 +44,8 @@ export interface AddInvoiceCharge {
 
 @Injectable()
 export class InvoicesService {
+  private bookingIndex?: Promise<string>;
+
   constructor(
     @InjectModel(Invoice.name) private readonly invoices: Model<Invoice>,
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
@@ -57,7 +64,7 @@ export class InvoicesService {
       this.active(existing);
       return existing;
     }
-    await this.invoices.init();
+    await this.ensureBookingIndex();
     const invoice = new this.invoices({
       booking: booking._id,
       code: `INV-${booking._id}`,
@@ -94,11 +101,15 @@ export class InvoicesService {
     this.validateCharge(charge);
     if (input.sourceId !== undefined && !charge.sourceId)
       throw new BadRequestException('Invalid charge source');
-    return this.update(input.bookingId, charge);
+    return withBookingFinancialOperation(this.bookings, input.bookingId, () =>
+      this.update(input.bookingId, charge),
+    );
   }
 
   async recalculate(bookingId: string): Promise<InvoiceDocument> {
-    return this.update(bookingId);
+    return withBookingFinancialOperation(this.bookings, bookingId, () =>
+      this.update(bookingId),
+    );
   }
 
   private async update(
@@ -115,15 +126,6 @@ export class InvoicesService {
       const booking = await this.booking(bookingId);
       if (charge) {
         await this.chargeSource.getApprovedCharges(invoice);
-        if (
-          [BookingStatus.CheckedOut, BookingStatus.Cancelled].includes(
-            booking.status,
-          )
-        ) {
-          throw new ConflictException(
-            'Charges cannot be added to a closed booking',
-          );
-        }
         const previous = charge.sourceId
           ? invoice.charges.find((item) => item.sourceId === charge.sourceId)
           : undefined;
@@ -137,7 +139,17 @@ export class InvoicesService {
               'Charge source already has different content',
             );
           }
-        } else invoice.charges.push(charge);
+        } else {
+          if (
+            [BookingStatus.CheckedOut, BookingStatus.Cancelled].includes(
+              booking.status,
+            )
+          )
+            throw new ConflictException(
+              'Charges cannot be added to a closed booking',
+            );
+          invoice.charges.push(charge);
+        }
       }
       await this.calculate(invoice, booking);
       invoice.markModified('balanceDue');
@@ -150,6 +162,28 @@ export class InvoicesService {
     throw new ConflictException(
       'Invoice changed concurrently; retry the operation',
     );
+  }
+
+  private ensureBookingIndex(): Promise<string> {
+    if (!this.bookingIndex) {
+      const index = InvoiceSchema.indexes().find(
+        ([keys, options]) =>
+          keys.booking === 1 &&
+          Object.keys(keys).length === 1 &&
+          options.unique === true,
+      );
+      if (!index) throw new Error('Invoice booking unique index is missing');
+      this.bookingIndex = this.invoices.collection
+        .createIndex(
+          index[0] as { booking: 1 },
+          index[1] as mongo.CreateIndexesOptions,
+        )
+        .catch((error: unknown) => {
+          this.bookingIndex = undefined;
+          throw error;
+        });
+    }
+    return this.bookingIndex;
   }
 
   private async booking(id: string): Promise<BookingDocument> {

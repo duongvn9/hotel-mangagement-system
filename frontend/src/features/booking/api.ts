@@ -33,6 +33,23 @@ export async function searchAvailability(
   return (await api.get<AvailableRoom[]>('/availability', { params })).data
 }
 
+/** Chi tiết loại phòng công khai (đi kèm UC05) để khách xem trước khi đặt. */
+export interface RoomTypeOverview {
+  id: string
+  name: string
+  description: string
+  adultCapacity: number
+  childCapacity: number
+  capacity: number
+  pricePerNight: number
+  amenities: { id: string; name: string }[]
+}
+
+/** 2.2.2 View Room Details — đọc chi tiết một loại phòng (endpoint công khai). */
+export async function getRoomTypeOverview(id: string): Promise<RoomTypeOverview> {
+  return (await api.get<RoomTypeOverview>(`/room-types/${id}/overview`)).data
+}
+
 export interface CreateBookingInput {
   rooms: string[]
   checkIn: string
