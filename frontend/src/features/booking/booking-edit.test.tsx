@@ -98,8 +98,10 @@ describe('EditBookingPage', () => {
         guestPhone: '0900000001',
       }),
     )
-    // Lưu xong quay về danh sách booking.
-    expect(await screen.findByRole('heading', { name: 'Danh sách booking' })).toBeInTheDocument()
+    // Lưu xong chuyển sang trang chi tiết booking của lễ tân.
+    expect(
+      await screen.findByRole('heading', { name: 'Chi tiết booking BKEDIT1' }),
+    ).toBeInTheDocument()
   })
 
   it('needs at least one room', async () => {
