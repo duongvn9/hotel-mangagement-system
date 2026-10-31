@@ -2,6 +2,9 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 
 @Schema({ timestamps: true, collection: 'amenities' })
 export class Amenity {
+  @Prop({ type: [String], default: [] })
+  images: string[];
+
   @Prop()
   iconUrl?: string;
 

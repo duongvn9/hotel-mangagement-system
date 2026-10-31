@@ -108,6 +108,7 @@ describe('UC51 amenity list API', () => {
     expect(Object.keys(result.body.items[0]).sort()).toEqual([
       'description',
       'id',
+      'images',
       'isActive',
       'name',
       'roomTypeCount',

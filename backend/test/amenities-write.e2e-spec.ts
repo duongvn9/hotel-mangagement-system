@@ -14,6 +14,7 @@ import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js'
 import { seedAmenities } from '../src/modules/amenities/seed.js';
 import { seedRoomTypes } from '../src/modules/room-types/seed.js';
 import { assertTestDatabase } from './test-database.js';
+import { AssetImagesService } from '../src/common/asset-images.service.js';
 
 describe('UC52 amenity writes with real AppModule and standalone Mongo', () => {
   let app: INestApplication;
@@ -83,6 +84,73 @@ describe('UC52 amenity writes with real AppModule and standalone Mongo', () => {
         (value) => value && typeof value === 'object' && 'forwardRef' in value,
       ),
     ).toBe(false);
+  });
+  it('uploads amenity images with manager authorization and the amenity storage prefix', async () => {
+    const upload = vi
+      .spyOn(
+        app.select(AmenitiesModule).get(AssetImagesService, { strict: true }),
+        'upload',
+      )
+      .mockResolvedValue({ path: '/images/seeds/amenities/test.jpg' });
+    try {
+      await http()
+        .post('/api/v1/amenities/images')
+        .attach('file', Buffer.from([255, 216, 255]), 'photo.jpg')
+        .expect(401);
+      await http()
+        .post('/api/v1/amenities/images')
+        .set('x-dev-role', 'CUSTOMER')
+        .attach('file', Buffer.from([255, 216, 255]), 'photo.jpg')
+        .expect(403);
+      expect(upload).not.toHaveBeenCalled();
+      const result = await http()
+        .post('/api/v1/amenities/images')
+        .set(manager)
+        .attach('file', Buffer.from([255, 216, 255]), 'photo.jpg')
+        .expect(201);
+      expect(result.body.path).toBe('/images/seeds/amenities/test.jpg');
+      expect(upload).toHaveBeenCalledWith(
+        expect.objectContaining({ mimetype: 'image/jpeg' }),
+        'amenities',
+      );
+    } finally {
+      upload.mockRestore();
+    }
+  });
+  it('persists image galleries, synchronizes the icon and clears both without changing assignments', async () => {
+    const images = [
+      '/images/seeds/amenities/first.jpg',
+      '/images/seeds/amenities/second.png',
+    ];
+    const result = await post({
+      name: prefix + 'Gallery',
+      images,
+      roomTypeIds: [active],
+    }).expect(201);
+    expect(result.body).toMatchObject({
+      images,
+      iconUrl: images[0],
+      roomTypeCount: 1,
+    });
+    expect((await amenities.findById(result.body.id).lean())!.images).toEqual(
+      images,
+    );
+    await patch(result.body.id, { description: 'Retain gallery' }).expect(200);
+    expect((await detail(result.body.id).expect(200)).body.images).toEqual(
+      images,
+    );
+    const cleared = await patch(result.body.id, { images: [] }).expect(200);
+    expect(cleared.body).toMatchObject({
+      images: [],
+      iconUrl: '',
+      roomTypeCount: 1,
+    });
+    await patch(result.body.id, { images: Array(11).fill(images[0]) }).expect(
+      400,
+    );
+    await patch(result.body.id, {
+      images: ['https://invalid.example.com/image.jpg'],
+    }).expect(400);
   });
   it('enforces 401 and all four non-manager roles on each write/detail endpoint', async () => {
     for (const role of [

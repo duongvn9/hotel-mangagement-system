@@ -5,10 +5,13 @@ import { Alert } from '@/components/Alert'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { getErrorMessage } from '@/lib/api-client'
+import { ImagePicker } from '@/components/ImagePicker'
+import { assetUrl } from '@/lib/asset-url'
 import {
   createAmenity,
   getAmenity,
   updateAmenity,
+  uploadAmenityImage,
   amenityRoomTypeOptions,
   type Amenity,
   type AmenityInput,
@@ -42,7 +45,7 @@ export function AmenityEditor({
     <dialog
       ref={dialog}
       aria-labelledby="amenity-form-title"
-      className="m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-xl overflow-y-auto rounded-lg border border-stone-300 bg-white p-6 font-body text-pearl-900 backdrop:bg-pearl-900/50"
+      className="m-auto max-h-[92dvh] w-[calc(100%_-_2rem)] max-w-2xl overflow-y-auto rounded-2xl border border-stone-300 bg-white p-5 font-body text-pearl-900 shadow-xl backdrop:bg-pearl-900/60 sm:p-8"
       onCancel={(event) => {
         event.preventDefault()
         if (!dialog.current?.querySelector('[aria-busy="true"]')) onClose()
@@ -94,6 +97,18 @@ export function AmenityForm({
   const [description, setDescription] = useState(initial?.description ?? '')
   const [selected, setSelected] = useState(originalIds)
   const [active, setActive] = useState(initial?.isActive ?? true)
+  const originalImages = initial?.images?.length
+    ? initial.images
+    : initial?.iconUrl
+      ? [initial.iconUrl]
+      : []
+  const [images, setImages] = useState<string[]>(originalImages)
+  const [files, setFiles] = useState<{ file: File; src: string }[]>([])
+  const generatedUrls = useRef<string[]>([])
+  useEffect(() => {
+    const urls = generatedUrls.current
+    return () => urls.forEach((url) => URL.revokeObjectURL(url))
+  }, [])
   const [search, setSearch] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [general, setGeneral] = useState('')
@@ -112,8 +127,16 @@ export function AmenityForm({
     form.current?.querySelector<HTMLInputElement>('input')?.focus()
   }, [])
   const mutation = useMutation({
-    mutationFn: (input: Partial<AmenityInput>) =>
-      initial ? updateAmenity(initial.id, input) : createAmenity(input as AmenityInput),
+    mutationFn: async (input: Partial<AmenityInput>) => {
+      const paths = [...(input.images ?? [])]
+      for (const item of input.images === undefined ? [] : files) {
+        paths.push(await uploadAmenityImage(item.file))
+        setImages([...paths])
+        setFiles((previous) => previous.filter((file) => file !== item))
+      }
+      const payload = input.images === undefined ? input : { ...input, images: paths }
+      return initial ? updateAmenity(initial.id, payload) : createAmenity(payload as AmenityInput)
+    },
     onSuccess: async () => {
       await Promise.all([
         client.invalidateQueries({ queryKey: ['amenities'] }),
@@ -178,6 +201,7 @@ export function AmenityForm({
     if (initial && active !== initial.isActive && !window.confirm(active ? reactivate : deactivate))
       return
     const input: AmenityInput = {
+      ...(images.length || originalImages.length || files.length ? { images } : {}),
       name: name.trim(),
       description: description.trim(),
       isActive: active,
@@ -185,6 +209,9 @@ export function AmenityForm({
     }
     const changes: Partial<AmenityInput> = initial
       ? {
+          ...(JSON.stringify(images) !== JSON.stringify(originalImages) || files.length
+            ? { images }
+            : {}),
           ...(input.name === initial.name ? {} : { name: input.name }),
           ...(input.description === initial.description ? {} : { description: input.description }),
           ...(input.isActive === initial.isActive ? {} : { isActive: input.isActive }),
@@ -210,7 +237,7 @@ export function AmenityForm({
       className="space-y-4"
     >
       {general && <Alert tone="danger">{general}</Alert>}
-      <fieldset disabled={mutation.isPending} className="space-y-4">
+      <fieldset disabled={mutation.isPending} className="min-w-0 space-y-5">
         <TextField
           label="Tên tiện nghi"
           required
@@ -241,11 +268,47 @@ export function AmenityForm({
             </p>
           )}
         </div>
+        <ImagePicker
+          name={name}
+          images={[
+            ...images.map((path, index) => ({ src: assetUrl(path)!, label: `Ảnh ${index + 1}` })),
+            ...files.map((item) => ({ src: item.src, label: item.file.name })),
+          ]}
+          onChoose={(added) => {
+            if (images.length + files.length + added.length > 10) {
+              setGeneral('Mỗi tiện nghi có tối đa 10 ảnh.')
+              return
+            }
+            if (
+              added.some(
+                (file) =>
+                  !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
+                  !file.size ||
+                  file.size > 5 * 1024 * 1024,
+              )
+            ) {
+              setGeneral('Chọn ảnh JPG, PNG hoặc WebP, tối đa 5 MB mỗi ảnh.')
+              return
+            }
+            setGeneral('')
+            const selectedFiles = added.map((file) => {
+              const src = URL.createObjectURL(file)
+              generatedUrls.current.push(src)
+              return { file, src }
+            })
+            setFiles((previous) => [...previous, ...selectedFiles])
+          }}
+          onRemove={(index) =>
+            index < images.length
+              ? setImages((previous) => previous.filter((_, i) => i !== index))
+              : setFiles((previous) => previous.filter((_, i) => i !== index - images.length))
+          }
+        />
         <fieldset
           tabIndex={-1}
           aria-invalid={errors.roomTypeIds ? true : undefined}
           aria-describedby={errors.roomTypeIds ? id + '-types-error' : undefined}
-          className="space-y-3 rounded border border-stone-300 p-3"
+          className="space-y-3 rounded-xl border border-stone-300 p-4"
         >
           <legend className="text-sm font-semibold">Gắn vào Room Type</legend>
           <TextField
@@ -274,7 +337,7 @@ export function AmenityForm({
             </p>
           )}
           <p className="text-sm text-stone-700">Đã chọn {selected.length} loại phòng</p>
-          <div className="max-h-64 overflow-y-auto">
+          <div className="grid max-h-64 grid-cols-1 gap-x-4 overflow-y-auto sm:grid-cols-2">
             {choices
               .filter((type) =>
                 type.name.toLocaleLowerCase('vi').includes(search.trim().toLocaleLowerCase('vi')),
@@ -330,7 +393,7 @@ export function AmenityForm({
           </p>
         )}
       </fieldset>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 border-t border-stone-300 pt-5">
         <Button type="submit" loading={mutation.isPending}>
           Lưu tiện nghi
         </Button>

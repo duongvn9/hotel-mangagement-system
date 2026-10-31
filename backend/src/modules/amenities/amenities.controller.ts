@@ -1,4 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
+import { UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  AssetImagesService,
+  type AssetImageFile,
+} from '../../common/asset-images.service.js';
 import {
   ApiProperty,
   ApiTags,
@@ -34,7 +40,21 @@ export class AmenityOptionDto {
 @Roles(Role.Manager)
 @Permissions('facility:manage')
 export class AmenitiesController {
-  constructor(private readonly amenities: AmenitiesService) {}
+  constructor(
+    private readonly amenities: AmenitiesService,
+    private readonly images: AssetImagesService,
+  ) {}
+
+  @Post('images')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 0 },
+    }),
+  )
+  @ApiOperation({ summary: 'Upload amenity image to local archive and S3' })
+  uploadImage(@UploadedFile() file?: AssetImageFile) {
+    return this.images.upload(file, 'amenities');
+  }
 
   @Get('options')
   @ApiOkResponse({ type: [AmenityOptionDto] })

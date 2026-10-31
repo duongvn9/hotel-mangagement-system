@@ -66,7 +66,58 @@ describe('UC52 amenity form', () => {
       return { data: { items: [amenity], total: 21, page: 1, limit: 10 } }
     })
   })
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+  it('uploads selected photos before saving the amenity gallery', async () => {
+    vi.stubGlobal(
+      'URL',
+      class extends URL {
+        static createObjectURL() {
+          return 'blob:amenity-preview'
+        }
+        static revokeObjectURL() {}
+      },
+    )
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url) => ({
+      data: url === '/amenities/images' ? { path: '/images/seeds/amenities/new.jpg' } : amenity,
+    }))
+    const { success } = form()
+    fireEvent.change(screen.getByLabelText(/^Tên tiện nghi/), { target: { value: 'New amenity' } })
+    fireEvent.change(screen.getByLabelText('Ảnh tiện nghi'), {
+      target: { files: [new File(['image'], 'amenity.jpg', { type: 'image/jpeg' })] },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu tiện nghi' }))
+    await waitFor(() => expect(success).toHaveBeenCalled())
+    expect(post).toHaveBeenNthCalledWith(1, '/amenities/images', expect.any(FormData), {
+      timeout: 120_000,
+    })
+    expect(post).toHaveBeenNthCalledWith(
+      2,
+      '/amenities',
+      expect.objectContaining({ images: ['/images/seeds/amenities/new.jpg'] }),
+    )
+  })
+  it('rejects unsupported uploads without calling the server', () => {
+    const post = vi.spyOn(api, 'post')
+    form()
+    fireEvent.change(screen.getByLabelText('Ảnh tiện nghi'), {
+      target: { files: [new File(['svg'], 'icon.svg', { type: 'image/svg+xml' })] },
+    })
+    expect(
+      screen.getByText('Chọn ảnh JPG, PNG hoặc WebP, tối đa 5 MB mỗi ảnh.'),
+    ).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+  })
+  it('removes a legacy icon by saving an empty gallery', async () => {
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: amenity })
+    const { success } = form({ ...amenity, iconUrl: '/images/seeds/amenities/wifi.svg' })
+    fireEvent.click(screen.getByRole('button', { name: 'Bỏ ảnh 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu tiện nghi' }))
+    await waitFor(() => expect(success).toHaveBeenCalled())
+    expect(patch).toHaveBeenCalledWith(`/amenities/${amenity.id}`, { images: [] })
+  })
   it('validates and focuses name, and searches Room Types without Room selection', async () => {
     const post = vi.spyOn(api, 'post')
     form()

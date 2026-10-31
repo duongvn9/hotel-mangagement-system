@@ -63,4 +63,16 @@ describe('Room type images dual storage', () => {
     await expect(service.upload(file)).rejects.toThrow('Không lưu được ảnh');
     expect(mocks.unlink).toHaveBeenCalledWith(mocks.writeFile.mock.calls[0][0]);
   });
+  it('stores amenity images in the amenity local directory and S3 prefix', async () => {
+    const result = await service.upload(file, 'amenities');
+    expect(result.path).toMatch(
+      /^\/images\/seeds\/amenities\/[a-z0-9-]+\.jpg$/,
+    );
+    expect(mocks.writeFile.mock.calls[0][0].replaceAll('\\', '/')).toContain(
+      '/hms/amenities/',
+    );
+    expect(mocks.send.mock.calls[0][0].input).toMatchObject({
+      Key: result.path.slice(1),
+    });
+  });
 });
