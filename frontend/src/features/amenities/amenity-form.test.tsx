@@ -80,11 +80,9 @@ describe('UC52 amenity form', () => {
         static revokeObjectURL() {}
       },
     )
-    const post = vi
-      .spyOn(api, 'post')
-      .mockImplementation(async (url) => ({
-        data: url === '/amenities/images' ? { path: '/images/seeds/amenities/new.jpg' } : amenity,
-      }))
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url) => ({
+      data: url === '/amenities/images' ? { path: '/images/seeds/amenities/new.jpg' } : amenity,
+    }))
     const { success } = form()
     fireEvent.change(screen.getByLabelText(/^Tên tiện nghi/), { target: { value: 'New amenity' } })
     fireEvent.change(screen.getByLabelText('Ảnh tiện nghi'), {
