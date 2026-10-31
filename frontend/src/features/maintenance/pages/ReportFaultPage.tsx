@@ -1,3 +1,4 @@
+import { AssetImage } from '@/components/AssetImage'
 import { isAxiosError } from 'axios'
 import { Link } from 'react-router'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
@@ -255,6 +256,9 @@ export function ReportFaultPage() {
                 <p id="target-error" className="text-sm text-danger">
                   {errors.targetId}
                 </p>
+                {mode === 'EQUIPMENT' && equipment && (
+                  <AssetImage path={equipment.imageUrl} name={equipment.name} />
+                )}
                 {mode === 'EQUIPMENT' && equipment && (
                   <p className="text-sm text-stone-700">
                     {equipment.roomNumber

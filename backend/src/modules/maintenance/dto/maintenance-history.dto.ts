@@ -62,6 +62,7 @@ class HistoryRoom {
   @ApiProperty() floor: number;
 }
 class HistoryEquipment {
+  @ApiPropertyOptional() imageUrl?: string;
   @ApiProperty() id: string;
   @ApiProperty() assetCode: string;
   @ApiProperty() name: string;

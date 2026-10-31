@@ -22,6 +22,7 @@ export interface MeResponse {
   email: string;
   fullName: string;
   phone?: string;
+  avatarUrl?: string;
   role: string;
   permissions: string[];
 }
@@ -88,6 +89,7 @@ export class AuthService {
       // Header dev chỉ có role thì chưa có User thật trong DB.
       fullName: user?.fullName ?? `Dev ${authUser.role}`,
       phone: user?.phone,
+      avatarUrl: user?.avatarUrl,
       role: authUser.role,
       permissions: role?.permissions ?? [],
     };
@@ -102,12 +104,13 @@ export class AuthService {
       .find({ isActive: true })
       .sort({ role: 1 })
       .limit(50)
-      .select('email fullName role')
+      .select('email fullName role avatarUrl')
       .lean();
     return users.map((u) => ({
       id: String(u._id),
       email: u.email,
       fullName: u.fullName,
+      avatarUrl: u.avatarUrl,
       role: u.role,
     }));
   }

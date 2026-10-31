@@ -62,7 +62,12 @@ export class CreateAccountDto extends ProfileDto {
 
 /** UC43 Update Account: không đổi email (định danh đăng nhập) và mật khẩu ở đây. */
 export class UpdateAccountDto extends PartialType(
-  PickType(CreateAccountDto, ['fullName', 'phone', 'role'] as const),
+  PickType(CreateAccountDto, [
+    'fullName',
+    'phone',
+    'role',
+    'avatarUrl',
+  ] as const),
 ) {
   @IsOptional()
   @IsBoolean()

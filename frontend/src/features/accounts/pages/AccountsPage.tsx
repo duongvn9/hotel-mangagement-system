@@ -1,3 +1,4 @@
+import { AssetImage } from '@/components/AssetImage'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { Alert } from '@/components/Alert'
@@ -141,7 +142,12 @@ export function AccountsPage() {
           <tbody>
             {data?.items.map((account) => (
               <tr key={account.id} className="h-13 border-t border-stone-300 hover:bg-cream-50">
-                <td className="px-4 font-medium text-pearl-900">{account.fullName}</td>
+                <td className="px-4 font-medium text-pearl-900">
+                  <span className="inline-flex items-center gap-2">
+                    <AssetImage decorative path={account.avatarUrl} name={account.fullName} />
+                    {account.fullName}
+                  </span>
+                </td>
                 <td className="px-4">{account.email}</td>
                 <td className="px-4">{account.phone ?? '—'}</td>
                 <td className="px-4">{roleName(account.role)}</td>

@@ -26,6 +26,7 @@ const toAccount = (user: LeanUser) => ({
   id: String(user._id),
   email: user.email,
   fullName: user.fullName,
+  avatarUrl: user.avatarUrl,
   phone: user.phone,
   role: user.role,
   isActive: user.isActive,

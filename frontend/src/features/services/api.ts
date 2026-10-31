@@ -1,5 +1,6 @@
 import { api } from '@/lib/api-client'
 export interface Service {
+  imageUrl?: string
   id: string
   name: string
   description: string

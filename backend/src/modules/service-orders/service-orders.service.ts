@@ -960,6 +960,7 @@ export class ServiceOrdersService implements OnModuleInit {
         .map((row) => ({
           id: String(row._id),
           name: row.name,
+          imageUrl: row.imageUrl,
           description: row.description ?? '',
           unit: row.unit ?? '',
           billable: row.billable,

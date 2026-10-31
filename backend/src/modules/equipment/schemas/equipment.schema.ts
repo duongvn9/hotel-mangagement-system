@@ -4,6 +4,9 @@ import { EquipmentCondition } from '../../../common/constants/equipment-conditio
 
 @Schema({ timestamps: true, collection: 'equipment' })
 export class Equipment {
+  @Prop()
+  imageUrl?: string;
+
   @Prop({ required: true, trim: true, unique: true }) assetCode: string;
   @Prop({ required: true, trim: true }) name: string;
   @Prop({ required: true, trim: true }) category: string;

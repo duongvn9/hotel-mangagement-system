@@ -6,6 +6,7 @@ export interface MaintenanceTargets {
   rooms: { id: string; roomNumber: string; floor: number; status: RoomStatus }[]
   equipment: {
     id: string
+    imageUrl?: string
     assetCode: string
     name: string
     category: string
@@ -62,6 +63,7 @@ export interface HistoryItem {
     room: { id: string; roomNumber: string; floor: number } | null
     equipment: {
       id: string
+      imageUrl?: string
       assetCode: string
       name: string
       category?: string

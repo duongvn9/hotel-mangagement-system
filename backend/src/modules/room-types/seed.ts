@@ -1,3 +1,4 @@
+import { SEED_ASSETS } from '../../database/seed-assets.js';
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import type { Seed } from '../../database/seed.js';
@@ -46,7 +47,15 @@ export const seedRoomTypes: Seed = async (app) => {
   for (const sample of samples) {
     await model.updateOne(
       { name: sample.name },
-      { $setOnInsert: sample },
+      {
+        $setOnInsert: {
+          ...sample,
+          images:
+            SEED_ASSETS['room-types'][
+              sample.name as keyof (typeof SEED_ASSETS)['room-types']
+            ],
+        },
+      },
       { upsert: true },
     );
   }

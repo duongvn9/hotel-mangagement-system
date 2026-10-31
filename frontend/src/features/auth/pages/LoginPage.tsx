@@ -1,3 +1,4 @@
+import { AssetImage } from '@/components/AssetImage'
 import { useQuery } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router'
@@ -127,7 +128,12 @@ function DevLogin({
               className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-cream-50 disabled:opacity-40"
             >
               <span>
-                <span className="block font-medium text-pearl-900">{account.fullName}</span>
+                <span className="block font-medium text-pearl-900">
+                  <span className="inline-flex items-center gap-2">
+                    <AssetImage decorative path={account.avatarUrl} name={account.fullName} />
+                    {account.fullName}
+                  </span>
+                </span>
                 <span className="text-sm text-stone-700">{account.email}</span>
               </span>
               <span className="text-xs font-semibold tracking-wider text-primary">

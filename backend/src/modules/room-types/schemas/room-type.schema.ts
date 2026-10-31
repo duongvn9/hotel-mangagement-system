@@ -12,6 +12,9 @@ export const validChildCapacity = (value: number): boolean =>
 
 @Schema({ timestamps: true, collection: 'roomtypes' })
 export class RoomType {
+  @Prop({ type: [String], default: [] })
+  images: string[];
+
   @Prop({ required: true, unique: true, trim: true })
   name: string;
 

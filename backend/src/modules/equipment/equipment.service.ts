@@ -49,6 +49,7 @@ export class EquipmentService {
           $project: {
             _id: 0,
             id: { $toString: '$_id' },
+            imageUrl: 1,
             assetCode: 1,
             name: 1,
             category: 1,

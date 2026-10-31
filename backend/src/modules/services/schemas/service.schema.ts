@@ -48,6 +48,9 @@ function strictString(value: unknown) {
   },
 })
 export class Service {
+  @Prop()
+  imageUrl?: string;
+
   @Prop({ required: true, unique: true, trim: true, set: strictString })
   name: string;
 

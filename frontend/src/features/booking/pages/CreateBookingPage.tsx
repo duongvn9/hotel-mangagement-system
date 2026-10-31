@@ -1,3 +1,4 @@
+import { AssetImage } from '@/components/AssetImage'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Alert } from '@/components/Alert'
@@ -227,6 +228,7 @@ export function CreateBookingPage() {
                             checked={on}
                             onChange={(event) => toggleService(svc.id, event.target.checked)}
                           />
+                          <AssetImage decorative path={svc.imageUrl} name={svc.name} />
                           <span className="font-semibold text-pearl-900">{svc.name}</span>
                           <span className="text-stone-700">
                             {svc.unitPriceVND

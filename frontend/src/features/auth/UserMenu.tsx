@@ -1,3 +1,4 @@
+import { AssetImage } from '@/components/AssetImage'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { flatLinks, isStaffRole, navGroupsFor, roleHome } from '@/app/navigation'
@@ -73,7 +74,10 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
         to="/profile"
         className={`${compact ? compactLink : ''} tracking-normal text-pearl-900 normal-case hover:text-primary`}
       >
-        {me.fullName}
+        <span className="inline-flex items-center gap-2">
+          <AssetImage decorative path={me.avatarUrl} name={me.fullName} />
+          {me.fullName}
+        </span>
       </Link>
       <button
         type="button"

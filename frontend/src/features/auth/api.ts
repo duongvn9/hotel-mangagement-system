@@ -18,6 +18,7 @@ export const ROLE_LABELS: Record<string, string> = {
 }
 
 export interface Me {
+  avatarUrl?: string
   id: string
   email: string
   fullName: string
@@ -27,6 +28,7 @@ export interface Me {
 }
 
 export interface DevAccount {
+  avatarUrl?: string
   id: string
   email: string
   fullName: string
@@ -38,6 +40,7 @@ export const getMe = async () => (await api.get<Me>('/auth/me')).data
 export const getDevAccounts = async () => (await api.get<DevAccount[]>('/auth/dev-accounts')).data
 
 export interface ProfileInput {
+  avatarUrl?: string
   fullName: string
   phone?: string
 }

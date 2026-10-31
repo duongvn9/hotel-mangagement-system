@@ -1,3 +1,4 @@
+import { AssetImage } from '@/components/AssetImage'
 import { useState, type FormEvent } from 'react'
 import { Alert } from '@/components/Alert'
 import { Button } from '@/components/Button'
@@ -35,6 +36,11 @@ export function ProfilePage() {
   return (
     <section className="mx-auto w-full max-w-md px-4 py-16">
       <h1 className="font-display text-4xl font-semibold text-pearl-900">Hồ sơ của tôi</h1>
+      <AssetImage
+        path={me.avatarUrl}
+        name={me.fullName}
+        className="mt-4 size-16 rounded-full object-cover"
+      />
       <dl className="mt-6 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
         <dt className="text-stone-700">Email</dt>
         <dd className="text-pearl-900">{me.email}</dd>

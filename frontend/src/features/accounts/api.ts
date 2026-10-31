@@ -1,6 +1,7 @@
 import { api } from '@/lib/api-client'
 
 export interface Account {
+  avatarUrl?: string
   id: string
   email: string
   fullName: string
@@ -28,6 +29,7 @@ export interface Page<T> {
 }
 
 export interface CreateAccountInput {
+  avatarUrl?: string
   email: string
   fullName: string
   phone?: string
@@ -35,7 +37,9 @@ export interface CreateAccountInput {
   password: string
 }
 
-export type UpdateAccountInput = Partial<Pick<Account, 'fullName' | 'phone' | 'role' | 'isActive'>>
+export type UpdateAccountInput = Partial<
+  Pick<Account, 'fullName' | 'phone' | 'role' | 'isActive' | 'avatarUrl'>
+>
 
 /** UC42 */
 export const listAccounts = async (query: AccountQuery) =>

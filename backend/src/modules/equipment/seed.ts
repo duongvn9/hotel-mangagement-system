@@ -1,3 +1,4 @@
+import { SEED_ASSETS } from '../../database/seed-assets.js';
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import type { Seed } from '../../database/seed.js';
@@ -67,6 +68,10 @@ export const seedEquipment: Seed = async (app) => {
       {
         $setOnInsert: {
           ...sample,
+          imageUrl:
+            SEED_ASSETS['equipment'][
+              sample.assetCode as keyof (typeof SEED_ASSETS)['equipment']
+            ],
           ...(room ? { room: room._id } : {}),
           condition: EquipmentCondition.Good,
           createdAt: now,

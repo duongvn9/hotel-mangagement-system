@@ -1,3 +1,4 @@
+import { AssetImage } from '@/components/AssetImage'
 import { Badge } from '@/components/Badge'
 import type { HistoryItem, HistoryStatus } from '../api'
 
@@ -29,6 +30,7 @@ export function HistoryTarget({ target }: { target: HistoryItem['target'] }) {
       )}
       {target.equipment && (
         <p>
+          <AssetImage decorative path={target.equipment.imageUrl} name={target.equipment.name} />
           {target.equipment.assetCode} — {target.equipment.name}
         </p>
       )}

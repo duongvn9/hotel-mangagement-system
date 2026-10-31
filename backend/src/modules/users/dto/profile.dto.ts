@@ -1,8 +1,16 @@
-import { PartialType } from '@nestjs/swagger';
+import { ASSET_PATH } from '../../../common/asset-path.js';
+import { ValidateIf } from 'class-validator';
+import { ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { IsOptional, IsString, Length, Matches } from 'class-validator';
 
 /** Thông tin hồ sơ người dùng tự nhập (UC01, UC04). */
 export class ProfileDto {
+  @ApiPropertyOptional()
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @Matches(ASSET_PATH)
+  avatarUrl?: string;
+
   @IsString()
   @Length(2, 100)
   fullName: string;
@@ -15,5 +23,5 @@ export class ProfileDto {
   phone?: string;
 }
 
-/** UC04: chỉ sửa được họ tên, số điện thoại. Gửi role, isActive, email... sẽ bị từ chối (BR-ACC-06). */
+/** UC04: sửa họ tên, số điện thoại, avatar. Gửi role, isActive, email... sẽ bị từ chối (BR-ACC-06). */
 export class UpdateProfileDto extends PartialType(ProfileDto) {}

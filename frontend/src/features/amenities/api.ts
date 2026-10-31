@@ -5,6 +5,7 @@ export interface AmenityRoomType {
   isActive: boolean
 }
 export interface Amenity {
+  iconUrl?: string
   id: string
   name: string
   description: string
@@ -30,6 +31,7 @@ export async function listAmenities(query: AmenityQuery): Promise<AmenityList> {
   return (await api.get<AmenityList>('/amenities', { params: query })).data
 }
 export interface AmenityInput {
+  iconUrl?: string
   name: string
   description?: string
   isActive?: boolean

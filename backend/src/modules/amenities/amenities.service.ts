@@ -131,6 +131,7 @@ export class AmenitiesService {
     return {
       id: String(row._id),
       name: row.name,
+      iconUrl: row.iconUrl,
       description: row.description ?? '',
       isActive: row.isActive,
       roomTypes,
@@ -289,6 +290,7 @@ export class AmenitiesService {
         return {
           id: String(row._id),
           name: row.name,
+          iconUrl: row.iconUrl,
           description: row.description ?? '',
           isActive: row.isActive,
           roomTypes,

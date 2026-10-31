@@ -32,6 +32,7 @@ export interface OrderContext {
   checkOut: string
 }
 export interface CatalogService {
+  imageUrl?: string
   id: string
   name: string
   description: string

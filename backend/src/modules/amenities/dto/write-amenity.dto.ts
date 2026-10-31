@@ -1,4 +1,5 @@
-﻿import { Transform } from 'class-transformer';
+import { ASSET_PATH } from '../../../common/asset-path.js';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
   ArrayUnique,
@@ -13,6 +14,12 @@ import {
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 export class CreateAmenityDto {
+  @ApiPropertyOptional({ type: String })
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @Matches(ASSET_PATH)
+  iconUrl?: string;
+
   @ApiProperty({ maxLength: 100 })
   @Transform(trim)
   @IsString()

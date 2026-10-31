@@ -29,6 +29,7 @@ export class ServicesService {
     return {
       id: String(row._id),
       name: row.name,
+      imageUrl: row.imageUrl,
       description: row.description ?? '',
       unit: row.unit ?? '',
       billable: row.billable,
@@ -178,6 +179,7 @@ export class ServicesService {
           _id: 0,
           id: { $toString: '$_id' },
           name: 1,
+          imageUrl: 1,
           description: { $ifNull: ['$description', ''] },
           unit: { $ifNull: ['$unit', ''] },
           billable: 1,
@@ -207,13 +209,14 @@ export class ServicesService {
   async publicCatalog() {
     const rows = await this.services
       .find({ isActive: true })
-      .select('name unit billable price')
+      .select('name unit billable price imageUrl')
       .sort({ name: 1 })
       .lean();
     return {
       items: rows.map((row) => ({
         id: String(row._id),
         name: row.name,
+        imageUrl: row.imageUrl,
         unit: row.unit ?? '',
         billable: row.billable,
         unitPriceVND: row.billable === false ? 0 : (row.price ?? null),

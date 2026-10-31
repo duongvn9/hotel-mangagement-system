@@ -1,5 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 export class ServiceResponse {
+  @ApiPropertyOptional({ type: String })
+  imageUrl?: string;
   @ApiProperty() id: string;
   @ApiProperty() name: string;
   @ApiProperty() description: string;
