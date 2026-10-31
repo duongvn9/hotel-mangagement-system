@@ -1,29 +1,20 @@
-import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link } from 'react-router'
+import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
+import { getErrorMessage } from '@/lib/api-client'
 import { BOOKING_STATUS_DISPLAY } from '../api'
-import { listStoredBookings } from '../storage'
+import { useMyBookings } from '../hooks'
 import { formatDate, money } from '../utils'
 
 /**
- * UC09/UC10 (đọc lại ở client) — danh sách booking đã tạo trên thiết bị này.
- * Backend chưa có GET nên đây là tiện ích per-viewer; kèm ô tra cứu bằng mã để mở lại booking cũ.
+ * UC09/UC10 — "Đặt phòng của tôi" cho Customer đăng nhập: đọc booking gắn với tài khoản
+ * từ server (GET /bookings/mine). Màn này yêu cầu đăng nhập (RequireAuth ở route); khách
+ * vãng lai tra cứu đơn bằng mã ở trang /booking/lookup.
  */
 export function MyBookingsPage() {
-  const navigate = useNavigate()
-  const bookings = listStoredBookings()
-  const [lookupId, setLookupId] = useState('')
-  const [lookupCode, setLookupCode] = useState('')
-
-  function openLookup(event: FormEvent) {
-    event.preventDefault()
-    const id = lookupId.trim()
-    if (!id) return
-    const code = lookupCode.trim()
-    navigate(`/booking/${id}${code ? `?code=${encodeURIComponent(code)}` : ''}`)
-  }
+  const query = useMyBookings()
+  const bookings = query.data ?? []
 
   return (
     <section className="mx-auto max-w-container space-y-8 px-4 py-10 font-body">
@@ -37,12 +28,21 @@ export function MyBookingsPage() {
         </Link>
       </div>
 
-      {bookings.length === 0 ? (
+      {query.isPending && <p role="status">Đang tải đặt phòng của bạn…</p>}
+
+      {query.isError && (
+        <Alert tone="danger">
+          {getErrorMessage(query.error, 'Không tải được danh sách đặt phòng.')}
+        </Alert>
+      )}
+
+      {query.isSuccess && bookings.length === 0 && (
         <p className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700">
-          Chưa có booking nào trên thiết bị này. Hãy tìm phòng để bắt đầu, hoặc tra cứu bằng mã bên
-          dưới.
+          Bạn chưa có đặt phòng nào. Hãy tìm phòng để bắt đầu.
         </p>
-      ) : (
+      )}
+
+      {bookings.length > 0 && (
         <ul className="space-y-3">
           {bookings.map((booking) => {
             const display = BOOKING_STATUS_DISPLAY[booking.status] ?? {
@@ -64,12 +64,12 @@ export function MyBookingsPage() {
                     </div>
                     <p className="text-sm text-stone-700">
                       {formatDate(booking.checkIn)} → {formatDate(booking.checkOut)} ·{' '}
-                      {booking.rooms.length} phòng · {booking.adultCount + booking.childCount} khách
+                      {booking.roomCount} phòng · {booking.adultCount + booking.childCount} khách
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs tracking-wider text-stone-700 uppercase">Tiền cọc</p>
-                    <p className="font-semibold text-primary tabular-nums">
+                    <p className="font-semibold whitespace-nowrap text-primary tabular-nums">
                       {money.format(booking.depositAmount)}
                     </p>
                   </div>
@@ -79,33 +79,6 @@ export function MyBookingsPage() {
           })}
         </ul>
       )}
-
-      <form
-        onSubmit={openLookup}
-        className="space-y-4 rounded-lg border border-stone-300 bg-white p-6"
-        aria-label="Tra cứu booking bằng mã"
-      >
-        <h2 className="font-display text-xl font-semibold text-pearl-900">Tra cứu booking</h2>
-        <p className="text-sm text-stone-700">
-          Dùng khi mở lại booking từ thiết bị khác. Nhập mã booking (vé) đã nhận cùng mã định danh
-          booking để đặt cọc hoặc huỷ.
-        </p>
-        <div className="grid gap-4 md:grid-cols-2">
-          <TextField
-            label="Mã định danh booking (ID)"
-            placeholder="vd: 6716..."
-            value={lookupId}
-            onChange={(event) => setLookupId(event.target.value)}
-          />
-          <TextField
-            label="Mã booking (vé)"
-            placeholder="BK..."
-            value={lookupCode}
-            onChange={(event) => setLookupCode(event.target.value)}
-          />
-        </div>
-        <Button type="submit">Mở booking</Button>
-      </form>
     </section>
   )
 }

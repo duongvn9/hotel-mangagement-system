@@ -62,6 +62,12 @@ export function LoginPage() {
             <Alert tone="danger">{error}</Alert>
           </div>
         )}
+        <p className="mt-4 text-sm text-stone-700">
+          Khách vãng lai?{' '}
+          <Link to="/booking/lookup" className="font-medium text-primary hover:underline">
+            Tra cứu đơn bằng mã
+          </Link>
+        </p>
         {isDevMode ? (
           <DevLogin pending={pending} onPick={(account) => run(() => loginAsDev(account))} />
         ) : (

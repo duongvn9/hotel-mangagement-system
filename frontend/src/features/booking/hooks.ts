@@ -4,9 +4,9 @@ import {
   cancelBooking,
   checkInBooking,
   checkOutBooking,
-  createBooking,
   createWalkInBooking,
   getBooking,
+  getMyBookings,
   getRoomTypeOverview,
   getServiceCatalog,
   holdBooking,
@@ -86,8 +86,9 @@ export function useRoomStatusBoard(params: RoomStatusBoardParams) {
   })
 }
 
-export function useCreateBooking() {
-  return useMutation({ mutationFn: createBooking })
+/** Booking của Customer đang đăng nhập (đọc từ server). */
+export function useMyBookings() {
+  return useQuery({ queryKey: ['my-bookings'], queryFn: getMyBookings })
 }
 
 export function useHoldBooking() {

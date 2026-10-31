@@ -97,16 +97,43 @@ describe('SearchRoomsPage', () => {
 })
 
 describe('MyBookingsPage', () => {
-  beforeEach(() => localStorage.clear())
+  afterEach(() => vi.restoreAllMocks())
 
-  it('shows an empty state and then a stored booking', async () => {
-    const empty = renderWithAuth(bookingRoutes, { path: '/my-bookings' })
-    expect(screen.getByText(/Chưa có booking nào/)).toBeInTheDocument()
+  const customer = {
+    me: {
+      id: 'c1',
+      email: 'khach@hms.local',
+      fullName: 'Nguyễn Văn Khách',
+      role: 'CUSTOMER',
+      permissions: [],
+    },
+  }
+
+  it('requires login and lists the customer bookings from the server', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue({ data: [] })
+    const empty = renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
+    expect(await screen.findByText(/Bạn chưa có đặt phòng nào/)).toBeInTheDocument()
     empty.unmount()
 
-    upsertStoredBooking(booking)
-    renderWithAuth(bookingRoutes, { path: '/my-bookings' })
-    expect(screen.getByText('BK123')).toBeInTheDocument()
+    get.mockResolvedValue({
+      data: [
+        {
+          id: 'b1',
+          code: 'BK123',
+          status: 'PENDING_DEPOSIT',
+          checkIn: '2099-01-10',
+          checkOut: '2099-01-12',
+          adultCount: 2,
+          childCount: 0,
+          roomCount: 1,
+          roomTotal: 2_000_000,
+          depositAmount: 200_000,
+          createdAt: '2099-01-01T00:00:00.000Z',
+        },
+      ],
+    })
+    renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
+    expect(await screen.findByText('BK123')).toBeInTheDocument()
     expect(screen.getByText('Chờ đặt cọc')).toBeInTheDocument()
   })
 })
@@ -267,12 +294,18 @@ describe('PaymentReturnPage (server-authoritative)', () => {
   })
 
   it('flags money that arrived after the hold expired for reconciliation', async () => {
-    rememberPaymentRef('TXN-LATE', 'b2')
     const path = '/payment/vnpay-return?vnp_TxnRef=TXN-LATE&vnp_ResponseCode=00'
     window.history.replaceState({}, '', path)
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
       if (url.startsWith('/payments/vnpay/return'))
-        return { data: { transactionRef: 'TXN-LATE', status: 'SUCCESS', responseCode: '00' } }
+        return {
+          data: {
+            transactionRef: 'TXN-LATE',
+            status: 'SUCCESS',
+            responseCode: '00',
+            bookingId: 'b2',
+          },
+        }
       if (url === '/bookings/b2')
         return {
           data: {

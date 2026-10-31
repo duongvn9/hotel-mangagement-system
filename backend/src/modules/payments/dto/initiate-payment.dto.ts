@@ -56,4 +56,7 @@ export class PaymentReturnResponse {
 
   @ApiProperty()
   responseCode: string;
+
+  @ApiProperty({ description: 'Booking của giao dịch, để đọc lại trạng thái' })
+  bookingId: string;
 }

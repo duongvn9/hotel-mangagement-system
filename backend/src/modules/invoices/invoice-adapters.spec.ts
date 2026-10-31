@@ -11,6 +11,7 @@ import {
 } from './invoice-adapters.js';
 import { InvoicesModule } from './invoices.module.js';
 import { InvoicesService } from './invoices.service.js';
+import { NOTIFICATION_OPTIONS } from '../../config/notifications.config.js';
 
 const InvoiceModel = model('H7AdapterInvoice', InvoiceSchema);
 describe('invoice adapter contracts', () => {
@@ -77,6 +78,19 @@ describe('invoice adapter contracts', () => {
       .useValue({})
       .overrideProvider(getModelToken('Service'))
       .useValue({})
+      // NotificationsModule (qua BookingsModule) cần options này khi khởi tạo.
+      .overrideProvider(NOTIFICATION_OPTIONS)
+      .useValue({
+        enabled: false,
+        user: '',
+        appPassword: '',
+        fromName: 'Test',
+        maxAttempts: 1,
+        retryBaseDelayMs: 1,
+        sendTimeoutMs: 1000,
+        queueCapacity: 100,
+        shutdownTimeoutMs: 1000,
+      })
       .compile();
     expect(module.get(InvoicePricingAdapter)).toBeInstanceOf(Pricing);
     expect(module.get(InvoicesService)).toBeInstanceOf(InvoicesService);

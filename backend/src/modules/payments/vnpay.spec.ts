@@ -94,7 +94,23 @@ async function moduleFor(config: unknown = settings) {
       ConfigModule.forRoot({
         ignoreEnvFile: true,
         ignoreEnvVars: true,
-        load: [() => ({ vnpay: config })],
+        load: [
+          () => ({
+            vnpay: config,
+            // NotificationsModule (qua PaymentsModule) cần config này khi khởi tạo.
+            notifications: {
+              enabled: false,
+              user: '',
+              appPassword: '',
+              fromName: 'Test',
+              maxAttempts: 1,
+              retryBaseDelayMs: 1,
+              sendTimeoutMs: 1000,
+              queueCapacity: 100,
+              shutdownTimeoutMs: 1000,
+            },
+          }),
+        ],
       }),
       PaymentsModule,
     ],

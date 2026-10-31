@@ -91,7 +91,7 @@ describe('Guest booking and code-based deposit (e2e)', () => {
       .send(guestBody)
       .expect(201);
     expect(response.body.code).toMatch(/^BK/);
-    expect(response.body.depositAmount).toBe(600000); // 30% của 2 đêm x 1.000.000
+    expect(response.body.depositAmount).toBe(200000); // 10% của 2 đêm x 1.000.000
     const saved = await bookings.findById(response.body.id).lean();
     expect(saved?.customer).toBeUndefined();
   });
@@ -106,7 +106,7 @@ describe('Guest booking and code-based deposit (e2e)', () => {
       .set('x-forwarded-for', '203.0.113.9')
       .send({ bookingId: created.body.id, code: created.body.code })
       .expect(201);
-    expect(response.body.amount).toBe(600000);
+    expect(response.body.amount).toBe(200000);
     expect(response.body.paymentUrl).toContain(settings.paymentUrl);
   });
 

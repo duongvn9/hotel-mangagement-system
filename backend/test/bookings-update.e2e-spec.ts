@@ -223,7 +223,7 @@ describe('Update booking (e2e)', () => {
     expect(body).toMatchObject({
       status: 'PENDING_DEPOSIT',
       roomTotal: 6000000, // 3 đêm x 2.000.000
-      depositAmount: 1800000, // cọc 30%
+      depositAmount: 600000, // cọc 10%
     });
     const hold = await holds
       .findOne({ booking: new Types.ObjectId(created.id) })

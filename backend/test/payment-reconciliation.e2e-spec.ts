@@ -94,7 +94,7 @@ describe('Payment reconciliation queue (e2e)', () => {
     );
     await http()
       .get(
-        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 600000, nextTxnNo())}`,
+        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 200000, nextTxnNo())}`,
       )
       .expect(200);
     return {
@@ -168,7 +168,7 @@ describe('Payment reconciliation queue (e2e)', () => {
       bookingId,
       bookingStatus: 'EXPIRED',
       purpose: 'DEPOSIT',
-      amount: 600000,
+      amount: 200000,
     });
 
     const paymentId = list.body.items[0].id;

@@ -228,6 +228,9 @@ export class PaymentsService {
         transactionRef: result.transactionRef,
         status: result.status,
         responseCode: result.responseCode,
+        // Trả bookingId từ server để trang Return đọc lại trạng thái booking mà không
+        // cần localStorage (dùng được khi khách thanh toán trên thiết bị khác).
+        bookingId: expected.booking.id,
       };
     } catch (error) {
       if (error instanceof VnpayValidationError) {

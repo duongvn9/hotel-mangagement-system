@@ -59,6 +59,12 @@ import type {
   BookingListResponse,
   ListBookingsQuery,
 } from './dto/list-bookings.dto.js';
+import type { MyBookingItem } from './dto/my-bookings.dto.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import {
+  bookingConfirmationEmail,
+  type BookingEmailData,
+} from './booking-email.js';
 
 type BookingDocument = HydratedDocument<Booking>;
 
@@ -68,8 +74,8 @@ const MS_PER_DAY = 86_400_000;
 /** Chống lạm dụng: tối đa số hold một phiên/IP tạo trong cửa sổ thời gian. */
 const HOLD_RATE_WINDOW_MS = 30 * 60 * 1000;
 const HOLD_RATE_MAX = 3;
-/** Tỷ lệ đặt cọc trên tiền phòng (placeholder, chờ SRS chốt chính thức). */
-export const DEPOSIT_RATE = 0.3;
+/** Tỷ lệ đặt cọc trên tiền phòng (chốt theo nghiệp vụ: 10%). */
+export const DEPOSIT_RATE = 0.1;
 
 interface RoomRate {
   room: Types.ObjectId;
@@ -98,7 +104,15 @@ export class BookingsService {
     @Inject(AvailabilityClock) private readonly clock: AvailabilityClock,
     @InjectModel(PaymentTransaction.name)
     private readonly payments: Model<PaymentTransaction>,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /** Gửi email booking (best-effort): không bao giờ làm hỏng luồng nghiệp vụ. */
+  private emailBooking(data: BookingEmailData): void {
+    const input = bookingConfirmationEmail(data);
+    if (!input) return;
+    void this.notifications.send(input).catch(() => undefined);
+  }
 
   async create(dto: CreateBookingDto, user?: AuthUser) {
     // Public: Guest (không đăng nhập) đặt được; Customer đăng nhập gắn booking vào tài
@@ -162,6 +176,19 @@ export class BookingsService {
       );
     }
 
+    // Gửi mã đặt phòng qua email để khách thanh toán và quản lý đơn.
+    this.emailBooking({
+      code: booking.code,
+      guestName: booking.guestName,
+      guestEmail: booking.guestEmail,
+      checkIn: stay.checkIn,
+      checkOut: stay.checkOut,
+      roomCount: roomIds.length,
+      roomTotal: booking.roomTotal,
+      depositAmount: booking.depositAmount,
+      status: booking.status,
+    });
+
     return {
       id: String(booking._id),
       code: booking.code,
@@ -219,6 +246,19 @@ export class BookingsService {
         'One or more rooms were just taken; please choose again',
       );
     }
+
+    // Booking tại quầy vào thẳng CONFIRMED: gửi email xác nhận cho khách.
+    this.emailBooking({
+      code: booking.code,
+      guestName: booking.guestName,
+      guestEmail: booking.guestEmail,
+      checkIn: stay.checkIn,
+      checkOut: stay.checkOut,
+      roomCount: roomIds.length,
+      roomTotal: booking.roomTotal,
+      depositAmount: booking.depositAmount,
+      status: booking.status,
+    });
 
     return {
       id: String(booking._id),
@@ -287,6 +327,33 @@ export class BookingsService {
       page: query.page,
       limit: query.limit,
     };
+  }
+
+  /** Danh sách booking của chính Customer đang đăng nhập (mới nhất trước). */
+  async listForCustomer(userId: string): Promise<MyBookingItem[]> {
+    const rows = await this.bookings
+      .find({ customer: new Types.ObjectId(userId), isActive: true })
+      .sort({ createdAt: -1, _id: -1 })
+      .select(
+        'code status checkIn checkOut adultCount childCount rooms roomTotal depositAmount createdAt',
+      )
+      .lean()
+      .exec();
+    return rows.map((booking) => ({
+      id: String(booking._id),
+      code: booking.code,
+      status: booking.status,
+      checkIn: booking.checkIn.toISOString(),
+      checkOut: booking.checkOut.toISOString(),
+      adultCount: booking.adultCount,
+      childCount: booking.childCount,
+      roomCount: booking.rooms.length,
+      roomTotal: booking.roomTotal,
+      depositAmount: booking.depositAmount,
+      createdAt: (
+        (booking as { createdAt?: Date }).createdAt ?? booking.checkIn
+      ).toISOString(),
+    }));
   }
 
   /**
@@ -707,7 +774,7 @@ export class BookingsService {
       status?: BookingStatus;
     },
   ) {
-    // Cọc = 30% tiền phòng (placeholder chờ SRS), làm tròn về VND nguyên.
+    // Cọc = DEPOSIT_RATE × tiền phòng (10%), làm tròn về VND nguyên.
     const depositAmount = Math.round(extra.roomTotal * DEPOSIT_RATE);
     return this.insertBooking({
       ...(extra.customer ? { customer: extra.customer } : {}),
@@ -902,6 +969,18 @@ export class BookingsService {
     }
     booking.status = BookingStatus.PendingDeposit;
     await booking.save();
+    // Gửi mã đặt phòng qua email ngay khi chuyển sang chờ đặt cọc.
+    this.emailBooking({
+      code: booking.code,
+      guestName: booking.guestName,
+      guestEmail: booking.guestEmail,
+      checkIn: booking.checkIn,
+      checkOut: booking.checkOut,
+      roomCount: booking.rooms.length,
+      roomTotal: booking.roomTotal,
+      depositAmount: booking.depositAmount,
+      status: booking.status,
+    });
     return this.holdResponse(booking, hold);
   }
 

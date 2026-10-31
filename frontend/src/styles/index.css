@@ -14,6 +14,15 @@
     font-size: var(--text-base);
     line-height: var(--leading-normal);
   }
+  /*
+   * Cormorant Garamond (font-display) mặc định dùng chữ số kiểu cổ (oldstyle):
+   * các số 3,4,5,7,9 thò đuôi xuống dưới baseline nên bị cắt/như rớt dòng trong
+   * tiêu đề. Ép dùng chữ số canh dòng (lining) để số nằm gọn trên baseline.
+   */
+  .font-display {
+    font-variant-numeric: lining-nums;
+    font-feature-settings: 'lnum' 1;
+  }
   :focus-visible {
     outline: none;
     box-shadow: var(--shadow-focus);

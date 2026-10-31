@@ -42,6 +42,7 @@ export interface RoomTypeOverview {
   childCapacity: number
   capacity: number
   pricePerNight: number
+  images?: string[]
   amenities: { id: string; name: string }[]
 }
 
@@ -95,11 +96,6 @@ export interface Booking {
   depositAmount: number
   /** Thời điểm giữ phòng hết hạn (ISO); vắng khi booking không còn giữ phòng. */
   holdExpiresAt?: string
-}
-
-/** UC07/UC46 — Tạo booking. Nếu đang đăng nhập Customer, booking tự gắn với tài khoản. */
-export async function createBooking(input: CreateBookingInput): Promise<Booking> {
-  return (await api.post<Booking>('/bookings', input)).data
 }
 
 /** Yêu cầu giữ phòng khi khách bấm "Đặt phòng" (chưa cần thông tin liên hệ). */
@@ -174,6 +170,26 @@ export async function submitBookingDetails(input: SubmitBookingDetailsInput): Pr
  */
 export async function getBooking(id: string, params: { code?: string } = {}): Promise<Booking> {
   return (await api.get<Booking>(`/bookings/${id}`, { params })).data
+}
+
+/** Một dòng "Đặt phòng của tôi" (Customer đăng nhập, đọc từ server). */
+export interface MyBookingItem {
+  id: string
+  code: string
+  status: string
+  checkIn: string
+  checkOut: string
+  adultCount: number
+  childCount: number
+  roomCount: number
+  roomTotal: number
+  depositAmount: number
+  createdAt: string
+}
+
+/** Danh sách booking của Customer đang đăng nhập (GET /bookings/mine). */
+export async function getMyBookings(): Promise<MyBookingItem[]> {
+  return (await api.get<MyBookingItem[]>('/bookings/mine')).data
 }
 
 /** Booking walk-in lễ tân vừa tạo (UC08): vào thẳng CONFIRMED, không cọc/giữ phòng. */
@@ -515,6 +531,8 @@ export interface PaymentReturn {
   transactionRef: string
   status: PaymentResultStatus
   responseCode: string
+  /** Booking của giao dịch (server trả) để đọc lại trạng thái, không cần localStorage. */
+  bookingId: string
 }
 
 export const PAYMENT_RESULT_DISPLAY: Record<

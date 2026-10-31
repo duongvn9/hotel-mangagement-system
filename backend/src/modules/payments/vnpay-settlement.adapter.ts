@@ -7,6 +7,8 @@ import {
   BookingStatus,
   UNCONFIRMED_BOOKING_STATUSES,
 } from '../../common/constants/booking-status.enum.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { bookingConfirmationEmail } from '../bookings/booking-email.js';
 import { Booking } from '../bookings/schemas/booking.schema.js';
 import { withBookingFinancialOperation } from '../bookings/booking-financial-operation.js';
 import { RoomHold } from '../bookings/schemas/room-hold.schema.js';
@@ -55,6 +57,7 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
     @InjectModel(RoomHold.name) private readonly holds: Model<RoomHold>,
     @InjectModel(Invoice.name) private readonly invoices: Model<Invoice>,
+    private readonly notifications: NotificationsService,
     private readonly moduleRef: ModuleRef,
   ) {
     super();
@@ -130,11 +133,87 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
         if (!confirmed) return duplicate ? 'duplicate' : 'committed';
         // Booking vừa CONFIRMED: tự sinh ServiceOrder từ dịch vụ khách chọn khi đặt.
         await this.generateServiceOrders(expected.booking.id);
+        // Gửi email xác nhận booking cho khách (best-effort).
+        await this.emailBookingConfirmed(expected.booking.id);
       }
       await this.reconcileInvoice(expected);
+      if (expected.payment.purpose === PaymentPurpose.Final) {
+        // Gửi email biên nhận thanh toán cuối cho khách (best-effort).
+        await this.emailPaymentSuccess(
+          expected.booking.id,
+          expected.payment.amount,
+          result.transactionRef,
+          result.paidAt ?? new Date(),
+        );
+      }
     }
 
     return duplicate ? 'duplicate' : 'committed';
+  }
+
+  /** Email "booking đã xác nhận" sau khi cọc thành công; lỗi không ảnh hưởng settlement. */
+  private async emailBookingConfirmed(bookingId: string): Promise<void> {
+    try {
+      const booking = await this.bookings
+        .findById(bookingId)
+        .select(
+          'code guestName guestEmail checkIn checkOut rooms roomTotal depositAmount',
+        )
+        .lean();
+      if (!booking?.guestEmail) return;
+      const input = bookingConfirmationEmail({
+        code: booking.code,
+        guestName: booking.guestName,
+        guestEmail: booking.guestEmail,
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        roomCount: booking.rooms.length,
+        roomTotal: booking.roomTotal,
+        depositAmount: booking.depositAmount,
+        status: BookingStatus.Confirmed,
+      });
+      if (input) await this.notifications.send(input);
+    } catch (error) {
+      this.logger.warn(
+        `Booking confirmation email failed for ${bookingId}: ${
+          (error as Error).message
+        }`,
+      );
+    }
+  }
+
+  /** Email biên nhận thanh toán cuối (PAYMENT_SUCCESS); best-effort. */
+  private async emailPaymentSuccess(
+    bookingId: string,
+    amount: number,
+    transactionRef: string,
+    paidAt: Date,
+  ): Promise<void> {
+    try {
+      const booking = await this.bookings
+        .findById(bookingId)
+        .select('code guestName guestEmail')
+        .lean();
+      if (!booking?.guestEmail) return;
+      await this.notifications.send({
+        to: booking.guestEmail,
+        template: 'PAYMENT_SUCCESS',
+        data: {
+          bookingCode: booking.code,
+          guestName: booking.guestName ?? '',
+          amount,
+          purpose: PaymentPurpose.Final,
+          paidAt,
+          transactionRef,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Payment success email failed for ${bookingId}: ${
+          (error as Error).message
+        }`,
+      );
+    }
   }
 
   /**

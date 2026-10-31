@@ -1,11 +1,9 @@
-import { useEffect } from 'react'
 import { Link } from 'react-router'
 import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
 import { getErrorMessage } from '@/lib/api-client'
 import { BOOKING_STATUS_DISPLAY, PAYMENT_RESULT_DISPLAY } from '../api'
 import { useBooking, useVerifyReturn } from '../hooks'
-import { lookupPaymentRef, upsertStoredBooking } from '../storage'
 
 /**
  * Đích VNPay redirect về sau khi thanh toán. Trang Return CHỈ hiển thị — bằng chứng confirm
@@ -15,17 +13,14 @@ export function PaymentReturnPage() {
   const rawQuery = window.location.search.replace(/^\?/, '')
   const verify = useVerifyReturn(rawQuery)
 
-  // Map giao dịch → booking để đọc lại trạng thái thật từ server (poll tới khi chốt).
-  const bookingId = verify.data ? lookupPaymentRef(verify.data.transactionRef) : undefined
+  // bookingId do server trả kèm kết quả Return (không cần localStorage): đọc lại trạng thái
+  // thật và poll tới khi IPN chốt CONFIRMED, dùng được cả khi thanh toán ở thiết bị khác.
+  const bookingId = verify.data?.bookingId
   const bookingQuery = useBooking(bookingId ?? '', {
     enabled: Boolean(bookingId),
     poll: true,
   })
   const booking = bookingQuery.data
-
-  useEffect(() => {
-    if (booking) upsertStoredBooking(booking)
-  }, [booking])
 
   const payDisplay = verify.data ? PAYMENT_RESULT_DISPLAY[verify.data.status] : undefined
   const bookingDisplay = booking ? BOOKING_STATUS_DISPLAY[booking.status] : undefined

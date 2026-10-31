@@ -16,6 +16,7 @@ import {
   ApiOperation,
   ApiTags,
   ApiTooManyRequestsResponse,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { AuthUser } from '../../common/auth/auth-user.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
@@ -48,6 +49,7 @@ import {
   BookingListResponse,
   ListBookingsQuery,
 } from './dto/list-bookings.dto.js';
+import { MyBookingItem } from './dto/my-bookings.dto.js';
 import { BookingsService } from './bookings.service.js';
 import { CheckInService } from './check-in.service.js';
 import { ServicesService } from '../services/services.service.js';
@@ -123,6 +125,17 @@ export class BookingsController {
   @ApiOkResponse({ type: BookingListResponse })
   list(@Query() query: ListBookingsQuery) {
     return this.bookings.list(query);
+  }
+
+  @Get('mine')
+  @Roles(Role.Customer)
+  @ApiOperation({
+    summary: 'List the signed-in customer’s own bookings (newest first)',
+  })
+  @ApiOkResponse({ type: [MyBookingItem] })
+  @ApiUnauthorizedResponse()
+  myBookings(@CurrentUser() user: AuthUser) {
+    return this.bookings.listForCustomer(user.id);
   }
 
   @Post('walk-in')

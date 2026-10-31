@@ -155,11 +155,11 @@ describe('Payment consistency with room hold (e2e)', () => {
       .set(STAFF)
       .send({ bookingId })
       .expect(201);
-    expect(deposit.body.amount).toBe(600000);
+    expect(deposit.body.amount).toBe(200000);
 
     const callback = await http()
       .get(
-        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 600000, nextTxnNo())}`,
+        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 200000, nextTxnNo())}`,
       )
       .expect(200);
     expect(callback.body.RspCode).toBe('00');
@@ -202,7 +202,7 @@ describe('Payment consistency with room hold (e2e)', () => {
 
     const callback = await http()
       .get(
-        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 600000, nextTxnNo())}`,
+        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 200000, nextTxnNo())}`,
       )
       .expect(200);
     // VNPay vẫn được ACK (tiền có thật), nhưng booking không được confirm.
@@ -244,7 +244,7 @@ describe('Payment consistency with room hold (e2e)', () => {
 
     const callback = await http()
       .get(
-        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 600000, nextTxnNo())}`,
+        `/api/v1/payments/vnpay/ipn?${ipn(deposit.body.transactionRef, 200000, nextTxnNo())}`,
       )
       .expect(200);
     // Tiền có thật nên ACK VNPay, nhưng adapter tự phát hiện hold quá hạn: không confirm.

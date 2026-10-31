@@ -4,11 +4,13 @@ import { RequireAuth } from '@/features/auth/RequireAuth'
 import { EditBookingPage } from './pages/EditBookingPage'
 import { BookingListPage } from './pages/BookingListPage'
 import { BookingDetailPage } from './pages/BookingDetailPage'
+import { ReceptionBookingDetailPage } from './pages/ReceptionBookingDetailPage'
 import { CreateBookingPage } from './pages/CreateBookingPage'
 import { MyBookingsPage } from './pages/MyBookingsPage'
 import { RoomStatusBoardPage } from './pages/RoomStatusBoardPage'
 import { FrontDeskPage } from './pages/FrontDeskPage'
 import { GuestSearchPage } from './pages/GuestSearchPage'
+import { LookupBookingPage } from './pages/LookupBookingPage'
 import { PaymentReturnPage } from './pages/PaymentReturnPage'
 import { ReconciliationPage } from './pages/ReconciliationPage'
 import { RoomDetailsPage } from './pages/RoomDetailsPage'
@@ -25,8 +27,16 @@ export const bookingRoutes: RouteObject[] = [
   { path: 'search', element: <SearchRoomsPage /> },
   { path: 'room-types/:id', element: <RoomDetailsPage /> },
   { path: 'booking/new', element: <CreateBookingPage /> },
+  { path: 'booking/lookup', element: <LookupBookingPage /> },
   { path: 'booking/:id', element: <BookingDetailPage /> },
-  { path: 'my-bookings', element: <MyBookingsPage /> },
+  {
+    path: 'my-bookings',
+    element: (
+      <RequireAuth roles={[Role.Customer]}>
+        <MyBookingsPage />
+      </RequireAuth>
+    ),
+  },
   {
     path: 'reception/front-desk',
     element: (
@@ -56,6 +66,14 @@ export const bookingRoutes: RouteObject[] = [
     element: (
       <RequireAuth roles={[Role.Receptionist, Role.Manager]}>
         <BookingListPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: 'reception/bookings/:code',
+    element: (
+      <RequireAuth roles={[Role.Receptionist, Role.Manager]}>
+        <ReceptionBookingDetailPage />
       </RequireAuth>
     ),
   },
