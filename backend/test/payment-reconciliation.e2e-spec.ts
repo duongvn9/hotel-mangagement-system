@@ -209,7 +209,11 @@ describe('Payment reconciliation queue (e2e)', () => {
       .send({ note: 'Refund completed' })
       .expect(200);
     const resolved = await payments.findById(paymentId).lean();
-    const raw = ipn(transactionRef, 600000, payment!.providerTransactionRef!);
+    const raw = ipn(
+      transactionRef,
+      payment!.amount,
+      payment!.providerTransactionRef!,
+    );
     for (let attempt = 0; attempt < 2; attempt++) {
       const duplicate = await http()
         .get(`/api/v1/payments/vnpay/ipn?${raw}`)
