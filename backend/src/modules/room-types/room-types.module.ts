@@ -4,6 +4,7 @@ import { AmenitiesModule } from '../amenities/amenities.module.js';
 import { RoomType, RoomTypeSchema } from './schemas/room-type.schema.js';
 import { RoomTypesController } from './room-types.controller.js';
 import { RoomTypesService } from './room-types.service.js';
+import { RoomTypeImagesService } from './room-type-images.service.js';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { RoomTypesService } from './room-types.service.js';
     ]),
   ],
   controllers: [RoomTypesController],
-  providers: [RoomTypesService],
+  providers: [RoomTypesService, RoomTypeImagesService],
   exports: [MongooseModule, RoomTypesService],
 })
 export class RoomTypesModule {}

@@ -1,5 +1,13 @@
 # Ảnh seed Grand Emily HMS
 
+## Ảnh tải lên khi thêm/sửa loại phòng
+
+Form loại phòng cho phép chọn/xem trước/bỏ ảnh, tối đa 10 ảnh JPG/PNG/WebP, mỗi ảnh tối đa 5 MB. Khi lưu, frontend gửi từng ảnh tới `POST /api/v1/room-types/images` (cùng quyền quản lý cơ sở vật chất với form). Backend kiểm tra loại file và chữ ký ảnh, sinh UUID, lưu tại `hms/room-types/<uuid>.<ext>` và upload cùng tên vào S3 key `images/seeds/room-types/<uuid>.<ext>`. Chỉ khi cả hai bước thành công mới trả đường dẫn để lưu vào `RoomType.images`; lỗi S3 sẽ dọn bản cục bộ vừa tạo. Không đổi bucket policy tự động.
+
+Cấu hình backend: `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `HMS_ASSET_DIR` (mặc định `../hms`, tính từ thư mục chạy backend). Không commit khóa thật. Frontend vẫn dùng `VITE_ASSET_BASE_URL` trỏ tới public bucket. Khi chạy container cần mount thư mục ảnh ghi được và đặt `HMS_ASSET_DIR` phù hợp.
+
+Bỏ ảnh khỏi form chỉ bỏ liên kết trong loại phòng, không xóa bản lưu trên ổ đĩa/S3 vì ảnh có thể đang được tham chiếu ở nơi khác. Upload thành công nhưng người dùng hủy hoặc lưu loại phòng thất bại có thể để lại file chưa được tham chiếu; khi thử lại ngay trong form, ảnh đã upload được giữ lại và không gửi lại.
+
 Ảnh được đọc trực tiếp từ storage đã upload. `hms/` chỉ để đối chứng, không được copy sang frontend hay upload lại. DB lưu đường dẫn tương đối `/images/seeds/...`.
 
 ## Phần đã có được giữ lại
