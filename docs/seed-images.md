@@ -1,5 +1,11 @@
 # Ảnh seed Grand Emily HMS
 
+## Ảnh dịch vụ
+
+Manager có thể chọn, xem trước, thay hoặc bỏ một ảnh khi thêm/sửa dịch vụ (JPG/PNG/WebP, tối đa 5 MB). `POST /api/v1/services/images` dùng quyền quản lý cơ sở vật chất, lưu cùng tên UUID tại `hms/services` và S3 key `images/seeds/services/...`. Dùng chung cấu hình và kiểm tra file với loại phòng/tiện nghi. Chỉ trả đường dẫn khi lưu cả hai nơi thành công; lỗi S3 dọn bản local vừa tạo.
+
+`Service.imageUrl` lưu đường dẫn ảnh; bỏ qua trường này giữ ảnh cũ, chuỗi rỗng bỏ liên kết ảnh. Thử lại trong cùng form giữ ảnh đã upload thành công; tải lại dữ liệu khi xung đột sẽ thay cả lựa chọn ảnh theo dữ liệu server. Bỏ ảnh không xóa file đã lưu, tránh ảnh hưởng các tham chiếu khác. Ảnh ở danh sách quản lý, form và trang khách chọn dịch vụ có thể bấm để xem lớn trong modal; Escape chỉ đóng modal ảnh.
+
 ## Ảnh tiện nghi
 
 Form UC52 chỉ cho chọn một ảnh JPG/PNG/WebP (tối đa 5 MB), có xem trước và modal xem lớn. Chọn ảnh mới thay ảnh hiện tại; API tạo/sửa từ chối mảng nhiều hơn một ảnh. `POST /api/v1/amenities/images` dùng quyền quản lý cơ sở vật chất, lưu cùng tên UUID ở `hms/amenities` và S3 key `images/seeds/amenities/...`; dùng chung cấu hình storage và kiểm tra file với loại phòng. Chỉ trả đường dẫn sau khi lưu cả hai nơi; lỗi S3 dọn bản local vừa tạo.

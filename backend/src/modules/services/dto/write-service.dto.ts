@@ -15,8 +15,11 @@ import {
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 export class CreateServiceDto {
-  @ApiPropertyOptional({ type: String })
-  @ValidateIf((_object, value) => value !== undefined)
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Image asset path; empty string clears the image',
+  })
+  @ValidateIf((_object, value) => value !== undefined && value !== '')
   @IsString()
   @Matches(ASSET_PATH)
   imageUrl?: string;

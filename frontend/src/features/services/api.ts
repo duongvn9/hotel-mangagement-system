@@ -37,3 +37,10 @@ export async function createService(input: ServiceInput): Promise<Service> {
 export async function updateService(id: string, input: Partial<ServiceInput>): Promise<Service> {
   return (await api.patch<Service>(`/services/${id}`, input)).data
 }
+
+export async function uploadServiceImage(file: File): Promise<string> {
+  const body = new FormData()
+  body.append('file', file)
+  return (await api.post<{ path: string }>('/services/images', body, { timeout: 120_000 })).data
+    .path
+}

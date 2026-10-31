@@ -6,18 +6,20 @@ export function ImagePicker({
   name,
   onChoose,
   onRemove,
+  label = 'Ảnh tiện nghi',
 }: {
   images: { src: string; label: string }[]
   name: string
   onChoose: (files: File[]) => void
   onRemove: (index: number) => void
+  label?: string
 }) {
   const id = useId()
   const [viewing, setViewing] = useState<number | null>(null)
   return (
     <div className="min-w-0 space-y-3 rounded-xl border border-stone-300 bg-cream-100/40 p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold">Ảnh tiện nghi</p>
+        <p className="text-sm font-semibold">{label}</p>
         <span className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-xs">
           {images.length} / 1 ảnh
         </span>
@@ -26,7 +28,7 @@ export function ImagePicker({
         id={id}
         type="file"
         accept="image/jpeg,image/png,image/webp"
-        aria-label="Ảnh tiện nghi"
+        aria-label={label}
         aria-describedby={`${id}-help`}
         className="peer sr-only"
         onChange={(event) => {
@@ -81,7 +83,7 @@ export function ImagePicker({
       {viewing !== null && (
         <ImageLightbox
           images={images.map((image) => image.src)}
-          name={name || 'Ảnh tiện nghi'}
+          name={name || label}
           startIndex={viewing}
           onClose={() => setViewing(null)}
         />
