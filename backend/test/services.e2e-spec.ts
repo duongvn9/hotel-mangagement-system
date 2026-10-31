@@ -360,6 +360,7 @@ describe('UC53 Service list and H4 (real AppModule)', () => {
       'billable',
       'description',
       'id',
+      'imageUrl',
       'isActive',
       'name',
       'price',

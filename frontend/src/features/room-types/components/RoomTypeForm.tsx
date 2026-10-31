@@ -5,11 +5,13 @@ import { Alert } from '@/components/Alert'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { getErrorMessage } from '@/lib/api-client'
+import { AssetImage } from '@/components/AssetImage'
 import {
   createRoomType,
   getAmenityOptions,
   getRoomType,
   updateRoomType,
+  uploadRoomTypeImage,
   type RoomType,
   type RoomTypeInput,
 } from '../api'
@@ -98,6 +100,14 @@ export function RoomTypeForm({
   )
   const [selected, setSelected] = useState(initial?.amenities.map((a) => a.id) ?? [])
   const [active, setActive] = useState(initial?.isActive ?? true)
+  const [images, setImages] = useState<string[]>(initial?.images ?? [])
+  const [files, setFiles] = useState<File[]>([])
+  const [previewUrls, setPreviewUrls] = useState(new Map<File, string>())
+  const generatedUrls = useRef<string[]>([])
+  useEffect(() => {
+    const urls = generatedUrls.current
+    return () => urls.forEach((url) => URL.revokeObjectURL(url))
+  }, [])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [general, setGeneral] = useState('')
   const focusError = () =>
@@ -106,8 +116,19 @@ export function RoomTypeForm({
       0,
     )
   const mutation = useMutation({
-    mutationFn: (input: Partial<RoomTypeInput>) =>
-      initial ? updateRoomType(initial.id, input) : createRoomType(input as RoomTypeInput),
+    mutationFn: async (input: Partial<RoomTypeInput>) => {
+      const paths = [...(input.images ?? [])]
+      // Keep successful uploads when retrying a failed upload or save.
+      for (const file of input.images === undefined ? [] : files) {
+        paths.push(await uploadRoomTypeImage(file))
+        setImages([...paths])
+        setFiles((previous) => previous.filter((item) => item !== file))
+      }
+      const payload = input.images === undefined ? input : { ...input, images: paths }
+      return initial
+        ? updateRoomType(initial.id, payload)
+        : createRoomType(payload as RoomTypeInput)
+    },
     onSuccess: async () => {
       await Promise.all([
         client.invalidateQueries({ queryKey: ['room-types'] }),
@@ -174,6 +195,7 @@ export function RoomTypeForm({
     const isActive = deactivate ? false : active
     if (initial?.isActive && !isActive && !window.confirm(confirmation)) return
     const input: RoomTypeInput = {
+      ...(images.length || initial?.images !== undefined || files.length ? { images } : {}),
       name: name.trim(),
       description: description.trim(),
       adultCapacity: Number(adultCapacity),
@@ -195,6 +217,7 @@ export function RoomTypeForm({
           ),
         )
       : input
+    if (files.length) changes.images = images
     if (!Object.keys(changes).length) {
       onClose()
       return
@@ -232,6 +255,84 @@ export function RoomTypeForm({
           value={description}
           onChange={(event) => setDescription(event.target.value)}
         />
+        <div className="space-y-2">
+          <label htmlFor="room-type-images" className="block text-sm font-semibold">
+            Ảnh loại phòng
+          </label>
+          <input
+            id="room-type-images"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            aria-describedby="room-type-images-help"
+            onChange={(event) => {
+              const added = Array.from(event.target.files ?? [])
+              event.target.value = ''
+              if (images.length + files.length + added.length > 10) {
+                setGeneral('Mỗi loại phòng có tối đa 10 ảnh.')
+                return
+              }
+              if (
+                added.some(
+                  (file) =>
+                    !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
+                    file.size === 0 ||
+                    file.size > 5 * 1024 * 1024,
+                )
+              ) {
+                setGeneral('Chọn ảnh JPG, PNG hoặc WebP, tối đa 5 MB mỗi ảnh.')
+                return
+              }
+              setGeneral('')
+              const addedPreviews = added.map((file) => {
+                const url = URL.createObjectURL(file)
+                generatedUrls.current.push(url)
+                return [file, url] as const
+              })
+              setPreviewUrls((previous) => new Map([...previous, ...addedPreviews]))
+              setFiles((previous) => [...previous, ...added])
+            }}
+          />
+          <p id="room-type-images-help" className="text-xs">
+            Tối đa 10 ảnh JPG, PNG hoặc WebP, mỗi ảnh tối đa 5 MB. Ảnh đầu tiên là ảnh đại diện.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {images.map((path, index) => (
+              <div key={path} className="space-y-1">
+                <AssetImage
+                  path={path}
+                  name={`Ảnh ${index + 1}`}
+                  className="h-20 w-28 rounded object-cover"
+                />
+                <button
+                  type="button"
+                  className="min-h-11 text-sm underline"
+                  onClick={() => setImages((previous) => previous.filter((_, i) => i !== index))}
+                >
+                  Bỏ ảnh {index + 1}
+                </button>
+              </div>
+            ))}
+            {files.map((file, index) => (
+              <div key={`${file.name}-${index}`} className="space-y-1">
+                {previewUrls.get(file) && (
+                  <img
+                    src={previewUrls.get(file)}
+                    alt={file.name}
+                    className="h-20 w-28 rounded object-cover"
+                  />
+                )}
+                <button
+                  type="button"
+                  className="min-h-11 text-sm underline"
+                  onClick={() => setFiles((previous) => previous.filter((_, i) => i !== index))}
+                >
+                  Bỏ {file.name}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
         <TextField
           label="Người lớn"
           required

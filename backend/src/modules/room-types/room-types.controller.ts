@@ -6,7 +6,14 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  RoomTypeImagesService,
+  type RoomImageFile,
+} from './room-type-images.service.js';
 import {
   ApiForbiddenResponse,
   ApiOkResponse,
@@ -38,7 +45,21 @@ import { RoomTypeOptionResponse } from './dto/room-type-option.dto.js';
 @ApiUnauthorizedResponse()
 @ApiForbiddenResponse()
 export class RoomTypesController {
-  constructor(private readonly roomTypes: RoomTypesService) {}
+  constructor(
+    private readonly roomTypes: RoomTypesService,
+    private readonly images: RoomTypeImagesService,
+  ) {}
+
+  @Post('images')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 0 },
+    }),
+  )
+  @ApiOperation({ summary: 'Upload room type image to local archive and S3' })
+  uploadImage(@UploadedFile() file?: RoomImageFile) {
+    return this.images.upload(file);
+  }
 
   @Get('options')
   @ApiOperation({
