@@ -1,5 +1,19 @@
 # Ảnh seed Grand Emily HMS
 
+## Ảnh tiện nghi
+
+Form UC52 có gallery tối đa 10 ảnh JPG/PNG/WebP (5 MB mỗi ảnh), xem trước và modal chuyển ảnh giống loại phòng. `POST /api/v1/amenities/images` dùng quyền quản lý cơ sở vật chất, lưu cùng tên UUID ở `hms/amenities` và S3 key `images/seeds/amenities/...`; dùng chung cấu hình storage và kiểm tra file với loại phòng. Chỉ trả đường dẫn sau khi lưu cả hai nơi; lỗi S3 dọn bản local vừa tạo.
+
+`Amenity.images` lưu thứ tự gallery; ảnh đầu tiên đồng bộ sang `iconUrl` cho các màn hình đang dùng icon. Các tiện nghi cũ chỉ có `iconUrl` (kể cả SVG seed) vẫn hiển thị ảnh đó trong gallery, không cần seed/backfill. `images: []` bỏ toàn bộ liên kết ảnh và làm rỗng `iconUrl`; bỏ qua `images` giữ nguyên dữ liệu ảnh. Bỏ ảnh không xóa file lưu trữ; hủy form sau upload hoặc lưu thất bại có thể để lại file chưa được tham chiếu. Khi thử lại trong cùng form, ảnh upload thành công không gửi lại.
+
+## Ảnh tải lên khi thêm/sửa loại phòng
+
+Form loại phòng cho phép chọn/xem trước/bỏ ảnh, tối đa 10 ảnh JPG/PNG/WebP, mỗi ảnh tối đa 5 MB. Khi lưu, frontend gửi từng ảnh tới `POST /api/v1/room-types/images` (cùng quyền quản lý cơ sở vật chất với form). Backend kiểm tra loại file và chữ ký ảnh, sinh UUID, lưu tại `hms/room-types/<uuid>.<ext>` và upload cùng tên vào S3 key `images/seeds/room-types/<uuid>.<ext>`. Chỉ khi cả hai bước thành công mới trả đường dẫn để lưu vào `RoomType.images`; lỗi S3 sẽ dọn bản cục bộ vừa tạo. Không đổi bucket policy tự động.
+
+Cấu hình backend: `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `HMS_ASSET_DIR` (mặc định `../hms`, tính từ thư mục chạy backend). Không commit khóa thật. Frontend vẫn dùng `VITE_ASSET_BASE_URL` trỏ tới public bucket. Khi chạy container cần mount thư mục ảnh ghi được và đặt `HMS_ASSET_DIR` phù hợp.
+
+Bỏ ảnh khỏi form chỉ bỏ liên kết trong loại phòng, không xóa bản lưu trên ổ đĩa/S3 vì ảnh có thể đang được tham chiếu ở nơi khác. Upload thành công nhưng người dùng hủy hoặc lưu loại phòng thất bại có thể để lại file chưa được tham chiếu; khi thử lại ngay trong form, ảnh đã upload được giữ lại và không gửi lại.
+
 Ảnh được đọc trực tiếp từ storage đã upload. `hms/` chỉ để đối chứng, không được copy sang frontend hay upload lại. DB lưu đường dẫn tương đối `/images/seeds/...`.
 
 ## Phần đã có được giữ lại

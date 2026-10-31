@@ -123,6 +123,7 @@ describe('UC51 service and query', () => {
     );
     const result = await service.list(new ListAmenitiesQuery());
     expect(result.items[0]).toEqual({
+      images: [],
       id: String(id),
       name: 'Wi-Fi',
       description: 'Internet',

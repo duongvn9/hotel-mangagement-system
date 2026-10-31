@@ -56,3 +56,10 @@ export async function createRoomType(input: RoomTypeInput): Promise<RoomType> {
 export async function updateRoomType(id: string, input: Partial<RoomTypeInput>): Promise<RoomType> {
   return (await api.patch<RoomType>(`/room-types/${id}`, input)).data
 }
+
+export async function uploadRoomTypeImage(file: File): Promise<string> {
+  const body = new FormData()
+  body.append('file', file)
+  return (await api.post<{ path: string }>('/room-types/images', body, { timeout: 120_000 })).data
+    .path
+}

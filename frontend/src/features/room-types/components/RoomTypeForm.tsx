@@ -5,11 +5,15 @@ import { Alert } from '@/components/Alert'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { getErrorMessage } from '@/lib/api-client'
+import { AssetImage } from '@/components/AssetImage'
+import { ImageLightbox } from '@/components/ImageLightbox'
+import { assetUrl } from '@/lib/asset-url'
 import {
   createRoomType,
   getAmenityOptions,
   getRoomType,
   updateRoomType,
+  uploadRoomTypeImage,
   type RoomType,
   type RoomTypeInput,
 } from '../api'
@@ -42,7 +46,7 @@ export function RoomTypeEditor({
     <dialog
       ref={dialog}
       aria-labelledby="room-type-form-title"
-      className="m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-xl overflow-y-auto rounded-lg border border-stone-300 bg-white p-6 font-body text-pearl-900 backdrop:bg-pearl-900/50"
+      className="m-auto max-h-[92dvh] w-[calc(100%_-_2rem)] max-w-2xl overflow-y-auto rounded-2xl border border-stone-300 bg-white p-5 font-body text-pearl-900 shadow-xl backdrop:bg-pearl-900/60 sm:p-8"
       onCancel={(event) => {
         event.preventDefault()
         if (!dialog.current?.querySelector('[aria-busy="true"]')) onClose()
@@ -98,6 +102,15 @@ export function RoomTypeForm({
   )
   const [selected, setSelected] = useState(initial?.amenities.map((a) => a.id) ?? [])
   const [active, setActive] = useState(initial?.isActive ?? true)
+  const [images, setImages] = useState<string[]>(initial?.images ?? [])
+  const [files, setFiles] = useState<File[]>([])
+  const [viewing, setViewing] = useState<number | null>(null)
+  const [previewUrls, setPreviewUrls] = useState(new Map<File, string>())
+  const generatedUrls = useRef<string[]>([])
+  useEffect(() => {
+    const urls = generatedUrls.current
+    return () => urls.forEach((url) => URL.revokeObjectURL(url))
+  }, [])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [general, setGeneral] = useState('')
   const focusError = () =>
@@ -106,8 +119,19 @@ export function RoomTypeForm({
       0,
     )
   const mutation = useMutation({
-    mutationFn: (input: Partial<RoomTypeInput>) =>
-      initial ? updateRoomType(initial.id, input) : createRoomType(input as RoomTypeInput),
+    mutationFn: async (input: Partial<RoomTypeInput>) => {
+      const paths = [...(input.images ?? [])]
+      // Keep successful uploads when retrying a failed upload or save.
+      for (const file of input.images === undefined ? [] : files) {
+        paths.push(await uploadRoomTypeImage(file))
+        setImages([...paths])
+        setFiles((previous) => previous.filter((item) => item !== file))
+      }
+      const payload = input.images === undefined ? input : { ...input, images: paths }
+      return initial
+        ? updateRoomType(initial.id, payload)
+        : createRoomType(payload as RoomTypeInput)
+    },
     onSuccess: async () => {
       await Promise.all([
         client.invalidateQueries({ queryKey: ['room-types'] }),
@@ -174,6 +198,7 @@ export function RoomTypeForm({
     const isActive = deactivate ? false : active
     if (initial?.isActive && !isActive && !window.confirm(confirmation)) return
     const input: RoomTypeInput = {
+      ...(images.length || initial?.images !== undefined || files.length ? { images } : {}),
       name: name.trim(),
       description: description.trim(),
       adultCapacity: Number(adultCapacity),
@@ -195,6 +220,7 @@ export function RoomTypeForm({
           ),
         )
       : input
+    if (files.length) changes.images = images
     if (!Object.keys(changes).length) {
       onClose()
       return
@@ -217,21 +243,144 @@ export function RoomTypeForm({
       aria-busy={mutation.isPending}
     >
       {general && <Alert tone="danger">{general}</Alert>}
-      <fieldset disabled={mutation.isPending} className="space-y-4">
-        <TextField
-          label="Tên loại phòng"
-          required
-          maxLength={100}
-          autoFocus
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          error={errors.name}
-        />
-        <TextField
-          label="Mô tả"
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-        />
+      <fieldset
+        disabled={mutation.isPending}
+        className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2"
+      >
+        <div className="sm:col-span-2">
+          <TextField
+            label="Tên loại phòng"
+            required
+            maxLength={100}
+            autoFocus
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            error={errors.name}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <TextField
+            label="Mô tả"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+          />
+        </div>
+        <div className="min-w-0 space-y-3 rounded-xl border border-stone-300 bg-cream-100/40 p-4 sm:col-span-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold">Ảnh loại phòng</p>
+            <span className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-xs">
+              {images.length + files.length} / 10 ảnh
+            </span>
+          </div>
+          <input
+            id="room-type-images"
+            aria-label="Ảnh loại phòng"
+            className="peer sr-only"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            aria-describedby="room-type-images-help"
+            onChange={(event) => {
+              const added = Array.from(event.target.files ?? [])
+              event.target.value = ''
+              if (images.length + files.length + added.length > 10) {
+                setGeneral('Mỗi loại phòng có tối đa 10 ảnh.')
+                return
+              }
+              if (
+                added.some(
+                  (file) =>
+                    !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
+                    file.size === 0 ||
+                    file.size > 5 * 1024 * 1024,
+                )
+              ) {
+                setGeneral('Chọn ảnh JPG, PNG hoặc WebP, tối đa 5 MB mỗi ảnh.')
+                return
+              }
+              setGeneral('')
+              const addedPreviews = added.map((file) => {
+                const url = URL.createObjectURL(file)
+                generatedUrls.current.push(url)
+                return [file, url] as const
+              })
+              setPreviewUrls((previous) => new Map([...previous, ...addedPreviews]))
+              setFiles((previous) => [...previous, ...added])
+            }}
+          />
+          <label
+            htmlFor="room-type-images"
+            className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/40 bg-white px-4 py-5 text-center transition hover:border-primary hover:bg-cream-100 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary peer-disabled:cursor-wait peer-disabled:opacity-50"
+          >
+            <span
+              aria-hidden="true"
+              className="flex size-9 items-center justify-center rounded-full bg-cream-100 text-2xl text-primary"
+            >
+              +
+            </span>
+            <span className="text-sm font-semibold text-primary">Chọn ảnh từ thiết bị</span>
+            <span className="text-xs text-stone-600">Có thể chọn nhiều ảnh cùng lúc</span>
+          </label>
+          <p id="room-type-images-help" className="text-xs">
+            Tối đa 10 ảnh JPG, PNG hoặc WebP, mỗi ảnh tối đa 5 MB. Ảnh đầu tiên là ảnh đại diện.
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {images.map((path, index) => (
+              <div
+                key={path}
+                className="min-w-0 overflow-hidden rounded-lg border border-stone-300 bg-white shadow-sm"
+              >
+                <button
+                  type="button"
+                  aria-label={`Phóng to ảnh ${index + 1}`}
+                  onClick={() => setViewing(index)}
+                  className="group block w-full overflow-hidden focus-visible:outline-2 focus-visible:outline-primary"
+                >
+                  <AssetImage
+                    path={path}
+                    name={`Ảnh ${index + 1}`}
+                    className="aspect-[4/3] w-full object-cover transition group-hover:scale-105"
+                  />
+                </button>
+                <button
+                  type="button"
+                  className="min-h-11 w-full px-2 text-xs text-primary transition hover:bg-cream-100"
+                  onClick={() => setImages((previous) => previous.filter((_, i) => i !== index))}
+                >
+                  Bỏ ảnh {index + 1}
+                </button>
+              </div>
+            ))}
+            {files.map((file, index) => (
+              <div
+                key={`${file.name}-${index}`}
+                className="min-w-0 overflow-hidden rounded-lg border border-stone-300 bg-white shadow-sm"
+              >
+                <button
+                  type="button"
+                  aria-label={`Phóng to ${file.name}`}
+                  onClick={() => setViewing(images.length + index)}
+                  className="group block w-full overflow-hidden focus-visible:outline-2 focus-visible:outline-primary"
+                >
+                  {previewUrls.get(file) && (
+                    <img
+                      src={previewUrls.get(file)}
+                      alt={file.name}
+                      className="aspect-[4/3] w-full object-cover transition group-hover:scale-105"
+                    />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="min-h-11 w-full truncate px-2 text-xs text-primary transition hover:bg-cream-100"
+                  onClick={() => setFiles((previous) => previous.filter((_, i) => i !== index))}
+                >
+                  Bỏ {file.name}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
         <TextField
           label="Người lớn"
           required
@@ -252,28 +401,30 @@ export function RoomTypeForm({
           onChange={(event) => setChildCapacity(event.target.value)}
           error={errors.childCapacity}
         />
-        <TextField
-          label="Giá VND"
-          required
-          inputMode="numeric"
-          value={price}
-          onChange={(event) => setPrice(event.target.value)}
-          onBlur={() => {
-            const number = Number(price.replaceAll('.', ''))
-            if (
-              /^(\d{1,3}(\.\d{3})*|\d+)$/.test(price) &&
-              Number.isSafeInteger(number) &&
-              number > 0
-            )
-              setPrice(new Intl.NumberFormat('vi-VN').format(number))
-          }}
-          error={errors.basePrice}
-        />
+        <div className="sm:col-span-2">
+          <TextField
+            label="Giá VND"
+            required
+            inputMode="numeric"
+            value={price}
+            onChange={(event) => setPrice(event.target.value)}
+            onBlur={() => {
+              const number = Number(price.replaceAll('.', ''))
+              if (
+                /^(\d{1,3}(\.\d{3})*|\d+)$/.test(price) &&
+                Number.isSafeInteger(number) &&
+                number > 0
+              )
+                setPrice(new Intl.NumberFormat('vi-VN').format(number))
+            }}
+            error={errors.basePrice}
+          />
+        </div>
         <fieldset
           tabIndex={-1}
           aria-invalid={errors.amenities ? true : undefined}
           aria-describedby={errors.amenities ? 'amenities-error' : undefined}
-          className="rounded border border-stone-300 p-3"
+          className="grid grid-cols-1 gap-x-4 rounded-xl border border-stone-300 p-4 sm:col-span-2 sm:grid-cols-2"
         >
           <legend className="text-sm font-semibold">Tiện nghi</legend>
           {options.isPending && <p role="status">Đang tải tiện nghi…</p>}
@@ -320,7 +471,7 @@ export function RoomTypeForm({
           Kích hoạt
         </label>
       </fieldset>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 border-t border-stone-300 pt-5">
         <Button type="submit" loading={mutation.isPending}>
           Lưu loại phòng
         </Button>
@@ -338,6 +489,17 @@ export function RoomTypeForm({
           Hủy
         </Button>
       </div>
+      {viewing !== null && (
+        <ImageLightbox
+          images={[
+            ...images.map((path) => assetUrl(path)!),
+            ...files.map((file) => previewUrls.get(file)!),
+          ]}
+          name={name || 'Ảnh loại phòng'}
+          startIndex={viewing}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </form>
   )
 }

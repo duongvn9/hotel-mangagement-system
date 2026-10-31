@@ -36,10 +36,55 @@ function fill() {
   fireEvent.change(screen.getByLabelText(/Giá VND/), { target: { value: '1.500.000' } })
 }
 describe('UC50 form', () => {
+  it('uploads a selected image before saving its path in the room type', async () => {
+    vi.stubGlobal(
+      'URL',
+      class extends URL {
+        static createObjectURL() {
+          return 'blob:preview'
+        }
+        static revokeObjectURL() {}
+      },
+    )
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url) => ({
+      data: url === '/room-types/images' ? { path: '/images/seeds/room-types/new.jpg' } : room,
+    }))
+    const { success } = renderForm()
+    fill()
+    fireEvent.change(screen.getByLabelText('Ảnh loại phòng'), {
+      target: { files: [new File(['image'], 'photo.jpg', { type: 'image/jpeg' })] },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu loại phòng' }))
+    await waitFor(() => expect(success).toHaveBeenCalled())
+    expect(post).toHaveBeenNthCalledWith(1, '/room-types/images', expect.any(FormData), {
+      timeout: 120_000,
+    })
+    expect(post).toHaveBeenNthCalledWith(
+      2,
+      '/room-types',
+      expect.objectContaining({ images: ['/images/seeds/room-types/new.jpg'] }),
+    )
+    vi.unstubAllGlobals()
+  })
+
+  it('rejects unsupported image types without uploading', () => {
+    const post = vi.spyOn(api, 'post')
+    renderForm()
+    fireEvent.change(screen.getByLabelText('Ảnh loại phòng'), {
+      target: { files: [new File(['text'], 'bad.svg', { type: 'image/svg+xml' })] },
+    })
+    expect(
+      screen.getByText('Chọn ảnh JPG, PNG hoặc WebP, tối đa 5 MB mỗi ảnh.'),
+    ).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+  })
   beforeEach(() => {
     vi.spyOn(api, 'get').mockResolvedValue({ data: [] })
   })
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
   it('validates fields, links error messages and focuses first error', async () => {
     const post = vi.spyOn(api, 'post')
     renderForm()

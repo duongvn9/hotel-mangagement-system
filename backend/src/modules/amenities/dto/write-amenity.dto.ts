@@ -3,6 +3,7 @@ import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
   ArrayUnique,
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsNotEmpty,
@@ -14,6 +15,14 @@ import {
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 export class CreateAmenityDto {
+  @ApiPropertyOptional({ type: [String] })
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ArrayUnique()
+  @Matches(ASSET_PATH, { each: true })
+  images?: string[];
+
   @ApiPropertyOptional({ type: String })
   @ValidateIf((_object, value) => value !== undefined)
   @IsString()

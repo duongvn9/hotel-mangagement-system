@@ -132,6 +132,11 @@ export class AmenitiesService {
       id: String(row._id),
       name: row.name,
       iconUrl: row.iconUrl,
+      images: row.images?.length
+        ? row.images
+        : row.iconUrl
+          ? [row.iconUrl]
+          : [],
       description: row.description ?? '',
       isActive: row.isActive,
       roomTypes,
@@ -141,6 +146,8 @@ export class AmenitiesService {
 
   async create(dto: CreateAmenityDto) {
     const { roomTypeIds = [], ...fields } = dto;
+    if (fields.images !== undefined) fields.iconUrl = fields.images[0] ?? '';
+    else if (fields.iconUrl !== undefined) fields.images = [fields.iconUrl];
     this.validateIds(roomTypeIds);
     await this.uniqueName(fields.name);
     await this.validateAssignments(roomTypeIds, fields.isActive ?? true);
@@ -210,6 +217,8 @@ export class AmenitiesService {
       );
     }
     const { roomTypeIds: _target, ...fields } = defined;
+    if (fields.images !== undefined) fields.iconUrl = fields.images[0] ?? '';
+    else if (fields.iconUrl !== undefined) fields.images = [fields.iconUrl];
     if (Object.keys(fields).length) {
       try {
         const updated = await this.amenities
@@ -291,6 +300,11 @@ export class AmenitiesService {
           id: String(row._id),
           name: row.name,
           iconUrl: row.iconUrl,
+          images: row.images?.length
+            ? row.images
+            : row.iconUrl
+              ? [row.iconUrl]
+              : [],
           description: row.description ?? '',
           isActive: row.isActive,
           roomTypes,
