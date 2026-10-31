@@ -16,6 +16,7 @@ export function ImageLightbox({
   const titleId = useId()
   const [index, setIndex] = useState(Math.min(startIndex, images.length - 1))
   const [failed, setFailed] = useState<string>()
+  const isVector = /\.svg(?:[?#]|$)/i.test(images[index] ?? '')
   const move = (step: number) =>
     setIndex((current) => (current + step + images.length) % images.length)
   useEffect(() => {
@@ -87,16 +88,18 @@ export function ImageLightbox({
           ×
         </button>
       </div>
-      <div className="relative flex h-[52dvh] min-h-48 items-center justify-center overflow-hidden rounded-xl bg-pearl-900 sm:h-[60dvh]">
+      <div
+        className={`relative flex h-[52dvh] min-h-48 items-center justify-center overflow-hidden rounded-xl sm:h-[60dvh] ${isVector ? 'bg-cream-100' : 'bg-pearl-900'}`}
+      >
         {failed === images[index] ? (
-          <p className="text-white">Không tải được ảnh này.</p>
+          <p className="rounded bg-white px-3 py-2 text-pearl-900">Không tải được ảnh này.</p>
         ) : (
           <img
             key={images[index]}
             src={images[index]}
             alt={`${name} — ảnh ${index + 1}`}
             onError={() => setFailed(images[index])}
-            className="h-full w-full object-contain"
+            className={`h-full w-full object-contain ${isVector ? 'p-8 sm:p-16' : ''}`}
           />
         )}
         {images.length > 1 && (

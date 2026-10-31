@@ -5,6 +5,8 @@ export class AmenityRoomTypeResponse {
   @ApiProperty() isActive: boolean;
 }
 export class AmenityResponse {
+  @ApiProperty({ type: [String] })
+  images: string[];
   @ApiPropertyOptional({ type: String })
   iconUrl?: string;
   @ApiProperty() id: string;

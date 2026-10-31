@@ -5,6 +5,7 @@ export interface AmenityRoomType {
   isActive: boolean
 }
 export interface Amenity {
+  images?: string[]
   iconUrl?: string
   id: string
   name: string
@@ -31,6 +32,7 @@ export async function listAmenities(query: AmenityQuery): Promise<AmenityList> {
   return (await api.get<AmenityList>('/amenities', { params: query })).data
 }
 export interface AmenityInput {
+  images?: string[]
   iconUrl?: string
   name: string
   description?: string
@@ -45,6 +47,13 @@ export async function createAmenity(input: AmenityInput): Promise<Amenity> {
 }
 export async function updateAmenity(id: string, input: Partial<AmenityInput>): Promise<Amenity> {
   return (await api.patch<Amenity>(`/amenities/${id}`, input)).data
+}
+
+export async function uploadAmenityImage(file: File): Promise<string> {
+  const body = new FormData()
+  body.append('file', file)
+  return (await api.post<{ path: string }>('/amenities/images', body, { timeout: 120_000 })).data
+    .path
 }
 export async function amenityRoomTypeOptions(): Promise<Pick<AmenityRoomType, 'id' | 'name'>[]> {
   return (await api.get<Pick<AmenityRoomType, 'id' | 'name'>[]>('/room-types/options')).data

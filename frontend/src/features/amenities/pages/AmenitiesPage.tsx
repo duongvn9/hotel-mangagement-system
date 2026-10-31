@@ -1,4 +1,4 @@
-import { AssetImage } from '@/components/AssetImage'
+import { RoomGallery } from '@/components/AssetImage'
 import { useEffect, useState } from 'react'
 import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
@@ -143,7 +143,16 @@ export function AmenitiesPage() {
                     <tr key={amenity.id} className="border-t border-stone-300 hover:bg-cream-50">
                       <th scope="row" className="px-4 py-4 font-semibold">
                         <span className="inline-flex items-center gap-2">
-                          <AssetImage decorative path={amenity.iconUrl} name={amenity.name} />
+                          <RoomGallery
+                            images={
+                              amenity.images?.length
+                                ? amenity.images
+                                : amenity.iconUrl
+                                  ? [amenity.iconUrl]
+                                  : []
+                            }
+                            name={amenity.name}
+                          />
                           {amenity.name}
                         </span>
                       </th>
