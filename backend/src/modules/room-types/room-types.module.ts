@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AmenitiesModule } from '../amenities/amenities.module.js';
 import { RoomType, RoomTypeSchema } from './schemas/room-type.schema.js';
@@ -8,6 +9,7 @@ import { RoomTypeImagesService } from './room-type-images.service.js';
 
 @Module({
   imports: [
+    ConfigModule,
     AmenitiesModule,
     MongooseModule.forFeature([
       { name: RoomType.name, schema: RoomTypeSchema },
