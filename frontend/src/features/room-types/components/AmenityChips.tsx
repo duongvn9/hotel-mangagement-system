@@ -1,3 +1,4 @@
+import { AssetImage } from '@/components/AssetImage'
 import { Badge } from '@/components/Badge'
 import type { RoomType } from '../api'
 
@@ -7,6 +8,12 @@ export function AmenityChips({ amenities }: Pick<RoomType, 'amenities'>) {
     <div className="flex flex-wrap gap-2">
       {amenities.slice(0, 3).map((amenity) => (
         <Badge key={amenity.id} tone="neutral">
+          <AssetImage
+            decorative
+            path={amenity.iconUrl}
+            name={amenity.name}
+            className="inline-block size-4 object-contain"
+          />
           {amenity.name}
         </Badge>
       ))}
@@ -18,6 +25,12 @@ export function AmenityChips({ amenities }: Pick<RoomType, 'amenities'>) {
           <div className="flex flex-wrap gap-2">
             {amenities.slice(3).map((amenity) => (
               <Badge key={amenity.id} tone="neutral">
+                <AssetImage
+                  decorative
+                  path={amenity.iconUrl}
+                  name={amenity.name}
+                  className="inline-block size-4 object-contain"
+                />
                 {amenity.name}
               </Badge>
             ))}

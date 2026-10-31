@@ -85,7 +85,15 @@ export class MaintenanceHistoryService {
           localField: 'equipment',
           foreignField: '_id',
           pipeline: [
-            { $project: { assetCode: 1, name: 1, category: 1, location: 1 } },
+            {
+              $project: {
+                assetCode: 1,
+                name: 1,
+                imageUrl: 1,
+                category: 1,
+                location: 1,
+              },
+            },
           ],
           as: 'equipmentRows',
         },
@@ -138,6 +146,7 @@ export class MaintenanceHistoryService {
                 id: { $toString: '$equipmentData._id' },
                 assetCode: '$equipmentData.assetCode',
                 name: '$equipmentData.name',
+                imageUrl: '$equipmentData.imageUrl',
                 ...(detail
                   ? {
                       category: '$equipmentData.category',

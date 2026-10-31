@@ -22,7 +22,8 @@
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
-    "notify:test": "node dist/notify-test.main.js"
+    "notify:test": "node dist/notify-test.main.js",
+    "backfill:assets": "nest start --entryFile backfill-assets.main"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",

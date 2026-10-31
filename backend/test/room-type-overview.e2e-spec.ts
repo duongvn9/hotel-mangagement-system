@@ -84,7 +84,9 @@ describe('Public room type overview (e2e)', () => {
       .get(`/api/v1/room-types/${activeId}/overview`)
       .expect(200);
     expect(response.body.amenities).toHaveLength(1);
-    expect(response.body.amenities[0]).toMatchObject({ name: prefix + 'Wi-Fi' });
+    expect(response.body.amenities[0]).toMatchObject({
+      name: prefix + 'Wi-Fi',
+    });
     expect(response.body.amenities[0]).toHaveProperty('id');
   });
 

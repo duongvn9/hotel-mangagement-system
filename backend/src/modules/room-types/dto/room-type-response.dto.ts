@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RoomTypeAmenityResponse {
+  @ApiPropertyOptional() iconUrl?: string;
   @ApiPropertyOptional({
     description: 'Included in create/update/detail responses for the editor',
   })
@@ -13,6 +14,8 @@ export class RoomTypeAmenityResponse {
 }
 
 export class RoomTypeResponse {
+  @ApiPropertyOptional({ type: [String] })
+  images?: string[];
   @ApiProperty()
   id: string;
 

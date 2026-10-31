@@ -1,3 +1,4 @@
+import { RoomGallery } from '@/components/AssetImage'
 import { useEffect, useState } from 'react'
 import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
@@ -140,6 +141,7 @@ export function RoomTypesPage() {
                   {data.items.map((roomType) => (
                     <tr key={roomType.id} className="border-t border-stone-300 hover:bg-cream-50">
                       <th scope="row" className="px-4 py-4 font-semibold">
+                        <RoomGallery images={roomType.images} name={roomType.name} />
                         {roomType.name}
                       </th>
                       <td className="max-w-64 px-4 py-4 break-words text-stone-700">

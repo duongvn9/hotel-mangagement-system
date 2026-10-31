@@ -22,6 +22,7 @@ export interface AvailableRoom {
   capacity: number;
   /** Tên loại phòng, để hiển thị cho khách (có khi nguồn phòng cung cấp). */
   roomTypeName?: string;
+  images?: string[];
   /** Đơn giá mỗi đêm của loại phòng (VND). */
   pricePerNight?: number;
 }
@@ -143,6 +144,7 @@ export function calculateAvailability(
       id: room.id,
       roomTypeId: room.roomTypeId,
       capacity: room.capacity,
+      ...(room.images !== undefined ? { images: room.images } : {}),
       // Chỉ kèm khi nguồn phòng cung cấp, giữ nguyên shape tối thiểu cho các stub/test.
       ...(room.roomTypeName !== undefined
         ? { roomTypeName: room.roomTypeName }

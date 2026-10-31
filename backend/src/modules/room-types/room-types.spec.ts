@@ -132,7 +132,7 @@ describe('RoomTypesService', () => {
     expect(chain.sort).toHaveBeenCalledWith({ basePrice: -1, _id: 1 });
     expect(chain.skip).toHaveBeenCalledWith(10);
     expect(chain.limit).toHaveBeenCalledWith(5);
-    expect(chain.populate).toHaveBeenCalledWith('amenities', 'name');
+    expect(chain.populate).toHaveBeenCalledWith('amenities', 'name iconUrl');
   });
   it('returns empty list and no implicit active filter', async () => {
     const { service, modelMock } = setup();
@@ -149,13 +149,19 @@ describe('RoomTypesService', () => {
       _id: new Types.ObjectId(),
       name: 'Standard',
       description: '',
+      images: ['/images/seeds/room-types/standard-01.jpg'],
       adultCapacity: 2,
       childCapacity: 0,
       basePrice: 850000,
       isActive: true,
       amenities: [
         null,
-        { _id: new Types.ObjectId(), name: 'Wi-Fi', description: 'private' },
+        {
+          _id: new Types.ObjectId(),
+          name: 'Wi-Fi',
+          iconUrl: '/images/seeds/amenities/wifi.svg',
+          description: 'private',
+        },
       ],
       privateField: 'secret',
     };
@@ -178,11 +184,16 @@ describe('RoomTypesService', () => {
       false,
     ]);
     expect(result.items[0].amenities).toEqual([
-      { id: String(base.amenities[1]!._id), name: 'Wi-Fi' },
+      {
+        id: String(base.amenities[1]!._id),
+        name: 'Wi-Fi',
+        iconUrl: '/images/seeds/amenities/wifi.svg',
+      },
     ]);
     expect(result.items[0]).not.toHaveProperty('privateField');
     expect(result.items[0]).not.toHaveProperty('capacity');
     expect(result.items[0]).toMatchObject({
+      images: base.images,
       adultCapacity: 2,
       childCapacity: 0,
     });

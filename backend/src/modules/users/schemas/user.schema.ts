@@ -7,6 +7,9 @@ export type UserDocument = HydratedDocument<User>;
 /** Tài khoản của Customer và nhân viên (collection `users`). */
 @Schema({ timestamps: true })
 export class User {
+  @Prop()
+  avatarUrl?: string;
+
   /** UID bên Firebase Auth. Tài khoản seed hoặc do Manager tạo có thể chưa có. */
   @Prop({ unique: true, sparse: true })
   firebaseUid?: string;

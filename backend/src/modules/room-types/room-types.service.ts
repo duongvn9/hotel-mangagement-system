@@ -83,8 +83,13 @@ export class RoomTypesService {
     const row = await this.roomTypes
       .findById(id)
       .populate<{
-        amenities: { _id: Types.ObjectId; name: string; isActive: boolean }[];
-      }>('amenities', 'name isActive')
+        amenities: {
+          _id: Types.ObjectId;
+          name: string;
+          iconUrl?: string;
+          isActive: boolean;
+        }[];
+      }>('amenities', 'name isActive iconUrl')
       .lean()
       .exec();
     if (!row) throw new NotFoundException('Không tìm thấy loại phòng');
@@ -95,16 +100,23 @@ export class RoomTypesService {
     _id: Types.ObjectId;
     name: string;
     description?: string;
+    images?: string[];
     adultCapacity: number;
     childCapacity: number;
     basePrice: number;
     isActive: boolean;
-    amenities: { _id: Types.ObjectId; name: string; isActive?: boolean }[];
+    amenities: {
+      _id: Types.ObjectId;
+      name: string;
+      iconUrl?: string;
+      isActive?: boolean;
+    }[];
   }) {
     return {
       id: String(row._id),
       name: row.name,
       description: row.description ?? '',
+      images: row.images ?? [],
       adultCapacity: row.adultCapacity,
       childCapacity: row.childCapacity,
       basePrice: row.basePrice,
@@ -112,6 +124,7 @@ export class RoomTypesService {
       amenities: (row.amenities ?? []).filter(Boolean).map((a) => ({
         id: String(a._id),
         name: a.name,
+        iconUrl: a.iconUrl,
         isActive: a.isActive,
       })),
       availableForBooking:
@@ -174,7 +187,7 @@ export class RoomTypesService {
               name: string;
               isActive: boolean;
             }[];
-          }>('amenities', 'name isActive')
+          }>('amenities', 'name isActive iconUrl')
           .lean()
           .exec();
         if (updated) return this.response(updated);
@@ -204,10 +217,9 @@ export class RoomTypesService {
         .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1, _id: 1 })
         .skip((page - 1) * limit)
         .limit(limit)
-        .populate<{ amenities: { _id: Types.ObjectId; name: string }[] }>(
-          'amenities',
-          'name',
-        )
+        .populate<{
+          amenities: { _id: Types.ObjectId; name: string; iconUrl?: string }[];
+        }>('amenities', 'name iconUrl')
         .lean()
         .exec(),
       this.roomTypes.countDocuments(filter).exec(),
@@ -217,12 +229,15 @@ export class RoomTypesService {
         id: String(row._id),
         name: row.name,
         description: row.description ?? '',
+        images: row.images ?? [],
         adultCapacity: row.adultCapacity,
         childCapacity: row.childCapacity,
         basePrice: row.basePrice,
-        amenities: (row.amenities ?? [])
-          .filter(Boolean)
-          .map((amenity) => ({ id: String(amenity._id), name: amenity.name })),
+        amenities: (row.amenities ?? []).filter(Boolean).map((amenity) => ({
+          id: String(amenity._id),
+          name: amenity.name,
+          iconUrl: amenity.iconUrl,
+        })),
         isActive: row.isActive,
         availableForBooking:
           row.isActive === true &&

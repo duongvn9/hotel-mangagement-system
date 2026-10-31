@@ -1,13 +1,14 @@
 import { api } from '@/lib/api-client'
 
 export interface RoomType {
+  images?: string[]
   id: string
   name: string
   description: string
   adultCapacity: number
   childCapacity: number
   basePrice: number
-  amenities: { id: string; name: string; isActive?: boolean }[]
+  amenities: { id: string; name: string; iconUrl?: string; isActive?: boolean }[]
   isActive: boolean
   availableForBooking: boolean
 }
@@ -33,6 +34,7 @@ export async function listRoomTypes(query: RoomTypeQuery): Promise<RoomTypeList>
 }
 
 export interface RoomTypeInput {
+  images?: string[]
   name: string
   description: string
   adultCapacity: number

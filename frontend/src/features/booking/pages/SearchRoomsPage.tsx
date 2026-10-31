@@ -1,3 +1,4 @@
+import { AssetImage, RoomGallery } from '@/components/AssetImage'
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Alert } from '@/components/Alert'
@@ -9,7 +10,7 @@ import { getErrorMessage } from '@/lib/api-client'
 import { env } from '@/lib/env'
 import type { AvailableRoom, SearchAvailabilityParams } from '../api'
 import { useAvailability } from '../hooks'
-import { BedIcon, ClockIcon, UsersIcon } from '../icons'
+import { ClockIcon, UsersIcon } from '../icons'
 import { money, nightsBetween, todayISO } from '../utils'
 
 /** Đọc tiêu chí hợp lệ từ URL để chạy UC05; trả null khi chưa đủ/không hợp lệ. */
@@ -28,6 +29,7 @@ function readCriteria(params: URLSearchParams): SearchAvailabilityParams | null 
 }
 
 interface TypeGroup {
+  images: string[]
   roomTypeId: string
   name: string
   pricePerNight: number
@@ -63,6 +65,7 @@ export function SearchRoomsPage() {
     return [...byType.entries()]
       .map(([id, rooms]) => ({
         roomTypeId: id,
+        images: rooms[0]?.images ?? [],
         name: rooms[0]?.roomTypeName ?? 'Phòng',
         pricePerNight: rooms[0]?.pricePerNight ?? 0,
         capacity: rooms[0]?.capacity ?? 0,
@@ -206,7 +209,11 @@ export function SearchRoomsPage() {
                 className="overflow-hidden rounded-xl border border-stone-300 bg-white shadow-sm sm:flex"
               >
                 <div className="relative flex h-32 items-center justify-center bg-gradient-to-br from-cream-100 to-brandy-100 sm:h-auto sm:w-44 sm:shrink-0">
-                  <BedIcon className="size-10 text-primary/60" />
+                  <AssetImage
+                    path={group.images[0]}
+                    name={group.name}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
                   <span className="absolute top-3 left-3">
                     <Badge tone="success">Còn {max} phòng</Badge>
                   </span>
@@ -220,6 +227,9 @@ export function SearchRoomsPage() {
                       <h3 className="font-display text-xl font-semibold text-pearl-900">
                         {group.name}
                       </h3>
+                      {group.images.length > 1 && (
+                        <RoomGallery images={group.images} name={group.name} />
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-stone-700">
                       <span className="inline-flex items-center gap-1.5">
