@@ -35,6 +35,12 @@ export class RoomTypeOverviewResponse {
   @ApiProperty({ description: 'Đơn giá mỗi đêm (VND)' })
   pricePerNight: number;
 
+  @ApiProperty({
+    type: [String],
+    description: 'Ảnh loại phòng (đường dẫn storage, ảnh đầu là ảnh đại diện)',
+  })
+  images: string[];
+
   @ApiProperty({ type: [RoomTypeAmenityResponse] })
   amenities: RoomTypeAmenityResponse[];
 }

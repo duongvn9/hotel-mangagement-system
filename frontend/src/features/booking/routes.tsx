@@ -4,6 +4,7 @@ import { RequireAuth } from '@/features/auth/RequireAuth'
 import { EditBookingPage } from './pages/EditBookingPage'
 import { BookingListPage } from './pages/BookingListPage'
 import { BookingDetailPage } from './pages/BookingDetailPage'
+import { ReceptionBookingDetailPage } from './pages/ReceptionBookingDetailPage'
 import { CreateBookingPage } from './pages/CreateBookingPage'
 import { MyBookingsPage } from './pages/MyBookingsPage'
 import { RoomStatusBoardPage } from './pages/RoomStatusBoardPage'
@@ -65,6 +66,14 @@ export const bookingRoutes: RouteObject[] = [
     element: (
       <RequireAuth roles={[Role.Receptionist, Role.Manager]}>
         <BookingListPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: 'reception/bookings/:code',
+    element: (
+      <RequireAuth roles={[Role.Receptionist, Role.Manager]}>
+        <ReceptionBookingDetailPage />
       </RequireAuth>
     ),
   },

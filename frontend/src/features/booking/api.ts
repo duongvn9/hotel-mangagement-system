@@ -42,6 +42,7 @@ export interface RoomTypeOverview {
   childCapacity: number
   capacity: number
   pricePerNight: number
+  images?: string[]
   amenities: { id: string; name: string }[]
 }
 

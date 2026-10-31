@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { Alert } from '@/components/Alert'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
+import { AssetImage } from '@/components/AssetImage'
 import { getErrorMessage } from '@/lib/api-client'
 import { env } from '@/lib/env'
 import { useRoomTypeOverview } from '../hooks'
@@ -17,6 +19,17 @@ export function RoomDetailsPage() {
   const { id = '' } = useParams()
   const [params] = useSearchParams()
   const overview = useRoomTypeOverview(id)
+  const images = overview.data?.images ?? []
+  const [active, setActive] = useState(0)
+
+  // Đổi loại phòng thì quay về ảnh đầu.
+  useEffect(() => setActive(0), [id])
+  // Tự động chuyển ảnh mỗi 4s khi có nhiều hơn 1 ảnh.
+  useEffect(() => {
+    if (images.length < 2) return
+    const timer = setInterval(() => setActive((i) => (i + 1) % images.length), 4000)
+    return () => clearInterval(timer)
+  }, [images.length])
 
   const checkIn = params.get('checkIn') ?? ''
   const checkOut = params.get('checkOut') ?? ''
@@ -66,11 +79,55 @@ export function RoomDetailsPage() {
         <div className="grid items-start gap-6 lg:grid-cols-[1fr_360px]">
           {/* Cột trái: ảnh minh hoạ + mô tả + tiện nghi */}
           <div className="space-y-6">
-            <div className="relative flex h-56 items-center justify-center overflow-hidden rounded-xl border border-stone-300 bg-gradient-to-br from-cream-100 to-brandy-100 sm:h-72">
-              <BedIcon className="size-16 text-primary/50" />
-              <span className="absolute top-4 left-4">
-                <Badge tone="success">Còn nhận đặt</Badge>
-              </span>
+            <div className="space-y-3">
+              <div className="relative overflow-hidden rounded-xl border border-stone-300">
+                {images.length > 0 ? (
+                  <AssetImage
+                    key={images[active] ?? active}
+                    path={images[active] ?? images[0]}
+                    name={room.name}
+                    className="h-56 w-full object-cover sm:h-72"
+                  />
+                ) : (
+                  <div className="flex h-56 items-center justify-center bg-gradient-to-br from-cream-100 to-brandy-100 sm:h-72">
+                    <BedIcon className="size-16 text-primary/50" />
+                  </div>
+                )}
+                <span className="absolute top-4 left-4">
+                  <Badge tone="success">Còn nhận đặt</Badge>
+                </span>
+                {images.length > 1 && (
+                  <span className="absolute right-4 bottom-4 rounded-full bg-pearl-900/70 px-2.5 py-1 text-xs font-medium text-cream-100 tabular-nums">
+                    {active + 1}/{images.length}
+                  </span>
+                )}
+              </div>
+
+              {images.length > 1 && (
+                <div className="flex flex-wrap gap-2">
+                  {images.map((path, index) => (
+                    <button
+                      key={path + index}
+                      type="button"
+                      onClick={() => setActive(index)}
+                      aria-label={`Xem ảnh ${index + 1}`}
+                      aria-current={active === index}
+                      className={`overflow-hidden rounded border transition ${
+                        active === index
+                          ? 'border-primary ring-2 ring-primary'
+                          : 'border-stone-300 opacity-70 hover:opacity-100'
+                      }`}
+                    >
+                      <AssetImage
+                        decorative
+                        path={path}
+                        name={`${room.name} — ${index + 1}`}
+                        className="h-16 w-24 object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="space-y-3 rounded-xl border border-stone-300 bg-white p-6">

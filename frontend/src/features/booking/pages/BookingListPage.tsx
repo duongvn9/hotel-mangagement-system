@@ -138,7 +138,7 @@ export function BookingListPage() {
                 return (
                   <li key={booking.id} className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                     <Link
-                      to={`/booking/${booking.id}`}
+                      to={`/reception/bookings/${encodeURIComponent(booking.code)}`}
                       className="grid flex-1 gap-3 rounded-lg border border-stone-300 bg-white p-5 hover:bg-cream-50 md:grid-cols-[1.2fr_1fr_1fr_auto] md:items-center"
                     >
                       <div className="space-y-1">

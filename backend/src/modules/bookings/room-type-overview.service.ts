@@ -35,6 +35,7 @@ export class RoomTypeOverviewService {
     }
     return {
       id: String(type._id),
+      images: type.images ?? [],
       name: type.name,
       description: type.description ?? '',
       adultCapacity: type.adultCapacity,

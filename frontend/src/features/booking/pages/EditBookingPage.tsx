@@ -128,7 +128,7 @@ function EditBookingForm({ booking }: { booking: BookingListItem }) {
           guestPhone: guestPhone.trim(),
         },
       })
-      navigate('/reception/bookings')
+      navigate(`/reception/bookings/${encodeURIComponent(booking.code)}`)
     } catch {
       // Lỗi hiển thị qua update.isError bên dưới.
     }
