@@ -36,7 +36,9 @@ export function ReceptionBookingDetailPage() {
     <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
       <div>
         <p className="text-xs font-semibold tracking-widest text-primary uppercase">Lễ tân</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">Chi tiết booking {code}</h1>
+        <h1 className="font-display text-4xl font-semibold text-pearl-900">
+          Chi tiết booking {code}
+        </h1>
       </div>
       {body}
       <Link
@@ -65,7 +67,9 @@ function ReceptionBookingDetail({ booking }: { booking: BookingListItem }) {
       <div className="space-y-6">
         <div className="space-y-4 rounded-xl border border-stone-300 bg-white p-6">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-2xl font-semibold tracking-wide text-primary">{booking.code}</span>
+            <span className="text-2xl font-semibold tracking-wide text-primary">
+              {booking.code}
+            </span>
             <Badge tone={status.tone}>{status.label}</Badge>
             {booking.source === 'FRONT_DESK' && <Badge tone="info">Tại quầy</Badge>}
           </div>
@@ -86,7 +90,9 @@ function ReceptionBookingDetail({ booking }: { booking: BookingListItem }) {
         </div>
 
         <div className="space-y-3 rounded-xl border border-stone-300 bg-white p-6">
-          <h2 className="font-display text-xl font-semibold text-pearl-900">Phòng ({rooms.length})</h2>
+          <h2 className="font-display text-xl font-semibold text-pearl-900">
+            Phòng ({rooms.length})
+          </h2>
           {rooms.length === 0 ? (
             <p className="text-sm text-stone-700">Chưa gán phòng cho booking này.</p>
           ) : (
@@ -114,13 +120,14 @@ function ReceptionBookingDetail({ booking }: { booking: BookingListItem }) {
           </div>
         </dl>
         {editable ? (
-          <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}/edit`} className="block">
+          <Link
+            to={`/reception/bookings/${encodeURIComponent(booking.code)}/edit`}
+            className="block"
+          >
             <Button className="w-full">Sửa booking</Button>
           </Link>
         ) : (
-          <p className="text-xs text-stone-700">
-            Booking ở trạng thái này không còn sửa được.
-          </p>
+          <p className="text-xs text-stone-700">Booking ở trạng thái này không còn sửa được.</p>
         )}
       </aside>
     </div>
