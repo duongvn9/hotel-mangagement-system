@@ -37,7 +37,9 @@ export function RoomDetailsPage() {
           <p className="text-xs font-semibold tracking-widest text-primary uppercase">
             {env.appName}
           </p>
-          <h1 className="font-display text-4xl font-semibold text-pearl-900">Chi tiết loại phòng</h1>
+          <h1 className="font-display text-4xl font-semibold text-pearl-900">
+            Chi tiết loại phòng
+          </h1>
         </div>
         <Link
           to={backToSearch}
@@ -81,7 +83,9 @@ export function RoomDetailsPage() {
             <div className="space-y-4 rounded-xl border border-stone-300 bg-white p-6">
               <h2 className="font-display text-xl font-semibold text-pearl-900">Tiện nghi</h2>
               {room.amenities.length === 0 ? (
-                <p className="text-sm text-stone-700">Chưa cập nhật tiện nghi cho loại phòng này.</p>
+                <p className="text-sm text-stone-700">
+                  Chưa cập nhật tiện nghi cho loại phòng này.
+                </p>
               ) : (
                 <ul className="grid gap-2 sm:grid-cols-2">
                   {room.amenities.map((amenity) => (
