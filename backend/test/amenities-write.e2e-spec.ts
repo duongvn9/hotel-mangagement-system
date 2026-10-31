@@ -118,10 +118,7 @@ describe('UC52 amenity writes with real AppModule and standalone Mongo', () => {
     }
   });
   it('persists image galleries, synchronizes the icon and clears both without changing assignments', async () => {
-    const images = [
-      '/images/seeds/amenities/first.jpg',
-      '/images/seeds/amenities/second.png',
-    ];
+    const images = ['/images/seeds/amenities/first.jpg'];
     const result = await post({
       name: prefix + 'Gallery',
       images,
@@ -145,9 +142,9 @@ describe('UC52 amenity writes with real AppModule and standalone Mongo', () => {
       iconUrl: '',
       roomTypeCount: 1,
     });
-    await patch(result.body.id, { images: Array(11).fill(images[0]) }).expect(
-      400,
-    );
+    await patch(result.body.id, {
+      images: [images[0], '/images/seeds/amenities/second.png'],
+    }).expect(400);
     await patch(result.body.id, {
       images: ['https://invalid.example.com/image.jpg'],
     }).expect(400);

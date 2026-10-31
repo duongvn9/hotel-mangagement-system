@@ -102,7 +102,7 @@ export function AmenityForm({
     : initial?.iconUrl
       ? [initial.iconUrl]
       : []
-  const [images, setImages] = useState<string[]>(originalImages)
+  const [images, setImages] = useState<string[]>(originalImages.slice(0, 1))
   const [files, setFiles] = useState<{ file: File; src: string }[]>([])
   const generatedUrls = useRef<string[]>([])
   useEffect(() => {
@@ -275,8 +275,9 @@ export function AmenityForm({
             ...files.map((item) => ({ src: item.src, label: item.file.name })),
           ]}
           onChoose={(added) => {
-            if (images.length + files.length + added.length > 10) {
-              setGeneral('Mỗi tiện nghi có tối đa 10 ảnh.')
+            if (!added.length) return
+            if (added.length > 1) {
+              setGeneral('Mỗi tiện nghi chỉ được chọn 1 ảnh.')
               return
             }
             if (
@@ -296,7 +297,8 @@ export function AmenityForm({
               generatedUrls.current.push(src)
               return { file, src }
             })
-            setFiles((previous) => [...previous, ...selectedFiles])
+            setImages([])
+            setFiles(selectedFiles)
           }}
           onRemove={(index) =>
             index < images.length

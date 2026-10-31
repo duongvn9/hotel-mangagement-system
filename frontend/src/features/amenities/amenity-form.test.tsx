@@ -84,6 +84,7 @@ describe('UC52 amenity form', () => {
       data: url === '/amenities/images' ? { path: '/images/seeds/amenities/new.jpg' } : amenity,
     }))
     const { success } = form()
+    expect(screen.getByLabelText('Ảnh tiện nghi')).not.toHaveAttribute('multiple')
     fireEvent.change(screen.getByLabelText(/^Tên tiện nghi/), { target: { value: 'New amenity' } })
     fireEvent.change(screen.getByLabelText('Ảnh tiện nghi'), {
       target: { files: [new File(['image'], 'amenity.jpg', { type: 'image/jpeg' })] },
@@ -109,6 +110,44 @@ describe('UC52 amenity form', () => {
       screen.getByText('Chọn ảnh JPG, PNG hoặc WebP, tối đa 5 MB mỗi ảnh.'),
     ).toBeInTheDocument()
     expect(post).not.toHaveBeenCalled()
+  })
+  it('replaces the current icon with one newly selected image', async () => {
+    vi.stubGlobal(
+      'URL',
+      class extends URL {
+        static createObjectURL() {
+          return 'blob:replacement'
+        }
+        static revokeObjectURL() {}
+      },
+    )
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValue({ data: { path: '/images/seeds/amenities/replacement.jpg' } })
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: amenity })
+    const { success } = form({ ...amenity, iconUrl: '/images/seeds/amenities/old.svg' })
+    fireEvent.change(screen.getByLabelText('Ảnh tiện nghi'), {
+      target: { files: [new File(['image'], 'new.jpg', { type: 'image/jpeg' })] },
+    })
+    expect(screen.queryByRole('button', { name: 'Bỏ ảnh 2' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu tiện nghi' }))
+    await waitFor(() => expect(success).toHaveBeenCalled())
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(patch).toHaveBeenCalledWith(`/amenities/${amenity.id}`, {
+      images: ['/images/seeds/amenities/replacement.jpg'],
+    })
+  })
+  it('rejects multiple files even if passed programmatically', () => {
+    form()
+    fireEvent.change(screen.getByLabelText('Ảnh tiện nghi'), {
+      target: {
+        files: [
+          new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
+          new File(['b'], 'b.jpg', { type: 'image/jpeg' }),
+        ],
+      },
+    })
+    expect(screen.getByText('Mỗi tiện nghi chỉ được chọn 1 ảnh.')).toBeInTheDocument()
   })
   it('removes a legacy icon by saving an empty gallery', async () => {
     const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: amenity })

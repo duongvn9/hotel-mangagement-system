@@ -19,13 +19,12 @@ export function ImagePicker({
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-semibold">Ảnh tiện nghi</p>
         <span className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-xs">
-          {images.length} / 10 ảnh
+          {images.length} / 1 ảnh
         </span>
       </div>
       <input
         id={id}
         type="file"
-        multiple
         accept="image/jpeg,image/png,image/webp"
         aria-label="Ảnh tiện nghi"
         aria-describedby={`${id}-help`}
@@ -46,12 +45,12 @@ export function ImagePicker({
           +
         </span>
         <span className="text-sm font-semibold text-primary">Chọn ảnh từ thiết bị</span>
-        <span className="text-xs text-stone-600">Có thể chọn nhiều ảnh cùng lúc</span>
+        <span className="text-xs text-stone-600">Chọn ảnh mới để thay ảnh hiện tại</span>
       </label>
       <p id={`${id}-help`} className="text-xs">
-        Tối đa 10 ảnh JPG, PNG hoặc WebP, mỗi ảnh tối đa 5 MB. Ảnh đầu tiên là ảnh đại diện.
+        Một ảnh JPG, PNG hoặc WebP, tối đa 5 MB.
       </p>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="mx-auto w-full max-w-64">
         {images.map((image, index) => (
           <div
             key={`${image.src}-${index}`}

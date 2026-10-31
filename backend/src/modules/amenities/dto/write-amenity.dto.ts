@@ -15,10 +15,10 @@ import {
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 export class CreateAmenityDto {
-  @ApiPropertyOptional({ type: [String] })
+  @ApiPropertyOptional({ type: [String], maxItems: 1 })
   @ValidateIf((_object, value) => value !== undefined)
   @IsArray()
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(1)
   @ArrayUnique()
   @Matches(ASSET_PATH, { each: true })
   images?: string[];
