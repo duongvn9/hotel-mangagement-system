@@ -76,7 +76,10 @@ describe('BookingListPage', () => {
     expect(rows.getAllByText('Tại quầy')).toHaveLength(1)
     expect(rows.getByText('3 khách')).toBeInTheDocument()
     expect(rows.getByText('1 khách')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /BKLIST1/ })).toHaveAttribute('href', '/booking/b1')
+    expect(screen.getByRole('link', { name: /BKLIST1/ })).toHaveAttribute(
+      'href',
+      '/reception/bookings/BKLIST1',
+    )
     expect(get).toHaveBeenCalledWith('/bookings', { params: { page: 1, limit: 20 } })
   })
 
