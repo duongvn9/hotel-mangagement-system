@@ -133,18 +133,8 @@ export function ReportFaultPage() {
         Ghi nhận lỗi thiết bị, hư hại cơ sở vật chất hoặc vấn đề cần bảo trì.
       </p>
       {mutation.isSuccess ? (
-        <div className="mt-6 space-y-5 rounded border border-stone-300 bg-white p-4 sm:p-6">
+        <div className="mt-6 space-y-5 rounded-xl border border-stone-300 bg-white p-4 shadow-sm sm:p-6">
           <Alert tone="success">Đã ghi nhận báo cáo bảo trì.</Alert>
-          <dl className="space-y-2 break-all text-sm">
-            <dt className="font-semibold">Mã báo cáo</dt>
-            <dd>{mutation.data.reportId}</dd>
-            {mutation.data.taskId && (
-              <>
-                <dt className="font-semibold">Mã công việc bảo trì</dt>
-                <dd>{mutation.data.taskId}</dd>
-              </>
-            )}
-          </dl>
           <p>
             {mutation.data.taskId
               ? 'Đã tạo công việc bảo trì và giao cho bạn.'
@@ -160,13 +150,15 @@ export function ReportFaultPage() {
               {warning}
             </Alert>
           ))}
-          <Link
-            className="inline-flex min-h-11 items-center text-primary underline"
-            to="/operations/maintenance/history"
-          >
-            Xem lịch sử bảo trì
-          </Link>
-          <Button onClick={reset}>Báo cáo vấn đề khác</Button>
+          <div className="flex flex-col gap-3 border-t border-stone-300 pt-5 sm:flex-row sm:flex-wrap">
+            <Link
+              className="inline-flex min-h-11 items-center justify-center rounded border border-pearl-900 px-4 py-3 text-center text-xs font-semibold tracking-wider text-pearl-900 uppercase transition-colors hover:bg-pearl-900 hover:text-cream-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              to="/operations/maintenance/history"
+            >
+              Xem lịch sử bảo trì
+            </Link>
+            <Button onClick={reset}>Báo cáo vấn đề khác</Button>
+          </div>
         </div>
       ) : (
         <form
