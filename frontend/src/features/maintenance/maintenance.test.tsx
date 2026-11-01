@@ -140,7 +140,10 @@ describe('UC35 ReportFaultPage', () => {
       data: { reportId: 'report1', taskId: 'task1', roomMarkedUnavailable: true, warnings: [] },
     })
     expect(await screen.findByText('Đã ghi nhận báo cáo bảo trì.')).toBeInTheDocument()
-    expect(screen.getByText('task1')).toBeInTheDocument()
+    expect(screen.queryByText('task1')).not.toBeInTheDocument()
+    expect(screen.queryByText('report1')).not.toBeInTheDocument()
+    expect(screen.queryByText('Mã báo cáo')).not.toBeInTheDocument()
+    expect(screen.queryByText('Mã công việc bảo trì')).not.toBeInTheDocument()
     expect(screen.getByText('Phòng đã được đánh dấu bảo trì, không khả dụng.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Xem lịch sử bảo trì' })).toHaveAttribute(
       'href',
