@@ -9,7 +9,7 @@ import { useManagerDashboard } from '../hooks'
 import { DashboardCard } from '../components/DashboardCard'
 import { MANAGER_SHORTCUTS } from '../shortcuts'
 const linkClass =
-  'inline-flex min-h-11 items-center text-primary underline underline-offset-4 hover:text-primary-hover'
+  'inline-flex min-h-11 w-full items-center justify-center rounded border border-primary/40 bg-white px-3 py-2.5 text-center text-sm leading-snug font-semibold text-primary transition-colors hover:border-primary hover:bg-primary hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary'
 export function ManagerDashboardPage() {
   const dashboard = useManagerDashboard(),
     data = dashboard.data
@@ -162,10 +162,10 @@ export function ManagerDashboardPage() {
             <section
               key={group.title}
               aria-label={group.title}
-              className="min-w-0 rounded border border-stone-300 p-4"
+              className="min-w-0 rounded-xl border border-stone-300 bg-white p-4 shadow-sm"
             >
-              <h3 className="mb-2 font-semibold">{group.title}</h3>
-              <ul>
+              <h3 className="mb-4 font-semibold">{group.title}</h3>
+              <ul className="space-y-2">
                 {group.links.map((link) => (
                   <li key={link.to}>
                     <Link className={linkClass} to={link.to}>
