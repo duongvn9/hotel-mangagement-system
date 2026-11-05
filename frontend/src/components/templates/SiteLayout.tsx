@@ -113,9 +113,9 @@ export function SiteLayout({
                       ? 'text-ink-foreground/85 hover:text-ink-foreground'
                       : 'text-muted-foreground hover:text-foreground',
                     active &&
-                      (overlay
-                        ? 'bg-card/20 text-ink-foreground'
-                        : 'bg-card text-foreground shadow-sm'),
+                    (overlay
+                      ? 'bg-card/20 text-ink-foreground'
+                      : 'bg-card text-foreground shadow-sm'),
                   )}
                 >
                   {l.label}
@@ -138,7 +138,7 @@ export function SiteLayout({
       <main id="main" tabIndex={-1}>
         {children}
       </main>
-      <footer className="mt-24 bg-ink text-ink-foreground">
+      <footer className="bg-ink text-ink-foreground">
         <div className="mx-auto grid max-w-7xl gap-10 px-5 py-16 md:grid-cols-4 lg:px-8">
           <div className="md:col-span-2">
             <Logo light name={brand} />
