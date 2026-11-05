@@ -162,6 +162,8 @@ components/
 | `KeyValue` | Cặp nhãn – giá trị trong chi tiết |
 | `Stars` | `value`, `onChange?` (không có `onChange` thì chỉ đọc) |
 | `DateRangeField` | `from`, `to` (`yyyy-MM-dd`), `onChange(from, to)`; ngày trả luôn sau ngày nhận ≥ 1 ngày |
+| `SectionHeading` | `eyebrow`, `title`, `body`, `align`, `as` (`h1` hoặc `h2`) |
+| `PhotoTile` | `src`, `alt`, `caption`, `aspect` (`square`, `4/3`, `3/4`) |
 | `Toaster` | Gắn một lần ở gốc app; gọi `toast()` từ `sonner` |
 
 ### Organisms — `@/components/organisms`
@@ -173,7 +175,9 @@ components/
 | `DataTable<T>` | `rows`, `columns`, `search`, `filters`, `pageSize`, `onRowClick`, `toolbar`, `empty`, `loading` — phân trang, tìm kiếm, lọc, trạng thái trống/đang tải |
 | `Dialog*`, `AlertDialog*`, `Sheet*` | Hộp thoại, xác nhận, ngăn kéo |
 | `RevenueArea`, `SimpleBars`, `Donut` | Biểu đồ (recharts) theo màu `--chart-*` |
-| `SearchBar` | Thanh tìm phòng; `onSearch({ from, to, guests })` |
+| `SearchBar` | Thanh tìm phòng; `initial`, `onSearch({ from, to, guests })`, `ariaLabel` |
+| `HeroBanner` | `image`, `imageAlt`, `title`, `eyebrow`, `tall`, `children` |
+| `RoomCard` | `image`, `name`, `description`, `amenities`, `price`, `priceNote`, `meta`, `actions`, `selected`, `onToggle`, `toggleLabel` |
 | `Unauthorized` | Trang 403; `homeTo`, `actionLabel`, `description` |
 
 ### Templates — `@/components/templates`
