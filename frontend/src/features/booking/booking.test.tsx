@@ -91,15 +91,13 @@ describe('SearchRoomsPage', () => {
     expect(screen.getByText('2 đêm · 2 phòng phù hợp')).toBeInTheDocument()
 
     // Chọn 1 phòng -> hiện thanh tiếp tục.
-    fireEvent.change(screen.getByLabelText('Số phòng'), { target: { value: '1' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /Chọn phòng/ }))
     expect(await screen.findByText(/Tiếp tục đặt phòng/)).toBeInTheDocument()
   })
 
   it('shows prompt when criteria are missing', () => {
     renderWithAuth(bookingRoutes, { path: '/search' })
-    expect(
-      screen.getByText(/Nhập thông tin ở trên và bấm “Tìm phòng” để bắt đầu/i),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/Nhập thông tin ở trên và bấm.*để bắt đầu/i)).toBeInTheDocument()
   })
 
   it('shows empty message when no rooms match', async () => {

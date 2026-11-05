@@ -1,17 +1,16 @@
-import { AssetImage, RoomGallery } from '@/components/AssetImage'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { Users } from 'lucide-react'
+import { RoomGallery } from '@/components/AssetImage'
+import { Button, Skeleton } from '@/components/atoms'
+import { EmptyState } from '@/components/molecules'
+import { RoomCard, SearchBar, type SearchValue } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
-import { env } from '@/lib/env'
+import { assetUrl } from '@/lib/asset-url'
+import { fshort, vnd } from '@/lib/format'
 import type { AvailableRoom, SearchAvailabilityParams } from '../api'
 import { useAvailability } from '../hooks'
-import { ClockIcon, UsersIcon } from '../icons'
-import { money, nightsBetween, todayISO } from '../utils'
+import { nightsBetween } from '../utils'
 
 /** Đọc tiêu chí hợp lệ từ URL để chạy UC05; trả null khi chưa đủ/không hợp lệ. */
 function readCriteria(params: URLSearchParams): SearchAvailabilityParams | null {
@@ -42,12 +41,6 @@ export function SearchRoomsPage() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const criteria = readCriteria(params)
-
-  // Form nhập độc lập với URL để người dùng sửa trước khi tìm.
-  const [checkIn, setCheckIn] = useState(params.get('checkIn') ?? '')
-  const [checkOut, setCheckOut] = useState(params.get('checkOut') ?? '')
-  const [guests, setGuests] = useState(params.get('guests') ?? '2')
-  const [formError, setFormError] = useState('')
 
   // Số phòng đã chọn theo loại, dùng để sang bước tạo booking.
   const [selection, setSelection] = useState<Record<string, number>>({})
@@ -91,19 +84,13 @@ export function SearchRoomsPage() {
     [groups, selection, nights],
   )
 
-  function submitSearch(event: FormEvent) {
-    event.preventDefault()
-    setFormError('')
-    if (nightsBetween(checkIn, checkOut) <= 0) {
-      setFormError('Ngày trả phòng phải sau ngày nhận phòng.')
-      return
-    }
-    if (!(Number(guests) >= 1)) {
-      setFormError('Số khách phải từ 1 trở lên.')
-      return
-    }
+  const handleSearch = ({ from, to, guests }: SearchValue) => {
     setSelection({})
-    setParams({ checkIn, checkOut, guests: String(Number(guests)) })
+    setParams({
+      checkIn: from,
+      checkOut: to,
+      guests: String(guests),
+    })
   }
 
   function proceed() {
@@ -118,184 +105,189 @@ export function SearchRoomsPage() {
   }
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div>
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">
-          {env.appName}
+    <div className="mx-auto max-w-7xl px-5 py-10 lg:px-8">
+      <h1 className="font-display text-5xl">Tìm phòng của bạn</h1>
+      {criteria ? (
+        <p className="mt-2 text-muted-foreground">
+          {fshort(criteria.checkIn)} — {fshort(criteria.checkOut)} · {nights} đêm ·{' '}
+          {criteria.guests} khách
         </p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">Đặt phòng</h1>
-        <p className="mt-2 text-sm text-stone-700">
+      ) : (
+        <p className="mt-2 text-muted-foreground">
           Chọn ngày nhận – trả phòng và số khách để xem các loại phòng còn trống tại khách sạn.
-        </p>
-      </div>
-
-      <form
-        onSubmit={submitSearch}
-        className="grid gap-4 rounded-lg border border-stone-300 bg-white p-6 md:grid-cols-4"
-        aria-label="Tìm phòng trống"
-      >
-        <TextField
-          label="Nhận phòng"
-          type="date"
-          required
-          min={todayISO()}
-          value={checkIn}
-          onChange={(event) => setCheckIn(event.target.value)}
-        />
-        <TextField
-          label="Trả phòng"
-          type="date"
-          required
-          min={checkIn || todayISO()}
-          value={checkOut}
-          onChange={(event) => setCheckOut(event.target.value)}
-        />
-        <TextField
-          label="Số khách"
-          type="number"
-          min={1}
-          max={20}
-          required
-          value={guests}
-          onChange={(event) => setGuests(event.target.value)}
-        />
-        <div className="flex items-end">
-          <Button type="submit" className="w-full">
-            Tìm phòng
-          </Button>
-        </div>
-      </form>
-
-      {formError && <Alert tone="danger">{formError}</Alert>}
-
-      {!criteria && !formError && (
-        <p className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700">
-          Nhập thông tin ở trên và bấm “Tìm phòng” để bắt đầu.
         </p>
       )}
 
-      {criteria && availability.isPending && <p role="status">Đang tìm phòng trống…</p>}
+      <div className="mt-6">
+        <SearchBar
+          compact
+          initial={
+            criteria
+              ? {
+                  from: criteria.checkIn,
+                  to: criteria.checkOut,
+                  guests: criteria.guests,
+                }
+              : undefined
+          }
+          onSearch={handleSearch}
+        />
+      </div>
+
+      {!criteria && (
+        <div className="mt-10 rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">
+          Nhập thông tin ở trên và bấm “Kiểm tra phòng trống” để bắt đầu.
+        </div>
+      )}
+
+      {criteria && availability.isPending && (
+        <div className="mt-10 grid gap-5" aria-busy="true" aria-label="Đang tìm phòng trống">
+          <p role="status" className="sr-only">
+            Đang tìm phòng trống…
+          </p>
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="card-soft grid h-64 md:grid-cols-[320px_1fr]">
+              <Skeleton className="h-56 w-full md:h-full" />
+              <div className="space-y-4 p-6">
+                <Skeleton className="h-8 w-2/3" />
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-16 w-full" />
+                <div className="flex justify-between pt-4">
+                  <Skeleton className="h-8 w-28" />
+                  <Skeleton className="h-8 w-24" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {criteria && availability.isError && (
-        <Alert tone="danger">{getErrorMessage(availability.error)}</Alert>
+        <div
+          role="alert"
+          className="mt-8 rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
+        >
+          {getErrorMessage(availability.error)}
+        </div>
       )}
 
       {criteria && availability.data && (
-        <div className="space-y-4">
+        <div className="mt-10 space-y-6">
           {availability.data.length === 0 ? (
-            <p
-              className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700"
-              aria-live="polite"
-            >
-              Không có phòng trống phù hợp. Vui lòng đổi ngày hoặc số khách.
-            </p>
+            <EmptyState
+              title="Không có phòng trống phù hợp"
+              body="Vui lòng đổi ngày nhận, trả phòng hoặc số lượng khách."
+            />
           ) : (
-            <div className="flex flex-wrap items-end justify-between gap-2 border-b border-stone-300 pb-2">
-              <h2 className="font-display text-2xl font-semibold text-pearl-900">
-                Loại phòng còn trống
-              </h2>
-              <p className="text-sm text-stone-700" aria-live="polite">
-                {nights} đêm · {availability.data.length} phòng phù hợp
-              </p>
-            </div>
-          )}
-
-          {groups.map((group) => {
-            const qty = selection[group.roomTypeId] ?? 0
-            const max = group.rooms.length
-            return (
-              <article
-                key={group.roomTypeId}
-                className="overflow-hidden rounded-xl border border-stone-300 bg-white shadow-sm sm:flex"
-              >
-                <div className="relative flex h-32 items-center justify-center bg-gradient-to-br from-cream-100 to-brandy-100 sm:h-auto sm:w-44 sm:shrink-0">
-                  <AssetImage
-                    path={group.images[0]}
-                    name={group.name}
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                  <span className="absolute top-3 left-3">
-                    <Badge tone="success">Còn {max} phòng</Badge>
-                  </span>
-                </div>
-                <div className="flex flex-1 flex-wrap items-center justify-between gap-4 p-5">
-                  <div className="min-w-48 space-y-2">
-                    <div>
-                      <p className="text-[11px] font-semibold tracking-widest text-primary uppercase">
-                        Loại phòng
-                      </p>
-                      <h3 className="font-display text-xl font-semibold text-pearl-900">
-                        {group.name}
-                      </h3>
-                      {group.images.length > 1 && (
-                        <RoomGallery images={group.images} name={group.name} />
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-stone-700">
-                      <span className="inline-flex items-center gap-1.5">
-                        <UsersIcon className="size-4 text-primary" /> Tối đa {group.capacity} khách
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <ClockIcon className="size-4 text-primary" /> Giữ phòng 15 phút
-                      </span>
-                    </div>
-                    {criteria && (
-                      <Link
-                        to={`/room-types/${group.roomTypeId}?${new URLSearchParams({
-                          checkIn: criteria.checkIn,
-                          checkOut: criteria.checkOut,
-                          guests: String(criteria.guests),
-                        }).toString()}`}
-                        className="inline-block text-sm font-semibold text-primary underline-offset-2 hover:underline"
-                      >
-                        Xem chi tiết
-                      </Link>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl font-semibold text-pearl-900 tabular-nums">
-                      {group.pricePerNight ? money.format(group.pricePerNight) : '—'}
-                    </p>
-                    <p className="text-xs text-stone-700">mỗi đêm</p>
-                  </div>
-                  <SelectField
-                    label="Số phòng"
-                    className="w-28"
-                    value={String(qty)}
-                    options={Array.from({ length: max + 1 }, (_, n) => ({
-                      value: String(n),
-                      label: String(n),
-                    }))}
-                    onChange={(event) =>
-                      setSelection((previous) => ({
-                        ...previous,
-                        [group.roomTypeId]: Number(event.target.value),
-                      }))
-                    }
-                  />
-                </div>
-              </article>
-            )
-          })}
-
-          {selectedRoomIds.length > 0 && (
-            <div className="sticky bottom-4 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-primary bg-cream-50 p-5">
-              <div>
-                <p className="text-sm text-stone-700">
-                  Đã chọn {selectedRoomIds.length} phòng · {nights} đêm
-                </p>
-                <p className="text-xl font-semibold text-pearl-900 tabular-nums">
-                  Tạm tính {money.format(estimatedTotal)}
-                </p>
-                <p className="text-xs text-stone-700">
-                  Tiền cọc và tổng tiền chính thức do hệ thống xác nhận ở bước sau.
+            <>
+              <div className="flex flex-wrap items-end justify-between gap-2 border-b border-border pb-3">
+                <h2 className="font-display text-2xl font-semibold">Loại phòng còn trống</h2>
+                <p className="text-sm text-muted-foreground" aria-live="polite">
+                  {nights} đêm · {availability.data.length} phòng phù hợp
                 </p>
               </div>
-              <Button onClick={proceed}>Tiếp tục đặt phòng</Button>
-            </div>
+
+              <div className="grid gap-5">
+                {groups.map((group) => {
+                  const qty = selection[group.roomTypeId] ?? 0
+                  const max = group.rooms.length
+                  return (
+                    <RoomCard
+                      key={group.roomTypeId}
+                      image={group.images[0] ? assetUrl(group.images[0]) : undefined}
+                      name={group.name}
+                      price={group.pricePerNight}
+                      priceNote="/ đêm"
+                      selected={qty > 0}
+                      onToggle={() => {
+                        setSelection((prev) => ({
+                          ...prev,
+                          [group.roomTypeId]: (prev[group.roomTypeId] ?? 0) > 0 ? 0 : 1,
+                        }))
+                      }}
+                      toggleLabel={`Chọn phòng ${group.name}`}
+                      meta={
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="flex items-center gap-1">
+                            <Users className="size-3.5" />
+                            Tối đa {group.capacity} khách
+                          </span>
+                          <span className="rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success">
+                            Còn {max} phòng
+                          </span>
+                          {group.images.length > 1 && (
+                            <RoomGallery images={group.images} name={group.name} />
+                          )}
+                        </div>
+                      }
+                      actions={
+                        <div className="flex flex-wrap items-center gap-3">
+                          {group.rooms.length > 1 && qty > 0 && (
+                            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <span>Số lượng:</span>
+                              <select
+                                aria-label={`Số lượng phòng ${group.name}`}
+                                value={qty}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value)
+                                  setSelection((prev) => ({
+                                    ...prev,
+                                    [group.roomTypeId]: val,
+                                  }))
+                                }}
+                                className="rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground"
+                              >
+                                {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+                                  <option key={n} value={n}>
+                                    {n}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
+                          {criteria && (
+                            <Link
+                              to={`/room-types/${group.roomTypeId}?${new URLSearchParams({
+                                checkIn: criteria.checkIn,
+                                checkOut: criteria.checkOut,
+                                guests: String(criteria.guests),
+                              }).toString()}`}
+                              className="rounded-full border border-border px-4 py-1.5 text-xs font-medium text-foreground transition hover:border-primary hover:text-primary"
+                            >
+                              Xem chi tiết
+                            </Link>
+                          )}
+                        </div>
+                      }
+                    />
+                  )
+                })}
+              </div>
+
+              {selectedRoomIds.length > 0 && (
+                <div className="sticky bottom-4 z-20 rounded-2xl border border-primary/40 bg-card/95 p-5 shadow-xl backdrop-blur">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">
+                        Đã chọn {selectedRoomIds.length} phòng · {nights} đêm
+                      </p>
+                      <p className="font-display text-2xl font-semibold text-foreground">
+                        Tạm tính {vnd(estimatedTotal)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Tiền cọc và tổng tiền chính thức do hệ thống xác nhận ở bước sau.
+                      </p>
+                    </div>
+                    <Button onClick={proceed} className="rounded-full px-6">
+                      Tiếp tục đặt phòng
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
-    </section>
+    </div>
   )
 }
