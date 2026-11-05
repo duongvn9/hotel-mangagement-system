@@ -2,6 +2,7 @@ import { AssetImage } from '@/components/AssetImage'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { flatLinks, isStaffRole, navGroupsFor, roleHome } from '@/app/navigation'
+import { cn } from '@/lib/utils'
 import { useAuth } from './auth-context'
 
 const compactLink =
@@ -12,7 +13,13 @@ const compactLink =
  * Mặc định liệt kê mọi link của role theo hàng ngang. `compact` dùng cho header khách: Customer
  * gom các trang của mình vào một menu, nhân viên chỉ thấy nút "Khu làm việc".
  */
-export function UserMenu({ compact = false }: { compact?: boolean }) {
+export function UserMenu({
+  compact = false,
+  overlay = false,
+}: {
+  compact?: boolean
+  overlay?: boolean
+}) {
   const { me, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -43,11 +50,22 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
 
   if (!me) {
     return compact ? (
-      <span className="flex flex-col gap-1 md:flex-row md:items-center md:gap-1">
-        <Link to="/login" className={compactLink}>
+      <span className="flex flex-col gap-1 md:flex-row md:items-center md:gap-2">
+        <Link
+          to="/login"
+          className={cn(
+            'inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors md:min-h-0 md:rounded-full lg:px-4',
+            overlay
+              ? 'text-ink-foreground hover:bg-card/15 hover:text-ink-foreground'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
           Đăng nhập
         </Link>
-        <Link to="/register" className={compactLink}>
+        <Link
+          to="/register"
+          className="inline-flex min-h-11 items-center rounded-full bg-primary px-4 py-2 text-sm font-medium whitespace-nowrap text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 md:min-h-0"
+        >
           Đăng ký
         </Link>
       </span>
@@ -75,7 +93,13 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
     <>
       <Link
         to="/profile"
-        className={`${compact ? compactLink : 'inline-flex min-h-11 items-center text-sm font-medium text-foreground hover:text-primary'} tracking-normal text-foreground normal-case`}
+        className={cn(
+          compact
+            ? compactLink
+            : 'inline-flex min-h-11 items-center text-sm font-medium hover:text-primary',
+          'tracking-normal normal-case',
+          overlay ? 'text-ink-foreground hover:text-ink-foreground/80' : 'text-foreground',
+        )}
       >
         <span className="inline-flex items-center gap-2">
           <AssetImage decorative path={me.avatarUrl} name={me.fullName} />
@@ -85,7 +109,12 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
       <button
         type="button"
         onClick={onLogout}
-        className={`${compact ? `${compactLink} uppercase` : 'inline-flex min-h-11 items-center text-sm font-medium uppercase text-muted-foreground hover:text-foreground'}`}
+        className={cn(
+          compact
+            ? `${compactLink} uppercase`
+            : 'inline-flex min-h-11 items-center text-sm font-medium uppercase hover:text-foreground',
+          overlay ? 'text-ink-foreground hover:text-ink-foreground/80' : 'text-muted-foreground',
+        )}
       >
         Đăng xuất
       </button>
@@ -116,10 +145,13 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
 
   const groups = navGroupsFor(me)
   return (
-    <span className="flex flex-col gap-1 md:flex-row md:items-center md:gap-1">
+    <span className="flex flex-col gap-1 md:flex-row md:items-center md:gap-2">
       {isStaffRole(me.role) ? (
-        <Link to={roleHome(me.role)} className={compactLink}>
-          Khu làm việc
+        <Link
+          to={roleHome(me.role)}
+          className="inline-flex min-h-11 items-center rounded-full bg-primary px-4 py-2 text-sm font-medium whitespace-nowrap text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 md:min-h-0"
+        >
+          Vào khu làm việc
         </Link>
       ) : (
         groups.length > 0 && (
@@ -130,7 +162,12 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
               aria-expanded={open}
               aria-controls="account-links"
               onClick={() => setOpenOn(open ? null : location.pathname)}
-              className={`${compactLink} gap-2 uppercase`}
+              className={cn(
+                `${compactLink} gap-2 uppercase`,
+                overlay
+                  ? 'text-ink-foreground hover:text-ink-foreground/80'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
             >
               {groups[0]?.label}
               <span aria-hidden className="text-xs">

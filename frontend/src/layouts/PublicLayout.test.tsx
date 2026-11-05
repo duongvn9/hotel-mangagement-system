@@ -40,11 +40,7 @@ describe('PublicLayout', () => {
     renderAt()
     const header = banner()
     expect(header.getByRole('link', { name: 'Trang chủ' })).toHaveAttribute('href', '/')
-    expect(header.getByRole('link', { name: 'Đặt phòng' })).toHaveAttribute('href', '/search')
-    expect(header.getByRole('link', { name: 'Booking của tôi' })).toHaveAttribute(
-      'href',
-      '/my-bookings',
-    )
+    expect(header.getByRole('link', { name: 'Phòng & suite' })).toHaveAttribute('href', '/search')
     expect(header.getByRole('link', { name: 'Trải nghiệm' })).toHaveAttribute(
       'href',
       '/experiences',
@@ -59,7 +55,7 @@ describe('PublicLayout', () => {
 
   it('marks the current page', () => {
     renderAt('/search')
-    expect(banner().getByRole('link', { name: 'Đặt phòng' })).toHaveAttribute(
+    expect(banner().getByRole('link', { name: 'Phòng & suite' })).toHaveAttribute(
       'aria-current',
       'page',
     )
@@ -110,7 +106,7 @@ describe('PublicLayout', () => {
   it('sends staff to their workspace instead of listing every staff page', () => {
     renderAt('/', manager)
     const header = banner()
-    expect(header.getByRole('link', { name: 'Khu làm việc' })).toHaveAttribute(
+    expect(header.getByRole('link', { name: 'Vào khu làm việc' })).toHaveAttribute(
       'href',
       '/manager/dashboard',
     )
