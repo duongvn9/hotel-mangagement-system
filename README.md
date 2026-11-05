@@ -223,6 +223,8 @@ The example files document every variable. The main groups:
 
 ## 6. Testing and CI
 
+CI runs on pull requests, pushes to `main`, and manual dispatch. It validates application builds but does not publish container images or deploy. Semgrep runs without an account or token; downloading its public rules requires network access.
+
 - Backend: unit tests with Vitest (`npm test`) and end-to-end tests with Supertest against a real MongoDB (`npm run test:e2e`). Business rules live in services and are covered by unit tests.
 - Frontend: component and page tests with Vitest and Testing Library (`npm test`).
 - `make test` runs both unit suites.
@@ -233,7 +235,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and on pu
 |---|---|
 | `backend` | lint, format check, typecheck, unit tests, e2e tests (against MongoDB), build |
 | `frontend` | lint, format check, unit tests, build |
-| `docker` | builds the production images |
+| `semgrep` | scans backend and frontend application source with the Semgrep Community Edition `p/ci` ruleset; findings and invalid rules fail CI |
 | `maintenance-smoke` | runtime smoke test of the Compose stack for the maintenance and manager dashboard features |
 
 ---

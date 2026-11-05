@@ -55,6 +55,9 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       target: dev
+    env_file:
+      - path: .env
+        required: false
     environment:
       VITE_PROXY_TARGET: http://backend:3000
     ports:
