@@ -241,6 +241,13 @@ Trong lúc nhiều người migrate song song, `design-system/legacy.css` giữ 
 | `tracking-widest` (0.2em) | `tracking-[0.2em]` chỉ cho eyebrow viết hoa |
 | `Button`/`Badge`/`TextField`... trong `components/*.tsx` | Xem mục 7 (các file cũ đã gắn `@deprecated`) |
 
+### Đã migrate: khu khách
+
+- **Vỏ & landing:** `HomePage`, `ExperiencesPage`, `NotFoundPage`, `Unauthorized`, `PublicLayout`, `UserMenu`
+- **Tìm và xem phòng:** `SearchRoomsPage`, `RoomDetailsPage`
+- **Đặt phòng:** `CreateBookingPage`, `LookupBookingPage`, `BookingDetailPage`, `PaymentReturnPage`
+- **Tài khoản khách:** `LoginPage`, `RegisterPage` (với `AuthLayout`), `ProfilePage`, `MyBookingsPage`
+
 Khi trang cuối cùng đã migrate: xóa `design-system/legacy.css`, dòng `@import` tương ứng trong `frontend/src/styles/index.css`
 và các component cũ.
 

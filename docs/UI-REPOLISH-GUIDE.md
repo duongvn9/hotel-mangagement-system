@@ -37,17 +37,18 @@ Cột "Task Jira" để nhóm điền khi nhận task. Đường dẫn app lấy
 
 | Prototype (`ui-prototype/src/routes/`) | Route app | Trang trong app | Task Jira |
 |---|---|---|---|
-| `index.tsx` | `/` | `pages/HomePage.tsx` | |
-| `rooms.index.tsx` | `/search` | `features/booking/pages/SearchRoomsPage.tsx` | |
-| `rooms.$typeId.tsx` | `/room-types/:id` | `features/booking/pages/RoomDetailsPage.tsx` | |
-| `book.$typeId.tsx` | `/booking/new` | `features/booking/pages/CreateBookingPage.tsx` | |
-| `lookup.tsx` | `/booking/lookup` | `features/booking/pages/LookupBookingPage.tsx` | |
-| `payment-return.tsx` | `/payment/vnpay-return` | `features/booking/pages/PaymentReturnPage.tsx` | |
-| `login.tsx`, `register.tsx` | `/login`, `/register` | `features/auth/pages/LoginPage.tsx`, `RegisterPage.tsx` | |
-| `unauthorized.tsx` | (trong `RequireAuth`) | `features/auth/RequireAuth.tsx` | |
-| `app.profile.tsx` | `/profile` | `features/auth/pages/ProfilePage.tsx` | |
-| `app.my-bookings.tsx` | `/my-bookings` | `features/booking/pages/MyBookingsPage.tsx` | |
-| `app.bookings.$id.tsx` | `/booking/:id`, `/reception/bookings/:code` | `BookingDetailPage.tsx`, `ReceptionBookingDetailPage.tsx` | |
+| `index.tsx` | `/` | `pages/HomePage.tsx` | Done |
+| `rooms.index.tsx` | `/search` | `features/booking/pages/SearchRoomsPage.tsx` | Done |
+| `rooms.$typeId.tsx` | `/room-types/:id` | `features/booking/pages/RoomDetailsPage.tsx` | Done |
+| `book.$typeId.tsx` | `/booking/new` | `features/booking/pages/CreateBookingPage.tsx` | Done |
+| `lookup.tsx` | `/booking/lookup` | `features/booking/pages/LookupBookingPage.tsx` | Done |
+| `payment-return.tsx` | `/payment/vnpay-return` | `features/booking/pages/PaymentReturnPage.tsx` | Done |
+| `login.tsx`, `register.tsx` | `/login`, `/register` | `features/auth/pages/LoginPage.tsx`, `RegisterPage.tsx` | Done |
+| `unauthorized.tsx` | (trong `RequireAuth`) | `features/auth/RequireAuth.tsx` | Done |
+| `app.profile.tsx` | `/profile` | `features/auth/pages/ProfilePage.tsx` | Done |
+| `app.my-bookings.tsx` | `/my-bookings` | `features/booking/pages/MyBookingsPage.tsx` | Done |
+| `app.bookings.$id.tsx` | `/booking/:id`, `/reception/bookings/:code` | `BookingDetailPage.tsx`, `ReceptionBookingDetailPage.tsx` | Done (khách) |
+| `experiences.tsx` | `/experiences` | `features/experiences/pages/ExperiencesPage.tsx` | Done |
 | `app.bookings.index.tsx` | `/reception/bookings` | `features/booking/pages/BookingListPage.tsx` | |
 | `app.walk-in.tsx` | `/reception/booking/new` | `features/booking/pages/WalkInBookingPage.tsx` | |
 | `app.front-desk.tsx` | `/reception/front-desk` | `features/booking/pages/FrontDeskPage.tsx` | |
@@ -76,7 +77,7 @@ Cột "Task Jira" để nhóm điền khi nhận task. Đường dẫn app lấy
 | `app.feedback.tsx` | `/my-feedback` | `features/feedback/pages/MyFeedbackPage.tsx` | |
 | `app.feedback-review.tsx` | `/staff/feedback` | `features/feedback/pages/FeedbackPage.tsx` | |
 | `app.tsx` (khung khu làm việc) | mọi route nhân viên | `layouts/StaffLayout.tsx`, `StaffNav.tsx` → dùng `templates/WorkspaceLayout` | |
-| `components/hms/SiteLayout.tsx` | mọi route khách | `layouts/PublicLayout.tsx` → dùng `templates/SiteLayout` | |
+| `components/hms/SiteLayout.tsx` | mọi route khách | `layouts/PublicLayout.tsx` → dùng `templates/SiteLayout` | Done |
 
 **Màn prototype chưa có trong app (hỏi Khoa trước, không tự làm):** `experiences.tsx`, `app.home.tsx`, `app.equipment.tsx`.
 
