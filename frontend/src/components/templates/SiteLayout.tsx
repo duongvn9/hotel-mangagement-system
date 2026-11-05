@@ -113,9 +113,9 @@ export function SiteLayout({
                       ? 'text-ink-foreground/85 hover:text-ink-foreground'
                       : 'text-muted-foreground hover:text-foreground',
                     active &&
-                    (overlay
-                      ? 'bg-card/20 text-ink-foreground'
-                      : 'bg-card text-foreground shadow-sm'),
+                      (overlay
+                        ? 'bg-card/20 text-ink-foreground'
+                        : 'bg-card text-foreground shadow-sm'),
                   )}
                 >
                   {l.label}

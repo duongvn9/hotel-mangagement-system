@@ -232,9 +232,18 @@ describe('RoomCard', () => {
     const heading = screen.getByRole('heading', { level: 2 })
     expect(heading.className).toMatch(/line-clamp-2|truncate/)
 
-    // Render without image
-    rerender(<RoomCard name="Phòng Deluxe" price={1500000} />)
+    // Render without image, with badge and subPrice
+    rerender(
+      <RoomCard
+        name="Phòng Deluxe"
+        price={1500000}
+        badge={<span>Còn 3 phòng</span>}
+        subPrice="Tổng 4.500.000 đ"
+      />,
+    )
     expect(screen.getByRole('heading', { name: 'Phòng Deluxe' })).toBeInTheDocument()
+    expect(screen.getByText('Còn 3 phòng')).toBeInTheDocument()
+    expect(screen.getByText('Tổng 4.500.000 đ')).toBeInTheDocument()
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
 })

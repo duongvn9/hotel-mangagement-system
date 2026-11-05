@@ -11,6 +11,8 @@ export interface RoomCardProps {
   amenities?: string[]
   price?: number
   priceNote?: string
+  subPrice?: ReactNode
+  badge?: ReactNode
   meta?: ReactNode
   actions?: ReactNode
   selected?: boolean
@@ -26,6 +28,8 @@ export function RoomCard({
   amenities,
   price,
   priceNote,
+  subPrice,
+  badge,
   meta,
   actions,
   selected = false,
@@ -66,6 +70,7 @@ export function RoomCard({
             <h2 className="font-display line-clamp-2 text-3xl">{name}</h2>
             {meta && <div className="mt-2 text-sm text-muted-foreground">{meta}</div>}
           </div>
+          {badge}
         </div>
 
         {description && (
@@ -97,6 +102,7 @@ export function RoomCard({
                   {priceNote ?? '/ đêm'}
                 </span>
               </div>
+              {subPrice && <div className="text-xs text-muted-foreground">{subPrice}</div>}
             </div>
           ) : (
             <div />

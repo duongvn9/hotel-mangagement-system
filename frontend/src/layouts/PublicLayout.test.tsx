@@ -50,7 +50,7 @@ describe('PublicLayout', () => {
       '/booking/lookup',
     )
     expect(header.getByRole('link', { name: 'Đăng nhập' })).toHaveAttribute('href', '/login')
-    expect(header.getByRole('link', { name: 'Đăng ký' })).toHaveAttribute('href', '/register')
+    expect(header.getByRole('link', { name: 'Đặt phòng' })).toHaveAttribute('href', '/search')
   })
 
   it('marks the current page', () => {

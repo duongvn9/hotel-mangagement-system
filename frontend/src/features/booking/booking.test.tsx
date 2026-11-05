@@ -95,9 +95,13 @@ describe('SearchRoomsPage', () => {
     expect(await screen.findByText(/Tiếp tục đặt phòng/)).toBeInTheDocument()
   })
 
-  it('shows prompt when criteria are missing', () => {
+  it('defaults to upcoming dates when criteria are missing from the URL', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/availability') return { data: availableRooms }
+      throw new Error(`unexpected GET ${url}`)
+    })
     renderWithAuth(bookingRoutes, { path: '/search' })
-    expect(screen.getByText(/Nhập thông tin ở trên và bấm.*để bắt đầu/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Deluxe' })).toBeInTheDocument()
   })
 
   it('shows empty message when no rooms match', async () => {
@@ -105,7 +109,7 @@ describe('SearchRoomsPage', () => {
     renderWithAuth(bookingRoutes, {
       path: '/search?checkIn=2099-01-10&checkOut=2099-01-12&guests=2',
     })
-    expect(await screen.findByText(/Không có phòng trống phù hợp/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Không có phòng phù hợp/i)).toBeInTheDocument()
   })
 
   it('shows error alert when availability query fails', async () => {

@@ -63,10 +63,10 @@ export function UserMenu({
           Đăng nhập
         </Link>
         <Link
-          to="/register"
+          to="/search"
           className="inline-flex min-h-11 items-center rounded-full bg-primary px-4 py-2 text-sm font-medium whitespace-nowrap text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 md:min-h-0"
         >
-          Đăng ký
+          Đặt phòng
         </Link>
       </span>
     ) : (
