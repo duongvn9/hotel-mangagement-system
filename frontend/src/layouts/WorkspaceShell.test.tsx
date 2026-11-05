@@ -94,6 +94,20 @@ describe('WorkspaceShell', () => {
     expect(await screen.findByRole('heading', { name: 'Trang đăng nhập' })).toBeInTheDocument()
   })
 
+  it('shows an error and stays on the current page when sign-out fails', async () => {
+    const logout = vi.fn().mockRejectedValue(new Error('Network error'))
+    renderWithAuth(routes, {
+      path: '/manager/dashboard',
+      auth: { me: manager, status: 'authenticated', logout },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất' }))
+    await waitFor(() => expect(logout).toHaveBeenCalled())
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Đăng xuất không thành công, vui lòng thử lại')
+    expect(screen.getByRole('heading', { name: 'Trang tổng quan' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Trang đăng nhập' })).not.toBeInTheDocument()
+  })
+
   it('offers a way back to the guest site and a skip link', () => {
     renderAt('/manager/dashboard')
     expect(within(sidebar()).getByRole('link', { name: 'Xem trang khách' })).toHaveAttribute(
