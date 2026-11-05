@@ -1,0 +1,143 @@
+import { parseISO } from 'date-fns'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { Inbox } from 'lucide-react'
+import * as molecules from '.'
+import { DateRangeField, normalizeRange } from './DateRangeField'
+import { EmptyState } from './EmptyState'
+import { FormField } from './FormField'
+import { KeyValue } from './KeyValue'
+import { Stars } from './Stars'
+import { StatCard } from './StatCard'
+import { Input } from '../atoms'
+
+describe('FormField', () => {
+  it('links the label to the control and shows the error as an alert', () => {
+    render(
+      <FormField label="Họ tên" htmlFor="name" error="Vui lòng nhập họ tên" required>
+        <Input id="name" />
+      </FormField>,
+    )
+    expect(screen.getByLabelText(/Họ tên/)).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Vui lòng nhập họ tên')
+    expect(screen.getByText('*')).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('shows the hint and no alert when there is no error', () => {
+    render(
+      <FormField label="Email" htmlFor="email" hint="Dùng email đã đặt phòng">
+        <Input id="email" />
+      </FormField>,
+    )
+    expect(screen.getByText('Dùng email đã đặt phòng')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('StatCard / EmptyState / KeyValue', () => {
+  it('shows the stat label, value, trend and hint', () => {
+    render(
+      <StatCard
+        label="Doanh thu"
+        value="12.000.000 ₫"
+        trend="+8%"
+        hint="so với tuần trước"
+        icon={Inbox}
+      />,
+    )
+    expect(screen.getByText('Doanh thu')).toBeInTheDocument()
+    expect(screen.getByText('12.000.000 ₫')).toBeInTheDocument()
+    expect(screen.getByText('+8%')).toBeInTheDocument()
+    expect(screen.getByText(/so với tuần trước/)).toBeInTheDocument()
+  })
+
+  it('renders an empty state with a title, body and action', () => {
+    render(
+      <EmptyState
+        title="Chưa có đặt phòng"
+        body="Hãy tạo đặt phòng đầu tiên."
+        action={<button>Tạo mới</button>}
+      />,
+    )
+    expect(screen.getByRole('heading', { name: 'Chưa có đặt phòng' })).toBeInTheDocument()
+    expect(screen.getByText('Hãy tạo đặt phòng đầu tiên.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tạo mới' })).toBeInTheDocument()
+  })
+
+  it('shows a key and its value', () => {
+    render(<KeyValue k="Phòng" v="Suite 501" />)
+    expect(screen.getByText('Phòng')).toBeInTheDocument()
+    expect(screen.getByText('Suite 501')).toBeInTheDocument()
+  })
+})
+
+describe('Stars', () => {
+  it('fills the first N stars', () => {
+    render(<Stars value={3} />)
+    expect(document.querySelectorAll('svg.fill-primary')).toHaveLength(3)
+  })
+
+  it('is read-only without onChange and calls onChange(5) when the fifth star is pressed', () => {
+    const { rerender } = render(<Stars value={2} />)
+    expect(screen.getAllByRole('button')[0]).toBeDisabled()
+    const onChange = vi.fn()
+    rerender(<Stars value={2} onChange={onChange} />)
+    fireEvent.click(screen.getByRole('button', { name: '5 stars' }))
+    expect(onChange).toHaveBeenCalledWith(5)
+  })
+})
+
+describe('DateRangeField', () => {
+  it('shows the selected range as dd/MM', () => {
+    render(<DateRangeField from="2026-11-10" to="2026-11-12" onChange={() => {}} />)
+    expect(screen.getByRole('button')).toHaveTextContent('10/11')
+    expect(screen.getByRole('button')).toHaveTextContent('12/11')
+  })
+
+  it('does not throw when to is not after from', () => {
+    expect(() =>
+      render(<DateRangeField from="2026-11-10" to="2026-11-10" onChange={() => {}} />),
+    ).not.toThrow()
+  })
+
+  it('does not throw for an empty or invalid date and shows a placeholder', () => {
+    render(<DateRangeField from="" to="not-a-date" onChange={() => {}} />)
+    expect(screen.getByRole('button')).toHaveTextContent('Chọn ngày')
+  })
+
+  it('pushes the end date to the day after the start when it is missing or not later', () => {
+    expect(normalizeRange(parseISO('2026-11-10'))).toEqual(['2026-11-10', '2026-11-11'])
+    expect(normalizeRange(parseISO('2026-11-10'), parseISO('2026-11-10'))).toEqual([
+      '2026-11-10',
+      '2026-11-11',
+    ])
+    expect(normalizeRange(parseISO('2026-11-10'), parseISO('2026-11-08'))).toEqual([
+      '2026-11-10',
+      '2026-11-11',
+    ])
+    expect(normalizeRange(parseISO('2026-11-10'), parseISO('2026-11-14'))).toEqual([
+      '2026-11-10',
+      '2026-11-14',
+    ])
+  })
+})
+
+describe('molecules barrel', () => {
+  it('re-exports the composite primitives and own components', () => {
+    for (const name of [
+      'Select',
+      'Tabs',
+      'Popover',
+      'Tooltip',
+      'DropdownMenu',
+      'Toaster',
+      'FormField',
+      'StatCard',
+      'EmptyState',
+      'KeyValue',
+      'Stars',
+      'DateRangeField',
+    ]) {
+      expect(molecules).toHaveProperty(name)
+    }
+  })
+})
