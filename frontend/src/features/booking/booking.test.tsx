@@ -302,6 +302,34 @@ describe('CreateBookingPage (hold-first flow)', () => {
       }),
     )
   })
+
+  it('shows error alert when hold fails', async () => {
+    vi.spyOn(api, 'post').mockRejectedValue(new Error('Hết phòng'))
+    renderWithAuth(bookingRoutes, {
+      path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+    })
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+  })
+
+  it('shows expiration alert and disables submit when hold expires', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue({
+      data: {
+        ...held,
+        holdExpiresAt: new Date(Date.now() - 1000).toISOString(),
+      },
+    })
+    vi.spyOn(api, 'get').mockResolvedValue({ data: { items: [] } })
+
+    renderWithAuth(bookingRoutes, {
+      path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+    })
+
+    const button = await screen.findByRole('button', { name: 'Tiếp tục đặt cọc' })
+    expect(button).toBeDisabled()
+    expect(
+      screen.getByText(/Đã quá thời gian giữ phòng|Thời gian giữ phòng đã hết/i),
+    ).toBeInTheDocument()
+  })
 })
 
 describe('BookingDetailPage (server-authoritative)', () => {
