@@ -179,6 +179,8 @@ components/
 | `HeroBanner` | `image`, `imageAlt`, `title`, `eyebrow`, `tall`, `children` |
 | `RoomCard` | `image`, `name`, `description`, `amenities`, `price`, `priceNote`, `meta`, `actions`, `selected`, `onToggle`, `toggleLabel` |
 | `Unauthorized` | The 403 page; `homeTo`, `actionLabel`, `description` |
+| `PageContainer` | Responsive page container: `mx-auto w-full max-w-7xl px-4 py-8 sm:px-8`, accepts `className` |
+
 
 ### Templates — `@/components/templates`
 
