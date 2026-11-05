@@ -122,6 +122,47 @@ describe('DateRangeField', () => {
   })
 })
 
+import { PhotoTile } from './PhotoTile'
+import { SectionHeading } from './SectionHeading'
+
+describe('SectionHeading', () => {
+  it('renders eyebrow, title and body using the requested heading tag', () => {
+    const { rerender } = render(
+      <SectionHeading
+        eyebrow="Khách sạn"
+        title="Hai mươi bốn phòng"
+        body="Nghỉ dưỡng tĩnh lặng."
+        as="h1"
+      />,
+    )
+    expect(screen.getByText('Khách sạn')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Hai mươi bốn phòng' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Nghỉ dưỡng tĩnh lặng.')).toBeInTheDocument()
+
+    rerender(<SectionHeading title="Phòng & suite" as="h2" align="center" />)
+    expect(screen.getByRole('heading', { level: 2, name: 'Phòng & suite' })).toBeInTheDocument()
+  })
+})
+
+describe('PhotoTile', () => {
+  it('renders an image with alt, lazy loading and optional caption', () => {
+    render(
+      <PhotoTile
+        src="/assets/lobby.jpg"
+        alt="Sảnh khách sạn"
+        caption="Khu vực đón tiếp"
+        aspect="4/3"
+      />,
+    )
+    const img = screen.getByRole('img', { name: 'Sảnh khách sạn' })
+    expect(img).toHaveAttribute('src', '/assets/lobby.jpg')
+    expect(img).toHaveAttribute('loading', 'lazy')
+    expect(screen.getByText('Khu vực đón tiếp')).toBeInTheDocument()
+  })
+})
+
 describe('molecules barrel', () => {
   it('re-exports the composite primitives and own components', () => {
     for (const name of [
@@ -137,6 +178,8 @@ describe('molecules barrel', () => {
       'KeyValue',
       'Stars',
       'DateRangeField',
+      'SectionHeading',
+      'PhotoTile',
     ]) {
       expect(molecules).toHaveProperty(name)
     }
