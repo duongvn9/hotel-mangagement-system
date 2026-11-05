@@ -177,6 +177,95 @@ describe('charts', () => {
   })
 })
 
+import { HeroBanner } from './HeroBanner'
+import { RoomCard } from './RoomCard'
+
+describe('HeroBanner', () => {
+  it('renders heading, image with alt and children', () => {
+    render(
+      <HeroBanner
+        image="/assets/hero.jpg"
+        imageAlt="Hồ bơi vô cực"
+        title="Nghỉ dưỡng nơi vịnh biển."
+        eyebrow="Nha Trang"
+        tall
+      >
+        <div data-testid="search-slot">Thanh tìm kiếm</div>
+      </HeroBanner>,
+    )
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Nghỉ dưỡng nơi vịnh biển.' }),
+    ).toBeInTheDocument()
+    const img = screen.getByRole('img', { name: 'Hồ bơi vô cực' })
+    expect(img).toHaveAttribute('src', '/assets/hero.jpg')
+    expect(screen.getByText('Nha Trang')).toBeInTheDocument()
+    expect(screen.getByTestId('search-slot')).toBeInTheDocument()
+  })
+})
+
+describe('RoomCard', () => {
+  it('renders name, formatted price, amenities with +N and handles selection', () => {
+    const onToggle = vi.fn()
+    const longName = 'Phòng '.repeat(40)
+    const { rerender } = render(
+      <RoomCard
+        name={longName}
+        price={1200000}
+        amenities={['Wifi', 'Ban công', 'Bồn tắm', 'Minibar', 'Máy pha cà phê']}
+        onToggle={onToggle}
+        toggleLabel="Chọn phòng Suite"
+        selected
+      />,
+    )
+    expect(screen.getByText(/1\.200\.000/)).toBeInTheDocument()
+    expect(screen.getByText('Wifi')).toBeInTheDocument()
+    expect(screen.getByText('Minibar')).toBeInTheDocument()
+    expect(screen.getByText('+1')).toBeInTheDocument()
+    expect(screen.queryByText('Máy pha cà phê')).not.toBeInTheDocument()
+
+    const checkbox = screen.getByRole('checkbox', { name: 'Chọn phòng Suite' })
+    expect(checkbox).toBeChecked()
+    fireEvent.click(checkbox)
+    expect(onToggle).toHaveBeenCalledTimes(1)
+
+    // Heading has line-clamp-2 / truncate
+    const heading = screen.getByRole('heading', { level: 2 })
+    expect(heading.className).toMatch(/line-clamp-2|truncate/)
+
+    // Render without image
+    rerender(<RoomCard name="Phòng Deluxe" price={1500000} />)
+    expect(screen.getByRole('heading', { name: 'Phòng Deluxe' })).toBeInTheDocument()
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+})
+
+describe('SearchBar', () => {
+  it('renders a form with role search, handles ariaLabel and submits normalized dates', () => {
+    const onSearch = vi.fn()
+    const { rerender } = render(
+      <SearchBar
+        initial={{ from: '2026-11-10', to: '2026-11-10', guests: 2 }}
+        onSearch={onSearch}
+      />,
+    )
+    const form = screen.getByRole('search', { name: 'Tìm phòng trống' })
+    expect(form).toBeInTheDocument()
+
+    // Submit via form
+    fireEvent.submit(form)
+    expect(onSearch).toHaveBeenCalledTimes(1)
+    expect(onSearch).toHaveBeenCalledWith({
+      from: '2026-11-10',
+      to: '2026-11-11',
+      guests: 2,
+    })
+
+    // Custom ariaLabel
+    rerender(<SearchBar ariaLabel="Tìm kiếm kỳ nghỉ" onSearch={onSearch} />)
+    expect(screen.getByRole('search', { name: 'Tìm kiếm kỳ nghỉ' })).toBeInTheDocument()
+  })
+})
+
 describe('organisms barrel', () => {
   it('re-exports overlays and own components', () => {
     for (const name of [
@@ -189,6 +278,8 @@ describe('organisms barrel', () => {
       'SearchBar',
       'Unauthorized',
       'RevenueArea',
+      'HeroBanner',
+      'RoomCard',
     ]) {
       expect(organisms).toHaveProperty(name)
     }
