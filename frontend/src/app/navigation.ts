@@ -152,23 +152,32 @@ export function navGroupsFor(me: Me): NavGroup[] {
 
 export const flatLinks = (me: Me): NavItem[] => navGroupsFor(me).flatMap((group) => group.items)
 
-const STAFF_AREAS = ['staff', 'manager', 'reception', 'operations']
+const WORKSPACE_AREAS = [
+  'staff',
+  'manager',
+  'reception',
+  'operations',
+  'customer',
+  'my-bookings',
+  'my-feedback',
+  'profile',
+]
 
 const firstSegment = (path: string | undefined) => path?.replace(/^\/+/, '').split('/')[0]
 
 /**
- * Tách các route thuộc khu nhân viên (/staff, /manager, /reception, /operations) khỏi phần còn lại
- * để router đặt chúng vào khung nhân viên mà không phải đổi URL hay file route của từng feature.
+ * Tách các route thuộc khu làm việc (nhân viên và tài khoản khách) khỏi phần trang công cộng
+ * để router đặt chúng vào WorkspaceShell mà không phải đổi URL hay file route của từng feature.
  */
-export function partitionStaffRoutes(routes: RouteObject[]): {
-  staff: RouteObject[]
+export function partitionWorkspaceRoutes(routes: RouteObject[]): {
+  workspace: RouteObject[]
   other: RouteObject[]
 } {
-  const staff: RouteObject[] = []
+  const workspace: RouteObject[] = []
   const other: RouteObject[] = []
   for (const route of routes) {
     const area = firstSegment(route.path)
-    ;(area !== undefined && STAFF_AREAS.includes(area) ? staff : other).push(route)
+    ;(area !== undefined && WORKSPACE_AREAS.includes(area) ? workspace : other).push(route)
   }
-  return { staff, other }
+  return { workspace, other }
 }

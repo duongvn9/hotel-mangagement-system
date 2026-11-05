@@ -1,6 +1,12 @@
 import type { RouteObject } from 'react-router'
 import type { Me } from '@/features/auth/api'
-import { flatLinks, isStaffRole, navGroupsFor, partitionStaffRoutes, roleHome } from './navigation'
+import {
+  flatLinks,
+  isStaffRole,
+  navGroupsFor,
+  partitionWorkspaceRoutes,
+  roleHome,
+} from './navigation'
 
 const me = (role: string, permissions: string[] = []): Me => ({
   id: 'u1',
@@ -115,10 +121,10 @@ describe('navGroupsFor', () => {
   })
 })
 
-describe('partitionStaffRoutes', () => {
+describe('partitionWorkspaceRoutes', () => {
   const route = (path: string): RouteObject => ({ path })
 
-  it('moves staff areas to the staff layout whatever the leading slash', () => {
+  it('moves workspace areas to the workspace layout whatever the leading slash', () => {
     const routes = [
       route('/manager/dashboard'),
       route('manager/accounts'),
@@ -129,29 +135,35 @@ describe('partitionStaffRoutes', () => {
       route('/customer/issues'),
       route('profile'),
       route('login'),
+      route('my-bookings'),
+      route('my-feedback'),
     ]
-    const { staff, other } = partitionStaffRoutes(routes)
-    expect(staff.map((item) => item.path)).toEqual([
+    const { workspace, other } = partitionWorkspaceRoutes(routes)
+    expect(workspace.map((item) => item.path)).toEqual([
       '/manager/dashboard',
       'manager/accounts',
       '/staff/tasks/:id',
       'reception/front-desk',
       'operations/maintenance/report',
-    ])
-    expect(other.map((item) => item.path)).toEqual([
-      'search',
       '/customer/issues',
       'profile',
-      'login',
+      'my-bookings',
+      'my-feedback',
     ])
+    expect(other.map((item) => item.path)).toEqual(['search', 'login'])
   })
 
-  it('does not mistake similar prefixes for staff areas and keeps route objects intact', () => {
-    const lookalike = route('staffing/plan')
+  it('does not mistake similar prefixes for workspace areas and keeps route objects intact', () => {
+    const lookalikes = [
+      route('staffing/plan'),
+      route('my-bookingsx'),
+      route('profiles'),
+      route('customers'),
+    ]
     const index: RouteObject = { index: true }
-    const { staff, other } = partitionStaffRoutes([lookalike, index])
-    expect(staff).toEqual([])
-    expect(other).toEqual([lookalike, index])
-    expect(other[0]).toBe(lookalike)
+    const { workspace, other } = partitionWorkspaceRoutes([...lookalikes, index])
+    expect(workspace).toEqual([])
+    expect(other).toEqual([...lookalikes, index])
+    expect(other[0]).toBe(lookalikes[0])
   })
 })
