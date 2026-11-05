@@ -17,7 +17,7 @@ export {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog'
-export { Sheet, SheetContent } from '../ui/sheet'
+export { Sheet, SheetContent, SheetDescription, SheetTitle } from '../ui/sheet'
 export { Donut, RevenueArea, SimpleBars } from './charts'
 export { DataTable, type Column, type Filter } from './DataTable'
 export { PageHeader } from './PageHeader'
