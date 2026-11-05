@@ -4,7 +4,7 @@ Dành cho **dev và AI (Claude Code, Codex…)** khi làm các task Jira "đưa 
 Mục tiêu: sau khi migrate, trang trong `frontend/` **giống prototype** về bố cục, màu, chữ, khoảng cách, bo góc, bóng, icon và các
 trạng thái (hover, focus, disabled, trống, đang tải, lỗi), trong khi **logic và test hành vi giữ nguyên**.
 
-Đọc trước: [`DESIGN.md`](../DESIGN.md) (token, component, quy tắc) và [`ui-prototype/README.md`](../ui-prototype/README.md).
+Đọc trước: [`DESIGN.md`](DESIGN.md) (token, component, quy tắc) và [`ui-prototype/README.md`](ui-prototype/README.md).
 
 ## 1. Quy trình cho một trang
 
@@ -119,7 +119,7 @@ Trang app: {ĐƯỜNG_DẪN_FILE_APP} (route {ROUTE_APP})
 Màn prototype tương ứng: ui-prototype/src/routes/{FILE_PROTOTYPE}
 
 Làm theo thứ tự:
-1. Đọc DESIGN.md và docs/UI-REPOLISH-GUIDE.md, rồi đọc file prototype ở trên cùng mọi component nó import.
+1. Đọc DESIGN.md và UI-REPOLISH-GUIDE.md, rồi đọc file prototype ở trên cùng mọi component nó import.
 2. Đọc trang app hiện tại và test của nó. Liệt kê ngắn gọn (a) hành vi/logic/test phải giữ nguyên, (b) khác biệt giữa app và prototype
    (bố cục, token, chữ, khoảng cách, icon, trạng thái), (c) component cần thêm ở tầng nào nếu thiếu.
 3. Viết/sửa test trước cho component mới (nếu có), thấy nó đỏ, rồi cài đặt.

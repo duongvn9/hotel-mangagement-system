@@ -8,7 +8,7 @@ giống. Bản chạy thử: <https://stayflow-hotel-harmony.lovable.app>
 context của `frontend/`. Muốn đổi thiết kế thì đổi ở repo gốc của prototype rồi copy lại.
 
 `AGENTS.md` ở đây là của Lovable (nói về git history và sync Lovable), **không áp dụng** cho repo
-này; quy tắc làm việc nằm ở `CLAUDE.md`, `DESIGN.md` và `docs/UI-REPOLISH-GUIDE.md` ở gốc repo.
+này; quy tắc làm việc nằm ở `CLAUDE.md`, `DESIGN.md` và `UI-REPOLISH-GUIDE.md` ở gốc repo.
 
 ## Chạy để so sánh
 

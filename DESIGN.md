@@ -6,7 +6,7 @@ Bộ giao diện của **Hotel Management System (HMS)**, lấy từ UI prototyp
 
 > **Quy tắc số 1:** trang nào đã migrate thì phải **giống prototype**. Prototype là nguồn sự thật; tài liệu
 > này mô tả nó và chỉ cách dùng lại. Quy trình làm một trang nằm ở
-> [`docs/UI-REPOLISH-GUIDE.md`](docs/UI-REPOLISH-GUIDE.md).
+> [`UI-REPOLISH-GUIDE.md`](UI-REPOLISH-GUIDE.md).
 
 ## Mục lục
 
@@ -250,7 +250,7 @@ và các component cũ.
 4. So sánh với prototype ở 1440px và 375px trước khi mở PR.
 
 Chi tiết, bảng ánh xạ màn prototype ↔ trang của app, danh sách cấm và prompt mẫu cho AI:
-[`docs/UI-REPOLISH-GUIDE.md`](docs/UI-REPOLISH-GUIDE.md).
+[`UI-REPOLISH-GUIDE.md`](UI-REPOLISH-GUIDE.md).
 
 Đổi hoặc thêm token: sửa `design-system/tokens.css` (và `theme.css` nếu cần lớp mới) **sau khi** prototype đã đổi, rồi chạy
 `npm test` trong `frontend/` để xác nhận không lệch.
