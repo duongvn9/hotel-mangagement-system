@@ -366,8 +366,45 @@ describe('BookingDetailPage (server-authoritative)', () => {
 
     renderWithAuth(bookingRoutes, { path: '/booking/b2' })
 
-    expect(await screen.findByText('Hết hạn giữ phòng')).toBeInTheDocument()
+    expect(await screen.findByText('Hết hạn')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Đặt cọc qua VNPay' })).not.toBeInTheDocument()
+  })
+
+  it('shows cancellation confirmation dialog and executes cancellation', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: { ...booking, status: 'CONFIRMED' } }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: {} })
+
+    renderWithAuth(bookingRoutes, { path: '/booking/b1' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ booking' }))
+
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }))
+
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledWith('/bookings/b1/cancel', expect.anything())
+    })
+  })
+})
+
+describe('LookupBookingPage', () => {
+  it('navigates to booking detail on submit', () => {
+    const { router } = renderWithAuth(bookingRoutes, { path: '/booking/lookup' })
+    expect(screen.getByRole('heading', { name: 'Tra cứu đặt phòng' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/Mã định danh booking/i), {
+      target: { value: 'b123' },
+    })
+    fireEvent.change(screen.getByLabelText(/Mã booking/i), {
+      target: { value: 'BK456' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Mở booking' }))
+
+    expect(router.state.location.pathname).toBe('/booking/b123')
+    expect(router.state.location.search).toBe('?code=BK456')
   })
 })
 

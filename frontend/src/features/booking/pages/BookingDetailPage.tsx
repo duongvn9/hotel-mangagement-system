@@ -1,14 +1,23 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
-import { getErrorMessage } from '@/lib/api-client'
+import { Button, Input, StatusBadge } from '@/components/atoms'
+import { FormField } from '@/components/molecules'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
-import { BOOKING_STATUS_DISPLAY, type InitiatePaymentInput } from '../api'
+import { getErrorMessage } from '@/lib/api-client'
+import { fdate, fshort, vnd } from '@/lib/format'
+import type { InitiatePaymentInput } from '../api'
 import { useBooking, useCancelBooking, useInitiateDeposit, useInitiateFinal } from '../hooks'
-import { formatDate, formatDateTime, money, nightsBetween } from '../utils'
+import { nightsBetween } from '../utils'
 import { formatRemaining, useHoldCountdown } from './useHoldCountdown'
 
 /**
@@ -37,7 +46,6 @@ export function BookingDetailPage() {
   const status = booking?.status
   const cancelled = status === 'CANCELLED'
   const expired = status === 'EXPIRED'
-  const statusDisplay = status ? (BOOKING_STATUS_DISPLAY[status] ?? undefined) : undefined
 
   const holding = status === 'PENDING_DEPOSIT' || status === 'ROOM_HELD'
   const remaining = useHoldCountdown(holding ? booking?.holdExpiresAt : undefined)
@@ -68,162 +76,221 @@ export function BookingDetailPage() {
   }
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div>
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">Đặt phòng</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">Chi tiết đặt phòng</h1>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          {booking && (
-            <span className="text-sm text-stone-700">
-              Mã booking{' '}
-              <span className="font-semibold tracking-wide text-pearl-900">{booking.code}</span>
-            </span>
-          )}
-          {statusDisplay && <Badge tone={statusDisplay.tone}>{statusDisplay.label}</Badge>}
+    <div className="mx-auto max-w-5xl px-5 py-10 lg:px-8">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold tracking-widest text-primary uppercase">Đặt phòng</p>
+          <h1 className="font-display text-4xl font-semibold">Chi tiết đặt phòng</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            {booking && (
+              <span className="text-sm text-muted-foreground">
+                Mã booking <span className="font-semibold text-foreground">{booking.code}</span>
+              </span>
+            )}
+            {status && <StatusBadge status={status} />}
+          </div>
         </div>
+        <Link
+          to="/my-bookings"
+          className="text-sm text-muted-foreground transition hover:text-foreground"
+        >
+          ← Danh sách đặt phòng của tôi
+        </Link>
       </div>
 
-      {query.isPending && !needsCode && <p role="status">Đang tải thông tin đặt phòng…</p>}
+      {query.isPending && !needsCode && (
+        <div role="status" className="py-12">
+          <p className="text-muted-foreground">Đang tải thông tin đặt phòng…</p>
+        </div>
+      )}
 
       {query.isError && !needsCode && (
-        <Alert tone="danger">
+        <div
+          role="alert"
+          className="mt-6 rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
+        >
           {getErrorMessage(query.error, 'Không đọc được thông tin đặt phòng.')}
-        </Alert>
+        </div>
       )}
 
       {needsCode && (
-        <>
-          <Alert tone="info">
+        <div className="mt-8 max-w-md space-y-4">
+          <div
+            role="alert"
+            className="rounded-xl border border-primary/20 bg-primary/10 p-4 text-sm text-foreground"
+          >
             Nhập mã booking (vé) đã nhận để xem và thao tác với đơn này trên thiết bị hiện tại.
-          </Alert>
-          <div className="max-w-sm">
-            <TextField
-              label="Mã booking (vé)"
+          </div>
+          <FormField label="Mã booking (vé)" htmlFor="typedCode">
+            <Input
+              id="typedCode"
               placeholder="BK..."
               value={typedCode}
               onChange={(event) => setTypedCode(event.target.value)}
             />
-          </div>
-        </>
+          </FormField>
+        </div>
       )}
 
       {booking && (
-        <>
+        <div className="mt-8 space-y-6">
           {holding && !holdExpired && remaining !== null && (
-            <Alert tone="warning">
+            <div className="rounded-xl border border-primary/20 bg-primary/10 p-4 text-sm text-foreground">
               Phòng đang được giữ. Vui lòng đặt cọc trong{' '}
               <strong>{formatRemaining(remaining)}</strong>, nếu không phòng sẽ được mở lại.
-            </Alert>
+            </div>
           )}
           {holding && holdExpired && (
-            <Alert tone="danger">
+            <div
+              role="alert"
+              className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive"
+            >
               Đã quá thời gian giữ phòng. Trạng thái sẽ sớm chuyển sang hết hạn; vui lòng tìm phòng
               lại nếu bạn vẫn muốn đặt.
-            </Alert>
+            </div>
           )}
           {expired && (
-            <Alert tone="danger">
+            <div
+              role="alert"
+              className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive"
+            >
               Đơn đã hết hạn giữ phòng và phòng đã được mở lại. Vui lòng tìm phòng để đặt lại.
-            </Alert>
+            </div>
           )}
-          {cancelled && <Alert tone="success">Booking đã được huỷ và phòng đã được mở lại.</Alert>}
+          {cancelled && (
+            <div
+              role="alert"
+              className="rounded-xl border border-success/20 bg-success/10 p-4 text-success"
+            >
+              Booking đã được huỷ và phòng đã được mở lại.
+            </div>
+          )}
 
-          <dl className="grid gap-4 rounded-lg border border-stone-300 bg-white p-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="card-soft grid gap-6 p-6 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <dt className="text-xs tracking-wider text-stone-700 uppercase">Nhận phòng</dt>
-              <dd className="mt-1 font-semibold">{formatDate(booking.checkIn)}</dd>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Nhận phòng</p>
+              <p className="mt-1 font-semibold">{fdate(booking.checkIn)}</p>
             </div>
             <div>
-              <dt className="text-xs tracking-wider text-stone-700 uppercase">Trả phòng</dt>
-              <dd className="mt-1 font-semibold">{formatDate(booking.checkOut)}</dd>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Trả phòng</p>
+              <p className="mt-1 font-semibold">{fdate(booking.checkOut)}</p>
             </div>
             <div>
-              <dt className="text-xs tracking-wider text-stone-700 uppercase">Phòng · Đêm</dt>
-              <dd className="mt-1 font-semibold">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Phòng · Đêm</p>
+              <p className="mt-1 font-semibold">
                 {booking.rooms.length} phòng · {nightsBetween(booking.checkIn, booking.checkOut)}{' '}
                 đêm
-              </dd>
+              </p>
             </div>
             <div>
-              <dt className="text-xs tracking-wider text-stone-700 uppercase">Số khách</dt>
-              <dd className="mt-1 font-semibold">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Số khách</p>
+              <p className="mt-1 font-semibold">
                 {booking.adultCount} người lớn
                 {booking.childCount > 0 ? `, ${booking.childCount} trẻ em` : ''}
-              </dd>
+              </p>
             </div>
             <div>
-              <dt className="text-xs tracking-wider text-stone-700 uppercase">Tiền phòng</dt>
-              <dd className="mt-1 font-semibold tabular-nums">{money.format(booking.roomTotal)}</dd>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Tiền phòng</p>
+              <p className="mt-1 font-semibold tabular-nums">{vnd(booking.roomTotal)}</p>
             </div>
             <div>
-              <dt className="text-xs tracking-wider text-stone-700 uppercase">Tiền cọc</dt>
-              <dd className="mt-1 font-semibold text-primary tabular-nums">
-                {money.format(booking.depositAmount)}
-              </dd>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Tiền cọc</p>
+              <p className="mt-1 font-semibold tabular-nums text-primary">
+                {vnd(booking.depositAmount)}
+              </p>
             </div>
             {booking.holdExpiresAt && holding && (
-              <div>
-                <dt className="text-xs tracking-wider text-stone-700 uppercase">Giữ phòng đến</dt>
-                <dd className="mt-1 font-semibold">{formatDateTime(booking.holdExpiresAt)}</dd>
+              <div className="sm:col-span-2">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Giữ phòng đến
+                </p>
+                <p className="mt-1 font-semibold">{fshort(booking.holdExpiresAt)}</p>
               </div>
             )}
-          </dl>
-        </>
-      )}
-
-      {deposit.isError && <Alert tone="danger">{getErrorMessage(deposit.error)}</Alert>}
-      {final.isError && <Alert tone="danger">{getErrorMessage(final.error)}</Alert>}
-      {cancel.isError && <Alert tone="danger">{getErrorMessage(cancel.error)}</Alert>}
-
-      {booking && !cancelled && !expired && (
-        <div className="flex flex-wrap gap-3">
-          {status === 'PENDING_DEPOSIT' && (
-            <Button
-              loading={deposit.isPending}
-              disabled={holdExpired}
-              onClick={() => void pay('deposit')}
-            >
-              Đặt cọc qua VNPay
-            </Button>
-          )}
-          {(status === 'CONFIRMED' || status === 'CHECKED_OUT') && (
-            <Button variant="secondary" loading={final.isPending} onClick={() => void pay('final')}>
-              Thanh toán phần còn lại
-            </Button>
-          )}
-          {status !== 'CHECKED_IN' && status !== 'CHECKED_OUT' && status !== 'ROOM_HELD' && (
-            <Button variant="danger" onClick={() => setConfirmCancel(true)}>
-              Huỷ booking
-            </Button>
-          )}
-        </div>
-      )}
-
-      {confirmCancel && (
-        <div
-          role="alertdialog"
-          aria-label="Xác nhận huỷ booking"
-          className="space-y-3 rounded-lg border border-danger bg-danger-bg p-5"
-        >
-          <p className="text-sm text-stone-700">
-            Huỷ booking này? Phòng đang giữ sẽ được mở lại. Thao tác không thể hoàn tác.
-          </p>
-          <div className="flex gap-3">
-            <Button variant="danger" loading={cancel.isPending} onClick={() => void doCancel()}>
-              Xác nhận huỷ
-            </Button>
-            <Button variant="secondary" onClick={() => setConfirmCancel(false)}>
-              Giữ lại
-            </Button>
           </div>
+
+          {deposit.isError && (
+            <div
+              role="alert"
+              className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive"
+            >
+              {getErrorMessage(deposit.error)}
+            </div>
+          )}
+          {final.isError && (
+            <div
+              role="alert"
+              className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive"
+            >
+              {getErrorMessage(final.error)}
+            </div>
+          )}
+          {cancel.isError && (
+            <div
+              role="alert"
+              className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive"
+            >
+              {getErrorMessage(cancel.error)}
+            </div>
+          )}
+
+          {!cancelled && !expired && (
+            <div className="flex flex-wrap gap-3 pt-2">
+              {status === 'PENDING_DEPOSIT' && (
+                <Button
+                  className="rounded-full px-6"
+                  disabled={holdExpired || deposit.isPending}
+                  aria-busy={deposit.isPending}
+                  onClick={() => void pay('deposit')}
+                >
+                  {deposit.isPending ? 'Đang chuyển sang cổng VNPay…' : 'Đặt cọc qua VNPay'}
+                </Button>
+              )}
+              {(status === 'CONFIRMED' || status === 'CHECKED_OUT') && (
+                <Button
+                  variant="outline"
+                  className="rounded-full px-6"
+                  disabled={final.isPending}
+                  aria-busy={final.isPending}
+                  onClick={() => void pay('final')}
+                >
+                  {final.isPending ? 'Đang chuyển sang cổng VNPay…' : 'Thanh toán phần còn lại'}
+                </Button>
+              )}
+              {status !== 'CHECKED_IN' && status !== 'CHECKED_OUT' && status !== 'ROOM_HELD' && (
+                <Button
+                  variant="ghost"
+                  className="rounded-full text-destructive hover:bg-destructive/10"
+                  onClick={() => setConfirmCancel(true)}
+                >
+                  Huỷ booking
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      <div>
-        <Link to="/my-bookings" className="text-sm text-primary underline">
-          ← Về danh sách đặt phòng của tôi
-        </Link>
-      </div>
-    </section>
+      <AlertDialog open={confirmCancel} onOpenChange={setConfirmCancel}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận huỷ booking</AlertDialogTitle>
+            <AlertDialogDescription>
+              Huỷ booking này? Phòng đang giữ sẽ được mở lại. Thao tác không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Giữ lại</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void doCancel()}
+              disabled={cancel.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Xác nhận huỷ
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   )
 }
