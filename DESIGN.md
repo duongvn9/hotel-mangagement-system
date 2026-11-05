@@ -1,450 +1,256 @@
-# DESIGN.md — Grand Emily Design System
+# DESIGN.md — Design system của Emily Hotel HMS
 
-Design system cho **Hotel Management System (HMS)**, lấy cảm hứng từ shot Dribbble
-[Grand Emily Hotel Website](https://dribbble.com/shots/20891256-Grand-Emily-Hotel-Website)
-và tinh thần của khách sạn Grand Emily (Lviv, Ukraine): gỗ ốp tối màu, chất liệu tự nhiên,
-cảm giác yên tĩnh, sang trọng và gần gũi thiên nhiên (mặt hồ, lau sậy, cây xanh).
+Bộ giao diện của **Hotel Management System (HMS)**, lấy từ UI prototype
+[stayflow-hotel-harmony](https://github.com/yunkhngn/stayflow-hotel-harmony) (bản sao chỉ đọc ở
+[`ui-prototype/`](ui-prototype/), bản chạy thử <https://stayflow-hotel-harmony.lovable.app>).
 
-> **Lưu ý:** giá trị màu và font trong tài liệu này là bộ chuẩn của dự án, không phải mã màu
-> lấy chính xác từ file gốc của shot. Nếu nhóm muốn khớp pixel với shot, chỉnh trong
-> `design-system/tokens.css` và `tokens.json`; mọi component dùng token nên sẽ tự cập nhật.
+> **Quy tắc số 1:** trang nào đã migrate thì phải **giống prototype**. Prototype là nguồn sự thật; tài liệu
+> này mô tả nó và chỉ cách dùng lại. Quy trình làm một trang nằm ở
+> [`docs/UI-REPOLISH-GUIDE.md`](docs/UI-REPOLISH-GUIDE.md).
 
 ## Mục lục
 
-1. [Nguyên tắc thiết kế](#1-nguyên-tắc-thiết-kế)
-2. [Màu sắc](#2-màu-sắc)
+1. [Nguyên tắc](#1-nguyên-tắc)
+2. [Màu sắc (token)](#2-màu-sắc-token)
 3. [Typography](#3-typography)
-4. [Spacing, layout và grid](#4-spacing-layout-và-grid)
-5. [Radius, shadow, motion](#5-radius-shadow-motion)
-6. [Iconography và hình ảnh](#6-iconography-và-hình-ảnh)
-7. [Components](#7-components)
-8. [Pattern theo màn hình HMS](#8-pattern-theo-màn-hình-hms)
+4. [Spacing và layout](#4-spacing-và-layout)
+5. [Bo góc, bóng, chuyển động](#5-bo-góc-bóng-chuyển-động)
+6. [Icon và ảnh](#6-icon-và-ảnh)
+7. [Atomic design và catalog component](#7-atomic-design-và-catalog-component)
+8. [Pattern theo màn hình](#8-pattern-theo-màn-hình)
 9. [Accessibility](#9-accessibility)
-10. [Cách dùng trong code](#10-cách-dùng-trong-code)
-
-File liên quan:
+10. [Lớp tương thích cũ (legacy)](#10-lớp-tương-thích-cũ-legacy)
+11. [Cách làm việc](#11-cách-làm-việc)
 
 | File | Nội dung |
 |---|---|
-| `design-system/tokens.css` | Toàn bộ token dạng CSS custom properties (nguồn chuẩn) |
-| `design-system/tokens.json` | Cùng bộ token dạng JSON (cho JS, Figma Tokens, mobile) |
-| `design-system/tailwind.preset.js` | Preset Tailwind nếu frontend dùng Tailwind |
-| `design-system/preview.html` | Trang xem nhanh màu, chữ, component (mở trực tiếp trên trình duyệt) |
+| `design-system/tokens.css` | Biến CSS `:root` (nguồn chuẩn của màu, bo góc). Khớp từng dòng với `ui-prototype/src/styles.css` |
+| `design-system/theme.css` | Ánh xạ token sang lớp Tailwind v4 + utility riêng (`font-display`, `card-soft`, `no-scrollbar`, `hero-scrim`) |
+| `design-system/legacy.css` | Màu và cỡ chữ của bộ cũ, **deprecated**, xóa khi hết trang cũ |
+| `design-system/preview.html` | Trang tĩnh xem nhanh màu, chữ, bo góc, bóng (mở trực tiếp trên trình duyệt) |
+| `frontend/src/styles/tokens.test.ts` | Test báo lỗi nếu `tokens.css` lệch prototype |
 
 ---
 
-## 1. Nguyên tắc thiết kế
+## 1. Nguyên tắc
 
-1. **Sang trọng nhưng tĩnh lặng.** Nhiều khoảng trắng, ít màu, chữ serif lớn cho tiêu đề. Không dùng gradient sặc sỡ hay bóng đổ nặng.
-2. **Ấm và tự nhiên.** Nền kem, chữ nâu đen, điểm nhấn vàng đồng. Không dùng xám lạnh hay trắng tinh cho nền trang.
-3. **Ảnh là nhân vật chính.** Trang khách (public) để ảnh phòng và không gian chiếm diện tích lớn; UI chỉ làm khung.
-4. **Một nhà, hai không gian.** Trang khách (marketing, đặt phòng) dùng giọng "editorial" với serif lớn. Trang nội bộ (lễ tân, quản lý, nhân viên) dùng cùng token nhưng gọn, dày thông tin, ưu tiên Be Vietnam Pro.
-5. **Tiếng Việt là mặc định.** Mọi font đã chọn đều hỗ trợ đầy đủ dấu tiếng Việt; luôn kiểm tra chữ có dấu ở cỡ nhỏ.
+1. **Sang trọng, tĩnh lặng.** Nền sáng ấm, nhiều khoảng trắng, màu nhấn nâu đồng (`primary`), chữ tiêu đề lớn dùng serif (Playfair).
+2. **Thẻ mềm.** Khối nội dung là `card-soft`: nền trắng, viền mảnh, bo `xl`, bóng rất nhẹ. Không bóng nặng, không gradient sặc sỡ (gradient duy nhất là mục menu đang chọn và lớp `hero-scrim` trên ảnh).
+3. **Ảnh là nhân vật chính** ở trang khách; khu làm việc gọn, dày thông tin, thanh bên tối (`ink`).
+4. **Trạng thái bằng chấm màu + chữ** (`StatusBadge`), không tô cả ô.
+5. **Tiếng Việt là mặc định.** Be Vietnam Pro và Playfair Display đều hỗ trợ đủ dấu; kiểm tra chữ có dấu ở cỡ nhỏ.
+6. **Chỉ dùng token.** Không hex, không `oklch()` hay px tùy ý trong trang; thiếu token thì thêm vào `tokens.css` + `theme.css` và cập nhật prototype trước.
 
 ---
 
-## 2. Màu sắc
+## 2. Màu sắc (token)
 
-### 2.1 Bảng màu thương hiệu
+Mọi màu là biến CSS `oklch` trong [`design-system/tokens.css`](design-system/tokens.css); dùng qua lớp Tailwind ngữ nghĩa
+(`bg-primary`, `text-muted-foreground`...), **không** dùng giá trị trực tiếp.
 
-| Token | Hex | Tên | Vai trò |
-|---|---|---|---|
-| `--ge-pearl-900` | `#1F1B16` | Black Pearl | Chữ chính, nền footer/hero tối, nút "inverse" |
-| `--ge-pearl-800` | `#2E2822` | | Hover trên nền tối, sidebar admin |
-| `--ge-pearl-700` | `#3D352D` | | Border trên nền tối |
-| `--ge-brandy-600` | `#8A5A3B` | Smoked Brandy | **Primary**: nút chính, link, trạng thái active |
-| `--ge-brandy-700` | `#6E4529` | | Hover / pressed của primary |
-| `--ge-brandy-400` | `#B98A68` | | Icon trang trí, chart |
-| `--ge-brandy-100` | `#F1E4D8` | | Nền nhạt cho item được chọn |
-| `--ge-gold-500` | `#C9A46A` | Gold | **Accent**: đường kẻ trang trí, sao đánh giá, focus ring, chữ trên nền tối |
-| `--ge-gold-200` | `#EADBC0` | | Nền highlight nhẹ |
-| `--ge-reed-700` | `#55633F` | Reed | **Secondary**: nút phụ, tag "eco/thiên nhiên" |
-| `--ge-reed-100` | `#E6EADB` | | Nền nhạt secondary |
-| `--ge-lake-600` | `#3E6577` | Lake | Info, link phụ |
-
-### 2.2 Neutrals (tông ấm)
-
-| Token | Hex | Vai trò |
+| Nhóm | Lớp Tailwind | Vai trò |
 |---|---|---|
-| `--ge-white` | `#FFFFFF` | Card, input, modal |
-| `--ge-cream-50` | `#FBF8F3` | Nền hàng xen kẽ trong bảng |
-| `--ge-cream-100` | `#F7F2EA` | **Nền trang mặc định** |
-| `--ge-stone-200` | `#EAE2D6` | Nền section phụ, nền khung ảnh khi đang tải |
-| `--ge-stone-300` | `#DCD2C4` | Border, divider |
-| `--ge-stone-500` | `#8C8275` | Placeholder, icon disabled (không dùng cho chữ < 18px) |
-| `--ge-stone-700` | `#5E554A` | Chữ phụ, caption, label |
+| Nền trang | `bg-background` / `text-foreground` | Nền và chữ mặc định |
+| Thẻ, popover | `bg-card` `text-card-foreground`, `bg-popover` | Thẻ `card-soft`, hộp thoại, menu thả |
+| **Primary** | `bg-primary` `text-primary-foreground`, `text-primary`, `ring-ring` | Nút chính, liên kết, trạng thái chọn, focus ring |
+| Phụ | `bg-secondary`, `bg-muted`, `bg-surface` (cùng tông be nhạt) | Nền khối phụ, ô lọc, hàng hover |
+| Chữ phụ | `text-muted-foreground` | Mô tả, nhãn, số phụ |
+| Accent | `bg-accent` `text-accent-foreground`, `bg-lavender`, `text-info` | Điểm nhấn tím nhạt, nhãn "đề xuất" của prototype |
+| **Ink** | `bg-ink` `text-ink-foreground` | Thanh bên, footer, ảnh phủ chữ (nền tối của thiết kế) |
+| Viền, ô nhập | `border-border`, `border-input` | Viền thẻ, bảng; viền ô nhập |
+| Trạng thái | `text-success` `text-warning` `text-info` `text-danger` `text-destructive` `text-neutral` | Chấm/chữ trạng thái, lỗi |
+| Biểu đồ | `var(--chart-1)` … `var(--chart-5)` | Màu series biểu đồ |
+| Thanh bên | `--sidebar-*` | Dành cho sidebar kiểu shadcn (prototype dùng `ink`) |
 
-### 2.3 Màu ngữ nghĩa
-
-| Ý nghĩa | Chữ / icon | Nền | Dùng cho |
-|---|---|---|---|
-| Success | `#3F7350` | `#E2EEE5` | Thanh toán thành công, phòng trống, check-in xong |
-| Warning | `#9A6418` | `#F6EAD3` | Sắp hết hạn giữ phòng, phòng đang dọn |
-| Danger | `#A8402F` | `#F5E0DB` | Lỗi, huỷ đặt phòng, phòng hỏng / bảo trì gấp |
-| Info | `#3E6577` | `#DDE7EC` | Thông báo, phòng đã đặt trước |
-
-### 2.4 Role token (dùng trong component, không dùng mã hex trực tiếp)
-
-| Role token | Giá trị |
-|---|---|
-| `--color-bg` | cream-100 |
-| `--color-surface` / `--color-surface-muted` / `--color-surface-inverse` | white / stone-200 / pearl-900 |
-| `--color-text` / `--color-text-muted` / `--color-text-inverse` | pearl-900 / stone-700 / cream-100 |
-| `--color-border` / `--color-border-strong` | stone-300 / pearl-900 |
-| `--color-primary` / `--color-primary-hover` / `--color-on-primary` | brandy-600 / brandy-700 / white |
-| `--color-secondary` / `--color-on-secondary` | reed-700 / white |
-| `--color-accent` / `--color-focus` | gold-500 |
-
-### 2.5 Độ tương phản đã kiểm tra (WCAG 2.1)
-
-| Chữ / Nền | Tỉ lệ | Kết quả |
-|---|---|---|
-| pearl-900 trên cream-100 | 15.4 : 1 | AAA |
-| stone-700 trên cream-100 | 6.6 : 1 | AA |
-| brandy-600 trên cream-100 | 5.2 : 1 | AA |
-| white trên brandy-600 | 5.8 : 1 | AA |
-| white trên brandy-700 | 8.3 : 1 | AAA |
-| white trên reed-700 | 6.5 : 1 | AA |
-| gold-500 trên pearl-900 | 7.3 : 1 | AAA |
-| stone-500 trên cream-100 | 3.4 : 1 | Chỉ cho chữ ≥ 18px hoặc phần tử không phải chữ |
-| danger / success / warning / info trên white | 6.1 / 5.6 / 5.0 / 6.3 : 1 | AA |
-
-**Quy tắc:** gold-500 **không** dùng làm màu chữ trên nền sáng (tương phản thấp); chỉ dùng cho đường kẻ, icon trang trí, hoặc chữ trên nền pearl-900.
-
-### 2.6 Tỉ lệ sử dụng gợi ý
-
-Khoảng 60% nền kem/trắng, 25% nâu đen (chữ, khối tối), 10% brandy (primary), 5% gold/reed (điểm nhấn).
+Quy tắc:
+- Chữ trên nền màu dùng cặp `*-foreground` tương ứng.
+- Độ trong suốt viết kiểu Tailwind (`bg-primary/10`, `text-ink-foreground/65`); không tạo màu mới.
+- Không dùng màu để truyền đạt thông tin một mình (luôn kèm chữ hoặc icon).
 
 ---
 
 ## 3. Typography
 
-### 3.1 Font
-
-| Vai trò | Font | Fallback | Ghi chú |
-|---|---|---|---|
-| Display / Heading | **Cormorant Garamond** (500, 600, 700, italic 500) | Times New Roman, serif | Serif cổ điển, sang trọng; chỉ dùng từ 24px trở lên |
-| Body / UI | **Be Vietnam Pro** (400, 500, 600, 700) | system-ui, Segoe UI, Roboto | Thiết kế cho tiếng Việt, rõ ở cỡ nhỏ |
-
-Cả hai font lấy từ Google Fonts với subset `vietnamese` (đã import sẵn trong `tokens.css`).
-
-### 3.2 Thang cỡ chữ
-
-| Style | Font | Size / Line-height | Weight | Dùng cho |
-|---|---|---|---|---|
-| Display XL | Cormorant | 72 / 1.05 | 500 | Tiêu đề hero trang chủ (desktop) |
-| Display L | Cormorant | 56 / 1.1 | 500 | Hero trang con, tiêu đề hero mobile = 40 |
-| H1 | Cormorant | 40 / 1.1 | 600 | Tiêu đề trang |
-| H2 | Cormorant | 32 / 1.2 | 600 | Tiêu đề section |
-| H3 | Cormorant | 24 / 1.3 | 600 | Tên phòng trên card, tiêu đề modal |
-| H4 | Be Vietnam Pro | 20 / 1.3 | 600 | Tiêu đề card trong dashboard |
-| Eyebrow | Be Vietnam Pro | 12 / 1.3, uppercase, letter-spacing 0.2em | 600 | Nhãn nhỏ phía trên tiêu đề ("PHÒNG & SUITE") |
-| Body L | Be Vietnam Pro | 18 / 1.6 | 400 | Đoạn giới thiệu |
-| Body | Be Vietnam Pro | 16 / 1.6 | 400 | Nội dung mặc định |
-| Body S | Be Vietnam Pro | 14 / 1.5 | 400 | Bảng, form, chú thích |
-| Caption | Be Vietnam Pro | 12 / 1.4 | 500 | Metadata, timestamp |
-| Button | Be Vietnam Pro | 14 / 1, uppercase, letter-spacing 0.08em | 600 | Nút |
-| Price | Cormorant | 32 / 1 | 600 | Giá phòng ("1.850.000 ₫ / đêm") |
-
-### 3.3 Quy tắc
-
-- Mỗi màn hình chỉ có **một** H1.
-- Tiêu đề serif có thể dùng **italic** cho một từ nhấn mạnh ("Trải nghiệm *nghỉ dưỡng* giữa thiên nhiên").
-- Không dùng Cormorant cho chữ dưới 24px, bảng, form hay nút.
-- Độ dài dòng văn bản tối đa khoảng 70 ký tự (`max-width: 65ch`).
-- Định dạng số và tiền theo `vi-VN`: `1.850.000 ₫`, ngày `dd/MM/yyyy`.
-
----
-
-## 4. Spacing, layout và grid
-
-### 4.1 Thang spacing (bước 4px)
-
-| Token | px | Dùng cho |
+| Vai trò | Font | Lớp |
 |---|---|---|
-| `--space-1` | 4 | Khoảng cách icon và chữ |
-| `--space-2` | 8 | Gap trong nhóm nhỏ (badge, chip) |
-| `--space-3` | 12 | Padding dọc input/nút nhỏ |
-| `--space-4` | 16 | Padding card nhỏ, gutter mobile |
-| `--space-6` | 24 | Padding card, gutter desktop |
-| `--space-8` | 32 | Khoảng cách giữa các khối trong section |
-| `--space-12` | 48 | Khoảng cách tiêu đề section và nội dung |
-| `--space-16` | 64 | Padding dọc section (mobile) |
-| `--space-24` | 96 | Padding dọc section (desktop) |
-| `--space-32` | 128 | Khoảng cách hero lớn |
+| Nội dung, UI | **Be Vietnam Pro** 400/500/600/700 | mặc định (`font-sans`) |
+| Tiêu đề lớn, trích dẫn | **Playfair Display** 400/500/600 | `font-display` (= serif, weight 400, `letter-spacing: -0.01em`) |
 
-### 4.2 Breakpoints
+Thang chữ prototype dùng thực tế (đếm trong `ui-prototype/src/routes`):
 
-| Tên | Min width | Cột grid | Gutter | Margin |
-|---|---|---|---|---|
-| xs (mobile) | 0 | 4 | 16 | 16 |
-| sm | 640 | 4 | 16 | 24 |
-| md (tablet) | 768 | 8 | 24 | 32 |
-| lg | 1024 | 12 | 24 | 40 |
-| xl | 1280 | 12 | 24 | auto, container 1200 |
-| 2xl | 1440 | 12 | 32 | auto, container 1200 (hero/ảnh full 1440) |
-
-### 4.3 Layout
-
-- **Trang khách:** header cao 80px (trong suốt trên hero, chuyển nền cream + shadow-sm khi cuộn), nội dung trong container 1200px, ảnh hero và gallery có thể tràn full-width.
-- **Trang nội bộ:** sidebar trái 264px nền pearl-900, topbar 64px nền white, vùng nội dung nền cream-100 với padding 24–32px.
-
----
-
-## 5. Radius, shadow, motion
-
-### Radius
-
-| Token | Giá trị | Dùng cho |
-|---|---|---|
-| `--radius-sm` | 2px | Checkbox, ảnh thumbnail nhỏ |
-| `--radius-md` | 4px | Button, input, select, dropdown |
-| `--radius-lg` | 8px | Card, modal, toast |
-| `--radius-xl` | 16px | Thanh đặt phòng (booking bar), ảnh lớn |
-| `--radius-pill` | 999px | Badge, chip, avatar |
-
-Phong cách chung là **góc vuông vắn, bo nhẹ**, tránh bo tròn quá mức.
-
-### Shadow
-
-| Token | Dùng cho |
+| Dùng cho | Lớp |
 |---|---|
-| `--shadow-sm` | Header khi cuộn, input focus nhẹ |
-| `--shadow-md` | Card hover, dropdown |
-| `--shadow-lg` | Modal, booking bar nổi trên hero |
-| `--shadow-focus` | Focus ring (vàng đồng, 3px) |
+| Nội dung, ô bảng, nút | `text-sm` (cỡ phổ biến nhất) |
+| Nhãn, chú thích, chip | `text-xs`; nhãn cực nhỏ `text-[11px]`/`text-[10px]` + `uppercase tracking-wider` |
+| Tiêu đề trang khu làm việc | `text-2xl font-semibold tracking-tight sm:text-[28px]` (xem `PageHeader`) |
+| Tiêu đề phần | `text-sm font-semibold` trong `Panel`; `font-display text-3xl/4xl` ở trang khách |
+| Hero, tiêu đề đăng nhập | `font-display text-5xl` (có khi `text-6xl`, `leading-[1.15]`) |
+| Số liệu thẻ thống kê | `text-2xl font-semibold tracking-tight` |
 
-### Motion
+Eyebrow (dòng nhỏ phía trên tiêu đề): `text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground`.
 
-| Token | Giá trị | Dùng cho |
+---
+
+## 4. Spacing và layout
+
+- Thang spacing mặc định của Tailwind (đơn vị 4px). Khoảng cách chuẩn: `gap-2/3/4`, `p-4/5`, thẻ `p-5`, hộp thoại `p-6`.
+- **Khu khách (`SiteLayout`)**: header cao `h-20`, nội dung `max-w-7xl`, lề ngang `px-5 lg:px-8`; footer nền `ink`, `mt-24`.
+- **Khu làm việc (`WorkspaceLayout`)**: thanh bên cố định `w-64` (ẩn dưới `lg`, thay bằng ngăn kéo `Sheet` rộng `w-72`), header dính `h-16`, nội dung `max-w-7xl px-4 py-8 sm:px-8`.
+- **Đăng nhập (`AuthLayout`)**: lưới 2 cột từ `lg` (form `max-w-md` + ảnh bo `3xl`).
+- Điểm gãy: dùng breakpoint mặc định Tailwind (`sm` 640, `md` 768, `lg` 1024). Mọi trang phải dùng được ở 375px.
+
+---
+
+## 5. Bo góc, bóng, chuyển động
+
+| Token | Giá trị | Dùng |
 |---|---|---|
-| `--duration-fast` | 120ms | Hover màu nút, link |
-| `--duration-base` | 200ms | Dropdown, tab, toast |
-| `--duration-slow` | 400ms | Modal, zoom ảnh khi hover card (scale 1.04) |
-| `--ease-standard` | cubic-bezier(0.2, 0, 0, 1) | Mặc định |
+| `--radius` | `0.875rem` | Gốc; `rounded-sm…4xl` suy ra từ đây (`lg` = radius, `xl` = +4px, `2xl` = +8px, `3xl` = +12px) |
+| `rounded-full` | | Nút bấm chính, chip, ô tìm kiếm, avatar, nút tròn |
+| `rounded-xl` | | Thẻ (`card-soft`), mục menu, khối trống |
+| `rounded-md` | | Ô nhập, nút mặc định của shadcn |
+| `shadow-soft` | | `card-soft` |
+| `shadow-lift` | | Thanh tìm kiếm nổi, thẻ nâng |
+| `shadow-sm` / `shadow-lg` | | Nút, menu thả, menu mobile |
 
-Tôn trọng `prefers-reduced-motion` (đã cấu hình trong `tokens.css`).
-
----
-
-## 6. Iconography và hình ảnh
-
-- **Icon:** bộ [Lucide](https://lucide.dev) (stroke 1.5px, góc bo), cỡ 16 / 20 / 24px, màu theo `currentColor`.
-- Icon tiện nghi (wifi, hồ bơi, spa, nhà hàng, đỗ xe, điều hoà...) dùng cỡ 24px màu brandy-600 hoặc gold-500 trên nền tối.
-- **Ảnh:** tông ấm, ánh sáng tự nhiên, ưu tiên gỗ, cây xanh, mặt hồ. Tỉ lệ: hero 16:9 (mobile 4:5), card phòng 4:3, gallery 3:2 hoặc 1:1.
-- Ảnh trên nền chữ dùng lớp phủ `linear-gradient(180deg, rgba(31,27,22,0) 40%, rgba(31,27,22,0.7) 100%)` để chữ trắng đọc rõ.
-- Luôn có `alt` mô tả bằng tiếng Việt; khi đang tải hiển thị nền stone-200.
+Chuyển động ngắn: `transition-colors`, `duration-200/300`, `ease-out`. Mục menu hover dịch `translate-x-1`. Animation vào/ra của hộp thoại, popover do `tw-animate-css`. Tôn trọng `prefers-reduced-motion` khi thêm animation mới.
 
 ---
 
-## 7. Components
+## 6. Icon và ảnh
 
-Mỗi component chỉ dùng role token. Trạng thái chuẩn: default, hover, active/pressed, focus-visible, disabled, loading (nếu có).
+- Icon: **lucide-react**, cỡ `size-4` (chuẩn trong nút, hàng), `size-3` (chấm phụ), `size-5/6` (khối nhấn). Tên icon phải trùng prototype.
+- Ảnh: dùng ảnh trong `ui-prototype/src/assets/` (lobby, hero, các hạng phòng, spa...). Ảnh phủ chữ dùng `hero-scrim`; ảnh trong thẻ bo theo thẻ, `object-cover`.
+- Avatar: chữ cái đầu trên nền `bg-primary/15 text-primary`.
 
-### 7.1 Button
+---
 
-| Variant | Nền | Chữ | Border | Hover |
-|---|---|---|---|---|
-| Primary | brandy-600 | white | none | brandy-700 |
-| Secondary | transparent | pearl-900 | 1px pearl-900 | nền pearl-900, chữ cream-100 |
-| Reed | reed-700 | white | none | tối hơn 8% |
-| Ghost | transparent | brandy-600 | none | nền brandy-100 |
-| Inverse (trên nền tối) | cream-100 | pearl-900 | none | gold-200 |
-| Link | none | brandy-600, gạch chân khi hover | none | brandy-700 |
-| Danger | danger | white | none | tối hơn 8% |
-
-| Size | Cao | Padding ngang | Font |
-|---|---|---|---|
-| sm | 36px | 16px | 12px |
-| md (mặc định) | 44px | 24px | 14px |
-| lg | 52px | 32px | 14px |
-
-- Chữ nút viết hoa, letter-spacing 0.08em, weight 600, radius 4px.
-- Icon trong nút 16px, cách chữ 8px.
-- Disabled: opacity 0.4, `cursor: not-allowed`.
-- Loading: spinner 16px thay icon, giữ nguyên độ rộng nút.
-- Focus: `box-shadow: var(--shadow-focus)`.
-
-### 7.2 Form controls
-
-**Input / Select / Textarea / Date picker**
-
-- Cao 44px, padding 12px 16px, nền white, border 1px stone-300, radius 4px, font 14–16px.
-- Label phía trên: 12px, weight 600, uppercase, letter-spacing 0.08em, màu stone-700, cách input 8px.
-- Placeholder: stone-500.
-- Hover: border stone-500. Focus: border brandy-600 + shadow-focus.
-- Error: border danger, helper text 12px màu danger, icon cảnh báo bên trái helper.
-- Disabled: nền stone-200, chữ stone-500.
-- Trường bắt buộc: dấu `*` màu danger sau label.
-
-**Checkbox / Radio / Switch:** 18px, tick màu white trên nền brandy-600; switch track 36×20, bật màu reed-700.
-
-### 7.3 Booking bar (thanh tìm & đặt phòng)
-
-Component nhận diện của trang khách, nổi trên hero hoặc ngay dưới hero.
-
-- Nền white, radius 16px, shadow-lg, padding 8px.
-- Gồm các ô: **Ngày nhận phòng**, **Ngày trả phòng**, **Khách** (người lớn / trẻ em), **Loại phòng** (tuỳ chọn), nút **Primary lg "KIỂM TRA PHÒNG"**.
-- Mỗi ô: label eyebrow 12px + giá trị 16px weight 500; phân cách bằng divider dọc stone-300.
-- Mobile: xếp dọc, nút full-width, có thể thu gọn thành nút "Đặt phòng" cố định dưới màn hình.
-
-### 7.4 Room card
-
-- Ảnh 4:3 phía trên (radius 8px top), hover zoom 1.04.
-- Badge góc trên trái (ví dụ "Bán chạy", "-15%").
-- Thân card padding 24px: tên phòng (H3 Cormorant), dòng thông tin 14px stone-700 kèm icon (diện tích m², số khách, loại giường), danh sách 3–4 tiện nghi dạng icon.
-- Chân card: giá (Price style) + "/ đêm" 14px stone-700, nút Secondary sm "XEM CHI TIẾT" hoặc Primary sm "ĐẶT NGAY".
-- Biến thể ngang (horizontal) dùng cho trang kết quả tìm kiếm trên desktop.
-
-### 7.5 Section heading
+## 7. Atomic design và catalog component
 
 ```
-EYEBROW (12px, uppercase, gold-500 hoặc brandy-600)
-Tiêu đề H2 Cormorant
-Đường kẻ 48×1px gold-500
-Mô tả Body L, stone-700, max 60ch
+components/
+  ui/          shadcn gốc (vendor) — KHÔNG import trực tiếp từ trang
+  atoms/       phần tử nhỏ nhất
+  molecules/   ghép vài atom thành một đơn vị dùng được
+  organisms/   khối hoàn chỉnh (tiêu đề trang, bảng, hộp thoại, biểu đồ)
+  templates/   khung trang
+  *.tsx        component cũ (deprecated)
 ```
 
-Căn giữa cho trang marketing, căn trái cho trang nội bộ.
+**Quy tắc import:** trang chỉ import từ `@/components/atoms | molecules | organisms | templates`. Cần component chưa có thì thêm đúng tầng
+(kèm test), không viết trong trang. Cần primitive shadcn mới: copy từ prototype vào `ui/` rồi re-export ở tầng phù hợp.
 
-### 7.6 Navigation
+### Atoms — `@/components/atoms`
 
-- **Header khách:** logo (wordmark serif) bên trái, menu giữa (Trang chủ, Phòng, Tiện ích, Ưu đãi, Liên hệ) 14px uppercase, bên phải nút Primary sm "ĐẶT PHÒNG" và icon tài khoản. Link active có gạch chân 1px gold-500.
-- **Sidebar nội bộ:** nền pearl-900, item 44px, icon 20px + chữ 14px màu cream-100 (opacity 0.72), item active nền pearl-800 + thanh trái 3px gold-500 + chữ opacity 1. Nhóm menu có eyebrow 11px stone-500.
-- **Breadcrumb:** 12px, phân cách `/`, item cuối pearl-900.
-- **Tabs:** chữ 14px weight 500, active có gạch dưới 2px brandy-600.
-- **Pagination:** ô 36×36, active nền pearl-900 chữ cream-100.
+| Component | Ghi chú |
+|---|---|
+| `Button` | `variant`: `default` `destructive` `outline` `secondary` `ghost` `link`; `size`: `default` `sm` `lg` `icon`; `asChild`. Nút chính trong prototype thường thêm `rounded-full` |
+| `Input`, `Textarea`, `Label`, `Checkbox`, `Switch`, `RadioGroup`/`RadioGroupItem`, `Slider`, `Toggle`, `Separator` | Form và điều khiển cơ bản |
+| `Avatar`, `AvatarFallback`, `AvatarImage` | |
+| `Skeleton` | Khung chờ tải (`animate-pulse`) |
+| `StatusBadge` | `status` (mã enum, ví dụ `CHECKED_IN`): chấm màu + nhãn tiếng Việt; trạng thái lạ → trung tính |
+| `Logo` | `light` (trên nền tối), `to` |
 
-### 7.7 Badge / Status chip
+### Molecules — `@/components/molecules`
 
-Pill, cao 24px, padding 0 10px, font 12px weight 600, có chấm tròn 6px phía trước.
+| Component | Ghi chú |
+|---|---|
+| `FormField` | `label`, `htmlFor`, `error`, `hint`, `required` + control con có `id` trùng `htmlFor`. Lỗi hiện `role="alert"` |
+| `Select` (+ `SelectTrigger/Content/Item/Value`), `Tabs`, `Popover`, `Tooltip`, `DropdownMenu` | Composite của radix |
+| `StatCard` | `label`, `value`, `hint`, `trend`, `icon` |
+| `EmptyState` | `title`, `body`, `action`, `icon` |
+| `KeyValue` | Cặp nhãn – giá trị trong chi tiết |
+| `Stars` | `value`, `onChange?` (không có `onChange` thì chỉ đọc) |
+| `DateRangeField` | `from`, `to` (`yyyy-MM-dd`), `onChange(from, to)`; ngày trả luôn sau ngày nhận ≥ 1 ngày |
+| `Toaster` | Gắn một lần ở gốc app; gọi `toast()` từ `sonner` |
 
-**Trạng thái phòng (dùng thống nhất ở mọi màn hình):**
+### Organisms — `@/components/organisms`
 
-| Trạng thái | Nhãn | Màu chữ / chấm | Nền |
-|---|---|---|---|
-| AVAILABLE | Trống | success | success-bg |
-| RESERVED | Đã đặt | info | info-bg |
-| OCCUPIED | Đang ở | brandy-700 | brandy-100 |
-| CLEANING | Đang dọn | warning | warning-bg |
-| MAINTENANCE | Bảo trì | danger | danger-bg |
-| OUT_OF_SERVICE | Ngừng sử dụng | stone-700 | stone-200 |
+| Component | Ghi chú |
+|---|---|
+| `PageHeader` | `title`, `subtitle`, `eyebrow`, `actions` — đầu mọi trang khu làm việc |
+| `Panel` | Thẻ có tiêu đề + `action` |
+| `DataTable<T>` | `rows`, `columns`, `search`, `filters`, `pageSize`, `onRowClick`, `toolbar`, `empty`, `loading` — phân trang, tìm kiếm, lọc, trạng thái trống/đang tải |
+| `Dialog*`, `AlertDialog*`, `Sheet*` | Hộp thoại, xác nhận, ngăn kéo |
+| `RevenueArea`, `SimpleBars`, `Donut` | Biểu đồ (recharts) theo màu `--chart-*` |
+| `SearchBar` | Thanh tìm phòng; `onSearch({ from, to, guests })` |
+| `Unauthorized` | Trang 403; `homeTo`, `actionLabel`, `description` |
 
-**Trạng thái đặt phòng / hoá đơn:** Chờ xác nhận (warning), Đã xác nhận (info), Đã nhận phòng (brandy), Hoàn tất / Đã thanh toán (success), Đã huỷ / Thất bại (danger), Hoàn tiền (stone).
+### Templates — `@/components/templates`
 
-### 7.8 Card nội bộ và Stat card
+| Component | Ghi chú |
+|---|---|
+| `SiteLayout` | Khung khu khách: `links`, `actions`, `overlay` (header đè lên hero) |
+| `WorkspaceLayout` | Khung khu làm việc: `groups` (menu theo nhóm), `user`, `workspaceLabel`, `onLogout`, `profileTo`, `publicSiteTo`, `loading`, `forbidden`; `children` mặc định `<Outlet />` |
+| `AuthLayout` | `title`, `subtitle`, `image`, `quote` |
 
-- Card: nền white, border 1px stone-300, radius 8px, padding 24px, không shadow (hover shadow-md nếu click được).
-- Stat card: label eyebrow, số liệu 32px Cormorant 600, so sánh kỳ trước 12px (success / danger kèm mũi tên).
-
-### 7.9 Data table
-
-- Header: nền stone-200, chữ 12px uppercase weight 600 stone-700, cao 44px.
-- Dòng: cao 52px, font 14px, border dưới stone-300, hover nền cream-50.
-- Cột số và tiền căn phải; cột trạng thái dùng Badge; cột hành động cuối cùng dùng icon button 32px + menu "...".
-- Thanh công cụ phía trên: ô tìm kiếm, bộ lọc (select), nút Primary "THÊM MỚI" bên phải.
-- Empty state: icon 48px stone-500, tiêu đề H4, mô tả Body S, nút hành động.
-
-### 7.10 Modal / Drawer
-
-- Overlay `rgba(31,27,22,0.5)`; modal nền white, radius 8px, shadow-lg, rộng 480 / 640 / 880px.
-- Header: tiêu đề H3 + nút đóng; footer căn phải: Secondary "HUỶ" + Primary hành động.
-- Modal xác nhận xoá / huỷ dùng nút Danger.
-- Drawer phải 480px cho form chi tiết (ví dụ xem chi tiết đặt phòng).
-
-### 7.11 Toast / Alert
-
-- Toast góc trên phải, rộng 360px, nền white, viền trái 4px màu ngữ nghĩa, icon + tiêu đề 14px 600 + mô tả 14px; tự tắt sau 5 giây.
-- Alert inline: nền màu `*-bg`, chữ màu ngữ nghĩa, radius 4px, padding 12px 16px.
-
-### 7.12 Khác
-
-- **Testimonial:** dấu ngoặc kép lớn gold-500, trích dẫn Cormorant italic 24px, tên khách 14px 600, sao đánh giá gold-500.
-- **Amenity item:** icon 32px trong vòng tròn viền gold-500, tên 16px 500, mô tả 14px.
-- **Avatar:** 32 / 40 / 64px, pill, fallback chữ cái đầu trên nền brandy-100.
-- **Skeleton:** nền stone-200 với hiệu ứng shimmer nhẹ.
-- **Footer:** nền pearl-900, chữ cream-100, tiêu đề cột eyebrow gold-500, link opacity 0.72 hover 1.
+Các template thuần trình bày, **chưa** thay `layouts/StaffLayout` và `PublicLayout` (còn chứa logic đăng nhập); việc nối hai bên là một task riêng.
 
 ---
 
-## 8. Pattern theo màn hình HMS
+## 8. Pattern theo màn hình
 
-| Nhóm màn hình | Không gian | Component chính |
-|---|---|---|
-| Trang chủ, giới thiệu, tiện ích | Khách | Hero + Booking bar, Section heading, Room card, Amenity, Testimonial, Footer |
-| Tìm & đặt phòng, chi tiết phòng | Khách | Booking bar, bộ lọc, Room card ngang, gallery, tóm tắt đặt phòng (card sticky), stepper 3 bước |
-| Thanh toán (VNPay), kết quả | Khách | Form, tóm tắt hoá đơn, Alert success/danger |
-| Đăng nhập / đăng ký (Firebase Auth) | Khách | Layout 2 cột: ảnh trái, form phải; nút đăng nhập Google dạng Secondary |
-| Tài khoản khách, lịch sử đặt phòng, phản hồi | Khách | Tabs, Data table rút gọn hoặc list card, Badge trạng thái |
-| Lễ tân: check-in / check-out, sơ đồ phòng | Nội bộ | Sidebar, lưới ô phòng theo tầng (ô 96×72 có màu theo trạng thái phòng), Drawer chi tiết |
-| Dịch vụ, sự cố, nhiệm vụ nhân viên | Nội bộ | Data table, Badge, Modal form, Tabs theo trạng thái |
-| Cơ sở vật chất, bảo trì | Nội bộ | Data table, Badge MAINTENANCE, lịch |
-| Báo cáo, dashboard quản lý | Nội bộ | Stat card, chart (màu chuỗi: brandy-600, reed-700, lake-600, gold-500, stone-500) |
+| Màn | Cấu tạo |
+|---|---|
+| Danh sách (đặt phòng, phòng, tài khoản...) | `PageHeader` (+ nút hành động) → `DataTable` (tìm kiếm, lọc, `StatusBadge`, `onRowClick` đi tới chi tiết) |
+| Dashboard | `PageHeader` → lưới `StatCard` → `Panel` chứa biểu đồ/danh sách ngắn |
+| Chi tiết | `PageHeader` → `Panel` + `KeyValue`, nút hành động ở `actions` |
+| Form | `Panel` → `FormField` + `Input/Select/Textarea`; lỗi theo trường, nút chính `Button` (đổi nhãn khi đang gửi) |
+| Xác nhận nguy hiểm | `AlertDialog` (nút hủy + nút `destructive`), không dùng `window.confirm` |
+| Không có dữ liệu | `EmptyState` (có hành động tiếp theo nếu được) |
+| Đang tải | `Skeleton` cùng hình dạng nội dung (hoặc `DataTable loading`) |
+| Không đủ quyền | `Unauthorized` |
+| Thông báo ngắn | `toast()` (sonner) |
 
 ---
 
 ## 9. Accessibility
 
-- Đạt tối thiểu **WCAG 2.1 AA**: tương phản chữ ≥ 4.5:1 (đã kiểm tra ở mục 2.5).
-- Vùng chạm tối thiểu 44×44px trên mobile.
-- Luôn có focus-visible rõ ràng (`--shadow-focus`), không xoá outline mà không thay thế.
-- Không truyền đạt trạng thái chỉ bằng màu: badge luôn có chữ, lỗi form luôn có thông báo.
-- Form có `label` gắn với input, lỗi liên kết qua `aria-describedby`.
-- Modal giữ focus bên trong, đóng bằng phím Esc.
-- Thuộc tính `lang="vi"` trên thẻ `html`.
+- Có ring khi focus bàn phím trên mọi điều khiển (shadcn dùng `focus-visible:ring-ring`); không bỏ `outline` mà không thay thế.
+- Nút chỉ có icon phải có `aria-label` (ví dụ "Trang sau", "Mở menu").
+- Trạng thái luôn kèm chữ; lỗi form dùng `role="alert"` và liên kết nhãn với ô nhập qua `htmlFor`.
+- Mục menu đang mở có `aria-current="page"`; nhóm thu gọn có `aria-expanded`.
+- Ngăn kéo/hộp thoại có tiêu đề (`SheetTitle`/`DialogTitle`, có thể `sr-only`).
+- Chạm tối thiểu ~36–44px cho nút chính; kiểm tra chữ có dấu ở cỡ nhỏ.
 
 ---
 
-## 10. Cách dùng trong code
+## 10. Lớp tương thích cũ (legacy)
 
-**CSS thuần / bất kỳ framework nào**
+Trong lúc nhiều người migrate song song, `design-system/legacy.css` giữ các lớp của bộ "Grand Emily" cũ
+(`bg-pearl-900`, `text-stone-700`, `border-stone-300`, `bg-cream-100`, `bg-success-bg`, `font-body`,
+`max-w-container`, `tracking-widest`...). **Trang đã migrate không được dùng chúng.** Khi đổi một trang, thay như sau:
 
-```html
-<link rel="stylesheet" href="/design-system/tokens.css" />
-```
+| Cũ | Mới |
+|---|---|
+| `bg-cream-100`, `bg-cream-50` | `bg-background` (nền trang), `bg-card` (thẻ), `bg-surface` (nền phụ) |
+| `text-pearl-900`, `bg-pearl-900` | `text-foreground`, `bg-ink` |
+| `text-stone-700`, `text-stone-500` | `text-muted-foreground` |
+| `border-stone-300`, `bg-stone-200` | `border-border`, `bg-muted` / `bg-surface` |
+| `bg-primary` + `hover:bg-primary-hover`, `bg-brandy-*` | `Button` (default) / `bg-primary hover:bg-primary/90` |
+| `bg-primary-soft`, `bg-brandy-100` | `bg-primary/10` |
+| `bg-success-bg text-success` (tương tự warning/danger/info) | `StatusBadge`, hoặc `bg-success/10 text-success` |
+| `text-gold-500` | `text-primary` |
+| `font-display` (Cormorant) | `font-display` (nay là Playfair) |
+| `font-body` | mặc định (đã là Be Vietnam Pro) |
+| `max-w-container` | `max-w-7xl` |
+| `tracking-widest` (0.2em) | `tracking-[0.2em]` chỉ cho eyebrow viết hoa |
+| `Button`/`Badge`/`TextField`... trong `components/*.tsx` | Xem mục 7 (các file cũ đã gắn `@deprecated`) |
 
-```css
-body {
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-family: var(--font-body);
-  font-size: var(--text-base);
-  line-height: var(--leading-normal);
-}
+Khi trang cuối cùng đã migrate: xóa `design-system/legacy.css`, dòng `@import` tương ứng trong `frontend/src/styles/index.css`
+và các component cũ.
 
-.btn-primary {
-  height: 44px;
-  padding: 0 var(--space-6);
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  border-radius: var(--radius-md);
-  font: var(--weight-semibold) var(--text-sm)/1 var(--font-body);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  transition: background var(--duration-fast) var(--ease-standard);
-}
-.btn-primary:hover { background: var(--color-primary-hover); }
-.btn-primary:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
-```
+---
 
-**Tailwind**
+## 11. Cách làm việc
 
-```js
-// tailwind.config.js
-module.exports = {
-  presets: [require('./design-system/tailwind.preset.js')],
-  content: ['./src/**/*.{html,js,jsx,ts,tsx,vue}'],
-};
-```
+1. Mở prototype (`ui-prototype/`, hoặc bản chạy thử) ở đúng màn cần làm và đọc code của nó.
+2. Dùng component ở mục 7; thiếu thì thêm đúng tầng kèm test.
+3. Chỉ đổi phần trình bày; giữ hook, API, logic và test hành vi.
+4. So sánh với prototype ở 1440px và 375px trước khi mở PR.
 
-```html
-<button class="h-11 px-6 rounded bg-primary hover:bg-primary-hover text-white text-sm font-semibold uppercase tracking-wider">
-  Đặt phòng
-</button>
-```
+Chi tiết, bảng ánh xạ màn prototype ↔ trang của app, danh sách cấm và prompt mẫu cho AI:
+[`docs/UI-REPOLISH-GUIDE.md`](docs/UI-REPOLISH-GUIDE.md).
 
-**Quy ước cho cả nhóm**
-
-1. Không viết mã hex trực tiếp trong component; luôn dùng token.
-2. Thêm hoặc đổi token thì sửa đồng thời `tokens.css`, `tokens.json`, `tailwind.preset.js` và cập nhật file này.
-3. Component mới phải có đủ trạng thái hover, focus, disabled và kiểm tra trên mobile 375px.
+Đổi hoặc thêm token: sửa `design-system/tokens.css` (và `theme.css` nếu cần lớp mới) **sau khi** prototype đã đổi, rồi chạy
+`npm test` trong `frontend/` để xác nhận không lệch.
