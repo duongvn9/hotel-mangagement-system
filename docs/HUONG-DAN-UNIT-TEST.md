@@ -29,7 +29,7 @@ Mở terminal (PowerShell, CMD hoặc terminal của VS Code) trong thư mục `
 | Chạy toàn bộ unit test backend | `npm test` |
 | Chạy và in tên từng test (để chụp ảnh) | `npx vitest run --reporter=verbose` |
 | Chạy kèm coverage toàn bộ | `npm run test:cov` |
-| Chạy một file | `npx vitest run src/modules/invoices/vi-du-hoa-don.spec.ts --reporter=verbose` |
+| Chạy một file | `npx vitest run src/modules/invoices/sample-invoice.spec.ts --reporter=verbose` |
 | Chạy một module kèm coverage của module đó | `npx vitest run src/modules/invoices --reporter=verbose --coverage --coverage.include="src/modules/invoices/**"` |
 
 Frontend làm tương tự trong thư mục `frontend` (`npm test`, `npm run test:cov`).
@@ -66,16 +66,16 @@ Unit test chủ yếu phủ phần logic thuần (tính tiền, kiểm tra trạ
 
 Dự án dùng **Vitest** (cú pháp giống Jest). File test đặt cạnh file code, tên kết thúc bằng `.spec.ts` (backend) hoặc `.test.tsx` (frontend). Vitest tự tìm các file này.
 
-File mẫu chạy được: [`backend/src/modules/invoices/vi-du-hoa-don.spec.ts`](../backend/src/modules/invoices/vi-du-hoa-don.spec.ts). Rút gọn:
+File mẫu chạy được: [`backend/src/modules/invoices/sample-invoice.spec.ts`](../backend/src/modules/invoices/sample-invoice.spec.ts). Rút gọn:
 
 ```ts
 import { describe, it, expect } from 'vitest';
 import { calculateInvoice } from './invoice-calculator.js';
 import { InvoiceStatus } from './schemas/invoice.schema.js';
 
-describe('Tính hóa đơn (calculateInvoice)', () => {
-  it('UT-01: 1 phòng 500.000đ x 2 đêm, chưa trả gì thì còn nợ 1.000.000đ', () => {
-    // Arrange: chuẩn bị dữ liệu đầu vào
+describe('calculateInvoice', () => {
+  it('UT-01: 1 room at 500,000 VND x 2 nights with no payment leaves 1,000,000 VND due', () => {
+    // Arrange: prepare the input
     const input = {
       rooms: [{ rate: 500_000, units: 2 }],
       serviceCharges: [],
@@ -85,16 +85,16 @@ describe('Tính hóa đơn (calculateInvoice)', () => {
       payments: [],
     };
 
-    // Act: gọi hàm cần test
+    // Act: call the function under test
     const invoice = calculateInvoice(input);
 
-    // Assert: so sánh kết quả với mong đợi
+    // Assert: compare the result with the expected values
     expect(invoice.roomTotal).toBe(1_000_000);
     expect(invoice.balanceDue).toBe(1_000_000);
     expect(invoice.status).toBe(InvoiceStatus.Unpaid);
   });
 
-  it('UT-04: số tiền âm phải báo lỗi', () => {
+  it('UT-04: a negative amount throws an error', () => {
     expect(() =>
       calculateInvoice({ rooms: [{ rate: -1, units: 1 }], serviceCharges: [], approvedAdditionalCharges: [], discounts: [], taxes: [], payments: [] }),
     ).toThrow();
@@ -104,7 +104,7 @@ describe('Tính hóa đơn (calculateInvoice)', () => {
 
 Ghi nhớ:
 
-- `describe` gom nhóm test của một hàm, `it` là một test case. Đặt tên `it` bằng tiếng Việt, có mã `UT-xx` để khớp với bảng báo cáo.
+- `describe` gom nhóm test của một hàm, `it` là một test case. **Viết test bằng tiếng Anh**: tên `describe`/`it` và comment đều tiếng Anh, tên `it` bắt đầu bằng mã `UT-xx` để khớp với bảng báo cáo, ví dụ `it('UT-07: rejects a check-in before the arrival date', ...)`.
 - Mỗi test theo 3 bước **Arrange, Act, Assert**.
 - Các hàm hay dùng: `toBe` (bằng đúng), `toEqual` / `toMatchObject` (so object), `toBeNull`, `toThrow` (phải báo lỗi), `toHaveBeenCalledWith` (mock đã được gọi với tham số).
 - Import trong backend phải có đuôi `.js` (dự án dùng ESM), dù file thật là `.ts`.

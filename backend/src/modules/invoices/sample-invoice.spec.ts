@@ -1,4 +1,4 @@
-// Test mẫu: chạy bằng `npx vitest run src/modules/invoices/vi-du-hoa-don.spec.ts`
+// Sample unit test. Run with: `npx vitest run src/modules/invoices/sample-invoice.spec.ts`
 import { describe, it, expect } from 'vitest';
 import { calculateInvoice } from './invoice-calculator.js';
 import { checkOutStatusError } from './check-out.core.js';
@@ -9,9 +9,9 @@ import {
   PaymentStatus,
 } from '../payments/schemas/payment-transaction.schema.js';
 
-describe('Tính hóa đơn (calculateInvoice)', () => {
-  it('UT-01: 1 phòng 500.000đ x 2 đêm, chưa trả gì thì còn nợ 1.000.000đ', () => {
-    // Arrange: chuẩn bị dữ liệu đầu vào
+describe('calculateInvoice', () => {
+  it('UT-01: 1 room at 500,000 VND x 2 nights with no payment leaves 1,000,000 VND due', () => {
+    // Arrange: prepare the input
     const input = {
       rooms: [{ rate: 500_000, units: 2 }],
       serviceCharges: [],
@@ -21,16 +21,16 @@ describe('Tính hóa đơn (calculateInvoice)', () => {
       payments: [],
     };
 
-    // Act: gọi hàm cần test
+    // Act: call the function under test
     const invoice = calculateInvoice(input);
 
-    // Assert: so sánh kết quả với mong đợi
+    // Assert: compare the result with the expected values
     expect(invoice.roomTotal).toBe(1_000_000);
     expect(invoice.balanceDue).toBe(1_000_000);
     expect(invoice.status).toBe(InvoiceStatus.Unpaid);
   });
 
-  it('UT-02: đã cọc 30% thành công thì dư nợ còn 70%', () => {
+  it('UT-02: a successful 30% deposit leaves 70% due', () => {
     const invoice = calculateInvoice({
       rooms: [{ rate: 500_000, units: 2 }],
       serviceCharges: [],
@@ -50,7 +50,7 @@ describe('Tính hóa đơn (calculateInvoice)', () => {
     expect(invoice.balanceDue).toBe(700_000);
   });
 
-  it('UT-03: giao dịch thất bại không được trừ vào dư nợ', () => {
+  it('UT-03: a failed payment does not reduce the balance due', () => {
     const invoice = calculateInvoice({
       rooms: [{ rate: 500_000, units: 2 }],
       serviceCharges: [],
@@ -70,7 +70,7 @@ describe('Tính hóa đơn (calculateInvoice)', () => {
     expect(invoice.balanceDue).toBe(1_000_000);
   });
 
-  it('UT-04: số tiền âm phải báo lỗi', () => {
+  it('UT-04: a negative amount throws an error', () => {
     expect(() =>
       calculateInvoice({
         rooms: [{ rate: -1, units: 1 }],
@@ -84,12 +84,12 @@ describe('Tính hóa đơn (calculateInvoice)', () => {
   });
 });
 
-describe('Điều kiện check-out (checkOutStatusError)', () => {
-  it('UT-05: khách đang ở (CHECKED_IN) thì được check-out', () => {
+describe('checkOutStatusError', () => {
+  it('UT-05: a CHECKED_IN booking can be checked out', () => {
     expect(checkOutStatusError(BookingStatus.CheckedIn)).toBeNull();
   });
 
-  it('UT-06: booking chưa nhận phòng thì không được check-out', () => {
+  it('UT-06: a booking that is not checked in cannot be checked out', () => {
     expect(checkOutStatusError(BookingStatus.Confirmed)).toBe(
       'The guest has not checked in yet',
     );
