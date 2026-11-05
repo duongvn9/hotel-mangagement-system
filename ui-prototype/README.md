@@ -7,8 +7,8 @@ giống. Bản chạy thử: <https://stayflow-hotel-harmony.lovable.app>
 **Không sửa, không import từ app.** Thư mục này nằm ngoài tsc, oxlint, prettier, vitest và Docker
 context của `frontend/`. Muốn đổi thiết kế thì đổi ở repo gốc của prototype rồi copy lại.
 
-`AGENTS.md` ở đây là của Lovable (nói về git history và sync Lovable), **không áp dụng** cho repo
-này; quy tắc làm việc nằm ở `CLAUDE.md`, `DESIGN.md` và `UI-REPOLISH-GUIDE.md` ở gốc repo.
+Bản copy này đã lược bớt metadata Lovable (`AGENTS.md`, `.lovable/`, `roadmap.md`) và cấu hình lint/test của prototype
+(không còn script `lint`, `format`, `test`). Quy tắc làm việc nằm ở `CLAUDE.md`, `DESIGN.md` và `UI-REPOLISH-GUIDE.md` ở gốc repo.
 
 ## Chạy để so sánh
 
