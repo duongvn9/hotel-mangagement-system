@@ -17,6 +17,7 @@ Keywords: **MUST** and **MUST NOT** are hard rules, not preferences. If a rule b
 
 ## 2. Global rules
 
+- **Language.** Every Markdown file you create or edit (`*.md`: READMEs, specs, plans, guides, notes) MUST be written in English, even when the user writes to you in another language. Exceptions: proper names of people, and quoted UI copy or labels that must stay verbatim (for example the prototype's "Đề xuất UX" marker). The product's user-facing text stays Vietnamese; this rule is about documentation, not UI strings.
 - **Scope.** Do exactly what was asked. No drive-by refactors, renames or "while I'm here" changes. Behavior changes need a test first (red, then green).
 - **Evidence.** Never claim work is done, fixed or passing without running the commands in section 6 and reading their output.
 - **Git.**
