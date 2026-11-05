@@ -12,7 +12,7 @@ import { StaffNav } from './StaffNav'
  * thanh trên có người dùng. Khách chưa đăng nhập được chuyển về đăng nhập; Customer vào nhầm khu
  * nhân viên vẫn dùng khung khách. Quyền vào từng trang do RequireAuth của route quyết định.
  */
-export function StaffLayout() {
+export function WorkspaceShell() {
   const { me, status, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()

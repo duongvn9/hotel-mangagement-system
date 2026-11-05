@@ -19,7 +19,7 @@ import { dashboardRoutes } from '@/features/dashboard/routes'
 import { experienceRoutes } from '@/features/experiences/routes'
 
 import { PublicLayout } from '@/layouts/PublicLayout'
-import { StaffLayout } from '@/layouts/StaffLayout'
+import { WorkspaceShell } from '@/layouts/WorkspaceShell'
 import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { partitionStaffRoutes } from './navigation'
@@ -51,7 +51,7 @@ const { staff, other } = partitionStaffRoutes([
 ])
 
 export const router = createBrowserRouter([
-  { element: <StaffLayout />, children: staff },
+  { element: <WorkspaceShell />, children: staff },
   { children: authOnlyRoutes },
   {
     element: <PublicLayout />,

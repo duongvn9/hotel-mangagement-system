@@ -1,13 +1,13 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
-import { StaffLayout } from './StaffLayout'
+import { WorkspaceShell } from './WorkspaceShell'
 
 const manager = { ...ME, role: 'MANAGER', fullName: 'Hoàng Thị Quản Lý' }
 const receptionist = { ...ME, role: 'RECEPTIONIST', fullName: 'Trần Lễ Tân' }
 
 const routes = [
   {
-    element: <StaffLayout />,
+    element: <WorkspaceShell />,
     children: [
       { path: '/manager/dashboard', element: <h1>Trang tổng quan</h1> },
       { path: '/manager/rooms', element: <h1>Trang phòng</h1> },
@@ -28,7 +28,7 @@ function renderAt(path: string, me: typeof ME | null = manager) {
 
 const sidebar = () => screen.getByRole('navigation', { name: 'Menu nhân viên' })
 
-describe('StaffLayout', () => {
+describe('WorkspaceShell', () => {
   it('sends visitors who are not signed in to the login page', async () => {
     renderAt('/manager/dashboard', null)
     expect(await screen.findByRole('heading', { name: 'Trang đăng nhập' })).toBeInTheDocument()

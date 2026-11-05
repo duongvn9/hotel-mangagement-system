@@ -1,5 +1,5 @@
 import { matchRoutes } from 'react-router'
-import { StaffLayout } from '@/layouts/StaffLayout'
+import { WorkspaceShell } from '@/layouts/WorkspaceShell'
 import { PublicLayout } from '@/layouts/PublicLayout'
 import { router } from './router'
 
@@ -25,7 +25,7 @@ describe('router layouts', () => {
     '/staff/service/dashboard',
     '/staff/feedback',
   ])('puts %s in the staff layout', (path) => {
-    expect(layoutOf(path).layout).toBe(StaffLayout)
+    expect(layoutOf(path).layout).toBe(WorkspaceShell)
   })
 
   it.each([
