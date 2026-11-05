@@ -7,7 +7,10 @@ interface TextAreaFieldProps extends TextareaHTMLAttributes<HTMLTextAreaElement>
   hint?: string
 }
 
-/** Ô nhập nhiều dòng có label, gợi ý và thông báo lỗi, cùng kiểu với TextField. */
+/**
+ * Ô nhập nhiều dòng có label, gợi ý và thông báo lỗi.
+ * @deprecated Dùng `FormField` (molecules) + `Textarea` (atoms) (xem DESIGN.md).
+ */
 export function TextAreaField({
   label,
   error,

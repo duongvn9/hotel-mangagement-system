@@ -1,0 +1,42 @@
+/* DEPRECATED — lớp tương thích cho các trang CHƯA migrate sang UI prototype.
+   Giữ nguyên giá trị của bộ "Grand Emily" cũ để trang cũ vẫn render đúng trong lúc chuyển tiếp.
+   Trang đã migrate không được dùng các lớp này (xem DESIGN.md mục "Lớp tương thích cũ").
+   Xóa file này (và dòng @import trong frontend/src/styles/index.css) khi trang cuối cùng đã migrate.
+   Không khai báo `primary`, `success|warning|danger|info` (màu chính), `border`, radius, `font-display`:
+   các tên đó thuộc bộ token mới ở theme.css. */
+@theme {
+  --color-pearl-700: #3d352d;
+  --color-pearl-800: #2e2822;
+  --color-pearl-900: #1f1b16;
+  --color-brandy-100: #f1e4d8;
+  --color-brandy-400: #b98a68;
+  --color-brandy-600: #8a5a3b;
+  --color-brandy-700: #6e4529;
+  --color-gold-200: #eadbc0;
+  --color-gold-500: #c9a46a;
+  --color-reed-100: #e6eadb;
+  --color-reed-700: #55633f;
+  --color-lake-100: #dde7ec;
+  --color-lake-600: #3e6577;
+  --color-cream-50: #fbf8f3;
+  --color-cream-100: #f7f2ea;
+  --color-stone-200: #eae2d6;
+  --color-stone-300: #dcd2c4;
+  --color-stone-500: #8c8275;
+  --color-stone-700: #5e554a;
+  --color-success-bg: #e2eee5;
+  --color-warning-bg: #f6ead3;
+  --color-danger-bg: #f5e0db;
+  --color-info-bg: #dde7ec;
+  --color-primary-hover: #6e4529;
+  --color-primary-soft: #f1e4d8;
+
+  --font-body: 'Be Vietnam Pro', system-ui, sans-serif;
+  --text-5xl: 3.5rem;
+  --text-5xl--line-height: 1.1;
+  --text-6xl: 4.5rem;
+  --text-6xl--line-height: 1.05;
+  --tracking-widest: 0.2em;
+  --container-container: 1200px;
+  --shadow-focus: 0 0 0 3px rgba(201, 164, 106, 0.45);
+}

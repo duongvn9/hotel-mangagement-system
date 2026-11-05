@@ -5,7 +5,10 @@ interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
   options: { value: string; label: string }[]
 }
 
-/** Ô chọn có label theo DESIGN.md mục 7.2. */
+/**
+ * Ô chọn có label.
+ * @deprecated Dùng `FormField` + `Select` từ `@/components/molecules` (xem DESIGN.md).
+ */
 export function SelectField({
   label,
   options,

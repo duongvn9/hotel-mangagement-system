@@ -66,7 +66,7 @@ Tài liệu nguồn: **SRS - HMS** (Hanoi, 09/2025), giao diện theo [`DESIGN.m
 
 | Lớp | Công nghệ |
 |---|---|
-| Frontend | React 19, TypeScript, Vite 8, React Router 8, TanStack Query 5, Axios, Tailwind CSS 4 (preset từ `design-system/`) |
+| Frontend | React 19, TypeScript, Vite 8, React Router 8, TanStack Query 5, Axios, Tailwind CSS 4 + shadcn/ui (token và theme từ `design-system/`) |
 | Backend | NestJS 12 (ESM), TypeScript, Mongoose 9, class-validator, Joi (kiểm tra env), Swagger, Terminus (health check), Helmet |
 | Database | MongoDB 8 |
 | Test & lint | Vitest, Testing Library, Supertest, Oxlint, Prettier |
@@ -98,8 +98,9 @@ Tài liệu nguồn: **SRS - HMS** (Hanoi, 09/2025), giao diện theo [`DESIGN.m
 │   │   └── styles/index.css    # import token + Tailwind
 │   ├── nginx.conf              # dùng cho image production
 │   └── Dockerfile              # target: dev | prod (build context = thư mục gốc)
-├── design-system/              # token màu, font, Tailwind preset (nguồn chuẩn cho UI)
-├── DESIGN.md                   # hướng dẫn design system
+├── design-system/              # token màu, theme Tailwind, lớp tương thích cũ (nguồn chuẩn cho UI)
+├── DESIGN.md                   # design system (theo UI prototype)
+├── ui-prototype/               # UI prototype tham chiếu, chỉ đọc
 ├── docker-compose.yml          # môi trường dev
 ├── docker-compose.prod.yml     # môi trường production
 ├── .env.example                # mẫu biến môi trường cho Docker Compose
@@ -233,7 +234,7 @@ docker compose -f docker-compose.prod.yml up -d --build    # hoặc: make prod
 - Code theo feature trong `frontend/src/features/<tên>`; gọi API qua `api` trong `src/lib/api-client.ts` và TanStack Query.
 - Import bằng alias `@/` (trỏ tới `src/`).
 - Trang mới cần xuất hiện trong menu: thêm một mục vào `frontend/src/app/navigation.ts` (nhóm của role đó, nhãn không trùng trong cùng role). Khu nhân viên (`/staff`, `/manager`, `/reception`, `/operations`) tự nằm trong khung nhân viên có thanh bên, các đường dẫn khác nằm trong khung khách; việc ai được vào vẫn do `RequireAuth` của route quyết định.
-- Màu, font, khoảng cách luôn dùng token/class Tailwind từ design system, không viết mã hex trong component (xem [`DESIGN.md`](DESIGN.md)).
+- Màu, font, khoảng cách luôn dùng token/class Tailwind từ design system, không viết mã hex trong component (xem [`DESIGN.md`](DESIGN.md)). Migrate trang sang UI mới: [`docs/UI-REPOLISH-GUIDE.md`](docs/UI-REPOLISH-GUIDE.md).
 - Component mới có đủ trạng thái hover, focus, disabled và kiểm tra ở màn hình 375px.
 
 ---
