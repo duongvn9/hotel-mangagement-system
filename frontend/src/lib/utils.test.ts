@@ -6,6 +6,7 @@ describe('cn', () => {
   })
 
   it('drops falsy values and joins the rest', () => {
-    expect(cn('a', false && 'b', undefined, 'c')).toBe('a c')
+    const off = Boolean(0)
+    expect(cn('a', off && 'b', undefined, 'c')).toBe('a c')
   })
 })
