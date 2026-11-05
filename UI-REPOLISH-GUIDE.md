@@ -1,41 +1,44 @@
-# Hướng dẫn repolish UI theo prototype
+# UI repolish guide
 
-Dành cho **dev và AI (Claude Code, Codex…)** khi làm các task Jira "đưa trang X về UI mới".
-Mục tiêu: sau khi migrate, trang trong `frontend/` **giống prototype** về bố cục, màu, chữ, khoảng cách, bo góc, bóng, icon và các
-trạng thái (hover, focus, disabled, trống, đang tải, lỗi), trong khi **logic và test hành vi giữ nguyên**.
+How to move a page of `frontend/` to the new UI. For **developers and AI agents** (Claude Code, Codex, …) working on tasks such as "migrate page X to the new UI".
 
-Đọc trước: [`DESIGN.md`](DESIGN.md) (token, component, quy tắc) và [`ui-prototype/README.md`](ui-prototype/README.md).
+**Goal:** after migration the page **matches the prototype** in layout, color, type, spacing, radius, shadow, icons and states (hover, focus, disabled, loading, empty, error), while **logic and behavior tests stay exactly as they are**.
 
-## 1. Quy trình cho một trang
+The hard rules live in [`CLAUDE.md`](CLAUDE.md) (identical to [`AGENTS.md`](AGENTS.md)); this guide is the how-to. Read, in this order: [`CLAUDE.md`](CLAUDE.md), [`DESIGN.md`](DESIGN.md) (tokens, component catalog), [`ui-prototype/README.md`](ui-prototype/README.md).
 
-1. **Tìm màn tương ứng** trong bảng ở mục 3 và mở file đó trong `ui-prototype/src/routes/`. Đọc luôn các component nó import
-   (`ui-prototype/src/components/hms/*`).
-2. **Chạy prototype để xem** (`cd ui-prototype && bun install && bun run dev`, hoặc mở <https://stayflow-hotel-harmony.lovable.app>).
-   Chọn đúng vai trò ở khu `/app`. Chụp màn hình ở 1440px và 375px.
-3. **Liệt kê component cần dùng** từ `@/components/atoms | molecules | organisms | templates` (catalog ở `DESIGN.md` mục 7).
-   Thiếu component → thêm đúng tầng, **kèm test** (tạo atom/molecule/organism mới theo đúng mã của prototype), không viết trong trang.
-4. **Sửa phần trình bày** của trang: thay JSX/class bằng component và token mới. Giữ nguyên hook, gọi API, validate, điều hướng,
-   `RequireAuth`, `data-testid`/nhãn mà test đang dùng. Test hành vi hiện có phải vẫn xanh.
-5. **Đối chiếu với prototype** theo checklist mục 2 ở 1440px và 375px.
-6. **Chạy** (trong `frontend/`): `npm run typecheck && npm run lint && npm run format:check && npm test && npm run build`.
+## 1. Workflow for one page
 
-## 2. "Giống prototype" nghĩa là gì (checklist cho PR)
+1. **Find the prototype screen** in the map in section 3 and open it in `ui-prototype/src/routes/`. Read every component it imports (`ui-prototype/src/components/hms/*`), and `ui-prototype/src/lib/nav.ts` for menus and icons.
+2. **See it running.** `cd ui-prototype && bun install && bun run dev` (or `npm install --legacy-peer-deps && npm run dev`), or open <https://stayflow-hotel-harmony.lovable.app>. Pick the right role in the `/app` area. Capture the screen at 1440px and 375px.
+3. **List the components you need** from `@/components/atoms | molecules | organisms | templates` (catalog: `DESIGN.md` section 7).
+   If one is missing, add it **to the right tier with tests** (port it from the prototype), never inside the page. Tier rules: `CLAUDE.md` section 4.
+4. **Write a safety net.** Read the page's current tests. For every behavior that has no test (validation, redirects, error states, guards), add a test that describes today's behavior and make sure it passes before you change anything.
+5. **Change presentation only.** Replace JSX and classes with components and tokens. Keep hooks, API calls, validation, navigation, `RequireAuth`, and the accessible names (roles, labels, text) that tests rely on. Existing behavior tests must stay green.
+6. **Compare with the prototype** using the checklist in section 2, at 1440px and 375px.
+7. **Verify** (in `frontend/`):
+   ```bash
+   npm run typecheck && npm run lint && npm run format:check && npm test && npm run build
+   ```
+   plus the three greps in `CLAUDE.md` section 6 on the files you changed (legacy classes, forbidden imports, hard-coded colors); each must print nothing.
 
-- [ ] Cùng cấu trúc: thứ tự khối, lưới, `PageHeader` → nội dung; cùng tầng bọc (`Panel`, `card-soft`, `DataTable`).
-- [ ] Cùng token: màu bằng lớp ngữ nghĩa (`bg-card`, `text-muted-foreground`, `bg-ink`…), bo góc, bóng (`shadow-soft/lift`).
-- [ ] Cùng chữ: font (sans/`font-display`), cỡ, độ đậm, `tracking`, `uppercase` như prototype.
-- [ ] Cùng khoảng cách: `gap/p/mx/max-w-*` như prototype ở desktop và mobile.
-- [ ] Cùng icon: lucide **cùng tên**, cùng `size-*`.
-- [ ] Đủ trạng thái: hover, focus-visible, disabled, đang tải (`Skeleton`), trống (`EmptyState`), lỗi (`FormField` error).
-- [ ] Dữ liệu thật vẫn đẹp với chuỗi dài, danh sách rỗng, số lớn (không vỡ bố cục).
-- [ ] Không còn lớp legacy (`pearl-*`, `cream-*`, `stone-*`, `brandy-*`, `*-bg`, `font-body`, `max-w-container`).
-- [ ] Không hex/`px` tùy ý; không import `components/ui/` hoặc component cũ (`components/*.tsx`) trong trang này.
+## 2. What "matches the prototype" means (PR checklist)
 
-## 3. Bảng ánh xạ prototype ↔ app
+- [ ] **Structure:** same block order and grid; `PageHeader` then content; same wrappers (`Panel`, `card-soft`, `DataTable`).
+- [ ] **Tokens:** colors through semantic classes (`bg-card`, `text-muted-foreground`, `bg-ink`, …); same radius and shadow (`shadow-soft` / `shadow-lift`).
+- [ ] **Type:** same font (sans vs `font-display`), size, weight, `tracking`, `uppercase` as the prototype.
+- [ ] **Spacing:** same `gap`, `p`, `m`, `max-w-*` on desktop and mobile.
+- [ ] **Icons:** lucide icons with the **same name** and `size-*`.
+- [ ] **States:** hover, `focus-visible`, disabled, loading (`Skeleton`), empty (`EmptyState`), error (`FormField` error).
+- [ ] **Real data holds up:** long strings, empty lists and large numbers do not break the layout; 375px has no horizontal scroll.
+- [ ] **No legacy classes:** `pearl-*`, `cream-*`, `stone-*`, `brandy-*`, `gold-*`, `reed-*`, `lake-*`, `*-bg`, `font-body`, `max-w-container`, `primary-hover`, `primary-soft`.
+- [ ] **No hard-coded values:** no hex, no arbitrary `px`; no imports of `components/ui/` or of the deprecated flat components (`components/*.tsx`).
+- [ ] **Behavior unchanged:** hooks, API calls, routes, permissions and existing tests are untouched (any assertion edit is listed in the PR with its reason).
 
-Cột "Task Jira" để nhóm điền khi nhận task. Đường dẫn app lấy từ `frontend/src/features/*/routes.tsx` và `frontend/src/pages/`.
+## 3. Prototype to app map
 
-| Prototype (`ui-prototype/src/routes/`) | Route app | Trang trong app | Task Jira |
+Fill the "Jira task" column when you pick up a task. App paths come from `frontend/src/features/*/routes.tsx` and `frontend/src/pages/`.
+
+| Prototype (`ui-prototype/src/routes/`) | App route | App page | Jira task |
 |---|---|---|---|
 | `index.tsx` | `/` | `pages/HomePage.tsx` | |
 | `rooms.index.tsx` | `/search` | `features/booking/pages/SearchRoomsPage.tsx` | |
@@ -44,10 +47,10 @@ Cột "Task Jira" để nhóm điền khi nhận task. Đường dẫn app lấy
 | `lookup.tsx` | `/booking/lookup` | `features/booking/pages/LookupBookingPage.tsx` | |
 | `payment-return.tsx` | `/payment/vnpay-return` | `features/booking/pages/PaymentReturnPage.tsx` | |
 | `login.tsx`, `register.tsx` | `/login`, `/register` | `features/auth/pages/LoginPage.tsx`, `RegisterPage.tsx` | |
-| `unauthorized.tsx` | (trong `RequireAuth`) | `features/auth/RequireAuth.tsx` | |
+| `unauthorized.tsx` | (inside `RequireAuth`) | `features/auth/RequireAuth.tsx` | |
 | `app.profile.tsx` | `/profile` | `features/auth/pages/ProfilePage.tsx` | |
 | `app.my-bookings.tsx` | `/my-bookings` | `features/booking/pages/MyBookingsPage.tsx` | |
-| `app.bookings.$id.tsx` | `/booking/:id`, `/reception/bookings/:code` | `BookingDetailPage.tsx`, `ReceptionBookingDetailPage.tsx` | |
+| `app.bookings.$id.tsx` | `/booking/:id`, `/reception/bookings/:code` | `BookingDetailPage.tsx`, `ReceptionBookingDetailPage.tsx` (both in `features/booking/pages/`) | |
 | `app.bookings.index.tsx` | `/reception/bookings` | `features/booking/pages/BookingListPage.tsx` | |
 | `app.walk-in.tsx` | `/reception/booking/new` | `features/booking/pages/WalkInBookingPage.tsx` | |
 | `app.front-desk.tsx` | `/reception/front-desk` | `features/booking/pages/FrontDeskPage.tsx` | |
@@ -67,7 +70,7 @@ Cột "Task Jira" để nhóm điền khi nhận task. Đường dẫn app lấy
 | `app.task-queues.tsx` | `/manager/task-queues` (+ `/:taskId`) | `features/task-supervision/pages/TaskQueuesPage.tsx`, `TaskQueueDetailPage.tsx` | |
 | `app.tasks.tsx` | `/staff/tasks` (+ `/:id`) | `features/tasks/pages/AssignedTasksPage.tsx`, `AssignedTaskDetailPage.tsx` | |
 | `app.service-orders.tsx` | `/staff/service-orders`, `/staff/service-history` | `features/service-orders/pages/StaffServiceOrdersPage.tsx`, `ServiceHistoryPage.tsx` | |
-| `app.order-service.tsx` | `/customer/service-orders/new` (+ danh sách `/customer/service-orders`) | `features/service-orders/pages/NewServiceOrderPage.tsx`, `ServiceOrdersPage.tsx` | |
+| `app.order-service.tsx` | `/customer/service-orders/new` (and the list at `/customer/service-orders`) | `features/service-orders/pages/NewServiceOrderPage.tsx`, `ServiceOrdersPage.tsx` | |
 | `app.service-desk.tsx` | `/staff/service/dashboard` | `features/staff-dashboards/StaffDashboardPage.tsx` | |
 | `app.operations.tsx` | `/staff/operations/dashboard` | `features/staff-dashboards/StaffDashboardPage.tsx` | |
 | `app.issues.tsx` | `/customer/issues`, `/staff/issues`, `/manager/issues` | `features/issues/pages/IssueListPage.tsx`, `IssueDetailPage.tsx` | |
@@ -75,58 +78,56 @@ Cột "Task Jira" để nhóm điền khi nhận task. Đường dẫn app lấy
 | `app.maintenance.tsx` | `/operations/maintenance/history` | `features/maintenance/pages/MaintenanceHistoryPage.tsx` | |
 | `app.feedback.tsx` | `/my-feedback` | `features/feedback/pages/MyFeedbackPage.tsx` | |
 | `app.feedback-review.tsx` | `/staff/feedback` | `features/feedback/pages/FeedbackPage.tsx` | |
-| `app.tsx` (khung khu làm việc) | mọi route nhân viên | `layouts/StaffLayout.tsx`, `StaffNav.tsx` → dùng `templates/WorkspaceLayout` | |
-| `components/hms/SiteLayout.tsx` | mọi route khách | `layouts/PublicLayout.tsx` → dùng `templates/SiteLayout` | |
+| `app.tsx` (workspace shell) | every staff route | `layouts/StaffLayout.tsx`, `StaffNav.tsx` → use `templates/WorkspaceLayout` | |
+| `components/hms/SiteLayout.tsx` | every public route | `layouts/PublicLayout.tsx` → use `templates/SiteLayout` | |
 
-**Màn prototype chưa có trong app (hỏi Khoa trước, không tự làm):** `experiences.tsx`, `app.home.tsx`, `app.equipment.tsx`.
+**Prototype screens the app does not have (ask the maintainer first, do not build on your own):** `experiences.tsx`, `app.home.tsx`, `app.equipment.tsx`.
 
-**Màn đề xuất, không triển khai:** `app.notifications.tsx` và mọi chấm/nhãn "Đề xuất UX" (`Proposed`) trong prototype. Đây là đề
-xuất chưa có backend; không đưa nhãn đó vào app.
+**Proposals, never implemented:** `app.notifications.tsx` and every dot or label marked "Đề xuất UX" (`Proposed`) in the prototype. They are design proposals with no backend; do not put them, or the label, in the app.
 
-**Lưu ý khi nối layout:** `NavGroup`/`NavItem` của `templates/WorkspaceLayout` dùng `title` và có `icon` (lucide, lấy đúng icon
-trong `ui-prototype/src/lib/nav.ts`), còn `frontend/src/app/navigation.ts` hiện dùng `label` và chưa có icon. Khi migrate khung
-nhân viên cần ánh xạ giữa hai dạng và bổ sung icon.
+**When you wire a layout:** the `NavGroup` / `NavItem` types of `templates/WorkspaceLayout` use `title` and carry an `icon` (a lucide icon; take the exact icon from `ui-prototype/src/lib/nav.ts`), while `frontend/src/app/navigation.ts` currently uses `label` and has no icons. Migrating the staff shell means mapping between the two shapes and adding icons.
 
-## 4. Cấm
+## 4. Do not
 
-- Hardcode màu (hex/`oklch()`), `px` tùy ý hoặc `style={{…}}` cho thứ có token.
-- Tự viết lại Button/Badge/Input/Select/Dialog…; dùng component cũ (`components/*.tsx`) hoặc import `components/ui/*` ở trang đã migrate.
-- Sửa `ui-prototype/` (chỉ đọc) hoặc đưa mock data, zustand store, TanStack Router, `RoleSwitcher` từ prototype vào app.
-- Đổi hành vi, API, route, quyền hoặc sửa test cho "dễ đẹp". Nếu test hành vi đỏ vì class/đoạn chữ đổi theo prototype, sửa
-  assertion tối thiểu và nói rõ trong PR.
-- Thêm thư viện mới mà chưa có trong `frontend/package.json` khi component đã có sẵn.
+- Hard-code colors (hex, `oklch()`), arbitrary `px` values, or inline `style` for anything a token covers.
+- Re-implement Button, Badge, Input, Select, Dialog, and so on; use deprecated flat components (`components/*.tsx`) or import `components/ui/*` in a migrated page.
+- Edit `ui-prototype/` (read-only) or bring prototype mock data, the zustand store, TanStack Router code or `RoleSwitcher` into the app.
+- Change behavior, API, routes or permissions, or edit tests to make the UI "easier". If a behavior test fails only because a class or a piece of text changed to match the prototype, make the smallest assertion edit and explain it in the PR.
+- Add a dependency for something a component already provides.
 
-## 5. Khi prototype thiếu hoặc mâu thuẫn
+## 5. When the prototype is missing something or contradicts the app
 
-Dừng và hỏi Khoa (nêu màn, trạng thái còn thiếu, đề xuất của bạn). Không tự bịa kiểu hiển thị. Ví dụ: app có trạng thái lỗi hoặc cột
-dữ liệu mà prototype không có.
+Stop and ask the maintainer: name the screen, the missing state, and your proposal. Do not invent a look. For example, the app has an error state or a data column the prototype does not.
 
-## 6. Quy trình PR
+## 6. Pull request rules
 
-- Nhánh theo task Jira; commit nhỏ, Conventional Commits (`feat(ui): …`, `test(ui): …`), mỗi commit tự build/test được.
-- Chỉ `git add` đường dẫn cụ thể (không `git add -A`); không đưa `.env*`, file khóa dịch vụ hay `docker-compose.yml` đang sửa dở vào commit.
-- PR có: ảnh **prototype | app** ở 1440px và 375px, checklist mục 2 đã tích, danh sách việc **chưa xem bằng mắt**, kết quả
-  `typecheck/lint/format:check/test/build`.
+- Branch per Jira task; small commits in Conventional Commits form (`feat(ui): …`, `test(ui): …`), each one building and passing tests on its own.
+- `git add` explicit paths only (never `git add -A`). Never commit `.env*`, service-account keys, or unrelated work-in-progress such as an edited `docker-compose.yml`.
+- The PR includes: screenshots **prototype | app** at 1440px and 375px, the checklist from section 2 ticked, a list of what you did **not** check visually, and the result of `typecheck / lint / format:check / test / build`.
 
-## 7. Prompt mẫu cho AI
+## 7. Prompt template for an AI agent
 
-Điền `{...}` rồi dán nguyên khối:
+Fill in the `{...}` placeholders and paste the whole block:
 
 ```text
-Task Jira: {MÃ_TASK} — đưa trang {TÊN_TRANG} về UI mới theo prototype.
+Jira task: {TASK_KEY} — move the page {PAGE_NAME} to the new UI so it matches the prototype.
 
-Trang app: {ĐƯỜNG_DẪN_FILE_APP} (route {ROUTE_APP})
-Màn prototype tương ứng: ui-prototype/src/routes/{FILE_PROTOTYPE}
+App page: {APP_FILE_PATH} (route {APP_ROUTE})
+Matching prototype screen: ui-prototype/src/routes/{PROTOTYPE_FILE}
 
-Làm theo thứ tự:
-1. Đọc DESIGN.md và UI-REPOLISH-GUIDE.md, rồi đọc file prototype ở trên cùng mọi component nó import.
-2. Đọc trang app hiện tại và test của nó. Liệt kê ngắn gọn (a) hành vi/logic/test phải giữ nguyên, (b) khác biệt giữa app và prototype
-   (bố cục, token, chữ, khoảng cách, icon, trạng thái), (c) component cần thêm ở tầng nào nếu thiếu.
-3. Viết/sửa test trước cho component mới (nếu có), thấy nó đỏ, rồi cài đặt.
-4. Sửa trang chỉ ở phần trình bày, dùng component từ @/components/atoms|molecules|organisms|templates và token của DESIGN.md.
-   Không hardcode màu, không import components/ui hay component cũ, không sửa ui-prototype/, không đổi logic/API/route.
-5. Tự đối chiếu checklist "giống prototype" (guide mục 2), chạy typecheck, lint, format:check, test, build trong frontend/.
-6. Báo cáo: đã đổi gì, checklist mục nào chưa chắc chắn hoặc chưa xem bằng mắt, test nào phải sửa assertion và vì sao.
-   Nếu prototype thiếu trạng thái mà app cần, dừng và hỏi, đừng tự bịa.
-Commit nhỏ theo Conventional Commits; chỉ git add đường dẫn cụ thể.
+Follow this order:
+1. Read CLAUDE.md, DESIGN.md and UI-REPOLISH-GUIDE.md, then the prototype file above and every component it imports.
+2. Read the current app page and its tests. List briefly: (a) the behavior, logic and tests that must stay unchanged,
+   (b) the differences between the app and the prototype (layout, tokens, type, spacing, icons, states),
+   (c) any component that is missing and the atomic tier it belongs to.
+3. For every behavior that has no test yet, add a test of today's behavior and confirm it passes before changing code.
+   Write tests first for any new component, watch them fail, then implement.
+4. Change presentation only, using components from @/components/atoms|molecules|organisms|templates and the tokens in DESIGN.md.
+   Do not hard-code colors, do not import components/ui or deprecated flat components, do not edit ui-prototype/,
+   do not change logic, API calls or routes.
+5. Check the result against the "matches the prototype" checklist (guide section 2). Run typecheck, lint, format:check,
+   test and build in frontend/, plus the three greps from CLAUDE.md section 6 on the files you changed.
+6. Report: what changed, which checklist items you are unsure about or did not verify visually, and which test
+   assertions you had to edit and why. If the prototype lacks a state the app needs, stop and ask; do not invent it.
+Make small commits in Conventional Commits form and `git add` explicit paths only.
 ```
