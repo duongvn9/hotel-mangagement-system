@@ -1,7 +1,16 @@
 import { Link } from 'react-router'
 import { cn } from '@/lib/utils'
 
-export function Logo({ light, to = '/' }: { light?: boolean; to?: string }) {
+export function Logo({
+  light,
+  to = '/',
+  name = 'Emily Hotel',
+}: {
+  light?: boolean
+  to?: string
+  name?: string
+}) {
+  const initial = name.trim().charAt(0).toUpperCase()
   return (
     <Link
       to={to}
@@ -11,9 +20,9 @@ export function Logo({ light, to = '/' }: { light?: boolean; to?: string }) {
       )}
     >
       <span className="font-display grid size-8 place-items-center rounded-full bg-primary text-lg text-primary-foreground">
-        P
+        {initial}
       </span>
-      Emily Hotel
+      {name}
     </Link>
   )
 }

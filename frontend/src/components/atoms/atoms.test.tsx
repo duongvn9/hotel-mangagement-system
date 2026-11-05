@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import * as atoms from '.'
 import { Logo } from './Logo'
@@ -46,6 +46,17 @@ describe('Logo', () => {
     const link = screen.getByRole('link', { name: /Emily Hotel/ })
     expect(link).toHaveAttribute('href', '/staff')
     expect(link).toHaveClass('text-ink-foreground')
+  })
+
+  it('renders a custom brand name and uses its initial letter', () => {
+    render(
+      <MemoryRouter>
+        <Logo name="Grand Emily HMS" />
+      </MemoryRouter>,
+    )
+    const link = screen.getByRole('link', { name: /Grand Emily HMS/ })
+    expect(link).toHaveTextContent('Grand Emily HMS')
+    expect(within(link).getByText('G')).toBeInTheDocument()
   })
 })
 

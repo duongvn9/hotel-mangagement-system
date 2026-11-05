@@ -149,7 +149,7 @@ components/
 | `Avatar`, `AvatarFallback`, `AvatarImage` | |
 | `Skeleton` | Khung chờ tải (`animate-pulse`) |
 | `StatusBadge` | `status` (mã enum, ví dụ `CHECKED_IN`): chấm màu + nhãn tiếng Việt; trạng thái lạ → trung tính |
-| `Logo` | `light` (trên nền tối), `to` |
+| `Logo` | `light` (trên nền tối), `to`, `name` (thương hiệu; chữ cái đầu làm huy hiệu) |
 
 ### Molecules — `@/components/molecules`
 
@@ -180,7 +180,7 @@ components/
 
 | Component | Ghi chú |
 |---|---|
-| `SiteLayout` | Khung khu khách: `links`, `actions`, `overlay` (header đè lên hero) |
+| `SiteLayout` | Khung khu khách: `links`, `actions`, `overlay` (header đè lên hero), `brand`, `navLabel`, `footerLinks`, `footerContact`, `footerTagline` |
 | `WorkspaceLayout` | Khung khu làm việc: `groups` (menu theo nhóm), `user`, `workspaceLabel`, `onLogout`, `profileTo`, `publicSiteTo`, `loading`, `forbidden`; `children` mặc định `<Outlet />` |
 | `AuthLayout` | `title`, `subtitle`, `image`, `quote` |
 
