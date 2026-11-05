@@ -70,7 +70,7 @@ describe('HomePage', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Phòng & suite' })).toBeInTheDocument()
   })
 
-  it('hides the "Phòng & suite" section when availability fails, but keeps ApiStatus', async () => {
+  it('hides the "Phòng & suite" section when availability fails', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (path: string) => {
       if (path === '/availability') {
         throw new Error('API Error')
@@ -84,7 +84,6 @@ describe('HomePage', () => {
     await waitFor(() =>
       expect(screen.queryByRole('heading', { name: 'Phòng & suite' })).not.toBeInTheDocument(),
     )
-    expect(await screen.findByText(/Backend API/)).toBeInTheDocument()
   })
 
   it('explains how booking works in three numbered steps', () => {
@@ -123,10 +122,5 @@ describe('HomePage', () => {
       '/reception/dashboard',
     )
     expect(screen.getByText(/Lễ tân/)).toBeInTheDocument()
-  })
-
-  it('shows the backend status only to developers', async () => {
-    renderHome()
-    expect(await screen.findByText(/Backend API/)).toBeInTheDocument()
   })
 })

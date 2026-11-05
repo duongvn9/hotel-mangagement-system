@@ -17,7 +17,6 @@ import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { isStaffRole, roleHome } from '@/app/navigation'
 import { guestImages } from '@/assets/guest'
-import { ApiStatus } from '@/components/ApiStatus'
 import { Button } from '@/components/atoms'
 import { PhotoTile, SectionHeading } from '@/components/molecules'
 import { HeroBanner, SearchBar } from '@/components/organisms'
@@ -405,12 +404,6 @@ export function HomePage() {
             </div>
           </div>
         </section>
-      )}
-
-      {import.meta.env.DEV && (
-        <div className="mx-auto max-w-7xl px-5 pb-10 lg:px-8">
-          <ApiStatus />
-        </div>
       )}
     </>
   )
