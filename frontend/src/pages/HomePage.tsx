@@ -2,6 +2,7 @@ import { addDays, format } from 'date-fns'
 import {
   ArrowRight,
   BedDouble,
+  Car,
   Coffee,
   Flower2,
   MapPin,
@@ -9,14 +10,16 @@ import {
   Plane,
   Sunrise,
   Sunset,
+  UtensilsCrossed,
   Waves,
 } from 'lucide-react'
+import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { isStaffRole, roleHome } from '@/app/navigation'
 import { guestImages } from '@/assets/guest'
 import { ApiStatus } from '@/components/ApiStatus'
 import { Button } from '@/components/atoms'
-import { PhotoTile } from '@/components/molecules'
+import { PhotoTile, SectionHeading } from '@/components/molecules'
 import { HeroBanner, SearchBar } from '@/components/organisms'
 import { ROLE_LABELS } from '@/features/auth/api'
 import { useAuth } from '@/features/auth/auth-context'
@@ -40,14 +43,24 @@ const STEPS = [
   },
 ]
 
+const getTomorrow = () => format(addDays(new Date(), 1), 'yyyy-MM-dd')
+const getDayAfter = () => format(addDays(new Date(), 2), 'yyyy-MM-dd')
+
+const AMENITY_HIGHLIGHTS = [
+  { icon: Waves, title: 'Hồ bơi vô cực', desc: 'Nước ấm, mở cửa 6:00–22:00' },
+  { icon: Flower2, title: 'Spa đá', desc: 'Massage đặc trưng' },
+  { icon: UtensilsCrossed, title: 'Bếp theo mùa', desc: 'Bữa sáng tại phòng hoặc sân hiên' },
+  { icon: Car, title: 'Đưa đón sân bay', desc: 'Xe riêng theo yêu cầu' },
+]
+
 /** Trang chủ: hero, thanh tìm phòng nổi, các bước đặt phòng và lối vào theo vai trò. */
 export function HomePage() {
   const { me } = useAuth()
   const navigate = useNavigate()
   const staff = me !== null && isStaffRole(me.role)
 
-  const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd')
-  const dayAfter = format(addDays(new Date(), 2), 'yyyy-MM-dd')
+  const tomorrow = useMemo(() => getTomorrow(), [])
+  const dayAfter = useMemo(() => getDayAfter(), [])
 
   const {
     data: availableRooms,
@@ -93,11 +106,11 @@ export function HomePage() {
 
       <section className="mx-auto grid max-w-7xl gap-12 px-5 py-24 md:grid-cols-2 md:items-center lg:px-8">
         <div>
-          <p className="text-sm font-medium tracking-[0.2em] text-primary uppercase">Khách sạn</p>
-          <h2 className="font-display mt-3 text-5xl leading-[1.2]">
-            Hai mươi bốn phòng, một nhịp sống thong thả.
-          </h2>
-          <p className="mt-5 max-w-md text-muted-foreground">{siteContent.intro}</p>
+          <SectionHeading
+            eyebrow="Khách sạn"
+            title="Hai mươi bốn phòng, một nhịp sống thong thả."
+            body={siteContent.intro}
+          />
           <div className="mt-8 grid grid-cols-3 gap-6 border-t pt-6">
             <div>
               <div className="font-display text-4xl">4.9</div>
@@ -189,15 +202,11 @@ export function HomePage() {
       <section className="mx-auto max-w-7xl px-5 py-28 lg:px-8">
         <div className="grid gap-12 md:grid-cols-[1fr_1.2fr] md:items-start">
           <div className="md:sticky md:top-28">
-            <p className="text-sm font-medium tracking-[0.2em] text-primary uppercase">
-              Một ngày tại Emily
-            </p>
-            <h2 className="font-display mt-3 text-5xl leading-[1.2]">
-              Từ bình minh đến khi sao lên.
-            </h2>
-            <p className="mt-5 max-w-sm text-muted-foreground">
-              Chúng tôi lo những điều nhỏ để bạn chỉ việc tận hưởng.
-            </p>
+            <SectionHeading
+              eyebrow="Một ngày tại Emily"
+              title="Từ bình minh đến khi sao lên."
+              body="Chúng tôi lo những điều nhỏ để bạn chỉ việc tận hưởng."
+            />
           </div>
           <ol className="relative border-l pl-10">
             {[
@@ -291,15 +300,25 @@ export function HomePage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-5 py-24 lg:px-8">
+        <SectionHeading title="Mọi thứ chu đáo, không chút vội vàng." />
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {AMENITY_HIGHLIGHTS.map(({ icon: Icon, title, desc }) => (
+            <div key={title} className="card-soft p-6">
+              <Icon className="size-6 text-primary" />
+              <div className="mt-6 font-semibold">{title}</div>
+              <div className="text-sm text-muted-foreground">{desc}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-5 py-24 lg:px-8">
         <div className="grid gap-12 lg:grid-cols-[1fr_1.4fr] lg:gap-20">
-          <div>
-            <p className="text-sm font-medium tracking-[0.2em] text-primary uppercase">Quy trình</p>
-            <h2 className="font-display mt-3 text-5xl leading-[1.2]">Đặt phòng trong ba bước</h2>
-            <p className="mt-4 max-w-md text-muted-foreground">
-              Không cần tài khoản để tìm phòng. Đăng nhập khi bạn muốn theo dõi booking và gửi phản
-              hồi sau kỳ nghỉ.
-            </p>
-          </div>
+          <SectionHeading
+            eyebrow="Quy trình"
+            title="Đặt phòng trong ba bước"
+            body="Không cần tài khoản để tìm phòng. Đăng nhập khi bạn muốn theo dõi booking và gửi phản hồi sau kỳ nghỉ."
+          />
           <ol aria-label="Các bước đặt phòng" className="border-b">
             {STEPS.map((step, index) => (
               <li key={step.title} className="grid grid-cols-[4rem_1fr] gap-6 border-t py-6">
