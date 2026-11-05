@@ -4,15 +4,38 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  semgrep:
+    name: Semgrep security scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Scan application source with blocking CI rules
+        run: >-
+          semgrep scan
+          --config p/ci
+          --error
+          --strict
+          --metrics=off
+          backend/src frontend/src
+
   backend:
-    # MongoDB không khởi động trên kernel Linux 6.19 - 7.0.13 (SERVER-121912);
-    # runner ubuntu-latest đang dùng kernel mới nên chạy job cần Mongo trên 22.04.
+    timeout-minutes: 20
+    # Keep MongoDB jobs on Ubuntu 22.04 for the kernel compatibility workaround (SERVER-121912).
     runs-on: ubuntu-22.04
     defaults:
       run:
@@ -42,6 +65,7 @@ jobs:
       - run: npm run build
 
   frontend:
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -56,25 +80,14 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run format:check
+      - run: npm run typecheck
       - run: npm test
       - run: npm run build
-
-  docker:
-    runs-on: ubuntu-latest
-    needs: [backend, frontend]
-    steps:
-      - uses: actions/checkout@v5
-      - name: Build production images
-        run: docker compose -f docker-compose.prod.yml build
-        env:
-          MONGO_ROOT_USERNAME: ci
-          MONGO_ROOT_PASSWORD: ci
-          CORS_ORIGINS: http://localhost
 
   maintenance-smoke:
     # Runtime Compose verification for UC35/36/55/56 and Manager dashboard, isolated from every development database.
     runs-on: ubuntu-22.04
-    needs: [backend, frontend]
+    needs: [semgrep, backend, frontend]
     timeout-minutes: 15
     env:
       COMPOSE_PROJECT_NAME: hms-uc36-ci
