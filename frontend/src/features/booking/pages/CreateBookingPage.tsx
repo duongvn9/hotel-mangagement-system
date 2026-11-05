@@ -1,15 +1,17 @@
-import { AssetImage } from '@/components/AssetImage'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { Alert } from '@/components/Alert'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
-import { getErrorMessage } from '@/lib/api-client'
+import { Clock } from 'lucide-react'
+import { AssetImage } from '@/components/AssetImage'
+import { Button, Checkbox, Input } from '@/components/atoms'
+import { FormField, KeyValue } from '@/components/molecules'
+import { Panel } from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
+import { getErrorMessage } from '@/lib/api-client'
+import { fdate, vnd } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import type { HeldBooking, ServiceSelectionInput } from '../api'
 import { useHoldBooking, useServiceCatalog, useSubmitBookingDetails } from '../hooks'
-import { MoonIcon } from '../icons'
-import { formatDate, money, nightsBetween } from '../utils'
+import { nightsBetween } from '../utils'
 import { formatRemaining, useHoldCountdown } from './useHoldCountdown'
 
 /**
@@ -32,7 +34,7 @@ export function CreateBookingPage() {
 
   const hold = useHoldBooking()
   const submit = useSubmitBookingDetails()
-  const { mutate: holdMutate } = hold // react-query mutate ổn định giữa các render
+  const { mutate: holdMutate } = hold
 
   const [held, setHeld] = useState<HeldBooking | undefined>()
   const requested = useRef(false)
@@ -41,8 +43,7 @@ export function CreateBookingPage() {
   const [guestEmail, setGuestEmail] = useState(me?.email ?? '')
   const [guestPhone, setGuestPhone] = useState(me?.phone ?? '')
 
-  // Dịch vụ chọn kèm (tuỳ chọn): serviceId -> số lượng. Hệ thống tự tạo yêu cầu dịch vụ
-  // khi booking được xác nhận (qua CONFIRMED).
+  // Dịch vụ chọn kèm (tuỳ chọn): serviceId -> số lượng.
   const catalog = useServiceCatalog()
   const [selectedServices, setSelectedServices] = useState<Record<string, number>>({})
 
@@ -54,6 +55,7 @@ export function CreateBookingPage() {
       return next
     })
   }
+
   function setServiceQuantity(id: string, value: number) {
     setSelectedServices((current) => ({
       ...current,
@@ -64,14 +66,13 @@ export function CreateBookingPage() {
   const serviceSelections: ServiceSelectionInput[] = Object.entries(selectedServices).map(
     ([serviceId, quantity]) => ({ serviceId, quantity }),
   )
+
   const servicesSubtotal = (catalog.data ?? []).reduce(
     (sum, svc) =>
       sum + (selectedServices[svc.id] ? (svc.unitPriceVND ?? 0) * selectedServices[svc.id] : 0),
     0,
   )
 
-  // Giữ phòng một lần khi vào trang (trước khi nhập form). Backend chỉ cho 1 hold/phiên nên
-  // bấm lại/refresh trả đúng hold cũ qua cookie phiên — không tạo thêm và không gia hạn.
   useEffect(() => {
     if (invalid || requested.current) return
     requested.current = true
@@ -92,15 +93,15 @@ export function CreateBookingPage() {
 
   if (invalid) {
     return (
-      <section className="mx-auto max-w-container space-y-4 px-4 py-16 text-center font-body">
-        <h1 className="font-display text-3xl font-semibold text-pearl-900">
-          Thiếu thông tin đặt phòng
-        </h1>
-        <p className="text-stone-700">Vui lòng chọn lại phòng và ngày ở.</p>
-        <Link to="/search" className="text-primary underline">
-          Quay lại tìm phòng
-        </Link>
-      </section>
+      <div className="mx-auto max-w-xl px-5 py-16 text-center">
+        <h1 className="font-display text-4xl font-semibold">Thiếu thông tin đặt phòng</h1>
+        <p className="mt-2 text-muted-foreground">Vui lòng chọn lại phòng và ngày ở.</p>
+        <div className="mt-6">
+          <Button asChild className="rounded-full">
+            <Link to="/search">Quay lại tìm phòng</Link>
+          </Button>
+        </div>
+      </div>
     )
   }
 
@@ -122,209 +123,232 @@ export function CreateBookingPage() {
   }
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div>
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">Đặt phòng</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">
-          Xác nhận & thông tin liên hệ
-        </h1>
+    <div className="mx-auto max-w-7xl px-5 py-10 lg:px-8">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold tracking-widest text-primary uppercase">Đặt phòng</p>
+          <h1 className="font-display text-4xl font-semibold">Xác nhận & thông tin liên hệ</h1>
+        </div>
+        {remaining !== null && (
+          <div
+            className={cn(
+              'flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium',
+              holdExpired ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary',
+            )}
+          >
+            <Clock className="size-4" />
+            <span>
+              {holdExpired ? 'Hết hạn giữ phòng' : `Giữ phòng còn ${formatRemaining(remaining)}`}
+            </span>
+          </div>
+        )}
       </div>
 
-      {hold.isPending && <p role="status">Đang giữ phòng cho bạn…</p>}
+      {hold.isPending && (
+        <div role="status" className="py-8">
+          <p className="text-muted-foreground">Đang giữ phòng cho bạn…</p>
+        </div>
+      )}
 
       {hold.isError && (
-        <Alert tone="danger">
+        <div
+          role="alert"
+          className="mt-6 rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
+        >
           {getErrorMessage(
             hold.error,
             'Không giữ được phòng (có thể vừa có người đặt hoặc bạn thao tác quá nhanh). Vui lòng tìm phòng lại.',
           )}
           <div className="mt-3">
-            <Link to="/search" className="text-sm font-semibold text-primary underline">
+            <Link to="/search" className="text-sm font-semibold underline">
               ← Tìm phòng lại
             </Link>
           </div>
-        </Alert>
+        </div>
       )}
 
       {held && (
-        <form onSubmit={onSubmit} className="grid items-start gap-6 lg:grid-cols-[1fr_360px]">
-          {/* Cột trái: thông tin khách */}
-          <div className="space-y-5">
+        <form onSubmit={onSubmit} className="mt-8 grid items-start gap-8 lg:grid-cols-[1fr_380px]">
+          {/* Cột trái: form thông tin khách */}
+          <div className="space-y-6">
             {holdExpired ? (
-              <Alert tone="danger">
+              <div
+                role="alert"
+                className="rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
+              >
                 Đã quá thời gian giữ phòng. Phòng có thể đã được mở lại cho khách khác — vui lòng
                 tìm phòng lại.
-              </Alert>
+              </div>
             ) : (
               remaining !== null && (
-                <Alert tone="warning">
-                  Phòng đang được giữ. Vui lòng hoàn tất trong{' '}
-                  <strong>{formatRemaining(remaining)}</strong>, nếu không phòng sẽ được mở lại.
-                </Alert>
+                <div className="flex items-center gap-2.5 rounded-xl border border-primary/20 bg-primary/10 p-4 text-sm text-foreground">
+                  <Clock className="size-4 shrink-0 text-primary" />
+                  <span>
+                    Phòng đang được giữ. Vui lòng hoàn tất trong{' '}
+                    <strong>{formatRemaining(remaining)}</strong>, nếu không phòng sẽ được mở lại.
+                  </span>
+                </div>
               )
             )}
 
-            <div className="space-y-4 rounded-xl border border-stone-300 bg-white p-6">
-              <h2 className="font-display text-xl font-semibold text-pearl-900">
-                Thông tin liên hệ
-              </h2>
+            <Panel title="Thông tin liên hệ">
               {me && (
-                <p className="text-sm text-stone-700">
+                <p className="mb-4 text-sm text-muted-foreground">
                   Đặt với tài khoản {me.email}. Bạn có thể sửa tên và số điện thoại nếu cần.
                 </p>
               )}
               <div className="grid gap-4 sm:grid-cols-2">
-                <TextField
-                  label="Họ tên"
-                  required
-                  maxLength={120}
-                  value={guestName}
-                  onChange={(event) => setGuestName(event.target.value)}
-                />
-                <TextField
-                  label="Email"
-                  type="email"
-                  required
-                  maxLength={160}
-                  value={guestEmail}
-                  onChange={(event) => setGuestEmail(event.target.value)}
-                />
-                <TextField
-                  label="Số điện thoại"
-                  type="tel"
-                  required
-                  placeholder="0900000000"
-                  value={guestPhone}
-                  onChange={(event) => setGuestPhone(event.target.value)}
-                  className="sm:col-span-2"
-                />
+                <FormField label="Họ tên" htmlFor="guestName" required>
+                  <Input
+                    id="guestName"
+                    required
+                    maxLength={120}
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                  />
+                </FormField>
+                <FormField label="Email" htmlFor="guestEmail" required>
+                  <Input
+                    id="guestEmail"
+                    type="email"
+                    required
+                    maxLength={160}
+                    value={guestEmail}
+                    onChange={(e) => setGuestEmail(e.target.value)}
+                  />
+                </FormField>
+                <div className="sm:col-span-2">
+                  <FormField label="Số điện thoại" htmlFor="guestPhone" required>
+                    <Input
+                      id="guestPhone"
+                      type="tel"
+                      required
+                      placeholder="0900000000"
+                      value={guestPhone}
+                      onChange={(e) => setGuestPhone(e.target.value)}
+                    />
+                  </FormField>
+                </div>
               </div>
-              <p className="text-xs text-stone-700">
+              <p className="mt-4 text-xs text-muted-foreground">
                 Chúng tôi gửi mã đặt phòng (vé) tới email này để bạn thanh toán và quản lý đơn.
               </p>
-            </div>
+            </Panel>
 
             {catalog.data && catalog.data.length > 0 && (
-              <div className="space-y-4 rounded-xl border border-stone-300 bg-white p-6">
-                <h2 className="font-display text-xl font-semibold text-pearl-900">
-                  Dịch vụ thêm (tuỳ chọn)
-                </h2>
-                <p className="text-sm text-stone-700">
+              <Panel title="Dịch vụ thêm (tuỳ chọn)">
+                <p className="mb-4 text-sm text-muted-foreground">
                   Chọn trước, hệ thống tạo yêu cầu dịch vụ khi đặt phòng được xác nhận. Phí dịch vụ
                   thanh toán trong thời gian lưu trú.
                 </p>
-                <ul className="space-y-3">
+                <ul className="divide-y divide-border">
                   {catalog.data.map((svc) => {
                     const on = svc.id in selectedServices
                     return (
                       <li
                         key={svc.id}
-                        className="flex flex-wrap items-center justify-between gap-3"
+                        className="flex flex-wrap items-center justify-between gap-4 py-3"
                       >
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
+                        <label className="flex cursor-pointer items-center gap-3 text-sm">
+                          <Checkbox
                             checked={on}
-                            onChange={(event) => toggleService(svc.id, event.target.checked)}
+                            onCheckedChange={(checked) => toggleService(svc.id, Boolean(checked))}
                           />
                           <AssetImage decorative path={svc.imageUrl} name={svc.name} />
-                          <span className="font-semibold text-pearl-900">{svc.name}</span>
-                          <span className="text-stone-700">
-                            {svc.unitPriceVND
-                              ? `${money.format(svc.unitPriceVND)}/${svc.unit || 'lần'}`
-                              : 'Miễn phí'}
-                          </span>
+                          <div>
+                            <span className="font-medium text-foreground">{svc.name}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {svc.unitPriceVND
+                                ? `${vnd(svc.unitPriceVND)} / ${svc.unit || 'lần'}`
+                                : 'Miễn phí'}
+                            </span>
+                          </div>
                         </label>
                         {on && (
-                          <input
-                            type="number"
-                            min={1}
-                            aria-label={`Số lượng ${svc.name}`}
-                            value={selectedServices[svc.id]}
-                            onChange={(event) =>
-                              setServiceQuantity(svc.id, Number(event.target.value))
-                            }
-                            className="h-10 w-20 rounded border border-stone-300 px-2"
-                          />
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">SL:</span>
+                            <Input
+                              type="number"
+                              min={1}
+                              aria-label={`Số lượng ${svc.name}`}
+                              value={selectedServices[svc.id]}
+                              onChange={(e) => setServiceQuantity(svc.id, Number(e.target.value))}
+                              className="h-9 w-20 text-center text-sm"
+                            />
+                          </div>
                         )}
                       </li>
                     )
                   })}
                 </ul>
+              </Panel>
+            )}
+
+            {submit.isError && (
+              <div
+                role="alert"
+                className="rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
+              >
+                {getErrorMessage(submit.error)}
               </div>
             )}
 
-            {submit.isError && <Alert tone="danger">{getErrorMessage(submit.error)}</Alert>}
-
             <Link
               to="/search"
-              className="inline-flex h-11 items-center text-sm font-semibold tracking-wider text-stone-700 uppercase hover:text-primary"
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-foreground"
             >
               ← Chọn lại phòng
             </Link>
           </div>
 
-          {/* Cột phải: tóm tắt đặt phòng (server-authoritative) */}
-          <aside className="h-fit space-y-4 rounded-xl border border-stone-300 bg-cream-50 p-6 lg:sticky lg:top-6">
-            <h2 className="font-display text-xl font-semibold text-pearl-900">Tóm tắt đặt phòng</h2>
+          {/* Cột phải: tóm tắt đặt phòng */}
+          <aside className="card-soft sticky top-24 h-fit space-y-5 p-6">
+            <h2 className="font-display text-2xl font-semibold">Tóm tắt đặt phòng</h2>
 
-            <dl className="space-y-2 text-sm">
-              <div className="flex justify-between gap-4">
-                <dt className="text-stone-700">Nhận phòng</dt>
-                <dd className="font-semibold">{formatDate(held.checkIn)}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-stone-700">Trả phòng</dt>
-                <dd className="font-semibold">{formatDate(held.checkOut)}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <dt className="inline-flex items-center gap-1.5 text-stone-700">
-                  <MoonIcon className="size-4 text-primary" /> Số đêm
-                </dt>
-                <dd className="font-semibold">{nightsBetween(held.checkIn, held.checkOut)}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-stone-700">Phòng · Khách</dt>
-                <dd className="font-semibold">
-                  {held.rooms.length} phòng · {held.adultCount + held.childCount} khách
-                </dd>
-              </div>
-            </dl>
+            <div className="divide-y divide-border border-y border-border">
+              <KeyValue k="Nhận phòng" v={fdate(held.checkIn)} />
+              <KeyValue k="Trả phòng" v={fdate(held.checkOut)} />
+              <KeyValue k="Số đêm" v={`${nightsBetween(held.checkIn, held.checkOut)} đêm`} />
+              <KeyValue
+                k="Phòng · Khách"
+                v={`${held.rooms.length} phòng · ${held.adultCount + held.childCount} khách`}
+              />
+            </div>
 
-            <dl className="space-y-2 border-t border-stone-300 pt-4 text-sm">
-              <div className="flex justify-between gap-4">
-                <dt className="text-stone-700">Tiền phòng</dt>
-                <dd className="font-semibold tabular-nums">{money.format(held.roomTotal)}</dd>
-              </div>
+            <div className="divide-y divide-border border-b border-border pb-4">
+              <KeyValue
+                k="Tiền phòng"
+                v={<span className="tabular-nums">{vnd(held.roomTotal)}</span>}
+              />
               {servicesSubtotal > 0 && (
-                <div className="flex justify-between gap-4">
-                  <dt className="text-stone-700">Dịch vụ thêm (trả khi lưu trú)</dt>
-                  <dd className="font-semibold tabular-nums">{money.format(servicesSubtotal)}</dd>
-                </div>
+                <KeyValue
+                  k="Dịch vụ thêm (trả khi lưu trú)"
+                  v={<span className="tabular-nums">{vnd(servicesSubtotal)}</span>}
+                />
               )}
-              <div className="flex justify-between gap-4">
-                <dt className="font-semibold text-pearl-900">Cọc cần trả</dt>
-                <dd className="text-lg font-semibold whitespace-nowrap text-primary tabular-nums">
-                  {money.format(held.depositAmount)}
-                </dd>
+              <div className="flex items-center justify-between gap-4 pt-3">
+                <span className="font-semibold text-foreground">Cọc cần trả</span>
+                <span className="font-display text-xl font-bold text-primary tabular-nums">
+                  {vnd(held.depositAmount)}
+                </span>
               </div>
-            </dl>
+            </div>
 
-            <p className="text-xs text-stone-700">
+            <p className="text-xs text-muted-foreground">
               Số tiền do hệ thống xác nhận tại thời điểm giữ phòng. Bạn chưa bị trừ tiền ở bước này.
             </p>
 
             <Button
               type="submit"
-              className="w-full"
-              loading={submit.isPending}
-              disabled={holdExpired}
+              className="w-full rounded-full"
+              disabled={holdExpired || submit.isPending}
+              aria-busy={submit.isPending}
             >
-              Tiếp tục đặt cọc
+              {submit.isPending ? 'Đang chuyển sang thanh toán…' : 'Tiếp tục đặt cọc'}
             </Button>
           </aside>
         </form>
       )}
-    </section>
+    </div>
   )
 }

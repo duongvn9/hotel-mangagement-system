@@ -37,11 +37,14 @@ describe('router layouts', () => {
     '/customer/service-orders',
     '/customer/issues/report',
     '/profile',
-    '/login',
-    '/register',
     '/payment/vnpay-return',
+    '/experiences',
   ])('puts %s in the guest layout', (path) => {
     expect(layoutOf(path).layout).toBe(PublicLayout)
+  })
+
+  it.each(['/login', '/register'])('renders auth page %s without a site layout', (path) => {
+    expect(layoutOf(path).layout).toBeUndefined()
   })
 
   it('keeps the guest layout for unknown pages and does not mistake lookalike prefixes', () => {
@@ -54,5 +57,7 @@ describe('router layouts', () => {
     expect(leaf?.path).toBe('/manager/dashboard')
     const home = matchRoutes(router.routes, '/')?.at(-1)?.route
     expect(home?.index).toBe(true)
+    const exp = matchRoutes(router.routes, '/experiences')?.at(-1)?.route
+    expect(exp?.path).toBe('experiences')
   })
 })

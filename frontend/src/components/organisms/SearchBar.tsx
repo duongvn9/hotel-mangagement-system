@@ -1,9 +1,10 @@
-import { addDays, format } from 'date-fns'
+import { addDays, format, parseISO } from 'date-fns'
 import { Search, Users } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Button } from '../atoms'
 import {
   DateRangeField,
+  normalizeRange,
   Select,
   SelectContent,
   SelectItem,
@@ -23,16 +24,37 @@ export function SearchBar({
   compact,
   initial,
   onSearch,
+  ariaLabel = 'Tìm phòng trống',
 }: {
   compact?: boolean
   initial?: SearchValue
   onSearch: (value: SearchValue) => void
+  ariaLabel?: string
 }) {
   const [from, setFrom] = useState(() => initial?.from ?? dayFromToday(3))
   const [to, setTo] = useState(() => initial?.to ?? dayFromToday(6))
   const [guests, setGuests] = useState(() => String(initial?.guests ?? 2))
+
+  const handleSubmit = (e?: FormEvent) => {
+    e?.preventDefault()
+    let validFrom = from
+    let validTo = to
+    if (!validTo || validTo <= validFrom) {
+      const [normalizedFrom, normalizedTo] = normalizeRange(
+        parseISO(validFrom || dayFromToday(3)),
+        validTo ? parseISO(validTo) : undefined,
+      )
+      validFrom = normalizedFrom
+      validTo = normalizedTo
+    }
+    onSearch({ from: validFrom, to: validTo, guests: Number(guests) })
+  }
+
   return (
-    <div
+    <form
+      role="search"
+      aria-label={ariaLabel}
+      onSubmit={handleSubmit}
       className={`card-soft flex flex-col gap-3 p-3 md:flex-row md:items-center md:rounded-full md:p-2 md:pl-6 ${compact ? '' : 'shadow-lift'}`}
     >
       <DateRangeField
@@ -63,13 +85,9 @@ export function SearchBar({
           </Select>
         </div>
       </div>
-      <Button
-        size="lg"
-        className="h-12 rounded-full px-7"
-        onClick={() => onSearch({ from, to, guests: Number(guests) })}
-      >
+      <Button type="submit" size="lg" className="h-12 rounded-full px-7">
         <Search className="size-4" /> Kiểm tra phòng trống
       </Button>
-    </div>
+    </form>
   )
 }

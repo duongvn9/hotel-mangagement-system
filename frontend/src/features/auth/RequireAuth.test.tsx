@@ -25,7 +25,24 @@ describe('RequireAuth', () => {
       path: '/admin',
       auth: { me: { ...ME, role: 'CUSTOMER' }, status: 'authenticated' },
     })
-    expect(screen.getByText('Không có quyền truy cập')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Cánh cửa này dành cho bộ phận khác' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Về trang chủ/ })).toHaveAttribute('href', '/')
+  })
+
+  it('sai role đối với nhân viên thì có link về khu làm việc', () => {
+    renderWithAuth(routes, {
+      path: '/admin',
+      auth: { me: { ...ME, role: 'SERVICE_STAFF' }, status: 'authenticated' },
+    })
+    expect(
+      screen.getByRole('heading', { name: 'Cánh cửa này dành cho bộ phận khác' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Về khu làm việc của tôi/ })).toHaveAttribute(
+      'href',
+      '/staff/service/dashboard',
+    )
   })
 
   it('role khác nhưng có đủ permission thì vào được', () => {

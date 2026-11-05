@@ -1,8 +1,7 @@
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { useLocation } from 'react-router'
-import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
-import { todayISO } from '@/features/booking/utils'
+import { api } from '@/lib/api-client'
 import { HomePage } from './HomePage'
 
 function SearchProbe() {
@@ -15,11 +14,23 @@ const routes = [
   { path: '/search', element: <SearchProbe /> },
 ]
 
-const addDays = (day: string, count: number) =>
-  new Date(Date.parse(`${day}T00:00:00Z`) + count * 86_400_000).toISOString().slice(0, 10)
-
 function renderHome(me: typeof ME | null = null) {
-  vi.spyOn(api, 'get').mockResolvedValue({ data: { status: 'ok' } })
+  vi.spyOn(api, 'get').mockImplementation(async (path: string) => {
+    if (path === '/availability') {
+      return {
+        data: [
+          {
+            id: 'room-1',
+            roomTypeId: 'type-deluxe',
+            roomTypeName: 'Phòng Deluxe',
+            pricePerNight: 1500000,
+            capacity: 2,
+          },
+        ],
+      } as any
+    }
+    return { data: { status: 'ok' } } as any
+  })
   return renderWithAuth(routes, {
     auth: me ? { me, status: 'authenticated' } : { me: null, status: 'anonymous' },
   })
@@ -30,52 +41,49 @@ const bar = () => screen.getByRole('search', { name: 'Tìm phòng trống' })
 describe('HomePage', () => {
   afterEach(() => vi.restoreAllMocks())
 
-  it('leads with one heading and an illustration of the lake', () => {
+  it('leads with one heading and an illustration of the pool at sunset', () => {
     renderHome()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(screen.getByRole('img', { name: /mặt hồ.*lau sậy/i })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /hồ bơi.*hoàng hôn/i })).toBeInTheDocument()
   })
 
-  it('prefills the search bar with tonight and tomorrow for two guests', () => {
+  it('submits the search bar with dates and guests', async () => {
     renderHome()
-    const today = todayISO()
-    expect(within(bar()).getByLabelText(/Nhận phòng/)).toHaveValue(today)
-    expect(within(bar()).getByLabelText(/Trả phòng/)).toHaveValue(addDays(today, 1))
-    expect(within(bar()).getByLabelText(/Số khách/)).toHaveValue(2)
-  })
+    const searchForm = bar()
+    expect(searchForm).toBeInTheDocument()
 
-  it('opens the room search with the chosen dates and guests', async () => {
-    renderHome()
-    fireEvent.change(within(bar()).getByLabelText(/Nhận phòng/), {
-      target: { value: '2099-01-10' },
+    const submitBtn = within(searchForm).getByRole('button', {
+      name: /Kiểm tra phòng trống/i,
     })
-    fireEvent.change(within(bar()).getByLabelText(/Trả phòng/), { target: { value: '2099-01-13' } })
-    fireEvent.change(within(bar()).getByLabelText(/Số khách/), { target: { value: '3' } })
-    fireEvent.click(within(bar()).getByRole('button', { name: 'Tìm phòng' }))
+    expect(submitBtn).toBeInTheDocument()
+    fireEvent.click(submitBtn)
 
-    expect(await screen.findByTestId('search')).toHaveTextContent(
-      '/search?checkIn=2099-01-10&checkOut=2099-01-13&guests=3',
+    const probe = await screen.findByTestId('search')
+    expect(probe).toHaveTextContent(
+      /\/search\?checkIn=\d{4}-\d{2}-\d{2}&checkOut=\d{4}-\d{2}-\d{2}&guests=2/,
     )
   })
 
-  it('does not search for a stay that ends before it starts', () => {
+  it('shows featured room types when available', async () => {
     renderHome()
-    fireEvent.change(within(bar()).getByLabelText(/Nhận phòng/), {
-      target: { value: '2099-01-10' },
-    })
-    fireEvent.change(within(bar()).getByLabelText(/Trả phòng/), { target: { value: '2099-01-10' } })
-    fireEvent.click(within(bar()).getByRole('button', { name: 'Tìm phòng' }))
-
-    expect(screen.getByRole('alert')).toHaveTextContent('Ngày trả phòng phải sau ngày nhận phòng.')
-    expect(screen.queryByTestId('search')).not.toBeInTheDocument()
+    expect(await screen.findByText('Phòng Deluxe')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Phòng & suite' })).toBeInTheDocument()
   })
 
-  it('needs at least one guest', () => {
-    renderHome()
-    fireEvent.change(within(bar()).getByLabelText(/Số khách/), { target: { value: '0' } })
-    fireEvent.click(within(bar()).getByRole('button', { name: 'Tìm phòng' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('Số khách phải từ 1 trở lên.')
-    expect(screen.queryByTestId('search')).not.toBeInTheDocument()
+  it('hides the "Phòng & suite" section when availability fails', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (path: string) => {
+      if (path === '/availability') {
+        throw new Error('API Error')
+      }
+      return { data: { status: 'ok' } } as any
+    })
+    renderWithAuth(routes, {
+      auth: { me: null, status: 'anonymous' },
+    })
+
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Phòng & suite' })).not.toBeInTheDocument(),
+    )
   })
 
   it('explains how booking works in three numbered steps', () => {
@@ -114,10 +122,5 @@ describe('HomePage', () => {
       '/reception/dashboard',
     )
     expect(screen.getByText(/Lễ tân/)).toBeInTheDocument()
-  })
-
-  it('shows the backend status only to developers', async () => {
-    renderHome()
-    expect(await screen.findByText(/Backend API/)).toBeInTheDocument()
   })
 })

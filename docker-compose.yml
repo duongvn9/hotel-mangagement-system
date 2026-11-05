@@ -1,5 +1,6 @@
 # Môi trường DEV: hot reload cho cả backend và frontend.
-#   docker compose up --watch          # khuyên dùng: tự đồng bộ code khi sửa
+#   docker compose up                  # tự mount volumes và hot reload khi sửa
+#   docker compose up --watch          # hoặc dùng watch của docker compose
 #   docker compose --profile tools up  # thêm mongo-express (http://localhost:8081)
 # Không cần file .env để chạy dev; muốn đổi giá trị thì copy .env.example thành .env.
 
@@ -42,11 +43,10 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
     develop:
       watch:
-        - action: sync
-          path: ./backend/src
-          target: /app/src
         - action: rebuild
           path: ./backend/package-lock.json
 
@@ -60,21 +60,18 @@ services:
         required: false
     environment:
       VITE_PROXY_TARGET: http://backend:3000
+      CHOKIDAR_USEPOLLING: "true"
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     depends_on:
       - backend
+    volumes:
+      - ./frontend/src:/app/frontend/src
+      - ./frontend/public:/app/frontend/public
+      - ./frontend/index.html:/app/frontend/index.html
+      - ./design-system:/app/design-system
     develop:
       watch:
-        - action: sync
-          path: ./frontend/src
-          target: /app/frontend/src
-        - action: sync
-          path: ./frontend/public
-          target: /app/frontend/public
-        - action: sync
-          path: ./design-system
-          target: /app/design-system
         - action: rebuild
           path: ./frontend/package-lock.json
         - action: rebuild

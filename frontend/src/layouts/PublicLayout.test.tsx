@@ -24,6 +24,7 @@ function renderAt(path = '/', me: typeof ME | null = null) {
   })
 }
 
+const banner = () => within(screen.getByRole('banner'))
 const mainNav = () => screen.getByRole('navigation', { name: 'Menu chính' })
 
 describe('PublicLayout', () => {
@@ -37,51 +38,53 @@ describe('PublicLayout', () => {
 
   it('offers the booking links and sign-in to visitors', () => {
     renderAt()
-    const nav = within(mainNav())
-    expect(nav.getByRole('link', { name: 'Trang chủ' })).toHaveAttribute('href', '/')
-    expect(nav.getByRole('link', { name: 'Đặt phòng' })).toHaveAttribute('href', '/search')
-    expect(nav.getByRole('link', { name: 'Booking của tôi' })).toHaveAttribute(
+    const header = banner()
+    expect(header.getByRole('link', { name: 'Trang chủ' })).toHaveAttribute('href', '/')
+    expect(header.getByRole('link', { name: 'Phòng & suite' })).toHaveAttribute('href', '/search')
+    expect(header.getByRole('link', { name: 'Trải nghiệm' })).toHaveAttribute(
       'href',
-      '/my-bookings',
+      '/experiences',
     )
-    expect(nav.getByRole('link', { name: 'Đăng nhập' })).toHaveAttribute('href', '/login')
-    expect(nav.getByRole('link', { name: 'Đăng ký' })).toHaveAttribute('href', '/register')
+    expect(header.getByRole('link', { name: 'Tra cứu đặt phòng' })).toHaveAttribute(
+      'href',
+      '/booking/lookup',
+    )
+    expect(header.getByRole('link', { name: 'Đăng nhập' })).toHaveAttribute('href', '/login')
+    expect(header.getByRole('link', { name: 'Đặt phòng' })).toHaveAttribute('href', '/search')
   })
 
   it('marks the current page', () => {
     renderAt('/search')
-    expect(within(mainNav()).getByRole('link', { name: 'Đặt phòng' })).toHaveAttribute(
+    expect(banner().getByRole('link', { name: 'Phòng & suite' })).toHaveAttribute(
       'aria-current',
       'page',
     )
-    expect(within(mainNav()).getByRole('link', { name: 'Trang chủ' })).not.toHaveAttribute(
-      'aria-current',
-    )
+    expect(banner().getByRole('link', { name: 'Trang chủ' })).not.toHaveAttribute('aria-current')
   })
 
   it('keeps the customer pages in one menu', () => {
     renderAt('/', customer)
-    const nav = within(mainNav())
-    const toggle = nav.getByRole('button', { name: 'Của tôi' })
+    const header = banner()
+    const toggle = header.getByRole('button', { name: 'Của tôi' })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(nav.queryByRole('link', { name: 'Dịch vụ của tôi' })).not.toBeInTheDocument()
+    expect(header.queryByRole('link', { name: 'Dịch vụ của tôi' })).not.toBeInTheDocument()
 
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(nav.getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
+    expect(header.getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
       'href',
       '/customer/service-orders',
     )
-    expect(nav.getByRole('link', { name: 'Phản hồi của tôi' })).toHaveAttribute(
+    expect(header.getByRole('link', { name: 'Phản hồi của tôi' })).toHaveAttribute(
       'href',
       '/my-feedback',
     )
-    expect(nav.getByRole('link', { name: 'Nguyễn Khách' })).toHaveAttribute('href', '/profile')
+    expect(header.getByRole('link', { name: 'Nguyễn Khách' })).toHaveAttribute('href', '/profile')
   })
 
   it('closes the customer menu with Escape and returns focus to its button', () => {
     renderAt('/', customer)
-    const toggle = within(mainNav()).getByRole('button', { name: 'Của tôi' })
+    const toggle = banner().getByRole('button', { name: 'Của tôi' })
     fireEvent.click(toggle)
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
@@ -90,27 +93,30 @@ describe('PublicLayout', () => {
 
   it('closes the customer menu after choosing a page', () => {
     renderAt('/', customer)
-    const nav = within(mainNav())
-    fireEvent.click(nav.getByRole('button', { name: 'Của tôi' }))
-    fireEvent.click(nav.getByRole('link', { name: 'Phản hồi của tôi' }))
+    const header = banner()
+    fireEvent.click(header.getByRole('button', { name: 'Của tôi' }))
+    fireEvent.click(header.getByRole('link', { name: 'Phản hồi của tôi' }))
     expect(screen.getByRole('heading', { name: 'Phản hồi' })).toBeInTheDocument()
-    expect(nav.getByRole('button', { name: 'Của tôi' })).toHaveAttribute('aria-expanded', 'false')
+    expect(header.getByRole('button', { name: 'Của tôi' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
   })
 
   it('sends staff to their workspace instead of listing every staff page', () => {
     renderAt('/', manager)
-    const nav = within(mainNav())
-    expect(nav.getByRole('link', { name: 'Khu làm việc' })).toHaveAttribute(
+    const header = banner()
+    expect(header.getByRole('link', { name: 'Vào khu làm việc' })).toHaveAttribute(
       'href',
       '/manager/dashboard',
     )
-    expect(nav.queryByRole('link', { name: 'Tài khoản' })).not.toBeInTheDocument()
-    expect(nav.queryByRole('button', { name: 'Của tôi' })).not.toBeInTheDocument()
+    expect(header.queryByRole('link', { name: 'Tài khoản' })).not.toBeInTheDocument()
+    expect(header.queryByRole('button', { name: 'Của tôi' })).not.toBeInTheDocument()
   })
 
   it('lets a signed-in user sign out', async () => {
     const view = renderAt('/', customer)
-    fireEvent.click(within(mainNav()).getByRole('button', { name: 'Đăng xuất' }))
+    fireEvent.click(banner().getByRole('button', { name: 'Đăng xuất' }))
     await waitFor(() => expect(view.auth.logout).toHaveBeenCalled())
     expect(await screen.findByRole('heading', { name: 'Trang đăng nhập' })).toBeInTheDocument()
   })
@@ -129,7 +135,7 @@ describe('PublicLayout', () => {
     expect(toggle).toHaveFocus()
 
     fireEvent.click(toggle)
-    fireEvent.click(within(mainNav()).getByRole('link', { name: 'Trang chủ' }))
+    fireEvent.click(banner().getByRole('link', { name: 'Trang chủ' }))
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
   })
 })

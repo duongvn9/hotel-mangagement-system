@@ -21,7 +21,7 @@ CMD ["npm", "run", "dev"]
 # ---------- build ----------
 FROM deps AS build
 ARG VITE_API_BASE_URL=/api/v1
-ARG VITE_APP_NAME="Grand Emily HMS"
+ARG VITE_APP_NAME="Grand Emily Hotel"
 ARG VITE_FIREBASE_API_KEY=""
 ARG VITE_FIREBASE_AUTH_DOMAIN=""
 ARG VITE_FIREBASE_PROJECT_ID=""

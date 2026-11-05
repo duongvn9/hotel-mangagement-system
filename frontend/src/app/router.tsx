@@ -1,6 +1,6 @@
 import { createBrowserRouter } from 'react-router'
 import { accountRoutes } from '@/features/accounts/routes'
-import { authRoutes } from '@/features/auth/routes'
+import { authOnlyRoutes, authRoutes } from '@/features/auth/routes'
 import { bookingRoutes } from '@/features/booking/routes'
 import { feedbackRoutes } from '@/features/feedback/routes'
 import { issueRoutes } from '@/features/issues/routes'
@@ -16,6 +16,7 @@ import { maintenanceRoutes } from '@/features/maintenance/routes'
 import { taskSupervisionRoutes } from '@/features/task-supervision/routes'
 import { reportRoutes } from '@/features/reports/routes'
 import { dashboardRoutes } from '@/features/dashboard/routes'
+import { experienceRoutes } from '@/features/experiences/routes'
 
 import { PublicLayout } from '@/layouts/PublicLayout'
 import { StaffLayout } from '@/layouts/StaffLayout'
@@ -46,10 +47,12 @@ const { staff, other } = partitionStaffRoutes([
   ...taskSupervisionRoutes,
   ...reportRoutes,
   ...dashboardRoutes,
+  ...experienceRoutes,
 ])
 
 export const router = createBrowserRouter([
   { element: <StaffLayout />, children: staff },
+  { children: authOnlyRoutes },
   {
     element: <PublicLayout />,
     children: [

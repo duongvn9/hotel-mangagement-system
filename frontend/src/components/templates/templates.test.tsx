@@ -113,34 +113,50 @@ describe('SiteLayout', () => {
     { to: '/rooms', label: 'Phòng & suite' },
   ]
 
-  it('renders the navigation, actions, content and footer', () => {
-    render(
+  // (a) getAllByRole('link', { name: 'Phòng & suite' }) có đúng 2 phần tử khi footerLinks chứa link đó (header + footer) và đúng 1 khi không có footerLinks
+  it('renders links in header and only duplicates to footer when footerLinks contains it', () => {
+    const { rerender } = render(
       <MemoryRouter>
-        <SiteLayout links={links} actions={<button>Đăng nhập</button>}>
+        <SiteLayout links={links} footerLinks={[{ to: '/rooms', label: 'Phòng & suite' }]}>
           <p>Nội dung</p>
         </SiteLayout>
       </MemoryRouter>,
     )
-    for (const link of screen.getAllByRole('link', { name: 'Phòng & suite' })) {
-      expect(link).toHaveAttribute('href', '/rooms')
-    }
-    expect(screen.getByRole('button', { name: 'Đăng nhập' })).toBeInTheDocument()
-    expect(screen.getByText('Nội dung')).toBeInTheDocument()
-    expect(screen.getByRole('contentinfo')).toBeInTheDocument()
-  })
+    expect(screen.getAllByRole('link', { name: 'Phòng & suite' })).toHaveLength(2)
 
-  it('overlays the header on the page when asked', () => {
-    render(
+    rerender(
       <MemoryRouter>
-        <SiteLayout links={links} overlay>
+        <SiteLayout links={links}>
           <p>Nội dung</p>
         </SiteLayout>
       </MemoryRouter>,
     )
-    expect(screen.getByRole('banner')).toHaveClass('absolute')
+    expect(screen.getAllByRole('link', { name: 'Phòng & suite' })).toHaveLength(1)
   })
 
-  it('opens and closes the mobile menu', () => {
+  // (b) getByRole('navigation', { name: 'Menu chính' }) tồn tại, navLabel="Menu" đổi tên
+  it('renders a single navigation labeled with navLabel', () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <SiteLayout links={links}>
+          <p>Nội dung</p>
+        </SiteLayout>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('navigation', { name: 'Menu chính' })).toBeInTheDocument()
+
+    rerender(
+      <MemoryRouter>
+        <SiteLayout links={links} navLabel="Menu">
+          <p>Nội dung</p>
+        </SiteLayout>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('navigation', { name: 'Menu' })).toBeInTheDocument()
+  })
+
+  // (c) skip-link getByRole('link', { name: 'Bỏ qua điều hướng' }) có href="#main" và getByRole('main') có id="main"
+  it('provides a skip link pointing to main landmark with id="main"', () => {
     render(
       <MemoryRouter>
         <SiteLayout links={links}>
@@ -148,11 +164,106 @@ describe('SiteLayout', () => {
         </SiteLayout>
       </MemoryRouter>,
     )
-    expect(screen.getAllByRole('link', { name: 'Phòng & suite' })).toHaveLength(2) // header + footer
-    fireEvent.click(screen.getByRole('button', { name: 'Mở menu' }))
-    expect(screen.getAllByRole('link', { name: 'Phòng & suite' })).toHaveLength(3)
-    fireEvent.click(screen.getByRole('button', { name: 'Mở menu' }))
-    expect(screen.getAllByRole('link', { name: 'Phòng & suite' })).toHaveLength(2)
+    const skipLink = screen.getByRole('link', { name: 'Bỏ qua điều hướng' })
+    expect(skipLink).toHaveAttribute('href', '#main')
+    expect(screen.getByRole('main')).toHaveAttribute('id', 'main')
+  })
+
+  // (d) nút Mở menu có aria-expanded="false", bấm → "true" và aria-controls trỏ tới nav
+  it('controls main nav expansion with aria-expanded and aria-controls on the toggle button', () => {
+    render(
+      <MemoryRouter>
+        <SiteLayout links={links}>
+          <p>Nội dung</p>
+        </SiteLayout>
+      </MemoryRouter>,
+    )
+    const button = screen.getByRole('button', { name: 'Mở menu' })
+    const nav = screen.getByRole('navigation', { name: 'Menu chính' })
+    expect(nav).toHaveAttribute('id', 'main-nav')
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    expect(button).toHaveAttribute('aria-controls', 'main-nav')
+
+    fireEvent.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  // (e) khi menu mở, nhấn Escape (keyDown trên document) → aria-expanded="false" và nút Mở menu đang document.activeElement
+  it('closes mobile menu on Escape keydown and restores focus to toggle button', () => {
+    render(
+      <MemoryRouter>
+        <SiteLayout links={links}>
+          <p>Nội dung</p>
+        </SiteLayout>
+      </MemoryRouter>,
+    )
+    const button = screen.getByRole('button', { name: 'Mở menu' })
+    fireEvent.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    expect(document.activeElement).toBe(button)
+  })
+
+  // (f) render lại bằng MemoryRouter đổi route (bấm link trong nav) → aria-expanded="false"
+  it('closes mobile menu when route changes via clicking a nav link', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SiteLayout links={links}>
+          <p>Nội dung</p>
+        </SiteLayout>
+      </MemoryRouter>,
+    )
+    const button = screen.getByRole('button', { name: 'Mở menu' })
+    fireEvent.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+
+    const nav = screen.getByRole('navigation', { name: 'Menu chính' })
+    fireEvent.click(within(nav).getByRole('link', { name: 'Phòng & suite' }))
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  // (g) brand="Grand Emily Hotel" hiển thị trong header và vòng tròn chữ là G
+  it('renders custom brand in header with initial letter in the badge', () => {
+    render(
+      <MemoryRouter>
+        <SiteLayout links={links} brand="Grand Emily Hotel">
+          <p>Nội dung</p>
+        </SiteLayout>
+      </MemoryRouter>,
+    )
+    const banner = screen.getByRole('banner')
+    expect(within(banner).getByText('Grand Emily Hotel')).toBeInTheDocument()
+    expect(within(banner).getByText('G')).toBeInTheDocument()
+  })
+
+  // (h) Link đang ở trang hiện tại có aria-current="page", / chỉ active khi pathname === '/'
+  it('marks active link with aria-current="page" and only activates / on root path', () => {
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/']}>
+        <SiteLayout links={links}>
+          <p>Nội dung</p>
+        </SiteLayout>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: 'Trang chủ' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Phòng & suite' })).not.toHaveAttribute('aria-current')
+
+    unmount()
+
+    render(
+      <MemoryRouter initialEntries={['/rooms']}>
+        <SiteLayout links={links}>
+          <p>Nội dung</p>
+        </SiteLayout>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: 'Trang chủ' })).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('link', { name: 'Phòng & suite' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
   })
 })
 
@@ -168,6 +279,17 @@ describe('AuthLayout', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Đăng nhập' })).toBeInTheDocument()
     expect(screen.getByText('Chào mừng bạn quay lại')).toBeInTheDocument()
     expect(screen.getByRole('form', { name: 'login' })).toBeInTheDocument()
+  })
+
+  it('passes brand name down to the logo', () => {
+    render(
+      <MemoryRouter>
+        <AuthLayout title="Đăng nhập" subtitle="Chào mừng" brand="Grand Emily Hotel">
+          <div />
+        </AuthLayout>
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Grand Emily Hotel')).toBeInTheDocument()
   })
 })
 

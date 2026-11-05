@@ -6,6 +6,7 @@ export function AuthLayout({
   title,
   subtitle,
   children,
+  brand,
   image = suite,
   imageAlt = 'Suite hướng biển',
   quote = '“Nơi khiến bạn muốn quay lại ngay từ buổi tối đầu tiên.”',
@@ -14,6 +15,7 @@ export function AuthLayout({
   title: string
   subtitle: string
   children: ReactNode
+  brand?: string
   image?: string
   imageAlt?: string
   quote?: string
@@ -22,7 +24,7 @@ export function AuthLayout({
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="flex flex-col px-6 py-8 sm:px-12">
-        <Logo />
+        <Logo name={brand} />
         <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-10">
           <h1 className="font-display text-5xl">{title}</h1>
           <p className="mt-2 text-muted-foreground">{subtitle}</p>

@@ -75,7 +75,7 @@ services:
       target: prod
       args:
         VITE_API_BASE_URL: /api/v1
-        VITE_APP_NAME: ${VITE_APP_NAME:-Grand Emily HMS}
+        VITE_APP_NAME: ${VITE_APP_NAME:-Grand Emily Hotel}
         VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:-}
         VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:-}
         VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:-}

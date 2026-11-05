@@ -1,9 +1,10 @@
-import { AssetImage } from '@/components/AssetImage'
 import { useState, type FormEvent } from 'react'
-import { Alert } from '@/components/Alert'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
+import { AssetImage } from '@/components/AssetImage'
+import { Button, Input } from '@/components/atoms'
+import { FormField } from '@/components/molecules'
+import { PageHeader, Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
+import { cn } from '@/lib/utils'
 import { ROLE_LABELS, updateProfile } from '../api'
 import { useAuth } from '../auth-context'
 
@@ -34,42 +35,77 @@ export function ProfilePage() {
   }
 
   return (
-    <section className="mx-auto w-full max-w-md px-4 py-16">
-      <h1 className="font-display text-4xl font-semibold text-pearl-900">Hồ sơ của tôi</h1>
-      <AssetImage
-        path={me.avatarUrl}
-        name={me.fullName}
-        className="mt-4 size-16 rounded-full object-cover"
+    <div className="mx-auto max-w-5xl px-5 py-10 lg:px-8">
+      <PageHeader
+        title="Hồ sơ của tôi"
+        subtitle={`Đang đăng nhập với vai trò ${ROLE_LABELS[me.role] ?? me.role}`}
       />
-      <dl className="mt-6 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
-        <dt className="text-stone-700">Email</dt>
-        <dd className="text-pearl-900">{me.email}</dd>
-        <dt className="text-stone-700">Vai trò</dt>
-        <dd className="text-pearl-900">{ROLE_LABELS[me.role] ?? me.role}</dd>
-      </dl>
 
-      <form onSubmit={onSubmit} className="mt-8 space-y-5">
-        {message && <Alert tone={message.tone}>{message.text}</Alert>}
-        <TextField
-          label="Họ và tên"
-          required
-          minLength={2}
-          maxLength={100}
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-        />
-        <TextField
-          label="Số điện thoại"
-          type="tel"
-          pattern="0[0-9]{9}"
-          title="10 chữ số, bắt đầu bằng 0"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-        />
-        <Button type="submit" loading={pending}>
-          Lưu thay đổi
-        </Button>
-      </form>
-    </section>
+      <Panel title="Thông tin cá nhân" className="max-w-2xl">
+        <div className="mb-6 flex items-center gap-4">
+          <AssetImage
+            path={me.avatarUrl}
+            name={me.fullName}
+            className="size-16 rounded-full object-cover"
+          />
+          <div>
+            <p className="font-semibold text-foreground">{me.fullName}</p>
+            <p className="text-sm text-muted-foreground">{me.email}</p>
+            <span className="mt-1 inline-block text-xs font-medium text-primary">
+              {ROLE_LABELS[me.role] ?? me.role}
+            </span>
+          </div>
+        </div>
+
+        {message && (
+          <div
+            role="alert"
+            className={cn(
+              'mb-4 rounded-xl border p-4 text-sm',
+              message.tone === 'success'
+                ? 'border-success/20 bg-success/10 text-success'
+                : 'border-destructive/20 bg-destructive/10 text-destructive',
+            )}
+          >
+            {message.text}
+          </div>
+        )}
+
+        <form onSubmit={onSubmit} className="space-y-4">
+          <FormField label="Họ và tên" htmlFor="fullName" required>
+            <Input
+              id="fullName"
+              required
+              minLength={2}
+              maxLength={100}
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
+          </FormField>
+
+          <FormField label="Số điện thoại" htmlFor="phone">
+            <Input
+              id="phone"
+              type="tel"
+              pattern="0[0-9]{9}"
+              title="10 chữ số, bắt đầu bằng 0"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </FormField>
+
+          <div className="pt-2">
+            <Button
+              type="submit"
+              disabled={pending}
+              aria-busy={pending}
+              className="rounded-full px-6"
+            >
+              {pending ? 'Đang lưu…' : 'Lưu thay đổi'}
+            </Button>
+          </div>
+        </form>
+      </Panel>
+    </div>
   )
 }

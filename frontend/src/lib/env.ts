@@ -2,7 +2,7 @@
 // Tuyệt đối không đặt secret ở đây.
 export const env = {
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL || '/api/v1',
-  appName: import.meta.env.VITE_APP_NAME || 'Grand Emily HMS',
+  appName: import.meta.env.VITE_APP_NAME || 'Grand Emily Hotel',
   firebase: {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',

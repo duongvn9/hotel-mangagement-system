@@ -149,7 +149,7 @@ components/
 | `Avatar`, `AvatarFallback`, `AvatarImage` | |
 | `Skeleton` | Loading placeholder (`animate-pulse`) |
 | `StatusBadge` | `status` (an enum code such as `CHECKED_IN`): colored dot plus Vietnamese label; an unknown status falls back to neutral |
-| `Logo` | `light` (on dark backgrounds), `to` |
+| `Logo` | `light` (on dark backgrounds), `to`, `name` (brand name; first letter as mark) |
 
 ### Molecules — `@/components/molecules`
 
@@ -162,6 +162,8 @@ components/
 | `KeyValue` | A label–value pair in detail views |
 | `Stars` | `value`, `onChange?` (read-only without `onChange`) |
 | `DateRangeField` | `from`, `to` (`yyyy-MM-dd`), `onChange(from, to)`; the end date is always at least one day after the start |
+| `SectionHeading` | `eyebrow`, `title`, `body`, `align`, `as` (`h1` or `h2`) |
+| `PhotoTile` | `src`, `alt`, `caption`, `aspect` (`square`, `4/3`, `3/4`) |
 | `Toaster` | Mount once at the app root; call `toast()` from `sonner` |
 
 ### Organisms — `@/components/organisms`
@@ -173,14 +175,16 @@ components/
 | `DataTable<T>` | `rows`, `columns`, `search`, `filters`, `pageSize`, `onRowClick`, `toolbar`, `empty`, `loading` — pagination, search, filtering, empty and loading states |
 | `Dialog*`, `AlertDialog*`, `Sheet*` | Dialog, confirmation, drawer |
 | `RevenueArea`, `SimpleBars`, `Donut` | Charts (recharts) using the `--chart-*` colors |
-| `SearchBar` | The room search bar; `onSearch({ from, to, guests })` |
+| `SearchBar` | The room search bar; `initial`, `onSearch({ from, to, guests })`, `ariaLabel`, `compact` |
+| `HeroBanner` | `image`, `imageAlt`, `title`, `eyebrow`, `tall`, `children` |
+| `RoomCard` | `image`, `name`, `description`, `amenities`, `price`, `priceNote`, `meta`, `actions`, `selected`, `onToggle`, `toggleLabel` |
 | `Unauthorized` | The 403 page; `homeTo`, `actionLabel`, `description` |
 
 ### Templates — `@/components/templates`
 
 | Component | Notes |
 |---|---|
-| `SiteLayout` | Public-site frame: `links`, `actions`, `overlay` (header over the hero) |
+| `SiteLayout` | Public-site frame: `links`, `actions`, `overlay` (header over the hero), `brand`, `navLabel`, `footerLinks`, `footerContact`, `footerTagline` |
 | `WorkspaceLayout` | Workspace frame: `groups` (grouped menu), `user`, `workspaceLabel`, `onLogout`, `profileTo`, `publicSiteTo`, `loading`, `forbidden`; `children` defaults to `<Outlet />` |
 | `AuthLayout` | `title`, `subtitle`, `image`, `quote` |
 
@@ -236,6 +240,13 @@ While many people migrate pages in parallel, `design-system/legacy.css` keeps th
 | `max-w-container` | `max-w-7xl` |
 | `tracking-widest` (0.2em) | `tracking-[0.2em]`, only for uppercase eyebrows |
 | `Button` / `Badge` / `TextField` … in `components/*.tsx` | See section 7 (the old files are marked `@deprecated`) |
+
+### Migrated: Guest Area
+
+- **Shell & landing:** `HomePage`, `ExperiencesPage`, `NotFoundPage`, `Unauthorized`, `PublicLayout`, `UserMenu`
+- **Browse & room details:** `SearchRoomsPage`, `RoomDetailsPage`
+- **Booking flow:** `CreateBookingPage`, `LookupBookingPage`, `BookingDetailPage`, `PaymentReturnPage`
+- **Guest account:** `LoginPage`, `RegisterPage` (with `AuthLayout`), `ProfilePage`, `MyBookingsPage`
 
 When the last page is migrated: delete `design-system/legacy.css`, its `@import` line in `frontend/src/styles/index.css`,
 and the old components.

@@ -25,6 +25,7 @@ export function Unauthorized({
             <h1 className="font-display mt-4 text-5xl leading-[1.1]">
               Cánh cửa này dành cho bộ phận khác
             </h1>
+            <h2 className="sr-only">Không có quyền truy cập</h2>
             <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{description}</p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button asChild className="rounded-full px-5">

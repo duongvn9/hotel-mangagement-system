@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { AssetImage } from '@/components/AssetImage'
+import { BedDouble, Check, ChevronLeft } from 'lucide-react'
+import { Button } from '@/components/atoms'
+import { KeyValue } from '@/components/molecules'
 import { getErrorMessage } from '@/lib/api-client'
-import { env } from '@/lib/env'
+import { assetUrl } from '@/lib/asset-url'
+import { vnd } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { useRoomTypeOverview } from '../hooks'
-import { BedIcon, CheckIcon, ChildIcon, UsersIcon } from '../icons'
-import { money, nightsBetween } from '../utils'
+import { nightsBetween } from '../utils'
 
 /**
  * UC 2.2.2 — View Room Details. Màn công khai cho Guest/Customer xem chi tiết một loại phòng
@@ -20,10 +20,15 @@ export function RoomDetailsPage() {
   const [params] = useSearchParams()
   const overview = useRoomTypeOverview(id)
   const images = overview.data?.images ?? []
-  const [active, setActive] = useState(0)
 
-  // Đổi loại phòng thì quay về ảnh đầu.
-  useEffect(() => setActive(0), [id])
+  const [active, setActive] = useState(0)
+  const [lastId, setLastId] = useState(id)
+
+  if (lastId !== id) {
+    setLastId(id)
+    setActive(0)
+  }
+
   // Tự động chuyển ảnh mỗi 4s khi có nhiều hơn 1 ảnh.
   useEffect(() => {
     if (images.length < 2) return
@@ -44,172 +49,156 @@ export function RoomDetailsPage() {
   const room = overview.data
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold tracking-widest text-primary uppercase">
-            {env.appName}
-          </p>
-          <h1 className="font-display text-4xl font-semibold text-pearl-900">
-            Chi tiết loại phòng
-          </h1>
-        </div>
-        <Link
-          to={backToSearch}
-          className="inline-flex h-11 items-center text-sm font-semibold tracking-wider text-stone-700 uppercase hover:text-primary"
-        >
-          ← Quay lại tìm phòng
-        </Link>
-      </div>
+    <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
+      <Link
+        to={backToSearch}
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-foreground"
+      >
+        <ChevronLeft className="size-4" />
+        Tất cả phòng
+      </Link>
 
-      {overview.isPending && <p role="status">Đang tải chi tiết loại phòng…</p>}
+      {overview.isPending && (
+        <div className="py-12" role="status">
+          <p className="text-muted-foreground">Đang tải chi tiết loại phòng…</p>
+        </div>
+      )}
 
       {overview.isError && (
-        <Alert tone="danger">
+        <div
+          role="alert"
+          className="mt-6 rounded-xl border border-destructive/20 bg-destructive/10 p-6 text-destructive"
+        >
           {getErrorMessage(overview.error, 'Không tìm thấy loại phòng này.')}
           <div className="mt-3">
             <Link to="/search" className="text-sm font-semibold text-primary underline">
               ← Tìm phòng
             </Link>
           </div>
-        </Alert>
+        </div>
       )}
 
       {room && (
-        <div className="grid items-start gap-6 lg:grid-cols-[1fr_360px]">
-          {/* Cột trái: ảnh minh hoạ + mô tả + tiện nghi */}
-          <div className="space-y-6">
-            <div className="space-y-3">
-              <div className="relative overflow-hidden rounded-xl border border-stone-300">
-                {images.length > 0 ? (
-                  <AssetImage
-                    key={images[active] ?? active}
-                    path={images[active] ?? images[0]}
-                    name={room.name}
-                    className="h-56 w-full object-cover sm:h-72"
-                  />
-                ) : (
-                  <div className="flex h-56 items-center justify-center bg-gradient-to-br from-cream-100 to-brandy-100 sm:h-72">
-                    <BedIcon className="size-16 text-primary/50" />
-                  </div>
-                )}
-                <span className="absolute top-4 left-4">
-                  <Badge tone="success">Còn nhận đặt</Badge>
-                </span>
-                {images.length > 1 && (
-                  <span className="absolute right-4 bottom-4 rounded-full bg-pearl-900/70 px-2.5 py-1 text-xs font-medium text-cream-100 tabular-nums">
-                    {active + 1}/{images.length}
-                  </span>
-                )}
+        <>
+          <h1 className="mt-4 font-display text-5xl md:text-6xl">{room.name}</h1>
+          <p className="mt-2 text-muted-foreground">
+            Tối đa {room.capacity} khách · {room.adultCapacity} người lớn, {room.childCapacity} trẻ
+            em
+          </p>
+
+          <div className="mt-8 grid gap-3 md:grid-cols-[1fr_180px]">
+            {images.length > 0 ? (
+              <img
+                src={assetUrl(images[active] ?? images[0])}
+                alt={room.name}
+                className="aspect-[16/10] w-full rounded-3xl object-cover"
+              />
+            ) : (
+              <div className="flex aspect-[16/10] w-full items-center justify-center rounded-3xl bg-surface text-muted-foreground">
+                <BedDouble className="size-16 opacity-40" />
               </div>
+            )}
+            {images.length > 1 && (
+              <div className="grid grid-cols-4 gap-3 md:grid-cols-1">
+                {images.map((g, i) => (
+                  <button
+                    key={g + i}
+                    type="button"
+                    onClick={() => setActive(i)}
+                    aria-label={`Xem ảnh ${i + 1}`}
+                    className={cn(
+                      'overflow-hidden rounded-2xl ring-2 transition',
+                      active === i
+                        ? 'ring-primary'
+                        : 'opacity-70 ring-transparent hover:opacity-100',
+                    )}
+                  >
+                    <img
+                      src={assetUrl(g)}
+                      alt={`${room.name} — ảnh ${i + 1}`}
+                      loading="lazy"
+                      className="aspect-square w-full object-cover md:aspect-[4/3]"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-              {images.length > 1 && (
-                <div className="flex flex-wrap gap-2">
-                  {images.map((path, index) => (
-                    <button
-                      key={path + index}
-                      type="button"
-                      onClick={() => setActive(index)}
-                      aria-label={`Xem ảnh ${index + 1}`}
-                      aria-current={active === index}
-                      className={`overflow-hidden rounded border transition ${
-                        active === index
-                          ? 'border-primary ring-2 ring-primary'
-                          : 'border-stone-300 opacity-70 hover:opacity-100'
-                      }`}
-                    >
-                      <AssetImage
-                        decorative
-                        path={path}
-                        name={`${room.name} — ${index + 1}`}
-                        className="h-16 w-24 object-cover"
-                      />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3 rounded-xl border border-stone-300 bg-white p-6">
-              <h2 className="font-display text-xl font-semibold text-pearl-900">Giới thiệu</h2>
-              <p className="leading-relaxed whitespace-pre-line text-stone-700">
+          <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_380px]">
+            {/* Cột trái: giới thiệu + tiện nghi + chính sách */}
+            <div>
+              <h2 className="text-lg font-semibold">Về phòng này</h2>
+              <p className="mt-2 leading-relaxed whitespace-pre-line text-muted-foreground">
                 {room.description?.trim() || 'Loại phòng này chưa có mô tả chi tiết.'}
               </p>
-            </div>
 
-            <div className="space-y-4 rounded-xl border border-stone-300 bg-white p-6">
-              <h2 className="font-display text-xl font-semibold text-pearl-900">Tiện nghi</h2>
+              <h2 className="mt-8 text-lg font-semibold">Tiện nghi</h2>
               {room.amenities.length === 0 ? (
-                <p className="text-sm text-stone-700">
+                <p className="mt-2 text-sm text-muted-foreground">
                   Chưa cập nhật tiện nghi cho loại phòng này.
                 </p>
               ) : (
-                <ul className="grid gap-2 sm:grid-cols-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   {room.amenities.map((amenity) => (
-                    <li
+                    <span
                       key={amenity.id}
-                      className="inline-flex items-center gap-2 text-sm text-stone-700"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-surface px-4 py-2 text-sm text-foreground"
                     >
-                      <CheckIcon className="size-4 shrink-0 text-primary" />
+                      <Check className="size-3.5 text-primary" />
                       {amenity.name}
-                    </li>
+                    </span>
                   ))}
-                </ul>
+                </div>
               )}
-            </div>
-          </div>
 
-          {/* Cột phải: tóm tắt + giá + CTA */}
-          <aside className="h-fit space-y-5 rounded-xl border border-stone-300 bg-cream-50 p-6 lg:sticky lg:top-6">
-            <div>
-              <p className="text-[11px] font-semibold tracking-widest text-primary uppercase">
-                Loại phòng
-              </p>
-              <h2 className="font-display text-2xl font-semibold text-pearl-900">{room.name}</h2>
+              <h2 className="mt-8 text-lg font-semibold">Chính sách</h2>
+              <ul className="mt-2 space-y-1.5 text-sm text-muted-foreground">
+                <li>Nhận phòng từ 14:00 · Trả phòng trước 12:00</li>
+                <li>Đặt cọc để giữ phòng; phần còn lại thanh toán khi trả phòng</li>
+                <li>Phòng được giữ trong 15 phút khi bạn tạo đơn đặt phòng</li>
+              </ul>
             </div>
 
-            <dl className="space-y-2 border-y border-stone-300 py-4 text-sm">
-              <div className="flex items-center justify-between gap-4">
-                <dt className="inline-flex items-center gap-1.5 text-stone-700">
-                  <UsersIcon className="size-4 text-primary" /> Người lớn tối đa
-                </dt>
-                <dd className="font-semibold">{room.adultCapacity}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <dt className="inline-flex items-center gap-1.5 text-stone-700">
-                  <ChildIcon className="size-4 text-primary" /> Trẻ em tối đa
-                </dt>
-                <dd className="font-semibold">{room.childCapacity}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <dt className="text-stone-700">Sức chứa tối đa</dt>
-                <dd className="font-semibold">{room.capacity} khách</dd>
-              </div>
-            </dl>
-
-            <div>
-              <p className="text-3xl font-bold whitespace-nowrap text-primary tabular-nums">
-                {money.format(room.pricePerNight)}
-              </p>
-              <p className="text-xs text-stone-700">mỗi đêm</p>
-              {hasStay && (
-                <p className="mt-1 text-sm whitespace-nowrap text-stone-700 tabular-nums">
-                  Tạm tính {nights} đêm: {money.format(room.pricePerNight * nights)}
+            {/* Cột phải: tóm tắt + giá + CTA */}
+            <aside className="card-soft sticky top-24 h-fit space-y-5 p-6">
+              <div>
+                <p className="text-xs font-semibold tracking-widest text-primary uppercase">
+                  Loại phòng
                 </p>
-              )}
-            </div>
+                <h2 className="font-display text-2xl font-semibold text-foreground">{room.name}</h2>
+              </div>
 
-            <Link to={backToSearch} className="block">
-              <Button className="w-full">
-                {hasStay ? 'Chọn phòng này & đặt' : 'Chọn ngày để đặt'}
+              <div className="divide-y divide-border border-y border-border">
+                <KeyValue k="Người lớn tối đa" v={`${room.adultCapacity} người`} />
+                <KeyValue k="Trẻ em tối đa" v={`${room.childCapacity} bé`} />
+                <KeyValue k="Sức chứa tối đa" v={`${room.capacity} khách`} />
+              </div>
+
+              <div>
+                <div className="text-3xl font-bold tabular-nums text-foreground">
+                  {vnd(room.pricePerNight)}
+                  <span className="text-sm font-normal text-muted-foreground"> / đêm</span>
+                </div>
+                {hasStay && (
+                  <p className="mt-1 text-sm text-muted-foreground tabular-nums">
+                    Tạm tính {nights} đêm: {vnd(room.pricePerNight * nights)}
+                  </p>
+                )}
+              </div>
+
+              <Button asChild size="lg" className="w-full rounded-full">
+                <Link to={backToSearch}>
+                  {hasStay ? 'Chọn phòng này & đặt' : 'Chọn ngày để đặt'}
+                </Link>
               </Button>
-            </Link>
-            <p className="text-xs text-stone-700">
-              Tình trạng phòng trống và tổng tiền chính thức do hệ thống xác nhận khi đặt.
-            </p>
-          </aside>
-        </div>
+              <p className="text-center text-xs text-muted-foreground">
+                Tình trạng phòng trống và tổng tiền chính thức do hệ thống xác nhận khi đặt.
+              </p>
+            </aside>
+          </div>
+        </>
       )}
-    </section>
+    </div>
   )
 }
