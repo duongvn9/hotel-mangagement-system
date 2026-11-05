@@ -7,7 +7,10 @@ const TONES = {
   warning: 'bg-warning-bg text-warning',
 }
 
-/** Alert inline theo DESIGN.md mục 7.11. */
+/**
+ * Alert inline theo DESIGN.md cũ.
+ * @deprecated Chưa có bản thay thế theo prototype; chờ component mới ở `@/components/molecules` (xem DESIGN.md).
+ */
 export function Alert({ tone, children }: { tone: keyof typeof TONES; children: ReactNode }) {
   return (
     <div

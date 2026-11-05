@@ -14,7 +14,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean
 }
 
-/** Nút theo DESIGN.md mục 7.1. */
+/**
+ * Nút theo DESIGN.md cũ.
+ * @deprecated Dùng `Button` từ `@/components/atoms` (xem DESIGN.md).
+ */
 export function Button({
   variant = 'primary',
   size = 'md',

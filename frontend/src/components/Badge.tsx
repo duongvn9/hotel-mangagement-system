@@ -8,7 +8,10 @@ const TONES = {
   neutral: 'bg-stone-200 text-stone-700',
 }
 
-/** Status chip theo DESIGN.md mục 7.7: luôn có chữ, không chỉ dùng màu. */
+/**
+ * Status chip: luôn có chữ, không chỉ dùng màu.
+ * @deprecated Dùng `StatusBadge` từ `@/components/atoms` (xem DESIGN.md).
+ */
 export function Badge({ tone, children }: { tone: keyof typeof TONES; children: ReactNode }) {
   return (
     <span

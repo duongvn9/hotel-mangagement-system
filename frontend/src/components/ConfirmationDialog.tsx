@@ -1,5 +1,8 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
+/**
+ * @deprecated Dùng `AlertDialog` từ `@/components/organisms` (xem DESIGN.md).
+ */
 export function ConfirmationDialog({
   label,
   busy,

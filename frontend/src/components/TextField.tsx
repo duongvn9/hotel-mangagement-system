@@ -5,7 +5,10 @@ interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string
 }
 
-/** Ô nhập có label và thông báo lỗi theo DESIGN.md mục 7.2. */
+/**
+ * Ô nhập có label và thông báo lỗi.
+ * @deprecated Dùng `FormField` (molecules) + `Input` (atoms) (xem DESIGN.md).
+ */
 export function TextField({ label, error, required, className = '', ...props }: TextFieldProps) {
   const id = useId()
   const errorId = `${id}-error`
