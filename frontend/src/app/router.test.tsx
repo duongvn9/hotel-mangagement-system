@@ -40,6 +40,7 @@ describe('router layouts', () => {
     '/login',
     '/register',
     '/payment/vnpay-return',
+    '/experiences',
   ])('puts %s in the guest layout', (path) => {
     expect(layoutOf(path).layout).toBe(PublicLayout)
   })
@@ -54,5 +55,7 @@ describe('router layouts', () => {
     expect(leaf?.path).toBe('/manager/dashboard')
     const home = matchRoutes(router.routes, '/')?.at(-1)?.route
     expect(home?.index).toBe(true)
+    const exp = matchRoutes(router.routes, '/experiences')?.at(-1)?.route
+    expect(exp?.path).toBe('experiences')
   })
 })
