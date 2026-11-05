@@ -1,9 +1,9 @@
 import { ChevronDown, Globe, LogOut, Menu } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Avatar, AvatarFallback, Logo, Skeleton } from '../atoms'
+import { Avatar, AvatarFallback, AvatarImage, Logo, Skeleton } from '../atoms'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../molecules'
-import { Sheet, SheetContent, SheetDescription, SheetTitle, Unauthorized } from '../organisms'
+import { Unauthorized } from '../organisms'
 
 import { isNavActive } from './nav'
 
@@ -29,12 +29,20 @@ export interface NavGroup {
 
 function SideNav({
   groups,
+  brand,
+  navLabel,
+  emptyNavText,
   publicSiteTo,
+  publicSiteLabel,
   onNavigate,
 }: {
   groups: NavGroup[]
+  brand: string
+  navLabel: string
+  emptyNavText?: string
   publicSiteTo?: string
-  onNavigate?: () => void
+  publicSiteLabel: string
+  onNavigate: () => void
 }) {
   const { pathname } = useLocation()
   // Chọn tay (mở/đóng nhóm) chỉ có hiệu lực ở trang hiện tại; sang trang khác thì nhóm chứa trang đang mở tự mở lại.
@@ -47,14 +55,20 @@ function SideNav({
   const isOpen = (title: string) => map[title] ?? title === activeTitle
 
   return (
-    <nav className="no-scrollbar relative flex h-full flex-col gap-2 overflow-x-hidden overflow-y-auto bg-ink px-4 py-6 text-ink-foreground">
+    <nav
+      aria-label={navLabel}
+      className="no-scrollbar relative flex h-full flex-col gap-2 overflow-x-hidden overflow-y-auto bg-ink px-4 py-6 text-ink-foreground"
+    >
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-20 -left-16 size-56 rounded-full bg-primary/30 blur-3xl" />
         <div className="absolute -right-20 -bottom-24 size-56 rounded-full bg-lavender/20 blur-3xl" />
       </div>
       <div className="relative px-2 pb-4 [&_*]:text-ink-foreground!">
-        <Logo />
+        <Logo name={brand} />
       </div>
+      {groups.length === 0 && emptyNavText && (
+        <p className="px-3 py-2 text-sm text-ink-foreground/50">{emptyNavText}</p>
+      )}
       {groups.map((g) => {
         const open = isOpen(g.title)
         const hasActive = g.items.some((i) => isNavActive(pathname, i.to))
@@ -133,9 +147,10 @@ function SideNav({
         <div className="relative mt-auto space-y-2 pt-4">
           <Link
             to={publicSiteTo}
+            onClick={onNavigate}
             className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink-foreground/65 transition-colors hover:bg-ink-foreground/5 hover:text-ink-foreground"
           >
-            <Globe className="size-4" /> Trang web công khai
+            <Globe className="size-4" /> {publicSiteLabel}
           </Link>
         </div>
       )}
@@ -150,25 +165,63 @@ export function WorkspaceLayout({
   onLogout,
   profileTo,
   publicSiteTo,
+  publicSiteLabel = 'Trang web công khai',
+  brand = 'Emily Hotel',
+  navLabel = 'Menu điều hướng',
+  emptyNavText,
+  sidebarId = 'workspace-sidebar',
+  error,
   loading,
+  loadingLabel = 'Đang tải…',
+  contentWidth = 'contained',
   forbidden,
   children,
 }: {
   groups: NavGroup[]
-  user: { name: string; roleLabel: string }
+  user: { name: string; roleLabel: string; avatarUrl?: string }
   workspaceLabel: string
   onLogout: () => void
   profileTo?: string
   publicSiteTo?: string
+  publicSiteLabel?: string
+  brand?: string
+  navLabel?: string
+  emptyNavText?: string
+  sidebarId?: string
+  error?: string
   loading?: boolean
+  loadingLabel?: string
+  contentWidth?: 'contained' | 'bare'
   forbidden?: boolean
   children?: ReactNode
 }) {
-  const [open, setOpen] = useState(false)
+  const { pathname } = useLocation()
+  const [openOn, setOpenOn] = useState<string | null>(null)
+  const open = openOn === pathname
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+  const sidebarRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    sidebarRef.current?.querySelector('a')?.focus()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenOn(null)
+        menuButtonRef.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open])
 
   if (loading) {
     return (
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen bg-background">
+        <p role="status" className="sr-only">
+          {loadingLabel}
+        </p>
         <div className="hidden w-64 border-r lg:block" />
         <div className="flex-1 space-y-4 p-8">
           <Skeleton className="h-8 w-64" />
@@ -179,46 +232,76 @@ export function WorkspaceLayout({
     )
   }
 
-  const initial = user.name.trim().split(/\s+/).at(-1)?.[0] ?? '?'
+  const initial = user.name.trim().split(/\s+/).at(-1)?.[0]?.toUpperCase() ?? '?'
 
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 bg-ink lg:block">
-        <SideNav groups={groups} publicSiteTo={publicSiteTo} />
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-md"
+      >
+        Bỏ qua điều hướng
+      </a>
+      {open && (
+        <button
+          type="button"
+          aria-label="Đóng menu"
+          tabIndex={-1}
+          onClick={() => setOpenOn(null)}
+          className="fixed inset-0 z-30 bg-ink/50 lg:hidden"
+        />
+      )}
+      <aside
+        id={sidebarId}
+        ref={sidebarRef}
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 flex h-full w-64 flex-col bg-ink transition-transform duration-300 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:shrink-0 lg:translate-x-0 lg:transition-none',
+          open ? 'translate-x-0' : 'invisible -translate-x-full lg:visible lg:translate-x-0',
+        )}
+      >
+        <SideNav
+          groups={groups}
+          brand={brand}
+          navLabel={navLabel}
+          emptyNavText={emptyNavText}
+          publicSiteTo={publicSiteTo}
+          publicSiteLabel={publicSiteLabel}
+          onNavigate={() => setOpenOn(null)}
+        />
       </aside>
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="left" className="w-72 border-0 bg-ink p-0">
-          <SheetTitle className="sr-only">Menu điều hướng</SheetTitle>
-          <SheetDescription className="sr-only">Các mục của khu làm việc</SheetDescription>
-          <SideNav groups={groups} publicSiteTo={publicSiteTo} onNavigate={() => setOpen(false)} />
-        </SheetContent>
-      </Sheet>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur sm:px-8">
           <button
+            ref={menuButtonRef}
             type="button"
             className="lg:hidden"
-            onClick={() => setOpen(true)}
+            onClick={() => setOpenOn(open ? null : pathname)}
             aria-label="Mở menu"
+            aria-expanded={open}
+            aria-controls={sidebarId}
           >
             <Menu className="size-5" />
           </button>
           <div className="text-sm text-muted-foreground">
-            Emily Hotel · <span className="text-foreground">Khu làm việc {workspaceLabel}</span>
+            {brand} · <span className="text-foreground">Khu làm việc {workspaceLabel}</span>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-2 rounded-full border bg-card py-1 pr-3 pl-1">
+              <DropdownMenuTrigger
+                aria-label={user.name}
+                className="flex items-center gap-2 rounded-full border bg-card py-1 pr-3 pl-1 text-sm font-medium hover:bg-muted/50 transition-colors"
+              >
                 <Avatar className="size-7">
+                  {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
                   <AvatarFallback className="bg-primary/15 text-xs text-primary">
                     {initial}
                   </AvatarFallback>
                 </Avatar>
-                <span className="hidden text-sm sm:inline">{user.name}</span>
+                <span className="hidden max-w-[40vw] truncate sm:inline">{user.name}</span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
-                  {user.name}
+                  <div className="font-medium text-foreground truncate">{user.name}</div>
                   <div className="text-xs font-normal text-muted-foreground">{user.roleLabel}</div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -234,7 +317,22 @@ export function WorkspaceLayout({
             </DropdownMenu>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-8">
+        {error && (
+          <p
+            role="alert"
+            className="border-b border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive sm:px-8"
+          >
+            {error}
+          </p>
+        )}
+        <main
+          id="main"
+          tabIndex={-1}
+          className={cn(
+            'flex-1 focus:outline-none',
+            contentWidth === 'contained' && 'mx-auto w-full max-w-7xl px-4 py-8 sm:px-8',
+          )}
+        >
           {forbidden ? (
             <div className="py-20">
               <Unauthorized

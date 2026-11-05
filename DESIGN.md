@@ -187,7 +187,7 @@ components/
 | Component | Notes |
 |---|---|
 | `SiteLayout` | Public-site frame: `links`, `actions`, `overlay` (header over the hero), `brand`, `navLabel`, `footerLinks`, `footerContact`, `footerTagline` |
-| `WorkspaceLayout` | Workspace frame: `groups` (grouped menu), `user`, `workspaceLabel`, `onLogout`, `profileTo`, `publicSiteTo`, `loading`, `forbidden`; `children` defaults to `<Outlet />` |
+| `WorkspaceLayout` | Workspace frame: `groups` (grouped menu), `user`, `workspaceLabel`, `onLogout`, `profileTo`, `publicSiteTo`, `publicSiteLabel`, `brand`, `navLabel`, `emptyNavText`, `sidebarId`, `error`, `loading`, `loadingLabel`, `contentWidth` (`contained` or `bare`), `forbidden`; `children` defaults to `<Outlet />` |
 | `AuthLayout` | `title`, `subtitle`, `image`, `quote` |
 
 The templates are presentational only and do **not** yet replace `layouts/StaffLayout` and `PublicLayout` (which still hold the sign-in logic); wiring them together is a separate task.
