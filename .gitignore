@@ -16,3 +16,6 @@ coverage/
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+
+# Tài liệu làm việc nội bộ (không đưa lên repo)
+docs/

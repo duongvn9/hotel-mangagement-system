@@ -1,15 +1,16 @@
 # features/
 
-Mỗi nhóm chức năng một thư mục, khớp với module backend:
+One folder per functional area, matching the backend modules:
 
 ```
 features/bookings/
-├── api.ts            # hàm gọi API (dùng api từ @/lib/api-client)
+├── api.ts            # API calls (use `api` from @/lib/api-client)
 ├── hooks.ts          # useQuery / useMutation
-├── components/       # component riêng của feature
-├── pages/            # trang của feature
-└── routes.tsx        # mảng route, gộp vào src/app/router.tsx
+├── components/       # components that belong to this feature only
+├── pages/            # the feature's pages
+└── routes.tsx        # route array, merged in src/app/router.tsx
 ```
 
-Component dùng chung nhiều feature (Button, Input, Modal, Table…) để ở `src/components/`.
-Màu, font, khoảng cách luôn dùng token của design system (xem `DESIGN.md`), không viết mã hex trong component.
+Components shared by several features live in `src/components/`, organized by atomic design tier
+(`atoms`, `molecules`, `organisms`, `templates`; see `DESIGN.md` section 7).
+Always use the design system's tokens for color, font and spacing (see `DESIGN.md`); never write hex values in components.
