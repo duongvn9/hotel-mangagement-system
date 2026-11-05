@@ -5,7 +5,7 @@ import { flatLinks, isStaffRole, navGroupsFor, roleHome } from '@/app/navigation
 import { useAuth } from './auth-context'
 
 const compactLink =
-  'inline-flex min-h-11 items-center hover:text-primary focus-visible:text-primary'
+  'inline-flex min-h-11 items-center rounded-lg px-3 py-2.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground md:min-h-0 md:rounded-full md:py-2 lg:px-4'
 
 /**
  * Góc phải header: link đăng nhập, hoặc tên người dùng + đăng xuất (UC03).
@@ -43,7 +43,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
 
   if (!me) {
     return compact ? (
-      <span className="flex flex-col gap-1 md:flex-row md:items-center md:gap-6">
+      <span className="flex flex-col gap-1 md:flex-row md:items-center md:gap-1">
         <Link to="/login" className={compactLink}>
           Đăng nhập
         </Link>
@@ -52,7 +52,10 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
         </Link>
       </span>
     ) : (
-      <Link to="/login" className="hover:text-primary">
+      <Link
+        to="/login"
+        className="inline-flex min-h-11 items-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
         Đăng nhập
       </Link>
     )
@@ -72,7 +75,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
     <>
       <Link
         to="/profile"
-        className={`${compact ? compactLink : ''} tracking-normal text-pearl-900 normal-case hover:text-primary`}
+        className={`${compact ? compactLink : 'inline-flex min-h-11 items-center text-sm font-medium text-foreground hover:text-primary'} tracking-normal text-foreground normal-case`}
       >
         <span className="inline-flex items-center gap-2">
           <AssetImage decorative path={me.avatarUrl} name={me.fullName} />
@@ -82,7 +85,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
       <button
         type="button"
         onClick={onLogout}
-        className={`${compact ? `${compactLink} uppercase` : 'uppercase hover:text-primary'}`}
+        className={`${compact ? `${compactLink} uppercase` : 'inline-flex min-h-11 items-center text-sm font-medium uppercase text-muted-foreground hover:text-foreground'}`}
       >
         Đăng xuất
       </button>
@@ -101,7 +104,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
           <Link
             key={link.to}
             to={link.to}
-            className="inline-flex min-h-11 items-center hover:text-primary"
+            className="inline-flex min-h-11 items-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             {link.label}
           </Link>
@@ -113,7 +116,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
 
   const groups = navGroupsFor(me)
   return (
-    <span className="flex flex-col gap-1 md:flex-row md:items-center md:gap-6">
+    <span className="flex flex-col gap-1 md:flex-row md:items-center md:gap-1">
       {isStaffRole(me.role) ? (
         <Link to={roleHome(me.role)} className={compactLink}>
           Khu làm việc
@@ -137,13 +140,13 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
             {open && (
               <ul
                 id="account-links"
-                className="mt-1 pl-3 md:absolute md:top-full md:right-0 md:z-30 md:mt-2 md:w-64 md:rounded-lg md:border md:border-stone-300 md:bg-white md:p-2 md:pl-2 md:shadow-md"
+                className="mt-1 pl-3 md:absolute md:top-full md:right-0 md:z-30 md:mt-2 md:w-64 md:rounded-xl md:border md:bg-card md:p-2 md:shadow-lg"
               >
                 {flatLinks(me).map((link) => (
                   <li key={link.to}>
                     <Link
                       to={link.to}
-                      className="flex min-h-11 items-center rounded px-3 tracking-normal text-pearl-900 normal-case transition-colors duration-150 hover:bg-primary-soft motion-reduce:transition-none"
+                      className="flex min-h-11 items-center rounded-lg px-3 text-sm tracking-normal text-foreground normal-case transition-colors duration-150 hover:bg-surface motion-reduce:transition-none"
                     >
                       {link.label}
                     </Link>
