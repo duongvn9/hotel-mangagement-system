@@ -94,6 +94,29 @@ describe('SearchRoomsPage', () => {
     fireEvent.change(screen.getByLabelText('Số phòng'), { target: { value: '1' } })
     expect(await screen.findByText(/Tiếp tục đặt phòng/)).toBeInTheDocument()
   })
+
+  it('shows prompt when criteria are missing', () => {
+    renderWithAuth(bookingRoutes, { path: '/search' })
+    expect(
+      screen.getByText(/Nhập thông tin ở trên và bấm “Tìm phòng” để bắt đầu/i),
+    ).toBeInTheDocument()
+  })
+
+  it('shows empty message when no rooms match', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: [] })
+    renderWithAuth(bookingRoutes, {
+      path: '/search?checkIn=2099-01-10&checkOut=2099-01-12&guests=2',
+    })
+    expect(await screen.findByText(/Không có phòng trống phù hợp/i)).toBeInTheDocument()
+  })
+
+  it('shows error alert when availability query fails', async () => {
+    vi.spyOn(api, 'get').mockRejectedValue(new Error('Máy chủ bận'))
+    renderWithAuth(bookingRoutes, {
+      path: '/search?checkIn=2099-01-10&checkOut=2099-01-12&guests=2',
+    })
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Có lỗi xảy ra|Máy chủ bận/)
+  })
 })
 
 describe('MyBookingsPage', () => {
