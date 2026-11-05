@@ -224,17 +224,17 @@ describe('SiteLayout', () => {
     expect(button).toHaveAttribute('aria-expanded', 'false')
   })
 
-  // (g) brand="Grand Emily HMS" hiển thị trong header và vòng tròn chữ là G
+  // (g) brand="Grand Emily Hotel" hiển thị trong header và vòng tròn chữ là G
   it('renders custom brand in header with initial letter in the badge', () => {
     render(
       <MemoryRouter>
-        <SiteLayout links={links} brand="Grand Emily HMS">
+        <SiteLayout links={links} brand="Grand Emily Hotel">
           <p>Nội dung</p>
         </SiteLayout>
       </MemoryRouter>,
     )
     const banner = screen.getByRole('banner')
-    expect(within(banner).getByText('Grand Emily HMS')).toBeInTheDocument()
+    expect(within(banner).getByText('Grand Emily Hotel')).toBeInTheDocument()
     expect(within(banner).getByText('G')).toBeInTheDocument()
   })
 
@@ -284,12 +284,12 @@ describe('AuthLayout', () => {
   it('passes brand name down to the logo', () => {
     render(
       <MemoryRouter>
-        <AuthLayout title="Đăng nhập" subtitle="Chào mừng" brand="Grand Emily HMS">
+        <AuthLayout title="Đăng nhập" subtitle="Chào mừng" brand="Grand Emily Hotel">
           <div />
         </AuthLayout>
       </MemoryRouter>,
     )
-    expect(screen.getByText('Grand Emily HMS')).toBeInTheDocument()
+    expect(screen.getByText('Grand Emily Hotel')).toBeInTheDocument()
   })
 })
 

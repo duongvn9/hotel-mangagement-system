@@ -51,11 +51,11 @@ describe('Logo', () => {
   it('renders a custom brand name and uses its initial letter', () => {
     render(
       <MemoryRouter>
-        <Logo name="Grand Emily HMS" />
+        <Logo name="Grand Emily Hotel" />
       </MemoryRouter>,
     )
-    const link = screen.getByRole('link', { name: /Grand Emily HMS/ })
-    expect(link).toHaveTextContent('Grand Emily HMS')
+    const link = screen.getByRole('link', { name: /Grand Emily Hotel/ })
+    expect(link).toHaveTextContent('Grand Emily Hotel')
     expect(within(link).getByText('G')).toBeInTheDocument()
   })
 })
