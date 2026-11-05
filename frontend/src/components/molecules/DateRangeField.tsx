@@ -1,22 +1,15 @@
-import { addDays, format, isValid, parseISO } from 'date-fns'
+import { format, isValid, parseISO, startOfToday } from 'date-fns'
 import { vi } from 'date-fns/locale'
 import { CalendarIcon } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
 import { cn } from '@/lib/utils'
 import { Calendar } from '../ui/calendar'
+import { normalizeRange } from './date-range'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
-
-const iso = (d: Date) => format(d, 'yyyy-MM-dd')
 
 function parse(value: string): Date | undefined {
   const date = parseISO(value)
   return isValid(date) ? date : undefined
-}
-
-/** Chuẩn hóa khoảng ngày chọn từ lịch: ngày trả luôn sau ngày nhận ít nhất 1 ngày. */
-export function normalizeRange(from: Date, to?: Date): [string, string] {
-  const end = to && to > from ? to : addDays(from, 1)
-  return [iso(from), iso(end)]
 }
 
 export function DateRangeField({
@@ -56,7 +49,7 @@ export function DateRangeField({
           mode="range"
           numberOfMonths={2}
           selected={range}
-          disabled={{ before: new Date(new Date().toDateString()) }}
+          disabled={(date) => date < startOfToday()}
           onSelect={(r) => {
             if (r?.from) onChange(...normalizeRange(r.from, r.to))
           }}
