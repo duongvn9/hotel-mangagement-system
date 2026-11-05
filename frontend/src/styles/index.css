@@ -1,30 +1,24 @@
-/* Token gốc của Grand Emily design system (CSS variables + Google Fonts) */
-@import '../../../design-system/tokens.css';
 @import 'tailwindcss';
-@config '../../tailwind.config.js';
+@import 'tw-animate-css';
+@import '../../../design-system/tokens.css';
+@import '../../../design-system/theme.css';
+@import '../../../design-system/legacy.css';
 
 @layer base {
+  * {
+    border-color: var(--color-border);
+  }
   html {
     -webkit-font-smoothing: antialiased;
   }
   body {
-    background: var(--color-bg);
-    color: var(--color-text);
-    font-family: var(--font-body);
-    font-size: var(--text-base);
-    line-height: var(--leading-normal);
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
   }
-  /*
-   * Cormorant Garamond (font-display) mặc định dùng chữ số kiểu cổ (oldstyle):
-   * các số 3,4,5,7,9 thò đuôi xuống dưới baseline nên bị cắt/như rớt dòng trong
-   * tiêu đề. Ép dùng chữ số canh dòng (lining) để số nằm gọn trên baseline.
-   */
-  .font-display {
-    font-variant-numeric: lining-nums;
-    font-feature-settings: 'lnum' 1;
-  }
+  /* Phần tử tùy biến của trang cũ vẫn cần vòng focus; component mới tự có ring của shadcn. */
   :focus-visible {
     outline: none;
-    box-shadow: var(--shadow-focus);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 45%, transparent);
   }
 }
