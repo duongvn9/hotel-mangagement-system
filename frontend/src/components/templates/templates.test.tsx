@@ -280,6 +280,17 @@ describe('AuthLayout', () => {
     expect(screen.getByText('Chào mừng bạn quay lại')).toBeInTheDocument()
     expect(screen.getByRole('form', { name: 'login' })).toBeInTheDocument()
   })
+
+  it('passes brand name down to the logo', () => {
+    render(
+      <MemoryRouter>
+        <AuthLayout title="Đăng nhập" subtitle="Chào mừng" brand="Grand Emily HMS">
+          <div />
+        </AuthLayout>
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Grand Emily HMS')).toBeInTheDocument()
+  })
 })
 
 describe('templates barrel', () => {

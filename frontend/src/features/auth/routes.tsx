@@ -4,9 +4,12 @@ import { LoginPage } from './pages/LoginPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { RegisterPage } from './pages/RegisterPage'
 
-export const authRoutes: RouteObject[] = [
+export const authOnlyRoutes: RouteObject[] = [
   { path: 'login', element: <LoginPage /> },
   { path: 'register', element: <RegisterPage /> },
+]
+
+export const authRoutes: RouteObject[] = [
   {
     path: 'profile',
     element: (
