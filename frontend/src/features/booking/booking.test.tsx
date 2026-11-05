@@ -117,6 +117,42 @@ describe('SearchRoomsPage', () => {
   })
 })
 
+describe('RoomDetailsPage', () => {
+  beforeEach(() => localStorage.clear())
+
+  const mockRoom = {
+    id: 't1',
+    name: 'Phòng Biển Deluxe',
+    description: 'Tầm nhìn tuyệt đẹp hướng biển Đông.',
+    adultCapacity: 2,
+    childCapacity: 1,
+    capacity: 3,
+    pricePerNight: 1800000,
+    images: ['room1.jpg', 'room2.jpg'],
+    amenities: [
+      { id: 'a1', name: 'Ban công ngắm biển' },
+      { id: 'a2', name: 'Bồn tắm nằm' },
+    ],
+  }
+
+  it('renders room details including name, description, amenities, and price', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/room-types/t1/overview') return { data: mockRoom }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    renderWithAuth(bookingRoutes, { path: '/room-types/t1' })
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Phòng Biển Deluxe' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Tầm nhìn tuyệt đẹp hướng biển Đông.')).toBeInTheDocument()
+    expect(screen.getByText('Ban công ngắm biển')).toBeInTheDocument()
+    expect(screen.getByText('Bồn tắm nằm')).toBeInTheDocument()
+    expect(screen.getByText(/1\.800\.000/)).toBeInTheDocument()
+  })
+})
+
 describe('MyBookingsPage', () => {
   afterEach(() => vi.restoreAllMocks())
 
