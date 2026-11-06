@@ -6,6 +6,7 @@ import {
   navGroupsFor,
   partitionWorkspaceRoutes,
   roleHome,
+  workspaceHome,
 } from './navigation'
 
 const me = (role: string, permissions: string[] = []): Me => ({
@@ -22,8 +23,17 @@ describe('roleHome', () => {
     expect(roleHome('RECEPTIONIST')).toBe('/reception/dashboard')
     expect(roleHome('SERVICE_STAFF')).toBe('/staff/service/dashboard')
     expect(roleHome('OPERATIONS_STAFF')).toBe('/staff/operations/dashboard')
-    expect(roleHome('CUSTOMER')).toBe('/')
+    expect(roleHome('CUSTOMER')).toBe('/customer/dashboard')
     expect(roleHome('SOMETHING_NEW')).toBe('/')
+  })
+})
+
+describe('workspaceHome', () => {
+  it('uses the role home, or the first menu page for a custom role, or the home page', () => {
+    expect(workspaceHome(me('CUSTOMER'))).toBe('/customer/dashboard')
+    expect(workspaceHome(me('MANAGER'))).toBe('/manager/dashboard')
+    expect(workspaceHome(me('CUSTOM_ROLE', ['task:execute']))).toBe('/staff/tasks')
+    expect(workspaceHome(me('CUSTOM_ROLE'))).toBe('/')
   })
 })
 
@@ -39,57 +49,63 @@ describe('isStaffRole', () => {
 describe('navGroupsFor', () => {
   it('groups the reception links', () => {
     const groups = navGroupsFor(me('RECEPTIONIST'))
-    expect(groups.map((group) => group.label)).toEqual(['Quầy lễ tân', 'Yêu cầu'])
+    expect(groups.map((group) => group.label)).toEqual(['Lễ tân', 'Yêu cầu', 'Tài khoản'])
     expect(groups[0]?.items.map((item) => item.to)).toEqual([
       '/reception/dashboard',
       '/reception/front-desk',
-      '/reception/rooms',
       '/reception/bookings',
       '/reception/booking/new',
       '/reception/guests',
+      '/reception/rooms',
     ])
   })
 
   it('groups the manager links and lets the manager reach the reception pages', () => {
     const groups = navGroupsFor(me('MANAGER'))
     expect(groups.map((group) => group.label)).toEqual([
-      'Giám sát',
+      'Tổng quan',
+      'Khách sạn',
+      'Nhân sự & công việc',
       'Báo cáo',
-      'Cơ sở vật chất',
-      'Quản trị',
-      'Lễ tân',
+      'Tài khoản',
     ])
     expect(flatLinks(me('MANAGER')).map((link) => link.to)).toEqual(
       expect.arrayContaining([
         '/manager/dashboard',
         '/manager/rooms',
-        '/reception/dashboard',
-        '/reception/front-desk',
+        '/reception/bookings',
+        '/reception/rooms',
       ]),
     )
   })
 
   it('gives service and operations staff their task pages', () => {
     expect(flatLinks(me('SERVICE_STAFF')).map((link) => link.to)).toEqual([
-      '/staff/tasks',
       '/staff/service/dashboard',
+      '/staff/tasks',
       '/staff/service-history',
+      '/notifications',
+      '/profile',
     ])
     expect(flatLinks(me('OPERATIONS_STAFF')).map((link) => link.to)).toEqual([
-      '/staff/tasks',
       '/staff/operations/dashboard',
-      '/operations/maintenance/report',
+      '/staff/tasks',
       '/operations/maintenance/history',
+      '/operations/maintenance/report',
+      '/notifications',
+      '/profile',
     ])
   })
 
-  it('lists the customer pages including feedback', () => {
+  it('lists the customer pages including feedback and profile', () => {
     expect(flatLinks(me('CUSTOMER')).map((link) => link.to)).toEqual([
+      '/customer/dashboard',
+      '/my-bookings',
       '/customer/service-orders',
-      '/customer/service-orders/new',
-      '/customer/issues',
-      '/customer/issues/report',
       '/my-feedback',
+      '/customer/issues/report',
+      '/notifications',
+      '/profile',
     ])
   })
 

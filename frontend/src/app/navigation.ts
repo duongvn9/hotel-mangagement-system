@@ -18,60 +18,84 @@ export interface NavGroup {
 
 const RECEPTION_DASHBOARD = '/reception/dashboard'
 
-const RECEPTION_DESK: NavItem[] = [
-  { to: '/reception/front-desk', label: 'Đến và đi trong ngày' },
-  { to: '/reception/rooms', label: 'Sơ đồ phòng' },
-  { to: '/reception/bookings', label: 'Danh sách booking' },
-  { to: '/reception/booking/new', label: 'Tạo booking' },
-  { to: '/reception/guests', label: 'Tìm khách' },
-]
+const NOTIFICATIONS_NAV_ITEM: NavItem = { to: '/notifications', label: 'Thông báo' }
+const PROFILE_NAV_ITEM: NavItem = { to: '/profile', label: 'Hồ sơ' }
+
+const ACCOUNT_GROUP: NavGroup = {
+  label: 'Tài khoản',
+  items: [NOTIFICATIONS_NAV_ITEM, PROFILE_NAV_ITEM],
+}
 
 const NAV_BY_ROLE: Record<string, NavGroup[]> = {
   CUSTOMER: [
     {
-      label: 'Của tôi',
+      label: 'Kỳ nghỉ của tôi',
       items: [
-        { to: '/customer/service-orders', label: 'Dịch vụ của tôi' },
-        { to: '/customer/service-orders/new', label: 'Yêu cầu dịch vụ' },
-        { to: '/customer/issues', label: 'Sự cố của tôi' },
+        { to: '/customer/dashboard', label: 'Tổng quan' },
+        { to: '/my-bookings', label: 'Đặt phòng của tôi' },
+        { to: '/customer/service-orders', label: 'Dịch vụ phòng' },
+        { to: '/my-feedback', label: 'Đánh giá' },
         { to: '/customer/issues/report', label: 'Báo sự cố' },
-        { to: '/my-feedback', label: 'Phản hồi của tôi' },
       ],
     },
+    ACCOUNT_GROUP,
   ],
   RECEPTIONIST: [
     {
-      label: 'Quầy lễ tân',
-      items: [{ to: RECEPTION_DASHBOARD, label: 'Tổng quan' }, ...RECEPTION_DESK],
+      label: 'Lễ tân',
+      items: [
+        { to: RECEPTION_DASHBOARD, label: 'Bảng điều khiển' },
+        { to: '/reception/front-desk', label: 'Quầy lễ tân' },
+        { to: '/reception/bookings', label: 'Đặt phòng' },
+        { to: '/reception/booking/new', label: 'Đặt phòng tại quầy' },
+        { to: '/reception/guests', label: 'Tra cứu khách' },
+        { to: '/reception/rooms', label: 'Sơ đồ trạng thái phòng' },
+      ],
     },
     {
       label: 'Yêu cầu',
       items: [
         { to: '/staff/service-orders', label: 'Yêu cầu dịch vụ' },
-        { to: '/staff/issues', label: 'Yêu cầu sự cố' },
-        { to: '/staff/feedback', label: 'Phản hồi' },
+        { to: '/staff/issues', label: 'Sự cố' },
+        { to: '/staff/feedback', label: 'Đánh giá của khách' },
       ],
     },
+    ACCOUNT_GROUP,
+  ],
+  SERVICE_STAFF: [
+    {
+      label: 'Dịch vụ',
+      items: [
+        { to: '/staff/service/dashboard', label: 'Bảng điều khiển' },
+        { to: '/staff/tasks', label: 'Công việc được giao' },
+        { to: '/staff/service-history', label: 'Lịch sử thực hiện dịch vụ' },
+      ],
+    },
+    ACCOUNT_GROUP,
+  ],
+  OPERATIONS_STAFF: [
+    {
+      label: 'Vận hành',
+      items: [
+        { to: '/staff/operations/dashboard', label: 'Bảng điều khiển' },
+        { to: '/staff/tasks', label: 'Công việc được giao' },
+        { to: '/operations/maintenance/history', label: 'Lịch sử bảo trì' },
+        { to: '/operations/maintenance/report', label: 'Báo hỏng hóc' },
+      ],
+    },
+    ACCOUNT_GROUP,
   ],
   MANAGER: [
     {
-      label: 'Giám sát',
+      label: 'Tổng quan',
       items: [
-        { to: '/manager/dashboard', label: 'Tổng quan' },
-        { to: '/manager/task-queues', label: 'Hàng đợi task' },
-        { to: '/manager/issues', label: 'Danh sách sự cố' },
-        { to: '/manager/payments/reconciliation', label: 'Đối soát thanh toán' },
+        { to: '/manager/dashboard', label: 'Bảng điều khiển' },
+        { to: '/reception/bookings', label: 'Đặt phòng' },
+        { to: '/reception/rooms', label: 'Sơ đồ trạng thái phòng' },
       ],
     },
     {
-      label: 'Báo cáo',
-      items: [
-        { to: '/manager/reports/revenue', label: 'Báo cáo doanh thu' },
-        { to: '/manager/reports/operational', label: 'Báo cáo vận hành' },
-      ],
-    },
-    {
-      label: 'Cơ sở vật chất',
+      label: 'Khách sạn',
       items: [
         { to: '/manager/rooms', label: 'Phòng' },
         { to: '/manager/room-types', label: 'Loại phòng' },
@@ -80,42 +104,24 @@ const NAV_BY_ROLE: Record<string, NavGroup[]> = {
       ],
     },
     {
-      label: 'Quản trị',
+      label: 'Nhân sự & công việc',
       items: [
         { to: '/manager/accounts', label: 'Tài khoản' },
-        { to: '/manager/roles', label: 'Vai trò' },
+        { to: '/manager/roles', label: 'Vai trò & quyền' },
+        { to: '/manager/task-queues', label: 'Giám sát công việc' },
+        { to: '/manager/issues', label: 'Sự cố' },
       ],
     },
     {
-      label: 'Lễ tân',
+      label: 'Báo cáo',
       items: [
-        { to: RECEPTION_DASHBOARD, label: 'Tổng quan lễ tân' },
-        ...RECEPTION_DESK,
-        { to: '/staff/feedback', label: 'Phản hồi' },
+        { to: '/manager/reports/revenue', label: 'Báo cáo doanh thu' },
+        { to: '/manager/reports/operational', label: 'Báo cáo vận hành' },
+        { to: '/staff/feedback', label: 'Đánh giá của khách' },
+        { to: '/manager/payments/reconciliation', label: 'Đối soát' },
       ],
     },
-  ],
-  SERVICE_STAFF: [
-    {
-      label: 'Công việc',
-      items: [
-        { to: '/staff/service/dashboard', label: 'Bảng điều khiển dịch vụ' },
-        { to: '/staff/service-history', label: 'Lịch sử thực hiện dịch vụ' },
-      ],
-    },
-  ],
-  OPERATIONS_STAFF: [
-    {
-      label: 'Công việc',
-      items: [{ to: '/staff/operations/dashboard', label: 'Bảng điều khiển vận hành' }],
-    },
-    {
-      label: 'Bảo trì',
-      items: [
-        { to: '/operations/maintenance/report', label: 'Báo hỏng thiết bị' },
-        { to: '/operations/maintenance/history', label: 'Lịch sử bảo trì' },
-      ],
-    },
+    ACCOUNT_GROUP,
   ],
 }
 
@@ -127,6 +133,7 @@ const ROLE_HOME: Record<string, string> = {
   RECEPTIONIST: RECEPTION_DASHBOARD,
   SERVICE_STAFF: '/staff/service/dashboard',
   OPERATIONS_STAFF: '/staff/operations/dashboard',
+  CUSTOMER: '/customer/dashboard',
 }
 
 export const roleHome = (role: string): string => ROLE_HOME[role] ?? '/'
@@ -143,14 +150,27 @@ const hasAssignedTasks = (me: Me) =>
 export function navGroupsFor(me: Me): NavGroup[] {
   const groups = NAV_BY_ROLE[me.role] ?? []
   if (!hasAssignedTasks(me)) return groups
+  const alreadyHasTasks = groups.some((group) =>
+    group.items.some((item) => item.to === ASSIGNED_TASKS.to),
+  )
+  if (alreadyHasTasks) return groups
   const [first, ...rest] = groups
-  // Việc được giao nằm đầu nhóm đầu tiên của role.
+  // Việc được giao nằm đầu nhóm đầu tiên của role khi chưa có trong cấu hình.
   return first
     ? [{ ...first, items: [ASSIGNED_TASKS, ...first.items] }, ...rest]
     : [{ label: 'Công việc', items: [ASSIGNED_TASKS] }]
 }
 
 export const flatLinks = (me: Me): NavItem[] => navGroupsFor(me).flatMap((group) => group.items)
+
+/**
+ * Điểm vào khu làm việc của một người dùng: trang chủ của role, hoặc mục menu đầu tiên với role
+ * tự tạo, hoặc trang chủ công khai khi chưa có mục nào.
+ */
+export function workspaceHome(me: Me): string {
+  if (me.role in ROLE_HOME) return roleHome(me.role)
+  return flatLinks(me)[0]?.to ?? '/'
+}
 
 const WORKSPACE_AREAS = [
   'staff',
@@ -161,6 +181,7 @@ const WORKSPACE_AREAS = [
   'my-bookings',
   'my-feedback',
   'profile',
+  'notifications',
 ]
 
 const firstSegment = (path: string | undefined) => path?.replace(/^\/+/, '').split('/')[0]

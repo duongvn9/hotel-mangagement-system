@@ -91,7 +91,9 @@ test('anonymous deep link redirects and static report wins over detail', async (
 })
 
 test.each([
-  ...views,
+  ['CUSTOMER', '/customer/issues/report', 'Báo sự cố'],
+  ['RECEPTIONIST', '/staff/issues', 'Sự cố'],
+  ['MANAGER', '/manager/issues', 'Sự cố'],
   ['SERVICE_STAFF', '', ''] as const,
   ['OPERATIONS_STAFF', '', ''] as const,
   ['CUSTOM_STAFF', '', ''] as const,
@@ -99,10 +101,15 @@ test.each([
   renderWithAuth([{ path: '/', element: <UserMenu /> }], {
     auth: { status: 'authenticated', me: { ...ME, role, permissions: ['issue:read'] } },
   })
-  for (const [, candidate, label] of views) {
-    if (candidate === path)
-      expect(screen.getByRole('link', { name: title })).toHaveAttribute('href', path)
-    else expect(screen.queryByRole('link', { name: label })).not.toBeInTheDocument()
+  if (path) {
+    expect(screen.getByRole('link', { name: title })).toHaveAttribute('href', path)
+  }
+  const otherPaths = ['/customer/issues/report', '/staff/issues', '/manager/issues'].filter(
+    (p) => p !== path,
+  )
+  for (const otherPath of otherPaths) {
+    const links = screen.queryAllByRole('link')
+    expect(links.some((l) => l.getAttribute('href') === otherPath)).toBe(false)
   }
 })
 

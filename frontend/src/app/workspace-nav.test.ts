@@ -9,7 +9,6 @@ import {
   ClipboardList,
   ConciergeBell,
   DoorOpen,
-  Flag,
   History,
   Layers,
   LayoutDashboard,
@@ -20,6 +19,7 @@ import {
   ShieldCheck,
   Star,
   TrendingUp,
+  User,
   UserCog,
   UserPlus,
   Users,
@@ -71,13 +71,15 @@ describe('workspace-nav', () => {
       expect(iconForPath('/manager/roles')).toBe(ShieldCheck)
     })
 
-    it('ánh xạ đúng icon cho các trang của khách hàng', () => {
+    it('ánh xạ đúng icon cho các trang của khách hàng và hồ sơ', () => {
+      expect(iconForPath('/customer/dashboard')).toBe(LayoutDashboard)
       expect(iconForPath('/my-bookings')).toBe(CalendarDays)
       expect(iconForPath('/customer/service-orders')).toBe(ConciergeBell)
       expect(iconForPath('/customer/service-orders/new')).toBe(CirclePlus)
       expect(iconForPath('/customer/issues')).toBe(AlertTriangle)
-      expect(iconForPath('/customer/issues/report')).toBe(Flag)
+      expect(iconForPath('/customer/issues/report')).toBe(AlertTriangle)
       expect(iconForPath('/my-feedback')).toBe(MessageSquareHeart)
+      expect(iconForPath('/profile')).toBe(User)
     })
   })
 
@@ -115,20 +117,33 @@ describe('workspace-nav', () => {
   })
 
   describe('(c2) shellGroupsFor', () => {
-    it('chèn /my-bookings vào đầu nhóm đầu tiên cho CUSTOMER', () => {
-      const paths = shellGroupsFor(me('CUSTOMER')).flatMap((g) => g.items.map((i) => i.to))
+    it('chuyển đổi chính xác cấu trúc nhóm cho CUSTOMER', () => {
+      const groups = shellGroupsFor(me('CUSTOMER'))
+      expect(groups[0].items[0]).toMatchObject({
+        to: '/customer/dashboard',
+        label: 'Tổng quan',
+        icon: LayoutDashboard,
+      })
+      const paths = groups.flatMap((g) => g.items.map((i) => i.to))
       expect(paths).toEqual([
+        '/customer/dashboard',
         '/my-bookings',
         '/customer/service-orders',
-        '/customer/service-orders/new',
-        '/customer/issues',
-        '/customer/issues/report',
         '/my-feedback',
+        '/customer/issues/report',
+        '/notifications',
+        '/profile',
       ])
     })
 
-    it('khớp chính xác với toWorkspaceGroups(navGroupsFor(me)) cho các role nhân viên', () => {
-      for (const role of ['MANAGER', 'RECEPTIONIST', 'SERVICE_STAFF', 'OPERATIONS_STAFF']) {
+    it('khớp chính xác với toWorkspaceGroups(navGroupsFor(me)) cho mọi role', () => {
+      for (const role of [
+        'MANAGER',
+        'RECEPTIONIST',
+        'SERVICE_STAFF',
+        'OPERATIONS_STAFF',
+        'CUSTOMER',
+      ]) {
         const user = me(role)
         expect(shellGroupsFor(user)).toEqual(toWorkspaceGroups(navGroupsFor(user)))
       }

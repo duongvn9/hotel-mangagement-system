@@ -3,13 +3,13 @@ import {
   Armchair,
   BarChart3,
   BedDouble,
+  Bell,
   CalendarDays,
   CircleDot,
   CirclePlus,
   ClipboardList,
   ConciergeBell,
   DoorOpen,
-  Flag,
   History,
   Layers,
   LayoutDashboard,
@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Star,
   TrendingUp,
+  User,
   UserCog,
   UserPlus,
   Users,
@@ -85,12 +86,17 @@ const ICONS_BY_PATH: Record<string, LucideIcon> = {
   '/manager/roles': ShieldCheck,
 
   // Khách hàng
+  '/customer/dashboard': LayoutDashboard,
   '/my-bookings': CalendarDays,
   '/customer/service-orders': ConciergeBell,
   '/customer/service-orders/new': CirclePlus,
   '/customer/issues': AlertTriangle,
-  '/customer/issues/report': Flag,
+  '/customer/issues/report': AlertTriangle,
   '/my-feedback': MessageSquareHeart,
+
+  // Tài khoản chung
+  '/notifications': Bell,
+  '/profile': User,
 }
 
 /**
@@ -118,22 +124,8 @@ export function toWorkspaceGroups(groups: AppNavGroup[]): WorkspaceNavGroup[] {
 
 /**
  * Lấy các nhóm menu dành cho khung làm việc (WorkspaceShell) theo thông tin người dùng `me`.
- * - Đối với khách hàng (role === 'CUSTOMER'): chèn thêm mục Booking của tôi (/my-bookings)
- *   vào đầu nhóm đầu tiên.
- * - Đối với nhân viên: chuyển đổi trực tiếp từ `navGroupsFor(me)`.
+ * Chuyển đổi trực tiếp từ `navGroupsFor(me)` sang định dạng WorkspaceNavGroup.
  */
 export function shellGroupsFor(me: Me): WorkspaceNavGroup[] {
-  const groups = navGroupsFor(me)
-  if (me.role === 'CUSTOMER') {
-    const bookingItem = {
-      to: '/my-bookings',
-      label: 'Booking của tôi',
-    }
-    const [first, ...rest] = groups
-    const customerFirst: AppNavGroup = first
-      ? { ...first, items: [bookingItem, ...first.items] }
-      : { label: 'Của tôi', items: [bookingItem] }
-    return toWorkspaceGroups([customerFirst, ...rest])
-  }
-  return toWorkspaceGroups(groups)
+  return toWorkspaceGroups(navGroupsFor(me))
 }

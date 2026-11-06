@@ -17,6 +17,8 @@ import { taskSupervisionRoutes } from '@/features/task-supervision/routes'
 import { reportRoutes } from '@/features/reports/routes'
 import { dashboardRoutes } from '@/features/dashboard/routes'
 import { experienceRoutes } from '@/features/experiences/routes'
+import { customerHomeRoutes } from '@/features/customer-home/routes'
+import { notificationRoutes } from '@/features/notifications/routes'
 
 import { PublicLayout } from '@/layouts/PublicLayout'
 import { WorkspaceShell } from '@/layouts/WorkspaceShell'
@@ -48,6 +50,8 @@ const { workspace, other } = partitionWorkspaceRoutes([
   ...reportRoutes,
   ...dashboardRoutes,
   ...experienceRoutes,
+  ...customerHomeRoutes,
+  ...notificationRoutes,
 ])
 
 export const router = createBrowserRouter([

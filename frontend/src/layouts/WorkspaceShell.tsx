@@ -25,7 +25,6 @@ export function WorkspaceShell() {
         loadingLabel="Đang tải…"
         groups={[]}
         user={{ name: '', roleLabel: '' }}
-        workspaceLabel=""
         onLogout={() => {}}
       />
     )
@@ -56,8 +55,8 @@ export function WorkspaceShell() {
       emptyNavText="Chưa có mục menu cho vai trò này. Liên hệ quản lý để được cấp quyền."
       groups={shellGroupsFor(me)}
       user={{ name: me.fullName, roleLabel, avatarUrl: me.avatarUrl }}
-      workspaceLabel={roleLabel}
       profileTo="/profile"
+      notificationsTo="/notifications"
       publicSiteTo="/"
       publicSiteLabel={customer ? 'Về trang chủ' : 'Xem trang khách'}
       contentWidth="bare"

@@ -1,4 +1,4 @@
-import { ChevronDown, Globe, LogOut, Menu } from 'lucide-react'
+import { Bell, ChevronDown, Globe, LogOut, Menu } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
 import type { LucideIcon } from 'lucide-react'
@@ -45,14 +45,22 @@ function SideNav({
   onNavigate: () => void
 }) {
   const { pathname } = useLocation()
-  // Chọn tay (mở/đóng nhóm) chỉ có hiệu lực ở trang hiện tại; sang trang khác thì nhóm chứa trang đang mở tự mở lại.
-  const [manual, setManual] = useState<{ path: string; map: Record<string, boolean> }>({
-    path: '',
-    map: {},
-  })
-  const map = manual.path === pathname ? manual.map : {}
-  const activeTitle = groups.find((g) => g.items.some((i) => isNavActive(pathname, i.to)))?.title
-  const isOpen = (title: string) => map[title] ?? title === activeTitle
+  // Nhóm do người dùng mở/đóng giữ nguyên khi chuyển trang; chưa chọn tay thì nhóm chứa trang đang mở được mở sẵn.
+  const [manual, setManual] = useState<Record<string, boolean>>({})
+  const [prevPathname, setPrevPathname] = useState(pathname)
+  const titleOf = (path: string) =>
+    groups.find((g) => g.items.some((i) => isNavActive(path, i.to)))?.title
+  const activeTitle = titleOf(pathname)
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname)
+    // Chốt nhóm vừa rời đi đang mở sẵn (không để nó tự đóng), rồi mở nhóm của trang mới.
+    const next = { ...manual }
+    const previous = titleOf(prevPathname)
+    if (previous && next[previous] === undefined) next[previous] = true
+    if (activeTitle) next[activeTitle] = true
+    setManual(next)
+  }
+  const isOpen = (title: string) => manual[title] ?? title === activeTitle
 
   return (
     <nav
@@ -77,7 +85,7 @@ function SideNav({
             <button
               type="button"
               aria-expanded={open}
-              onClick={() => setManual({ path: pathname, map: { ...map, [g.title]: !open } })}
+              onClick={() => setManual({ ...manual, [g.title]: !open })}
               className="group/head flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[10px] font-medium tracking-[0.2em] text-ink-foreground/45 uppercase transition-colors hover:text-ink-foreground/85"
             >
               <span className={cn('transition-colors', hasActive && 'text-primary/90')}>
@@ -161,9 +169,9 @@ function SideNav({
 export function WorkspaceLayout({
   groups,
   user,
-  workspaceLabel,
   onLogout,
   profileTo,
+  notificationsTo,
   publicSiteTo,
   publicSiteLabel = 'Trang web công khai',
   brand = 'Emily Hotel',
@@ -179,9 +187,9 @@ export function WorkspaceLayout({
 }: {
   groups: NavGroup[]
   user: { name: string; roleLabel: string; avatarUrl?: string }
-  workspaceLabel: string
   onLogout: () => void
   profileTo?: string
+  notificationsTo?: string
   publicSiteTo?: string
   publicSiteLabel?: string
   brand?: string
@@ -282,10 +290,16 @@ export function WorkspaceLayout({
           >
             <Menu className="size-5" />
           </button>
-          <div className="text-sm text-muted-foreground">
-            {brand} · <span className="text-foreground">Khu làm việc {workspaceLabel}</span>
-          </div>
           <div className="ml-auto flex items-center gap-2">
+            {notificationsTo && (
+              <Link
+                to={notificationsTo}
+                aria-label="Thông báo"
+                className="relative grid size-9 place-items-center rounded-full border bg-card transition-colors hover:bg-muted/50"
+              >
+                <Bell className="size-4" />
+              </Link>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger
                 aria-label={user.name}

@@ -26,6 +26,8 @@ describe('router layouts', () => {
     '/staff/feedback',
     '/my-bookings',
     '/my-feedback',
+    '/customer/dashboard',
+    '/notifications',
     '/customer/service-orders',
     '/customer/issues/report',
     '/customer/issues/abc',

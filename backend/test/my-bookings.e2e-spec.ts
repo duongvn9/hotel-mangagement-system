@@ -9,10 +9,17 @@ import {
   BookingSource,
   BookingStatus,
 } from '../src/modules/bookings/schemas/booking.schema.js';
+import {
+  PaymentMethod,
+  PaymentPurpose,
+  PaymentStatus,
+  PaymentTransaction,
+} from '../src/modules/payments/schemas/payment-transaction.schema.js';
 
 describe('GET /bookings/mine (e2e)', () => {
   let app: INestApplication;
   let bookings: Model<Booking>;
+  let payments: Model<PaymentTransaction>;
   const customerA = new Types.ObjectId();
   const customerB = new Types.ObjectId();
   const prefix = 'MINE-E2E-';
@@ -50,14 +57,42 @@ describe('GET /bookings/mine (e2e)', () => {
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
     await app.init();
     bookings = app.get(getModelToken(Booking.name));
-    await bookings.create([
+    payments = app.get(getModelToken(PaymentTransaction.name));
+    const created = await bookings.create([
       makeBooking(customerA, 'A1', '2095-01-10', '2095-01-12'),
       makeBooking(customerA, 'A2', '2095-02-10', '2095-02-12'),
       makeBooking(customerB, 'B1', '2095-03-10', '2095-03-12'),
     ]);
+    const a2 = created[1]._id;
+    const payment = (
+      ref: string,
+      status: PaymentStatus,
+      amount: number,
+      extra: Partial<PaymentTransaction> = {},
+    ) => ({
+      booking: a2,
+      invoice: new Types.ObjectId(),
+      transactionRef: prefix + ref,
+      method: PaymentMethod.Vnpay,
+      purpose: PaymentPurpose.Deposit,
+      status,
+      amount,
+      ...extra,
+    });
+    await payments.create([
+      payment('P1', PaymentStatus.Success, 150000),
+      payment('P2', PaymentStatus.Success, 50000, {
+        purpose: PaymentPurpose.Final,
+      }),
+      payment('P3', PaymentStatus.Pending, 999000),
+      payment('P4', PaymentStatus.Failed, 777000),
+      payment('P5', PaymentStatus.Success, 555000, { isActive: false }),
+    ]);
   }, 30000);
 
   afterAll(async () => {
+    if (payments)
+      await payments.deleteMany({ transactionRef: { $regex: '^' + prefix } });
     if (bookings) await bookings.deleteMany({ code: { $regex: '^' + prefix } });
     await app?.close();
   });
@@ -77,6 +112,22 @@ describe('GET /bookings/mine (e2e)', () => {
       depositAmount: 200000,
     });
     expect(codes).not.toContain(prefix + 'B1');
+  });
+
+  it('adds the total of successful payments as paidAmount', async () => {
+    const response = await http()
+      .get('/api/v1/bookings/mine')
+      .set({ 'x-dev-role': 'CUSTOMER', 'x-dev-user-id': String(customerA) })
+      .expect(200);
+    const paid = Object.fromEntries(
+      response.body.map((item: { code: string; paidAmount: number }) => [
+        item.code,
+        item.paidAmount,
+      ]),
+    );
+    // Chỉ tính giao dịch SUCCESS còn hiệu lực; PENDING, FAILED và bản ghi đã tắt bị loại.
+    expect(paid[prefix + 'A2']).toBe(200000);
+    expect(paid[prefix + 'A1']).toBe(0);
   });
 
   it('requires authentication', async () => {

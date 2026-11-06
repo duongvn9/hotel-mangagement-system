@@ -1,5 +1,4 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { ROLE_LABELS } from '@/features/auth/api'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { shellGroupsFor } from '@/app/workspace-nav'
 import { WorkspaceShell } from './WorkspaceShell'
@@ -49,11 +48,11 @@ describe('WorkspaceShell', () => {
     renderAt('/manager/dashboard')
     expect(screen.getByRole('heading', { name: 'Trang tổng quan' })).toBeInTheDocument()
     const menu = within(sidebar())
-    for (const group of ['Giám sát', 'Báo cáo', 'Cơ sở vật chất', 'Quản trị', 'Lễ tân']) {
-      expect(menu.getByText(group)).toBeInTheDocument()
+    for (const group of ['Tổng quan', 'Khách sạn', 'Nhân sự & công việc', 'Báo cáo', 'Tài khoản']) {
+      expect(menu.getAllByText(group)[0]).toBeInTheDocument()
     }
     expect(menu.getByRole('link', { name: 'Phòng' })).toHaveAttribute('href', '/manager/rooms')
-    expect(menu.getByRole('link', { name: 'Sơ đồ phòng' })).toHaveAttribute(
+    expect(menu.getByRole('link', { name: 'Sơ đồ trạng thái phòng' })).toHaveAttribute(
       'href',
       '/reception/rooms',
     )
@@ -62,8 +61,8 @@ describe('WorkspaceShell', () => {
   it('shows the reception menu without manager pages', () => {
     renderAt('/reception/front-desk', receptionist)
     const menu = within(sidebar())
-    expect(menu.getByRole('link', { name: 'Đến và đi trong ngày' })).toBeInTheDocument()
-    expect(menu.queryByRole('link', { name: 'Tài khoản' })).not.toBeInTheDocument()
+    expect(menu.getByRole('link', { name: 'Quầy lễ tân' })).toBeInTheDocument()
+    expect(menu.queryByRole('link', { name: 'Giám sát công việc' })).not.toBeInTheDocument()
   })
 
   it('marks the current page, including its sub-pages', () => {
@@ -72,13 +71,13 @@ describe('WorkspaceShell', () => {
       'aria-current',
       'page',
     )
-    expect(within(sidebar()).getByRole('link', { name: 'Tổng quan' })).not.toHaveAttribute(
+    expect(within(sidebar()).getByRole('link', { name: 'Bảng điều khiển' })).not.toHaveAttribute(
       'aria-current',
     )
     first.unmount()
 
     renderAt('/reception/bookings/BK1/edit', receptionist)
-    expect(within(sidebar()).getByRole('link', { name: 'Danh sách booking' })).toHaveAttribute(
+    expect(within(sidebar()).getByRole('link', { name: 'Đặt phòng' })).toHaveAttribute(
       'aria-current',
       'page',
     )
@@ -158,11 +157,11 @@ describe('WorkspaceShell', () => {
     renderAt('/manager/dashboard', { ...ME, role: 'CUSTOMER', fullName: 'Khách' })
     expect(screen.queryByRole('navigation', { name: 'Menu nhân viên' })).not.toBeInTheDocument()
     const nav = screen.getByRole('navigation', { name: 'Menu khách hàng' })
-    expect(within(nav).getByRole('link', { name: 'Booking của tôi' })).toHaveAttribute(
+    expect(within(nav).getByRole('link', { name: 'Đặt phòng của tôi' })).toHaveAttribute(
       'href',
       '/my-bookings',
     )
-    expect(within(nav).getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
+    expect(within(nav).getByRole('link', { name: 'Dịch vụ phòng' })).toHaveAttribute(
       'href',
       '/customer/service-orders',
     )
@@ -273,10 +272,9 @@ describe.each(ROLE_FIXTURES)('role $role in WorkspaceShell', (fixture) => {
     expect(navsAfter).toHaveLength(1)
   })
 
-  it('(d) header shows Khu làm việc + role label', () => {
+  it('(d) header has no "Khu làm việc" caption for any role', () => {
     render()
-    const expectedLabel = ROLE_LABELS[fixture.role] ?? fixture.role
-    expect(screen.getByText(new RegExp(`Khu làm việc ${expectedLabel}`))).toBeInTheDocument()
+    expect(screen.queryByText(/Khu làm việc/)).not.toBeInTheDocument()
   })
 
   it('(e) main does not have max-w-7xl (bare mode)', () => {
@@ -313,7 +311,6 @@ describe('WorkspaceShell – extra role coverage', () => {
     const link = within(nav).getByRole('link', { name: 'Công việc được giao' })
     expect(link).toHaveAttribute('href', '/staff/tasks')
     expect(link.querySelector('svg')).toBeTruthy()
-    expect(screen.getByText(/Khu làm việc CUSTOM_ROLE/)).toBeInTheDocument()
   })
 
   it('customer does not see any staff/manager/reception/operations links', () => {

@@ -185,6 +185,12 @@ export interface MyBookingItem {
   roomTotal: number
   depositAmount: number
   createdAt: string
+  /** Tổng các giao dịch thanh toán thành công của booking (VND). */
+  paidAmount?: number
+  roomTypeName?: string
+  roomTypeImage?: string
+  roomNumber?: string
+  roomFloor?: number
 }
 
 /** Danh sách booking của Customer đang đăng nhập (GET /bookings/mine). */

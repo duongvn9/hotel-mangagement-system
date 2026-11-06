@@ -339,6 +339,22 @@ export class BookingsService {
       )
       .lean()
       .exec();
+    // Một truy vấn gộp cho cả danh sách, không truy vấn riêng từng booking.
+    const paid = await this.payments
+      .aggregate<{ _id: Types.ObjectId; total: number }>([
+        {
+          $match: {
+            booking: { $in: rows.map((booking) => booking._id) },
+            status: PaymentStatus.Success,
+            isActive: true,
+          },
+        },
+        { $group: { _id: '$booking', total: { $sum: '$amount' } } },
+      ])
+      .exec();
+    const paidByBooking = new Map(
+      paid.map((entry) => [String(entry._id), entry.total]),
+    );
     return rows.map((booking) => ({
       id: String(booking._id),
       code: booking.code,
@@ -350,6 +366,7 @@ export class BookingsService {
       roomCount: booking.rooms.length,
       roomTotal: booking.roomTotal,
       depositAmount: booking.depositAmount,
+      paidAmount: paidByBooking.get(String(booking._id)) ?? 0,
       createdAt: (
         (booking as { createdAt?: Date }).createdAt ?? booking.checkIn
       ).toISOString(),

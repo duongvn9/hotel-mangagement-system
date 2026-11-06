@@ -26,13 +26,7 @@ const user = { name: 'Trịnh Hải Yến', roleLabel: 'Lễ tân' }
 function renderWorkspace(path: string, props: Partial<Parameters<typeof WorkspaceLayout>[0]> = {}) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <WorkspaceLayout
-        groups={groups}
-        user={user}
-        workspaceLabel="Lễ tân"
-        onLogout={() => {}}
-        {...props}
-      >
+      <WorkspaceLayout groups={groups} user={user} onLogout={() => {}} {...props}>
         <p>Nội dung trang</p>
       </WorkspaceLayout>
     </MemoryRouter>,
@@ -124,13 +118,43 @@ describe('WorkspaceLayout', () => {
     expect(analyticsGroup).toHaveAttribute('aria-expanded', 'true')
   })
 
+  it('keeps the groups the user opened or closed when moving to another page', () => {
+    renderWorkspace('/staff/rooms')
+    const hotelGroup = screen.getByRole('button', { name: /Khách sạn/ })
+    const analyticsGroup = screen.getByRole('button', { name: /Phân tích/ })
+    fireEvent.click(analyticsGroup)
+    expect(analyticsGroup).toHaveAttribute('aria-expanded', 'true')
+
+    // Sang trang khác trong nhóm đang mở: nhóm mở tay vẫn mở.
+    fireEvent.click(screen.getByRole('link', { name: /Loại phòng/ }))
+    expect(screen.getByRole('link', { name: /Loại phòng/ })).toHaveAttribute('aria-current', 'page')
+    expect(hotelGroup).toHaveAttribute('aria-expanded', 'true')
+    expect(analyticsGroup).toHaveAttribute('aria-expanded', 'true')
+
+    // Sang trang của nhóm khác: nhóm đó mở, nhóm cũ không tự đóng.
+    fireEvent.click(screen.getByRole('link', { name: /Doanh thu/ }))
+    expect(analyticsGroup).toHaveAttribute('aria-expanded', 'true')
+    expect(hotelGroup).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('keeps a group closed by the user closed after navigating elsewhere', () => {
+    renderWorkspace('/staff/rooms')
+    const hotelGroup = screen.getByRole('button', { name: /Khách sạn/ })
+    const analyticsGroup = screen.getByRole('button', { name: /Phân tích/ })
+    fireEvent.click(analyticsGroup)
+    fireEvent.click(hotelGroup)
+    expect(hotelGroup).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(screen.getByRole('link', { name: /Doanh thu/ }))
+    expect(hotelGroup).toHaveAttribute('aria-expanded', 'false')
+    expect(analyticsGroup).toHaveAttribute('aria-expanded', 'true')
+  })
+
   it('(h) displays emptyNavText when groups is empty, or nothing when emptyNavText is omitted', () => {
     const { rerender } = render(
       <MemoryRouter initialEntries={['/staff']}>
         <WorkspaceLayout
           groups={[]}
           user={user}
-          workspaceLabel="Lễ tân"
           onLogout={() => {}}
           emptyNavText="Chưa có mục menu"
         />
@@ -141,7 +165,7 @@ describe('WorkspaceLayout', () => {
 
     rerender(
       <MemoryRouter initialEntries={['/staff']}>
-        <WorkspaceLayout groups={[]} user={user} workspaceLabel="Lễ tân" onLogout={() => {}} />
+        <WorkspaceLayout groups={[]} user={user} onLogout={() => {}} />
       </MemoryRouter>,
     )
     expect(
@@ -160,7 +184,7 @@ describe('WorkspaceLayout', () => {
 
     rerender(
       <MemoryRouter initialEntries={['/staff/rooms']}>
-        <WorkspaceLayout groups={groups} user={user} workspaceLabel="Lễ tân" onLogout={() => {}} />
+        <WorkspaceLayout groups={groups} user={user} onLogout={() => {}} />
       </MemoryRouter>,
     )
     expect(
@@ -171,14 +195,24 @@ describe('WorkspaceLayout', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('(j) renders brand and workspaceLabel in header', () => {
-    renderWorkspace('/staff/rooms', {
-      brand: 'Grand Emily HMS',
-      workspaceLabel: 'Quản lý',
-    })
+  it('(j) keeps the header free of a workspace caption and shows the user menu', () => {
+    renderWorkspace('/staff/rooms', { brand: 'Grand Emily HMS' })
     const header = screen.getByRole('banner')
-    expect(within(header).getByText(/Grand Emily HMS/)).toBeInTheDocument()
-    expect(within(header).getByText(/Khu làm việc Quản lý/)).toBeInTheDocument()
+    expect(within(header).queryByText(/Khu làm việc/)).not.toBeInTheDocument()
+    expect(within(header).getByRole('button', { name: user.name })).toBeInTheDocument()
+  })
+
+  it('shows a notification bell link next to the user menu when notificationsTo is given', () => {
+    renderWorkspace('/staff/rooms', { notificationsTo: '/notifications' })
+    const header = screen.getByRole('banner')
+    const bell = within(header).getByRole('link', { name: 'Thông báo' })
+    expect(bell).toHaveAttribute('href', '/notifications')
+    expect(bell.nextElementSibling).toBe(within(header).getByRole('button', { name: user.name }))
+  })
+
+  it('shows no bell when notificationsTo is not given', () => {
+    renderWorkspace('/staff/rooms')
+    expect(screen.queryByRole('link', { name: 'Thông báo' })).not.toBeInTheDocument()
   })
 
   it('(k) opens user menu on Enter with roleLabel, profile link, and logout action', async () => {
@@ -203,12 +237,7 @@ describe('WorkspaceLayout', () => {
 
     rerender(
       <MemoryRouter initialEntries={['/staff/rooms']}>
-        <WorkspaceLayout
-          groups={groups}
-          user={customUser}
-          workspaceLabel="Quản lý"
-          onLogout={onLogout}
-        />
+        <WorkspaceLayout groups={groups} user={customUser} onLogout={onLogout} />
       </MemoryRouter>,
     )
     const newTrigger = screen.getByRole('button', { name: 'Hoàng Thị Quản Lý' })
@@ -238,7 +267,6 @@ describe('WorkspaceLayout', () => {
               roleLabel: 'Nhân viên',
               avatarUrl: 'https://example.com/avatar.jpg',
             }}
-            workspaceLabel="Nhân viên"
             onLogout={() => {}}
           />
         </MemoryRouter>,
@@ -269,7 +297,7 @@ describe('WorkspaceLayout', () => {
 
     rerender(
       <MemoryRouter initialEntries={['/staff/rooms']}>
-        <WorkspaceLayout groups={groups} user={user} workspaceLabel="Lễ tân" onLogout={() => {}} />
+        <WorkspaceLayout groups={groups} user={user} onLogout={() => {}} />
       </MemoryRouter>,
     )
     expect(screen.getByRole('main')).toHaveClass('max-w-7xl', 'sm:px-8')

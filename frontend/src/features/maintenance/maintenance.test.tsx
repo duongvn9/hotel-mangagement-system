@@ -238,7 +238,7 @@ describe('UC35 ReportFaultPage', () => {
     renderWithAuth([{ path: '/', element: <UserMenu /> }], {
       auth: { me: { ...ME, role: 'OPERATIONS_STAFF' }, status: 'authenticated' },
     })
-    expect(screen.getByRole('link', { name: 'Báo hỏng thiết bị' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Báo hỏng hóc' })).toHaveAttribute(
       'href',
       '/operations/maintenance/report',
     )
