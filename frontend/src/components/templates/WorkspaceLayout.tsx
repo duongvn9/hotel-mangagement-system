@@ -45,22 +45,16 @@ function SideNav({
   onNavigate: () => void
 }) {
   const { pathname } = useLocation()
-  // Nhóm do người dùng mở/đóng giữ nguyên khi chuyển trang; chưa chọn tay thì nhóm chứa trang đang mở được mở sẵn.
-  const [manual, setManual] = useState<Record<string, boolean>>({})
+  // Mặc định mọi nhóm đều mở. Nhóm do người dùng đóng giữ nguyên khi chuyển trang, trừ khi trang mới
+  // thuộc chính nhóm đó thì mở ra để thấy mục đang chọn.
+  const [closed, setClosed] = useState<Record<string, boolean>>({})
   const [prevPathname, setPrevPathname] = useState(pathname)
-  const titleOf = (path: string) =>
-    groups.find((g) => g.items.some((i) => isNavActive(path, i.to)))?.title
-  const activeTitle = titleOf(pathname)
+  const activeTitle = groups.find((g) => g.items.some((i) => isNavActive(pathname, i.to)))?.title
   if (prevPathname !== pathname) {
     setPrevPathname(pathname)
-    // Chốt nhóm vừa rời đi đang mở sẵn (không để nó tự đóng), rồi mở nhóm của trang mới.
-    const next = { ...manual }
-    const previous = titleOf(prevPathname)
-    if (previous && next[previous] === undefined) next[previous] = true
-    if (activeTitle) next[activeTitle] = true
-    setManual(next)
+    if (activeTitle && closed[activeTitle]) setClosed({ ...closed, [activeTitle]: false })
   }
-  const isOpen = (title: string) => manual[title] ?? title === activeTitle
+  const isOpen = (title: string) => !closed[title]
 
   return (
     <nav
@@ -85,7 +79,7 @@ function SideNav({
             <button
               type="button"
               aria-expanded={open}
-              onClick={() => setManual({ ...manual, [g.title]: !open })}
+              onClick={() => setClosed({ ...closed, [g.title]: open })}
               className="group/head flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[10px] font-medium tracking-[0.2em] text-ink-foreground/45 uppercase transition-colors hover:text-ink-foreground/85"
             >
               <span className={cn('transition-colors', hasActive && 'text-primary/90')}>

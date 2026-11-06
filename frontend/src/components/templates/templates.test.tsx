@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { BedDouble, LayoutDashboard } from 'lucide-react'
-import { MemoryRouter } from 'react-router'
+import { Link, MemoryRouter } from 'react-router'
 import * as templates from '.'
 import { AuthLayout } from './AuthLayout'
 import { SiteLayout } from './SiteLayout'
@@ -112,41 +112,45 @@ describe('WorkspaceLayout', () => {
     const hotelGroup = screen.getByRole('button', { name: /Khách sạn/ })
     const analyticsGroup = screen.getByRole('button', { name: /Phân tích/ })
     expect(hotelGroup).toHaveAttribute('aria-expanded', 'true')
+    expect(analyticsGroup).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(analyticsGroup)
     expect(analyticsGroup).toHaveAttribute('aria-expanded', 'false')
-
     fireEvent.click(analyticsGroup)
     expect(analyticsGroup).toHaveAttribute('aria-expanded', 'true')
   })
 
-  it('keeps the groups the user opened or closed when moving to another page', () => {
+  it('opens every group by default, whichever page is current', () => {
+    renderWorkspace('/staff/rooms')
+    for (const group of screen.getAllByRole('button', { name: /Khách sạn|Phân tích/ })) {
+      expect(group).toHaveAttribute('aria-expanded', 'true')
+    }
+  })
+
+  it('keeps a group the user closed closed when moving to a page of another group', () => {
     renderWorkspace('/staff/rooms')
     const hotelGroup = screen.getByRole('button', { name: /Khách sạn/ })
     const analyticsGroup = screen.getByRole('button', { name: /Phân tích/ })
     fireEvent.click(analyticsGroup)
-    expect(analyticsGroup).toHaveAttribute('aria-expanded', 'true')
-
-    // Sang trang khác trong nhóm đang mở: nhóm mở tay vẫn mở.
+    expect(analyticsGroup).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(screen.getByRole('link', { name: /Loại phòng/ }))
-    expect(screen.getByRole('link', { name: /Loại phòng/ })).toHaveAttribute('aria-current', 'page')
     expect(hotelGroup).toHaveAttribute('aria-expanded', 'true')
-    expect(analyticsGroup).toHaveAttribute('aria-expanded', 'true')
-
-    // Sang trang của nhóm khác: nhóm đó mở, nhóm cũ không tự đóng.
-    fireEvent.click(screen.getByRole('link', { name: /Doanh thu/ }))
-    expect(analyticsGroup).toHaveAttribute('aria-expanded', 'true')
-    expect(hotelGroup).toHaveAttribute('aria-expanded', 'true')
+    expect(analyticsGroup).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('keeps a group closed by the user closed after navigating elsewhere', () => {
-    renderWorkspace('/staff/rooms')
+  it('reopens a closed group when the user navigates to one of its pages', () => {
+    render(
+      <MemoryRouter initialEntries={['/staff/revenue']}>
+        <WorkspaceLayout groups={groups} user={user} onLogout={() => {}}>
+          <Link to="/staff/rooms">Đi tới phòng</Link>
+        </WorkspaceLayout>
+      </MemoryRouter>,
+    )
     const hotelGroup = screen.getByRole('button', { name: /Khách sạn/ })
-    const analyticsGroup = screen.getByRole('button', { name: /Phân tích/ })
-    fireEvent.click(analyticsGroup)
     fireEvent.click(hotelGroup)
     expect(hotelGroup).toHaveAttribute('aria-expanded', 'false')
-    fireEvent.click(screen.getByRole('link', { name: /Doanh thu/ }))
-    expect(hotelGroup).toHaveAttribute('aria-expanded', 'false')
-    expect(analyticsGroup).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(screen.getByRole('link', { name: 'Đi tới phòng' }))
+    expect(hotelGroup).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('(h) displays emptyNavText when groups is empty, or nothing when emptyNavText is omitted', () => {
