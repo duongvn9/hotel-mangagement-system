@@ -60,9 +60,36 @@ describe('Logo', () => {
   })
 })
 
+describe('Badge', () => {
+  it.each([
+    ['success', 'bg-success/15 text-success'],
+    ['danger', 'bg-destructive/15 text-destructive'],
+    ['info', 'bg-info/15 text-info'],
+    ['warning', 'bg-warning/15 text-warning'],
+    ['neutral', 'bg-muted text-muted-foreground'],
+  ] as const)('renders tone %s with token class %s and decorative dot', (tone, toneClass) => {
+    const { container } = render(<atoms.Badge tone={tone}>Thẻ mẫu</atoms.Badge>)
+    const badge = screen.getByText('Thẻ mẫu')
+    expect(badge.closest('div, span')).toHaveClass(toneClass)
+    expect(badge.closest('div, span')).toHaveClass('whitespace-nowrap')
+    const dot = container.querySelector('[aria-hidden="true"]')
+    expect(dot).toBeInTheDocument()
+    expect(dot).toHaveClass('rounded-full')
+  })
+})
+
 describe('atoms barrel', () => {
   it('re-exports the primitives pages are allowed to use', () => {
-    for (const name of ['Button', 'Input', 'Textarea', 'Label', 'Checkbox', 'Switch', 'Avatar']) {
+    for (const name of [
+      'Button',
+      'Input',
+      'Textarea',
+      'Label',
+      'Checkbox',
+      'Switch',
+      'Avatar',
+      'Badge',
+    ]) {
       expect(atoms).toHaveProperty(name)
     }
     expect(atoms.StatusBadge).toBe(StatusBadge)

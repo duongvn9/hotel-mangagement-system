@@ -163,6 +163,41 @@ describe('PhotoTile', () => {
   })
 })
 
+describe('Alert', () => {
+  it('renders role="alert" and text for danger tone', () => {
+    render(<molecules.Alert tone="danger">Có lỗi xảy ra</molecules.Alert>)
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Có lỗi xảy ra')
+    expect(alert).toHaveClass('text-destructive')
+  })
+
+  it('renders role="status" and text for success tone', () => {
+    render(<molecules.Alert tone="success">Thao tác thành công</molecules.Alert>)
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('Thao tác thành công')
+    expect(status).toHaveClass('text-success')
+  })
+
+  it.each([
+    ['warning', 'text-warning'],
+    ['info', 'text-info'],
+  ] as const)('applies token classes for tone %s', (tone, toneClass) => {
+    render(<molecules.Alert tone={tone}>Thông báo {tone}</molecules.Alert>)
+    const status = screen.getByRole('status')
+    expect(status).toHaveClass(toneClass)
+  })
+
+  it('renders with title when provided', () => {
+    render(
+      <molecules.Alert tone="info" title="Lưu ý">
+        Nội dung thông báo
+      </molecules.Alert>,
+    )
+    expect(screen.getByText('Lưu ý')).toBeInTheDocument()
+    expect(screen.getByText('Nội dung thông báo')).toBeInTheDocument()
+  })
+})
+
 describe('molecules barrel', () => {
   it('re-exports the composite primitives and own components', () => {
     for (const name of [
@@ -180,6 +215,7 @@ describe('molecules barrel', () => {
       'DateRangeField',
       'SectionHeading',
       'PhotoTile',
+      'Alert',
     ]) {
       expect(molecules).toHaveProperty(name)
     }
