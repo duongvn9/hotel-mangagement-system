@@ -8,6 +8,7 @@ import {
   MapPin,
   Moon,
   Plane,
+  Star,
   Sunrise,
   Sunset,
   UtensilsCrossed,
@@ -23,6 +24,7 @@ import { HeroBanner, SearchBar } from '@/components/organisms'
 import { ROLE_LABELS } from '@/features/auth/api'
 import { useAuth } from '@/features/auth/auth-context'
 import { useAvailability } from '@/features/booking/hooks'
+import { assetUrl } from '@/lib/asset-url'
 import { vnd } from '@/lib/format'
 import { siteContent } from '@/lib/site-content'
 import { featuredRoomTypes } from './home/featured'
@@ -162,7 +164,7 @@ export function HomePage() {
                       <div className="aspect-[4/3] w-full overflow-hidden bg-surface">
                         {t.image ? (
                           <img
-                            src={t.image}
+                            src={assetUrl(t.image)}
                             alt={t.name}
                             loading="lazy"
                             className="size-full object-cover transition duration-500 group-hover:scale-105"
@@ -241,7 +243,7 @@ export function HomePage() {
               },
             ].map(({ icon: Icon, time, title, desc }) => (
               <li key={time} className="relative pb-12 last:pb-0">
-                <span className="absolute -left-[3.05rem] grid size-10 place-items-center rounded-full border bg-card text-primary">
+                <span className="absolute -left-10 top-0 -translate-x-1/2 grid size-10 place-items-center rounded-full border bg-card text-primary">
                   <Icon className="size-4" />
                 </span>
                 <div className="font-display text-2xl text-primary">{time}</div>
@@ -337,6 +339,28 @@ export function HomePage() {
         </div>
       </section>
 
+      <section className="mx-auto max-w-7xl px-5 lg:px-8">
+        <div className="grid gap-5 md:grid-cols-3">
+          {siteContent.testimonials.map((t, index) => (
+            <figure key={index} className="rounded-3xl bg-ink p-8 text-ink-foreground">
+              <div
+                role="img"
+                aria-label={`${t.rating} trên 5 sao`}
+                className="flex gap-0.5 text-lavender"
+              >
+                {Array.from({ length: t.rating }, (_, i) => (
+                  <Star key={i} aria-hidden className="size-4 fill-current" />
+                ))}
+              </div>
+              <blockquote className="font-display mt-5 text-2xl leading-snug">
+                “{t.quote}”
+              </blockquote>
+              <figcaption className="mt-6 text-sm text-ink-foreground/60">{t.name}</figcaption>
+            </figure>
+          ))}
+        </div>
+      </section>
+
       <section className="relative mt-28 h-[80vh] min-h-[560px] overflow-hidden">
         <img
           src={guestImages.bay}
@@ -365,6 +389,30 @@ export function HomePage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-5 py-28 text-center lg:px-8">
+        <p className="text-sm font-medium tracking-[0.2em] text-primary uppercase">
+          Đặt trực tiếp · Giá tốt nhất
+        </p>
+        <h2 className="font-display mx-auto mt-4 max-w-3xl text-6xl leading-[1.15]">
+          Kỳ nghỉ tiếp theo của bạn bắt đầu từ đây.
+        </h2>
+        <p className="mx-auto mt-5 max-w-md text-muted-foreground">{siteContent.offer}</p>
+        <div className="mt-10 flex flex-wrap justify-center gap-3">
+          <Link
+            to="/search"
+            className="inline-flex items-center gap-2 rounded-full bg-ink px-7 py-3.5 text-sm font-medium text-ink-foreground transition hover:bg-primary"
+          >
+            Chọn phòng <ArrowRight className="size-4" />
+          </Link>
+          <Link
+            to="/experiences"
+            className="inline-flex items-center rounded-full border px-7 py-3.5 text-sm font-medium transition hover:bg-surface"
+          >
+            Khám phá trải nghiệm
+          </Link>
         </div>
       </section>
 
