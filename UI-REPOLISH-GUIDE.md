@@ -63,7 +63,7 @@ Fill the "Jira task" column when you pick up a task. App paths come from `fronte
 | `app.revenue.tsx` | `/manager/reports/revenue` | `features/reports/pages/RevenueReportPage.tsx` | |
 | `app.operations-report.tsx` | `/manager/reports/operational` | `features/reports/pages/OperationalReportPage.tsx` | |
 | `app.accounts.tsx` | `/manager/accounts` | `features/accounts/pages/AccountsPage.tsx` | WDP301-154 |
-| `app.roles.tsx` | `/manager/roles` | `features/roles/pages/RolesPage.tsx` | |
+| `app.roles.tsx` | `/manager/roles` | `features/roles/pages/RolesPage.tsx` | WDP301-155 |
 | `app.rooms.tsx` | `/manager/rooms` | `features/rooms/pages/RoomsPage.tsx` | |
 | `app.room-types.tsx` | `/manager/room-types` | `features/room-types/pages/RoomTypesPage.tsx` | |
 | `app.amenities.tsx` | `/manager/amenities` | `features/amenities/pages/AmenitiesPage.tsx` | |
