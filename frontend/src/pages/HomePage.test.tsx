@@ -115,13 +115,11 @@ describe('HomePage', () => {
     expect(screen.queryByRole('link', { name: 'Đăng nhập' })).not.toBeInTheDocument()
   })
 
-  it('sends staff to their workspace', () => {
+  it('does not repeat the workspace entry or the signed-in role in a banner for staff', () => {
     renderHome({ ...ME, role: 'RECEPTIONIST', fullName: 'Trần Lễ Tân' })
-    expect(screen.getByRole('link', { name: /Vào khu làm việc/ })).toHaveAttribute(
-      'href',
-      '/reception/dashboard',
-    )
-    expect(screen.getByText(/Lễ tân/)).toBeInTheDocument()
+    // The header already has the single "Vào dashboard" button (see PublicLayout tests).
+    expect(screen.queryByText(/đang đăng nhập với vai trò/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Vào khu làm việc/ })).not.toBeInTheDocument()
   })
 
   it('shows guest testimonials as quotes with a rating and the guest name', () => {
