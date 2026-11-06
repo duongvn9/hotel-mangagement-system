@@ -95,7 +95,7 @@ Eyebrow (the small line above a title): `text-xs font-medium uppercase tracking-
 
 - Tailwind's default spacing scale (4px unit). Standard gaps: `gap-2/3/4`, `p-4/5`, cards `p-5`, dialogs `p-6`.
 - **Public site (`SiteLayout`)**: header `h-20`, content `max-w-7xl`, horizontal padding `px-5 lg:px-8`; footer on `ink`, `mt-24`.
-- **Workspace (`WorkspaceLayout`)**: fixed sidebar `w-64` (hidden below `lg`, replaced by a `w-72` `Sheet` drawer), sticky header `h-16`, content `max-w-7xl px-4 py-8 sm:px-8`.
+- **Workspace (`WorkspaceLayout`)**: sticky sidebar `w-64` on `lg+` (below `lg`: CSS drawer sliding in with `transition-transform`, `invisible -translate-x-full` when closed); sticky header `h-16 bg-background/85 backdrop-blur border-b`; content area uses `contentWidth="bare"` (no padding — each page wraps itself) until migrated, then `contentWidth="contained"` = `max-w-7xl px-4 py-8 sm:px-8`. Use `<PageContainer>` from `@/components/organisms` when migrating inner pages.
 - **Sign-in (`AuthLayout`)**: two columns from `lg` (a `max-w-md` form plus a photo with `3xl` radius).
 - Breakpoints: Tailwind defaults (`sm` 640, `md` 768, `lg` 1024). Every page must work at 375px.
 
@@ -190,7 +190,7 @@ components/
 | `WorkspaceLayout` | Workspace frame: `groups` (grouped menu), `user`, `workspaceLabel`, `onLogout`, `profileTo`, `publicSiteTo`, `publicSiteLabel`, `brand`, `navLabel`, `emptyNavText`, `sidebarId`, `error`, `loading`, `loadingLabel`, `contentWidth` (`contained` or `bare`), `forbidden`; `children` defaults to `<Outlet />` |
 | `AuthLayout` | `title`, `subtitle`, `image`, `quote` |
 
-The templates are presentational only and do **not** yet replace `layouts/StaffLayout` and `PublicLayout` (which still hold the sign-in logic); wiring them together is a separate task.
+The templates are presentational only. `WorkspaceLayout` is wired through `layouts/WorkspaceShell` (which holds auth logic) for all roles — staff and `CUSTOMER`. `PublicLayout` is wired through `layouts/PublicLayout`. Both shells handle auth/redirect; templates handle only presentation.
 
 ---
 
@@ -249,6 +249,13 @@ While many people migrate pages in parallel, `design-system/legacy.css` keeps th
 - **Browse & room details:** `SearchRoomsPage`, `RoomDetailsPage`
 - **Booking flow:** `CreateBookingPage`, `LookupBookingPage`, `BookingDetailPage`, `PaymentReturnPage`
 - **Guest account:** `LoginPage`, `RegisterPage` (with `AuthLayout`), `ProfilePage`, `MyBookingsPage`
+
+### Migrated: Dashboard Shell
+
+- `layouts/WorkspaceShell` replaces `StaffLayout` and now wraps all roles: `MANAGER`, `RECEPTIONIST`, `SERVICE_STAFF`, `OPERATIONS_STAFF`, `CUSTOMER`, and custom roles.
+- `templates/WorkspaceLayout` renders the sidebar, header, user menu, and mobile drawer.
+- Customer account routes (`/my-bookings`, `/my-feedback`, `/customer/*`, `/profile`) now render inside `WorkspaceShell` (not `PublicLayout`).
+- Inner page content still uses legacy wrappers (`mx-auto max-w-container px-4 py-10`) pending per-page migration. Each page migration should replace that wrapper with `<PageContainer>` from `@/components/organisms`.
 
 When the last page is migrated: delete `design-system/legacy.css`, its `@import` line in `frontend/src/styles/index.css`,
 and the old components.

@@ -79,14 +79,16 @@ Fill the "Jira task" column when you pick up a task. App paths come from `fronte
 | `app.maintenance.tsx` | `/operations/maintenance/history` | `features/maintenance/pages/MaintenanceHistoryPage.tsx` | |
 | `app.feedback.tsx` | `/my-feedback` | `features/feedback/pages/MyFeedbackPage.tsx` | |
 | `app.feedback-review.tsx` | `/staff/feedback` | `features/feedback/pages/FeedbackPage.tsx` | |
-| `app.tsx` (workspace shell) | every staff route | `layouts/StaffLayout.tsx`, `StaffNav.tsx` → use `templates/WorkspaceLayout` | |
+| `app.tsx` (workspace shell) | every staff and customer account route | `layouts/WorkspaceShell.tsx` now renders `templates/WorkspaceLayout` for all roles (staff and `CUSTOMER`). `StaffNav.tsx` deleted. | Done |
 | `components/hms/SiteLayout.tsx` | every public route | `layouts/PublicLayout.tsx` → use `templates/SiteLayout` | Done |
 
 **Prototype screens the app does not have (ask the maintainer first, do not build on your own):** `app.home.tsx`, `app.equipment.tsx`.
 
 **Proposals, never implemented:** `app.notifications.tsx` and every dot or label marked "Đề xuất UX" (`Proposed`) in the prototype. They are design proposals with no backend; do not put them, or the label, in the app.
 
-**When you wire a layout:** the `NavGroup` / `NavItem` types of `templates/WorkspaceLayout` use `title` and carry an `icon` (a lucide icon; take the exact icon from `ui-prototype/src/lib/nav.ts`), while `frontend/src/app/navigation.ts` currently uses `label` and has no icons. Migrating the staff shell means mapping between the two shapes and adding icons.
+**When you wire a layout:** the `NavGroup` / `NavItem` types of `templates/WorkspaceLayout` use `title` and carry an `icon` (a lucide icon), while `frontend/src/app/navigation.ts` uses `label` and has no icons. Use `shellGroupsFor(me)` from `@/app/workspace-nav` — it converts nav groups to the template's format and injects `Booking của tôi` for `CUSTOMER`. When you add a new menu item in `navigation.ts`, also add its icon in `workspace-nav.ts` (`iconForPath` map); failing to do so will be caught by the `shellGroupsFor` guard test.
+
+**Migrating a page inside the workspace shell (staff or customer):** replace the page's outer wrapper `mx-auto max-w-container px-4 py-10` with `<PageContainer>` from `@/components/organisms`. When all pages inside the shell have been migrated, switch `WorkspaceShell` to `contentWidth="contained"` and remove `PageContainer` from each page.
 
 ## 4. Do not
 
