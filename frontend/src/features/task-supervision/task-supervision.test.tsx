@@ -447,11 +447,11 @@ describe('UC55 Manager task supervision', () => {
     const manager = renderWithAuth([{ path: '/', element: <UserMenu /> }], {
       auth: { me: ME, status: 'authenticated' },
     })
-    expect(screen.getByRole('link', { name: 'Hàng đợi task' })).toHaveAttribute('href', root)
+    expect(screen.getByRole('link', { name: 'Giám sát công việc' })).toHaveAttribute('href', root)
     manager.unmount()
     renderWithAuth([{ path: '/', element: <UserMenu /> }], {
       auth: { me: { ...ME, role: 'OPERATIONS_STAFF' }, status: 'authenticated' },
     })
-    expect(screen.queryByRole('link', { name: 'Hàng đợi task' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Giám sát công việc' })).not.toBeInTheDocument()
   })
 })

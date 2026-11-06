@@ -1,6 +1,13 @@
 import type { RouteObject } from 'react-router'
 import type { Me } from '@/features/auth/api'
-import { flatLinks, isStaffRole, navGroupsFor, partitionStaffRoutes, roleHome } from './navigation'
+import {
+  flatLinks,
+  isStaffRole,
+  navGroupsFor,
+  partitionWorkspaceRoutes,
+  roleHome,
+  workspaceHome,
+} from './navigation'
 
 const me = (role: string, permissions: string[] = []): Me => ({
   id: 'u1',
@@ -16,8 +23,17 @@ describe('roleHome', () => {
     expect(roleHome('RECEPTIONIST')).toBe('/reception/dashboard')
     expect(roleHome('SERVICE_STAFF')).toBe('/staff/service/dashboard')
     expect(roleHome('OPERATIONS_STAFF')).toBe('/staff/operations/dashboard')
-    expect(roleHome('CUSTOMER')).toBe('/')
+    expect(roleHome('CUSTOMER')).toBe('/customer/dashboard')
     expect(roleHome('SOMETHING_NEW')).toBe('/')
+  })
+})
+
+describe('workspaceHome', () => {
+  it('uses the role home, or the first menu page for a custom role, or the home page', () => {
+    expect(workspaceHome(me('CUSTOMER'))).toBe('/customer/dashboard')
+    expect(workspaceHome(me('MANAGER'))).toBe('/manager/dashboard')
+    expect(workspaceHome(me('CUSTOM_ROLE', ['task:execute']))).toBe('/staff/tasks')
+    expect(workspaceHome(me('CUSTOM_ROLE'))).toBe('/')
   })
 })
 
@@ -33,57 +49,63 @@ describe('isStaffRole', () => {
 describe('navGroupsFor', () => {
   it('groups the reception links', () => {
     const groups = navGroupsFor(me('RECEPTIONIST'))
-    expect(groups.map((group) => group.label)).toEqual(['Quầy lễ tân', 'Yêu cầu'])
+    expect(groups.map((group) => group.label)).toEqual(['Lễ tân', 'Yêu cầu', 'Tài khoản'])
     expect(groups[0]?.items.map((item) => item.to)).toEqual([
       '/reception/dashboard',
       '/reception/front-desk',
-      '/reception/rooms',
       '/reception/bookings',
       '/reception/booking/new',
       '/reception/guests',
+      '/reception/rooms',
     ])
   })
 
   it('groups the manager links and lets the manager reach the reception pages', () => {
     const groups = navGroupsFor(me('MANAGER'))
     expect(groups.map((group) => group.label)).toEqual([
-      'Giám sát',
+      'Tổng quan',
+      'Khách sạn',
+      'Nhân sự & công việc',
       'Báo cáo',
-      'Cơ sở vật chất',
-      'Quản trị',
-      'Lễ tân',
+      'Tài khoản',
     ])
     expect(flatLinks(me('MANAGER')).map((link) => link.to)).toEqual(
       expect.arrayContaining([
         '/manager/dashboard',
         '/manager/rooms',
-        '/reception/dashboard',
-        '/reception/front-desk',
+        '/reception/bookings',
+        '/reception/rooms',
       ]),
     )
   })
 
   it('gives service and operations staff their task pages', () => {
     expect(flatLinks(me('SERVICE_STAFF')).map((link) => link.to)).toEqual([
-      '/staff/tasks',
       '/staff/service/dashboard',
+      '/staff/tasks',
       '/staff/service-history',
+      '/notifications',
+      '/profile',
     ])
     expect(flatLinks(me('OPERATIONS_STAFF')).map((link) => link.to)).toEqual([
-      '/staff/tasks',
       '/staff/operations/dashboard',
-      '/operations/maintenance/report',
+      '/staff/tasks',
       '/operations/maintenance/history',
+      '/operations/maintenance/report',
+      '/notifications',
+      '/profile',
     ])
   })
 
-  it('lists the customer pages including feedback', () => {
+  it('lists the customer pages including feedback and profile', () => {
     expect(flatLinks(me('CUSTOMER')).map((link) => link.to)).toEqual([
+      '/customer/dashboard',
+      '/my-bookings',
       '/customer/service-orders',
-      '/customer/service-orders/new',
-      '/customer/issues',
-      '/customer/issues/report',
       '/my-feedback',
+      '/customer/issues/report',
+      '/notifications',
+      '/profile',
     ])
   })
 
@@ -115,10 +137,10 @@ describe('navGroupsFor', () => {
   })
 })
 
-describe('partitionStaffRoutes', () => {
+describe('partitionWorkspaceRoutes', () => {
   const route = (path: string): RouteObject => ({ path })
 
-  it('moves staff areas to the staff layout whatever the leading slash', () => {
+  it('moves workspace areas to the workspace layout whatever the leading slash', () => {
     const routes = [
       route('/manager/dashboard'),
       route('manager/accounts'),
@@ -129,29 +151,35 @@ describe('partitionStaffRoutes', () => {
       route('/customer/issues'),
       route('profile'),
       route('login'),
+      route('my-bookings'),
+      route('my-feedback'),
     ]
-    const { staff, other } = partitionStaffRoutes(routes)
-    expect(staff.map((item) => item.path)).toEqual([
+    const { workspace, other } = partitionWorkspaceRoutes(routes)
+    expect(workspace.map((item) => item.path)).toEqual([
       '/manager/dashboard',
       'manager/accounts',
       '/staff/tasks/:id',
       'reception/front-desk',
       'operations/maintenance/report',
-    ])
-    expect(other.map((item) => item.path)).toEqual([
-      'search',
       '/customer/issues',
       'profile',
-      'login',
+      'my-bookings',
+      'my-feedback',
     ])
+    expect(other.map((item) => item.path)).toEqual(['search', 'login'])
   })
 
-  it('does not mistake similar prefixes for staff areas and keeps route objects intact', () => {
-    const lookalike = route('staffing/plan')
+  it('does not mistake similar prefixes for workspace areas and keeps route objects intact', () => {
+    const lookalikes = [
+      route('staffing/plan'),
+      route('my-bookingsx'),
+      route('profiles'),
+      route('customers'),
+    ]
     const index: RouteObject = { index: true }
-    const { staff, other } = partitionStaffRoutes([lookalike, index])
-    expect(staff).toEqual([])
-    expect(other).toEqual([lookalike, index])
-    expect(other[0]).toBe(lookalike)
+    const { workspace, other } = partitionWorkspaceRoutes([...lookalikes, index])
+    expect(workspace).toEqual([])
+    expect(other).toEqual([...lookalikes, index])
+    expect(other[0]).toBe(lookalikes[0])
   })
 })

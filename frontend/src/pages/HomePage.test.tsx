@@ -123,4 +123,54 @@ describe('HomePage', () => {
     )
     expect(screen.getByText(/Lễ tân/)).toBeInTheDocument()
   })
+
+  it('shows guest testimonials as quotes with a rating and the guest name', () => {
+    renderHome()
+    const quotes = screen
+      .getAllByRole('figure')
+      .filter((figure) => figure.querySelector('blockquote'))
+    expect(quotes).toHaveLength(3)
+    expect(within(quotes[0]).getByText(/Kỳ nghỉ tuyệt vời/)).toBeInTheDocument()
+    expect(within(quotes[0]).getByText('Phạm Đức Huy')).toBeInTheDocument()
+    expect(within(quotes[0]).getByRole('img', { name: '5 trên 5 sao' })).toBeInTheDocument()
+    expect(within(quotes[1]).getByRole('img', { name: '4 trên 5 sao' })).toBeInTheDocument()
+  })
+
+  it('closes with a call to action that links to the rooms and the experiences', () => {
+    renderHome()
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Kỳ nghỉ tiếp theo của bạn bắt đầu từ đây.' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Miễn phí huỷ trước 48 giờ/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Chọn phòng/ })).toHaveAttribute('href', '/search')
+    expect(screen.getByRole('link', { name: 'Khám phá trải nghiệm' })).toHaveAttribute(
+      'href',
+      '/experiences',
+    )
+  })
+
+  it('loads featured room images from the asset base URL', async () => {
+    vi.stubEnv('VITE_ASSET_BASE_URL', 'https://assets.example.test/bucket')
+    vi.spyOn(api, 'get').mockImplementation(async (path: string) => {
+      if (path === '/availability') {
+        return {
+          data: [
+            {
+              id: 'room-1',
+              roomTypeId: 'type-deluxe',
+              roomTypeName: 'Phòng Deluxe',
+              pricePerNight: 1500000,
+              capacity: 2,
+              images: ['/room-types/deluxe.jpg'],
+            },
+          ],
+        } as any
+      }
+      return { data: { status: 'ok' } } as any
+    })
+    renderWithAuth(routes, { auth: { me: null, status: 'anonymous' } })
+    const image = await screen.findByRole('img', { name: 'Phòng Deluxe' })
+    expect(image).toHaveAttribute('src', 'https://assets.example.test/bucket/room-types/deluxe.jpg')
+    vi.unstubAllEnvs()
+  })
 })

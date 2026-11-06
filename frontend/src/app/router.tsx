@@ -17,19 +17,21 @@ import { taskSupervisionRoutes } from '@/features/task-supervision/routes'
 import { reportRoutes } from '@/features/reports/routes'
 import { dashboardRoutes } from '@/features/dashboard/routes'
 import { experienceRoutes } from '@/features/experiences/routes'
+import { customerHomeRoutes } from '@/features/customer-home/routes'
+import { notificationRoutes } from '@/features/notifications/routes'
 
 import { PublicLayout } from '@/layouts/PublicLayout'
-import { StaffLayout } from '@/layouts/StaffLayout'
+import { WorkspaceShell } from '@/layouts/WorkspaceShell'
 import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { partitionStaffRoutes } from './navigation'
+import { partitionWorkspaceRoutes } from './navigation'
 
 /**
- * Mỗi feature export mảng route riêng rồi gộp ở đây. Route thuộc khu nhân viên (/staff, /manager,
- * /reception, /operations) được đặt trong khung nhân viên, phần còn lại trong khung khách; việc
- * tách theo tiền tố đường dẫn nên URL và RequireAuth của từng feature không đổi.
+ * Mỗi feature export mảng route riêng rồi gộp ở đây. Route thuộc khu làm việc (nhân viên và tài
+ * khoản khách) được đặt trong WorkspaceShell, phần còn lại trong khung khách; việc tách theo tiền
+ * tố đường dẫn nên URL và RequireAuth của từng feature không đổi.
  */
-const { staff, other } = partitionStaffRoutes([
+const { workspace, other } = partitionWorkspaceRoutes([
   ...bookingRoutes,
   ...authRoutes,
   ...accountRoutes,
@@ -48,10 +50,12 @@ const { staff, other } = partitionStaffRoutes([
   ...reportRoutes,
   ...dashboardRoutes,
   ...experienceRoutes,
+  ...customerHomeRoutes,
+  ...notificationRoutes,
 ])
 
 export const router = createBrowserRouter([
-  { element: <StaffLayout />, children: staff },
+  { element: <WorkspaceShell />, children: workspace },
   { children: authOnlyRoutes },
   {
     element: <PublicLayout />,

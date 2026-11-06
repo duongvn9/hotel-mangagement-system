@@ -86,7 +86,7 @@ export function RoomDetailsPage() {
             em
           </p>
 
-          <div className="mt-8 grid gap-3 md:grid-cols-[1fr_180px]">
+          <div className={cn('mt-8 grid gap-3', images.length > 1 && 'md:grid-cols-[1fr_180px]')}>
             {images.length > 0 ? (
               <img
                 src={assetUrl(images[active] ?? images[0])}
@@ -99,7 +99,7 @@ export function RoomDetailsPage() {
               </div>
             )}
             {images.length > 1 && (
-              <div className="grid grid-cols-4 gap-3 md:grid-cols-1">
+              <div className="grid grid-cols-4 gap-3 md:h-full md:grid-cols-1">
                 {images.map((g, i) => (
                   <button
                     key={g + i}
@@ -107,7 +107,7 @@ export function RoomDetailsPage() {
                     onClick={() => setActive(i)}
                     aria-label={`Xem ảnh ${i + 1}`}
                     className={cn(
-                      'overflow-hidden rounded-2xl ring-2 transition',
+                      'relative block aspect-square w-full overflow-hidden rounded-2xl ring-2 transition md:aspect-auto md:h-full',
                       active === i
                         ? 'ring-primary'
                         : 'opacity-70 ring-transparent hover:opacity-100',
@@ -117,7 +117,7 @@ export function RoomDetailsPage() {
                       src={assetUrl(g)}
                       alt={`${room.name} — ảnh ${i + 1}`}
                       loading="lazy"
-                      className="aspect-square w-full object-cover md:aspect-[4/3]"
+                      className="h-full w-full object-cover"
                     />
                   </button>
                 ))}

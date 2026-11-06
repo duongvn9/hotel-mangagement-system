@@ -32,6 +32,11 @@ export class MyBookingItem {
   @ApiProperty({ description: 'Tiền cọc (VND)' })
   depositAmount: number;
 
+  @ApiProperty({
+    description: 'Tổng các giao dịch thanh toán thành công của booking (VND)',
+  })
+  paidAmount: number;
+
   @ApiProperty({ description: 'Thời điểm tạo booking (ISO)' })
   createdAt: string;
 }

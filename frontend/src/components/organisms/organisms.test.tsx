@@ -275,6 +275,28 @@ describe('SearchBar', () => {
   })
 })
 
+describe('PageContainer', () => {
+  it('renders children with default container classes', () => {
+    render(
+      <organisms.PageContainer>
+        <div>Nội dung</div>
+      </organisms.PageContainer>,
+    )
+    const el = screen.getByText('Nội dung').parentElement
+    expect(el).toHaveClass('mx-auto', 'w-full', 'max-w-7xl', 'px-4', 'py-8', 'sm:px-8')
+  })
+
+  it('merges custom className', () => {
+    render(
+      <organisms.PageContainer className="custom-class">
+        <div>Nội dung</div>
+      </organisms.PageContainer>,
+    )
+    const el = screen.getByText('Nội dung').parentElement
+    expect(el).toHaveClass('custom-class', 'max-w-7xl')
+  })
+})
+
 describe('organisms barrel', () => {
   it('re-exports overlays and own components', () => {
     for (const name of [
@@ -289,6 +311,7 @@ describe('organisms barrel', () => {
       'RevenueArea',
       'HeroBanner',
       'RoomCard',
+      'PageContainer',
     ]) {
       expect(organisms).toHaveProperty(name)
     }

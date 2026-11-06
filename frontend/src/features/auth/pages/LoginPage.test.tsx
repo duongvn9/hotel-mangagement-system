@@ -6,6 +6,7 @@ import { LoginPage } from './LoginPage'
 const routes = [
   { path: '/login', element: <LoginPage /> },
   { path: '/', element: <p>trang chủ</p> },
+  { path: '/customer/dashboard', element: <p>tổng quan khách</p> },
   { path: '/manager/dashboard', element: <p>trang quản lý</p> },
   { path: '/reception/dashboard', element: <p>trang lễ tân</p> },
   { path: '/booking/new', element: <p>trang đặt phòng</p> },
@@ -64,9 +65,9 @@ describe('LoginPage', () => {
       expect(await screen.findByText('trang lễ tân')).toBeInTheDocument()
     })
 
-    it('đưa khách về trang chủ', async () => {
+    it('đưa khách vào tổng quan của khách', async () => {
       signedIn('CUSTOMER')
-      expect(await screen.findByText('trang chủ')).toBeInTheDocument()
+      expect(await screen.findByText('tổng quan khách')).toBeInTheDocument()
     })
 
     it('quay lại trang đang xem dở trước khi bị yêu cầu đăng nhập', async () => {

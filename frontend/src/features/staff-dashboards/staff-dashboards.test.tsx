@@ -11,9 +11,10 @@ import type { AssignedTask, TaskList, TaskStatus } from '@/features/tasks/api'
 import { staffDashboardRoutes } from './routes'
 import { DashboardReadError, readStaffDashboard } from './api'
 import { staffDashboardKey } from './hooks'
+import type * as ApiClient from '@/lib/api-client'
 
 vi.mock('@/lib/api-client', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/lib/api-client')>()
+  const original = await importOriginal<typeof ApiClient>()
   return { ...original, api: { get: vi.fn() } }
 })
 
@@ -143,12 +144,22 @@ it.each(['SERVICE_STAFF', 'OPERATIONS_STAFF', 'MANAGER', 'CUSTOMER', 'CUSTOM_ROL
     renderWithAuth([{ path: '/', element: <UserMenu /> }], {
       auth: { status: 'authenticated', me: { ...ME, role, permissions: ['task:execute'] } },
     })
-    expect(screen.queryByRole('link', { name: 'Bảng điều khiển dịch vụ' }) !== null).toBe(
-      role === 'SERVICE_STAFF',
+    const isStaffRoleWithDashboard = ['SERVICE_STAFF', 'OPERATIONS_STAFF', 'MANAGER'].includes(role)
+    expect(screen.queryByRole('link', { name: 'Bảng điều khiển' }) !== null).toBe(
+      isStaffRoleWithDashboard,
     )
-    expect(screen.queryByRole('link', { name: 'Bảng điều khiển vận hành' }) !== null).toBe(
-      role === 'OPERATIONS_STAFF',
-    )
+    if (role === 'SERVICE_STAFF') {
+      expect(screen.getByRole('link', { name: 'Bảng điều khiển' })).toHaveAttribute(
+        'href',
+        servicePath,
+      )
+    }
+    if (role === 'OPERATIONS_STAFF') {
+      expect(screen.getByRole('link', { name: 'Bảng điều khiển' })).toHaveAttribute(
+        'href',
+        operationsPath,
+      )
+    }
     expect(screen.getByRole('link', { name: 'Công việc được giao' })).toHaveAttribute(
       'href',
       '/staff/tasks',

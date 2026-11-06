@@ -252,6 +252,6 @@ describe('Manager Dashboard', () => {
     renderWithAuth([{ path: '/', element: <UserMenu /> }], {
       auth: { me: ME, status: 'authenticated' },
     })
-    expect(screen.getByRole('link', { name: 'Tổng quan' })).toHaveAttribute('href', root)
+    expect(screen.getByRole('link', { name: 'Bảng điều khiển' })).toHaveAttribute('href', root)
   })
 })

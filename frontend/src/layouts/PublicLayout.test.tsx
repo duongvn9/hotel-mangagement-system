@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { PublicLayout } from './PublicLayout'
 
@@ -62,63 +62,36 @@ describe('PublicLayout', () => {
     expect(banner().getByRole('link', { name: 'Trang chủ' })).not.toHaveAttribute('aria-current')
   })
 
-  it('keeps the customer pages in one menu', () => {
+  it('gives a signed-in customer a single button to their dashboard', () => {
     renderAt('/', customer)
     const header = banner()
-    const toggle = header.getByRole('button', { name: 'Của tôi' })
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(header.queryByRole('link', { name: 'Dịch vụ của tôi' })).not.toBeInTheDocument()
-
-    fireEvent.click(toggle)
-    expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(header.getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
+    expect(header.getByRole('link', { name: 'Vào dashboard' })).toHaveAttribute(
       'href',
-      '/customer/service-orders',
+      '/customer/dashboard',
     )
-    expect(header.getByRole('link', { name: 'Phản hồi của tôi' })).toHaveAttribute(
-      'href',
-      '/my-feedback',
-    )
-    expect(header.getByRole('link', { name: 'Nguyễn Khách' })).toHaveAttribute('href', '/profile')
+    expect(header.queryByRole('button', { name: 'Của tôi' })).not.toBeInTheDocument()
+    expect(header.queryByRole('link', { name: 'Nguyễn Khách' })).not.toBeInTheDocument()
+    expect(header.queryByRole('button', { name: 'Đăng xuất' })).not.toBeInTheDocument()
+    expect(header.queryByRole('link', { name: 'Đăng nhập' })).not.toBeInTheDocument()
   })
 
-  it('closes the customer menu with Escape and returns focus to its button', () => {
-    renderAt('/', customer)
-    const toggle = banner().getByRole('button', { name: 'Của tôi' })
-    fireEvent.click(toggle)
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(toggle).toHaveFocus()
-  })
-
-  it('closes the customer menu after choosing a page', () => {
-    renderAt('/', customer)
-    const header = banner()
-    fireEvent.click(header.getByRole('button', { name: 'Của tôi' }))
-    fireEvent.click(header.getByRole('link', { name: 'Phản hồi của tôi' }))
-    expect(screen.getByRole('heading', { name: 'Phản hồi' })).toBeInTheDocument()
-    expect(header.getByRole('button', { name: 'Của tôi' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    )
-  })
-
-  it('sends staff to their workspace instead of listing every staff page', () => {
+  it('gives staff the same single button to their own workspace', () => {
     renderAt('/', manager)
     const header = banner()
-    expect(header.getByRole('link', { name: 'Vào khu làm việc' })).toHaveAttribute(
+    expect(header.getByRole('link', { name: 'Vào dashboard' })).toHaveAttribute(
       'href',
       '/manager/dashboard',
     )
-    expect(header.queryByRole('link', { name: 'Tài khoản' })).not.toBeInTheDocument()
-    expect(header.queryByRole('button', { name: 'Của tôi' })).not.toBeInTheDocument()
+    expect(header.queryByRole('link', { name: 'Hoàng Quản Lý' })).not.toBeInTheDocument()
+    expect(header.queryByRole('button', { name: 'Đăng xuất' })).not.toBeInTheDocument()
   })
 
-  it('lets a signed-in user sign out', async () => {
-    const view = renderAt('/', customer)
-    fireEvent.click(banner().getByRole('button', { name: 'Đăng xuất' }))
-    await waitFor(() => expect(view.auth.logout).toHaveBeenCalled())
-    expect(await screen.findByRole('heading', { name: 'Trang đăng nhập' })).toBeInTheDocument()
+  it('sends a custom role to its first workspace page', () => {
+    renderAt('/', { ...ME, role: 'CUSTOM_ROLE', permissions: ['task:execute'] })
+    expect(banner().getByRole('link', { name: 'Vào dashboard' })).toHaveAttribute(
+      'href',
+      '/staff/tasks',
+    )
   })
 
   it('collapses the menu behind a button on small screens', () => {

@@ -1,5 +1,5 @@
 import { matchRoutes } from 'react-router'
-import { StaffLayout } from '@/layouts/StaffLayout'
+import { WorkspaceShell } from '@/layouts/WorkspaceShell'
 import { PublicLayout } from '@/layouts/PublicLayout'
 import { router } from './router'
 
@@ -24,19 +24,25 @@ describe('router layouts', () => {
     '/staff/tasks',
     '/staff/service/dashboard',
     '/staff/feedback',
-  ])('puts %s in the staff layout', (path) => {
-    expect(layoutOf(path).layout).toBe(StaffLayout)
+    '/my-bookings',
+    '/my-feedback',
+    '/customer/dashboard',
+    '/notifications',
+    '/customer/service-orders',
+    '/customer/issues/report',
+    '/customer/issues/abc',
+    '/profile',
+  ])('puts %s in the workspace layout', (path) => {
+    expect(layoutOf(path).layout).toBe(WorkspaceShell)
   })
 
   it.each([
     '/',
     '/search',
     '/booking/new',
-    '/my-bookings',
-    '/my-feedback',
-    '/customer/service-orders',
-    '/customer/issues/report',
-    '/profile',
+    '/booking/abc',
+    '/booking/lookup',
+    '/room-types/abc',
     '/payment/vnpay-return',
     '/experiences',
   ])('puts %s in the guest layout', (path) => {
@@ -50,6 +56,7 @@ describe('router layouts', () => {
   it('keeps the guest layout for unknown pages and does not mistake lookalike prefixes', () => {
     expect(layoutOf('/nope').layout).toBe(PublicLayout)
     expect(layoutOf('/staffing/plan').layout).toBe(PublicLayout)
+    expect(layoutOf('/profiles').layout).toBe(PublicLayout)
   })
 
   it('keeps the real page routes as the leaves, so their URLs and guards are unchanged', () => {
