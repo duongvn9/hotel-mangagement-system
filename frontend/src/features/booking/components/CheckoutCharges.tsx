@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { Alert } from '@/components/Alert'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
+import { Button, Input } from '@/components/atoms'
+import { Alert, FormField } from '@/components/molecules'
 import { getErrorMessage } from '@/lib/api-client'
 import type { BookingListItem } from '../api'
 import { useAddCharge, useBookingCharges } from '../hooks'
@@ -43,43 +42,44 @@ export function CheckoutCharges({ booking }: { booking: BookingListItem }) {
   }
 
   return (
-    <div className="space-y-3 border-t border-stone-200 p-4">
+    <div className="space-y-3 border-t border-border p-4">
       <Button
         size="sm"
         variant="secondary"
         aria-expanded={open}
+        className="rounded-full"
         onClick={() => setOpen((current) => !current)}
       >
         Phụ phí
       </Button>
 
       {open && (
-        <div className="space-y-4 rounded border border-stone-300 bg-cream-50 p-3">
+        <div className="space-y-4 rounded-xl border border-border bg-surface p-4">
           {charges.isError && <Alert tone="danger">{getErrorMessage(charges.error)}</Alert>}
-          {charges.isPending && <p className="text-sm text-stone-700">Đang tải…</p>}
+          {charges.isPending && <p className="text-sm text-muted-foreground">Đang tải…</p>}
 
           {charges.data && (
             <>
               {charges.data.charges.length === 0 ? (
-                <p className="text-sm text-stone-700">Chưa có phụ phí.</p>
+                <p className="text-sm text-muted-foreground">Chưa có phụ phí.</p>
               ) : (
                 <ul aria-label="Phụ phí đã ghi" className="space-y-1 text-sm">
                   {charges.data.charges.map((charge, index) => (
                     <li key={charge.sourceId ?? index} className="flex justify-between gap-4">
-                      <span>{charge.reason}</span>
-                      <span className="font-semibold tabular-nums">
+                      <span className="text-foreground">{charge.reason}</span>
+                      <span className="font-semibold tabular-nums text-foreground">
                         {money.format(charge.amount)}
                       </span>
                     </li>
                   ))}
                 </ul>
               )}
-              <div className="space-y-1 border-t border-stone-300 pt-2 text-sm text-stone-700">
+              <div className="space-y-1 border-t border-border pt-2 text-sm text-muted-foreground">
                 <p>Tiền phòng: {money.format(charges.data.totals.roomTotal)}</p>
                 <p>Phụ phí: {money.format(charges.data.totals.additionalTotal)}</p>
                 <p>Tổng cộng: {money.format(charges.data.totals.totalAmount)}</p>
                 <p>Đã cọc: {money.format(charges.data.totals.depositPaid)}</p>
-                <p className="font-semibold text-pearl-900">
+                <p className="font-semibold text-foreground">
                   Còn phải trả: {money.format(charges.data.totals.balanceDue)}
                 </p>
               </div>
@@ -97,22 +97,31 @@ export function CheckoutCharges({ booking }: { booking: BookingListItem }) {
               onSubmit={submit}
               className="grid gap-3 sm:grid-cols-[160px_1fr_auto] sm:items-end"
             >
-              <TextField
-                label="Số tiền (VND)"
-                type="number"
-                min={1}
-                max={MAX_CHARGE}
-                step={1}
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-              />
-              <TextField
-                label="Lý do"
-                maxLength={200}
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-              />
-              <Button type="submit" size="sm" disabled={!valid} loading={add.isPending}>
+              <FormField label="Số tiền (VND)" htmlFor={`charge-amount-${booking.id}`}>
+                <Input
+                  id={`charge-amount-${booking.id}`}
+                  type="number"
+                  min={1}
+                  max={MAX_CHARGE}
+                  step={1}
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                />
+              </FormField>
+              <FormField label="Lý do" htmlFor={`charge-reason-${booking.id}`}>
+                <Input
+                  id={`charge-reason-${booking.id}`}
+                  maxLength={200}
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                />
+              </FormField>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!valid || add.isPending}
+                className="rounded-full"
+              >
                 Thêm phụ phí
               </Button>
             </form>
