@@ -85,6 +85,13 @@ describe('Stars', () => {
     fireEvent.click(screen.getByRole('button', { name: '5 stars' }))
     expect(onChange).toHaveBeenCalledWith(5)
   })
+
+  it('renders a labelled read-only image with no buttons when given a label', () => {
+    render(<Stars value={2} label="2 trên 5 sao" />)
+    expect(screen.getByRole('img', { name: '2 trên 5 sao' })).toBeInTheDocument()
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(document.querySelectorAll('svg.fill-primary')).toHaveLength(2)
+  })
 })
 
 describe('DateRangeField', () => {
