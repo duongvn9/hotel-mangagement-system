@@ -60,7 +60,7 @@ export function SiteLayout({
   }, [open])
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-md"
@@ -135,7 +135,7 @@ export function SiteLayout({
           )}
         </div>
       </header>
-      <main id="main" tabIndex={-1}>
+      <main id="main" tabIndex={-1} className="flex-1">
         {children}
       </main>
       <footer className="bg-ink text-ink-foreground">

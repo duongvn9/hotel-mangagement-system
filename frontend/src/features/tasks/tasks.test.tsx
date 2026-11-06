@@ -8,9 +8,10 @@ import { UserMenu } from '@/features/auth/UserMenu'
 import { api } from '@/lib/api-client'
 import { taskRoutes } from './routes'
 import type { AssignedTask, TaskList } from './api'
+import type * as ApiClient from '@/lib/api-client'
 
 vi.mock('@/lib/api-client', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/lib/api-client')>()
+  const original = await importOriginal<typeof ApiClient>()
   return { ...original, api: { get: vi.fn(), patch: vi.fn() } }
 })
 

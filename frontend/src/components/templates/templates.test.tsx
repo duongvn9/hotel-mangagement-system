@@ -311,6 +311,20 @@ describe('SiteLayout', () => {
     expect(screen.getAllByRole('link', { name: 'Phòng & suite' })).toHaveLength(1)
   })
 
+  // jsdom does not lay out, so assert the classes that keep the footer at the bottom of a short page.
+  it('keeps the footer at the bottom of the viewport when the page content is short', () => {
+    render(
+      <MemoryRouter>
+        <SiteLayout links={links}>
+          <p>Nội dung</p>
+        </SiteLayout>
+      </MemoryRouter>,
+    )
+    const main = screen.getByRole('main')
+    expect(main).toHaveClass('flex-1')
+    expect(main.parentElement).toHaveClass('flex', 'min-h-screen', 'flex-col')
+  })
+
   // (b) getByRole('navigation', { name: 'Menu chính' }) tồn tại, navLabel="Menu" đổi tên
   it('renders a single navigation labeled with navLabel', () => {
     const { rerender } = render(

@@ -11,9 +11,10 @@ import type { AssignedTask, TaskList, TaskStatus } from '@/features/tasks/api'
 import { staffDashboardRoutes } from './routes'
 import { DashboardReadError, readStaffDashboard } from './api'
 import { staffDashboardKey } from './hooks'
+import type * as ApiClient from '@/lib/api-client'
 
 vi.mock('@/lib/api-client', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/lib/api-client')>()
+  const original = await importOriginal<typeof ApiClient>()
   return { ...original, api: { get: vi.fn() } }
 })
 
