@@ -145,10 +145,11 @@ components/
 | Component | Notes |
 |---|---|
 | `Button` | `variant`: `default` `destructive` `outline` `secondary` `ghost` `link`; `size`: `default` `sm` `lg` `icon`; `asChild`. The prototype's main buttons usually add `rounded-full` |
-| `Input`, `Textarea`, `Label`, `Checkbox`, `Switch`, `RadioGroup`/`RadioGroupItem`, `Slider`, `Toggle`, `Separator` | Basic form controls |
+| `Input`, `Textarea`, `Label`, `NativeSelect`, `Checkbox`, `Switch`, `RadioGroup`/`RadioGroupItem`, `Slider`, `Toggle`, `Separator` | Basic form controls |
 | `Avatar`, `AvatarFallback`, `AvatarImage` | |
 | `Skeleton` | Loading placeholder (`animate-pulse`) |
 | `StatusBadge` | `status` (an enum code such as `CHECKED_IN`): colored dot plus Vietnamese label; an unknown status falls back to neutral |
+| `Badge` | `tone`: `success`, `danger`, `info`, `warning`, `neutral`; with decorative dot. Replaces legacy `Badge` (which remains `@deprecated`). For enum status codes use `StatusBadge` |
 | `Logo` | `light` (on dark backgrounds), `to`, `name` (brand name; first letter as mark) |
 
 ### Molecules — `@/components/molecules`
@@ -164,6 +165,7 @@ components/
 | `DateRangeField` | `from`, `to` (`yyyy-MM-dd`), `onChange(from, to)`; the end date is always at least one day after the start |
 | `SectionHeading` | `eyebrow`, `title`, `body`, `align`, `as` (`h1` or `h2`) |
 | `PhotoTile` | `src`, `alt`, `caption`, `aspect` (`square`, `4/3`, `3/4`) |
+| `Alert` | `tone`: `success`, `danger`, `info`, `warning`, `title?`, `children`. `role="alert"` when `tone="danger"`, otherwise `role="status"`. Replaces legacy `Alert` (which remains `@deprecated`) |
 | `Toaster` | Mount once at the app root; call `toast()` from `sonner` |
 
 ### Organisms — `@/components/organisms`

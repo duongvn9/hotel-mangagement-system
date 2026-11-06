@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import * as atoms from '.'
 import { Logo } from './Logo'
@@ -60,9 +60,53 @@ describe('Logo', () => {
   })
 })
 
+describe('Badge', () => {
+  it.each([
+    ['success', 'bg-success/15 text-success'],
+    ['danger', 'bg-destructive/15 text-destructive'],
+    ['info', 'bg-info/15 text-info'],
+    ['warning', 'bg-warning/15 text-warning'],
+    ['neutral', 'bg-muted text-muted-foreground'],
+  ] as const)('renders tone %s with token class %s and decorative dot', (tone, toneClass) => {
+    const { container } = render(<atoms.Badge tone={tone}>Thẻ mẫu</atoms.Badge>)
+    const badge = screen.getByText('Thẻ mẫu')
+    expect(badge.closest('div, span')).toHaveClass(toneClass)
+    expect(badge.closest('div, span')).toHaveClass('whitespace-nowrap')
+    const dot = container.querySelector('[aria-hidden="true"]')
+    expect(dot).toBeInTheDocument()
+    expect(dot).toHaveClass('rounded-full')
+  })
+})
+
+describe('NativeSelect', () => {
+  it('renders a select element and handles change events', () => {
+    const onChange = vi.fn()
+    render(
+      <atoms.NativeSelect aria-label="Lựa chọn" onChange={onChange}>
+        <option value="1">Một</option>
+        <option value="2">Hai</option>
+      </atoms.NativeSelect>,
+    )
+    const select = screen.getByLabelText('Lựa chọn')
+    expect(select).toBeInTheDocument()
+    fireEvent.change(select, { target: { value: '2' } })
+    expect(onChange).toHaveBeenCalled()
+  })
+})
+
 describe('atoms barrel', () => {
   it('re-exports the primitives pages are allowed to use', () => {
-    for (const name of ['Button', 'Input', 'Textarea', 'Label', 'Checkbox', 'Switch', 'Avatar']) {
+    for (const name of [
+      'Button',
+      'Input',
+      'Textarea',
+      'Label',
+      'Checkbox',
+      'Switch',
+      'Avatar',
+      'Badge',
+      'NativeSelect',
+    ]) {
       expect(atoms).toHaveProperty(name)
     }
     expect(atoms.StatusBadge).toBe(StatusBadge)

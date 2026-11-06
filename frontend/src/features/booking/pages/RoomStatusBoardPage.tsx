@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { Badge, Input, NativeSelect } from '@/components/atoms'
+import { Alert, FormField } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import type { RoomBoardEntry, RoomOccupancy } from '../api'
 import { useRoomStatusBoard } from '../hooks'
@@ -72,43 +71,59 @@ export function RoomStatusBoardPage() {
     : []
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div>
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">Lễ tân</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">Sơ đồ phòng</h1>
-        {board.data && (
-          <p className="mt-2 text-sm text-stone-700">
-            Tình trạng phòng ngày {formatDate(board.data.date)}
-          </p>
-        )}
-      </div>
+    <PageContainer className="space-y-6">
+      <PageHeader
+        eyebrow="Lễ tân"
+        title="Sơ đồ phòng"
+        subtitle={
+          board.data
+            ? `Tình trạng phòng ngày ${formatDate(board.data.date)}`
+            : 'Tình trạng từng phòng theo ngày.'
+        }
+      />
 
-      <div className="grid gap-4 rounded-lg border border-stone-300 bg-white p-6 md:grid-cols-3">
-        <TextField
-          label="Ngày"
-          type="date"
-          required
-          value={date}
-          onChange={(event) => event.target.value && setDate(event.target.value)}
-        />
-        <SelectField
-          label="Tầng"
-          options={floorOptions}
-          value={floor}
-          onChange={(event) => setFloor(event.target.value)}
-        />
-        <SelectField
-          label="Loại phòng"
-          options={typeOptions}
-          value={roomTypeId}
-          onChange={(event) => setRoomTypeId(event.target.value)}
-        />
+      <div className="card-soft grid gap-4 p-5 sm:p-6 md:grid-cols-3">
+        <FormField label="Ngày" htmlFor="room-board-date" required>
+          <Input
+            id="room-board-date"
+            type="date"
+            required
+            value={date}
+            onChange={(event) => event.target.value && setDate(event.target.value)}
+          />
+        </FormField>
+        <FormField label="Tầng" htmlFor="room-board-floor">
+          <NativeSelect
+            id="room-board-floor"
+            value={floor}
+            onChange={(event) => setFloor(event.target.value)}
+          >
+            {floorOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </FormField>
+        <FormField label="Loại phòng" htmlFor="room-board-type">
+          <NativeSelect
+            id="room-board-type"
+            value={roomTypeId}
+            onChange={(event) => setRoomTypeId(event.target.value)}
+          >
+            {typeOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </FormField>
       </div>
 
       {board.isError && <Alert tone="danger">{getErrorMessage(board.error)}</Alert>}
 
       {board.isPending ? (
-        <p className="text-stone-700">Đang tải…</p>
+        <p className="text-sm text-muted-foreground">Đang tải…</p>
       ) : (
         board.data && (
           <>
@@ -116,7 +131,7 @@ export function RoomStatusBoardPage() {
               {chips.map((chip) => (
                 <li
                   key={chip.label}
-                  className="rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-semibold text-stone-700"
+                  className="inline-flex items-center rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm"
                 >
                   {chip.label}: {chip.count}
                 </li>
@@ -124,13 +139,13 @@ export function RoomStatusBoardPage() {
             </ul>
 
             {floors.length === 0 ? (
-              <p className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700">
-                Không có phòng nào để hiển thị.
-              </p>
+              <Panel>
+                <p className="text-sm text-muted-foreground">Không có phòng nào để hiển thị.</p>
+              </Panel>
             ) : (
               floors.map(([floorNumber, floorRooms]) => (
                 <div key={floorNumber} className="space-y-3">
-                  <h2 className="font-display text-xl font-semibold text-pearl-900">
+                  <h2 className="font-display text-xl font-semibold text-foreground">
                     Tầng {floorNumber}
                   </h2>
                   <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -144,7 +159,7 @@ export function RoomStatusBoardPage() {
           </>
         )
       )}
-    </section>
+    </PageContainer>
   )
 }
 
@@ -154,12 +169,12 @@ function RoomCard({ room }: { room: RoomBoardEntry }) {
   return (
     <li
       aria-label={`Phòng ${room.roomNumber}`}
-      className="space-y-2 rounded-lg border border-stone-300 bg-white p-4"
+      className="card-soft space-y-2 p-4 transition-colors hover:shadow-lift"
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-2xl font-semibold text-pearl-900 tabular-nums">{room.roomNumber}</p>
-          <p className="text-xs text-stone-700">
+          <p className="text-2xl font-semibold tabular-nums text-foreground">{room.roomNumber}</p>
+          <p className="text-xs text-muted-foreground">
             {room.roomTypeName} · {room.capacity} khách
           </p>
         </div>
@@ -169,10 +184,10 @@ function RoomCard({ room }: { room: RoomBoardEntry }) {
         </div>
       </div>
       {room.booking && (
-        <div className="space-y-0.5 border-t border-stone-200 pt-2 text-sm">
-          <p className="font-semibold tracking-wide text-pearl-900">{room.booking.code}</p>
-          <p className="text-stone-700">{room.booking.guestName}</p>
-          <p className="text-xs text-stone-500">
+        <div className="space-y-0.5 border-t border-border pt-2 text-sm">
+          <p className="font-semibold tracking-wide text-foreground">{room.booking.code}</p>
+          <p className="text-muted-foreground">{room.booking.guestName}</p>
+          <p className="text-xs text-muted-foreground">
             {formatDate(room.booking.checkIn)} – {formatDate(room.booking.checkOut)}
           </p>
         </div>

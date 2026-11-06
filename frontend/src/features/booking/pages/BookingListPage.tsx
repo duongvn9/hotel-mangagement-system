@@ -1,10 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { UserPlus } from 'lucide-react'
+import { Badge, Button, Input, NativeSelect, StatusBadge } from '@/components/atoms'
+import { Alert, FormField } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { BOOKING_STATUS_DISPLAY, type BookingListParams } from '../api'
 import { useBookingList } from '../hooks'
@@ -65,54 +64,70 @@ export function BookingListPage() {
   }
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold tracking-widest text-primary uppercase">Lễ tân</p>
-          <h1 className="font-display text-4xl font-semibold text-pearl-900">Danh sách booking</h1>
-        </div>
-        <Link to="/reception/booking/new">
-          <Button>Tạo booking</Button>
-        </Link>
-      </div>
+    <PageContainer className="space-y-6">
+      <PageHeader
+        eyebrow="Lễ tân"
+        title="Danh sách booking"
+        subtitle="Tìm kiếm, lọc và mở bất kỳ đặt phòng nào."
+        actions={
+          <Button asChild className="rounded-full">
+            <Link to="/reception/booking/new">
+              <UserPlus className="size-4" />
+              Tạo booking
+            </Link>
+          </Button>
+        }
+      />
 
       <form
         onSubmit={applyFilters}
-        className="grid gap-4 rounded-lg border border-stone-300 bg-white p-6 md:grid-cols-5"
+        className="card-soft grid gap-4 p-5 sm:p-6 md:grid-cols-5"
         aria-label="Lọc booking"
       >
-        <TextField
-          label="Tìm kiếm"
-          placeholder="Mã, tên, email, số điện thoại"
-          maxLength={100}
-          value={draft.q}
-          onChange={(event) => setDraft({ ...draft, q: event.target.value })}
-          className="md:col-span-2"
-        />
-        <SelectField
-          label="Trạng thái"
-          options={STATUS_OPTIONS}
-          value={draft.status}
-          onChange={(event) => setDraft({ ...draft, status: event.target.value })}
-        />
-        <TextField
-          label="Nhận phòng từ"
-          type="date"
-          value={draft.checkInFrom}
-          onChange={(event) => setDraft({ ...draft, checkInFrom: event.target.value })}
-        />
-        <TextField
-          label="Nhận phòng đến"
-          type="date"
-          min={draft.checkInFrom || undefined}
-          value={draft.checkInTo}
-          onChange={(event) => setDraft({ ...draft, checkInTo: event.target.value })}
-        />
+        <FormField label="Tìm kiếm" htmlFor="booking-search-q" className="md:col-span-2">
+          <Input
+            id="booking-search-q"
+            placeholder="Mã, tên, email, số điện thoại"
+            maxLength={100}
+            value={draft.q}
+            onChange={(event) => setDraft({ ...draft, q: event.target.value })}
+          />
+        </FormField>
+        <FormField label="Trạng thái" htmlFor="booking-search-status">
+          <NativeSelect
+            id="booking-search-status"
+            value={draft.status}
+            onChange={(event) => setDraft({ ...draft, status: event.target.value })}
+          >
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </FormField>
+        <FormField label="Nhận phòng từ" htmlFor="booking-search-from">
+          <Input
+            id="booking-search-from"
+            type="date"
+            value={draft.checkInFrom}
+            onChange={(event) => setDraft({ ...draft, checkInFrom: event.target.value })}
+          />
+        </FormField>
+        <FormField label="Nhận phòng đến" htmlFor="booking-search-to">
+          <Input
+            id="booking-search-to"
+            type="date"
+            min={draft.checkInFrom || undefined}
+            value={draft.checkInTo}
+            onChange={(event) => setDraft({ ...draft, checkInTo: event.target.value })}
+          />
+        </FormField>
         <div className="flex gap-3 md:col-span-5">
-          <Button type="submit" loading={list.isFetching}>
+          <Button type="submit" disabled={list.isFetching} className="rounded-full">
             Lọc
           </Button>
-          <Button type="button" variant="ghost" onClick={resetFilters}>
+          <Button type="button" variant="ghost" onClick={resetFilters} className="rounded-full">
             Xoá bộ lọc
           </Button>
         </div>
@@ -121,89 +136,89 @@ export function BookingListPage() {
       {list.isError && <Alert tone="danger">{getErrorMessage(list.error)}</Alert>}
 
       {list.isPending ? (
-        <p className="text-stone-700">Đang tải…</p>
+        <p className="text-sm text-muted-foreground">Đang tải…</p>
       ) : list.data && list.data.items.length === 0 ? (
-        <p className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700">
-          Không có booking nào phù hợp.
-        </p>
+        <Panel>
+          <p className="text-sm text-muted-foreground">Không có booking nào phù hợp.</p>
+        </Panel>
       ) : (
         list.data && (
           <>
             <ul className="space-y-3">
-              {list.data.items.map((booking) => {
-                const display = BOOKING_STATUS_DISPLAY[booking.status] ?? {
-                  label: booking.status,
-                  tone: 'neutral' as const,
-                }
-                return (
-                  <li key={booking.id} className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-                    <Link
-                      to={`/reception/bookings/${encodeURIComponent(booking.code)}`}
-                      className="grid flex-1 gap-3 rounded-lg border border-stone-300 bg-white p-5 hover:bg-cream-50 md:grid-cols-[1.2fr_1fr_1fr_auto] md:items-center"
+              {list.data.items.map((booking) => (
+                <li key={booking.id} className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                  <Link
+                    to={`/reception/bookings/${encodeURIComponent(booking.code)}`}
+                    className="card-soft grid flex-1 gap-3 p-5 transition-colors hover:bg-surface md:grid-cols-[1.2fr_1fr_1fr_auto] md:items-center"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold tracking-wide text-foreground">
+                          {booking.code}
+                        </span>
+                        <StatusBadge status={booking.status} />
+                        {booking.source === 'FRONT_DESK' && <Badge tone="info">Tại quầy</Badge>}
+                      </div>
+                      <p className="text-sm text-foreground">{booking.guestName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {booking.guestPhone} · {booking.guestEmail}
+                      </p>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <p className="font-semibold text-foreground">
+                        {formatDate(booking.checkIn)} – {formatDate(booking.checkOut)}
+                      </p>
+                      <p className="text-muted-foreground">
+                        {booking.adultCount + booking.childCount} khách
+                      </p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {booking.rooms
+                        .map((room) =>
+                          [room.roomNumber, room.roomTypeName].filter(Boolean).join(' · '),
+                        )
+                        .join(', ')}
+                    </p>
+                    <p className="font-semibold tabular-nums text-foreground md:text-right">
+                      {money.format(booking.roomTotal)}
+                    </p>
+                  </Link>
+                  {EDITABLE_STATUSES.includes(booking.status) && (
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="self-center rounded-full"
                     >
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold tracking-wide text-pearl-900">
-                            {booking.code}
-                          </span>
-                          <Badge tone={display.tone}>{display.label}</Badge>
-                          {booking.source === 'FRONT_DESK' && <Badge tone="info">Tại quầy</Badge>}
-                        </div>
-                        <p className="text-sm text-stone-700">{booking.guestName}</p>
-                        <p className="text-xs text-stone-500">
-                          {booking.guestPhone} · {booking.guestEmail}
-                        </p>
-                      </div>
-                      <div className="space-y-1 text-sm">
-                        <p className="font-semibold">
-                          {formatDate(booking.checkIn)} – {formatDate(booking.checkOut)}
-                        </p>
-                        <p className="text-stone-700">
-                          {booking.adultCount + booking.childCount} khách
-                        </p>
-                      </div>
-                      <p className="text-sm text-stone-700">
-                        {booking.rooms
-                          .map((room) =>
-                            [room.roomNumber, room.roomTypeName].filter(Boolean).join(' · '),
-                          )
-                          .join(', ')}
-                      </p>
-                      <p className="font-semibold tabular-nums md:text-right">
-                        {money.format(booking.roomTotal)}
-                      </p>
-                    </Link>
-                    {EDITABLE_STATUSES.includes(booking.status) && (
-                      <Link
-                        to={`/reception/bookings/${encodeURIComponent(booking.code)}/edit`}
-                        className="inline-flex items-center justify-center rounded border border-pearl-900 px-5 text-xs font-semibold tracking-wider text-pearl-900 uppercase hover:bg-pearl-900 hover:text-cream-100"
-                      >
+                      <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}/edit`}>
                         Sửa
                       </Link>
-                    )}
-                  </li>
-                )
-              })}
+                    </Button>
+                  )}
+                </li>
+              ))}
             </ul>
 
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <p className="text-sm text-stone-700">
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+              <p className="text-sm text-muted-foreground">
                 Trang {list.data.page} / {totalPages} · {list.data.total} booking
               </p>
-              <div className="flex gap-3">
+              <div className="flex gap-2">
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   size="sm"
                   disabled={pageNumber <= 1}
                   onClick={() => setPageNumber((current) => current - 1)}
+                  className="rounded-full"
                 >
                   Trang trước
                 </Button>
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   size="sm"
                   disabled={pageNumber >= totalPages}
                   onClick={() => setPageNumber((current) => current + 1)}
+                  className="rounded-full"
                 >
                   Trang sau
                 </Button>
@@ -212,6 +227,6 @@ export function BookingListPage() {
           </>
         )
       )}
-    </section>
+    </PageContainer>
   )
 }
