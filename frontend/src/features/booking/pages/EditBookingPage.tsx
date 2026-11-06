@@ -1,10 +1,10 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
+import { Button, Input, StatusBadge } from '@/components/atoms'
+import { Alert, FormField } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
+import { cn } from '@/lib/utils'
 import { BOOKING_STATUS_DISPLAY, type BookingListItem } from '../api'
 import { useAvailability, useBookingList, useUpdateBooking } from '../hooks'
 import { money, nightsBetween, toBusinessDate } from '../utils'
@@ -21,7 +21,7 @@ export function EditBookingPage() {
 
   let body
   if (list.isPending) {
-    body = <p className="text-stone-700">Đang tải…</p>
+    body = <p className="text-sm text-muted-foreground">Đang tải…</p>
   } else if (list.isError) {
     body = <Alert tone="danger">{getErrorMessage(list.error)}</Alert>
   } else if (!booking) {
@@ -38,19 +38,20 @@ export function EditBookingPage() {
   }
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div>
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">Lễ tân</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">Sửa booking {code}</h1>
-      </div>
+    <PageContainer className="space-y-6">
+      <PageHeader
+        eyebrow="Lễ tân"
+        title={`Sửa booking ${code}`}
+        subtitle="Cập nhật thời gian ở, chọn lại phòng hoặc sửa thông tin khách."
+      />
       {body}
       <Link
         to="/reception/bookings"
-        className="inline-flex h-11 items-center text-sm font-semibold tracking-wider text-stone-700 uppercase hover:text-primary"
+        className="inline-flex h-11 items-center text-sm font-semibold tracking-wider text-muted-foreground uppercase transition-colors hover:text-primary"
       >
         ← Danh sách booking
       </Link>
-    </section>
+    </PageContainer>
   )
 }
 
@@ -134,143 +135,170 @@ function EditBookingForm({ booking }: { booking: BookingListItem }) {
     }
   }
 
-  const status = BOOKING_STATUS_DISPLAY[booking.status]
-
   return (
     <form onSubmit={submit} className="grid items-start gap-6 lg:grid-cols-[1fr_360px]">
       <div className="space-y-5">
-        <div className="space-y-4 rounded-xl border border-stone-300 bg-white p-6">
-          <h2 className="font-display text-xl font-semibold text-pearl-900">Thời gian ở</h2>
+        <Panel title="Thời gian ở">
           <div className="grid gap-4 sm:grid-cols-2">
-            <TextField
-              label="Nhận phòng"
-              type="date"
-              required
-              value={checkIn}
-              onChange={(event) => setCheckIn(event.target.value)}
-            />
-            <TextField
-              label="Trả phòng"
-              type="date"
-              required
-              min={checkIn || undefined}
-              value={checkOut}
-              onChange={(event) => setCheckOut(event.target.value)}
-            />
-            <TextField
-              label="Người lớn"
-              type="number"
-              required
-              min={1}
-              step={1}
-              value={adultCount}
-              onChange={(event) => setAdultCount(event.target.value)}
-            />
-            <TextField
-              label="Trẻ em"
-              type="number"
-              required
-              min={0}
-              step={1}
-              value={childCount}
-              onChange={(event) => setChildCount(event.target.value)}
-            />
+            <FormField label="Nhận phòng" htmlFor="edit-check-in" required>
+              <Input
+                id="edit-check-in"
+                type="date"
+                required
+                value={checkIn}
+                onChange={(event) => setCheckIn(event.target.value)}
+              />
+            </FormField>
+            <FormField label="Trả phòng" htmlFor="edit-check-out" required>
+              <Input
+                id="edit-check-out"
+                type="date"
+                required
+                min={checkIn || undefined}
+                value={checkOut}
+                onChange={(event) => setCheckOut(event.target.value)}
+              />
+            </FormField>
+            <FormField label="Người lớn" htmlFor="edit-adult-count" required>
+              <Input
+                id="edit-adult-count"
+                type="number"
+                required
+                min={1}
+                step={1}
+                value={adultCount}
+                onChange={(event) => setAdultCount(event.target.value)}
+              />
+            </FormField>
+            <FormField label="Trẻ em" htmlFor="edit-child-count" required>
+              <Input
+                id="edit-child-count"
+                type="number"
+                required
+                min={0}
+                step={1}
+                value={childCount}
+                onChange={(event) => setChildCount(event.target.value)}
+              />
+            </FormField>
           </div>
-        </div>
+        </Panel>
 
-        <div className="space-y-3 rounded-xl border border-stone-300 bg-white p-6">
-          <h2 className="font-display text-xl font-semibold text-pearl-900">Phòng</h2>
+        <Panel title="Phòng">
           <ul className="grid gap-2 sm:grid-cols-2">
-            {options.map((room) => (
-              <li key={room.id}>
-                <label className="flex cursor-pointer items-center gap-3 rounded border border-stone-300 px-4 py-3 text-sm hover:border-stone-500">
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(room.id)}
-                    onChange={() => toggle(room.id)}
-                    aria-label={room.label}
-                  />
-                  <span className="flex-1">
-                    {room.label}
-                    <span className="block text-xs text-stone-500">{room.note}</span>
-                  </span>
-                  {room.pricePerNight !== undefined && (
-                    <span className="text-stone-700 tabular-nums">
-                      {money.format(room.pricePerNight)}/đêm
+            {options.map((room) => {
+              const isSelected = selected.includes(room.id)
+              return (
+                <li key={room.id}>
+                  <label
+                    className={cn(
+                      'flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 text-sm transition-colors',
+                      isSelected
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border bg-card hover:border-primary/50 text-foreground',
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggle(room.id)}
+                      aria-label={room.label}
+                      className="size-4 cursor-pointer rounded accent-primary"
+                    />
+                    <span className="flex-1">
+                      <span className="font-medium">{room.label}</span>
+                      <span className="block text-xs text-muted-foreground">{room.note}</span>
                     </span>
-                  )}
-                </label>
-              </li>
-            ))}
+                    {room.pricePerNight !== undefined && (
+                      <span className="tabular-nums text-muted-foreground">
+                        {money.format(room.pricePerNight)}/đêm
+                      </span>
+                    )}
+                  </label>
+                </li>
+              )
+            })}
           </ul>
           {availability.isError && (
-            <Alert tone="danger">{getErrorMessage(availability.error)}</Alert>
+            <div className="mt-3">
+              <Alert tone="danger">{getErrorMessage(availability.error)}</Alert>
+            </div>
           )}
-        </div>
+        </Panel>
 
-        <div className="space-y-4 rounded-xl border border-stone-300 bg-white p-6">
-          <h2 className="font-display text-xl font-semibold text-pearl-900">Thông tin khách</h2>
+        <Panel title="Thông tin khách">
           <div className="grid gap-4 sm:grid-cols-2">
-            <TextField
-              label="Họ tên"
-              required
-              maxLength={120}
-              value={guestName}
-              onChange={(event) => setGuestName(event.target.value)}
-            />
-            <TextField
-              label="Email"
-              type="email"
-              required
-              maxLength={160}
-              value={guestEmail}
-              onChange={(event) => setGuestEmail(event.target.value)}
-            />
-            <TextField
+            <FormField label="Họ tên" htmlFor="edit-guest-name" required>
+              <Input
+                id="edit-guest-name"
+                required
+                maxLength={120}
+                value={guestName}
+                onChange={(event) => setGuestName(event.target.value)}
+              />
+            </FormField>
+            <FormField label="Email" htmlFor="edit-guest-email" required>
+              <Input
+                id="edit-guest-email"
+                type="email"
+                required
+                maxLength={160}
+                value={guestEmail}
+                onChange={(event) => setGuestEmail(event.target.value)}
+              />
+            </FormField>
+            <FormField
               label="Số điện thoại"
-              type="tel"
+              htmlFor="edit-guest-phone"
               required
-              value={guestPhone}
-              onChange={(event) => setGuestPhone(event.target.value)}
               className="sm:col-span-2"
-            />
+            >
+              <Input
+                id="edit-guest-phone"
+                type="tel"
+                required
+                value={guestPhone}
+                onChange={(event) => setGuestPhone(event.target.value)}
+              />
+            </FormField>
           </div>
-        </div>
+        </Panel>
 
         {update.isError && <Alert tone="danger">{getErrorMessage(update.error)}</Alert>}
       </div>
 
-      <aside className="h-fit space-y-4 rounded-xl border border-stone-300 bg-cream-50 p-6 lg:sticky lg:top-6">
-        <h2 className="font-display text-xl font-semibold text-pearl-900">Tóm tắt</h2>
+      <aside className="card-soft h-fit space-y-4 p-6 lg:sticky lg:top-6">
+        <h2 className="font-display text-xl font-semibold text-foreground">Tóm tắt</h2>
         <dl className="space-y-2 text-sm">
           <div className="flex items-center justify-between gap-4">
-            <dt className="text-stone-700">Trạng thái</dt>
+            <dt className="text-muted-foreground">Trạng thái</dt>
             <dd>
-              <Badge tone={status?.tone ?? 'neutral'}>{status?.label ?? booking.status}</Badge>
+              <StatusBadge status={booking.status} />
             </dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-stone-700">Số đêm</dt>
-            <dd className="font-semibold">{nights}</dd>
+            <dt className="text-muted-foreground">Số đêm</dt>
+            <dd className="font-semibold text-foreground">{nights}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-stone-700">Phòng đã chọn</dt>
-            <dd className="font-semibold">{selected.length}</dd>
+            <dt className="text-muted-foreground">Phòng đã chọn</dt>
+            <dd className="font-semibold text-foreground">{selected.length}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-stone-700">Tiền phòng hiện tại</dt>
-            <dd className="font-semibold tabular-nums">{money.format(booking.roomTotal)}</dd>
+            <dt className="text-muted-foreground">Tiền phòng hiện tại</dt>
+            <dd className="font-semibold tabular-nums text-foreground">
+              {money.format(booking.roomTotal)}
+            </dd>
           </div>
         </dl>
-        <p className="text-xs text-stone-700">
+        <p className="text-xs text-muted-foreground">
           Khi lưu, hệ thống kiểm tra lại phòng trống và tính lại tiền phòng. Tiền cọc đã nhận của
           booking đã xác nhận được giữ nguyên.
         </p>
         <Button
           type="submit"
-          className="w-full"
-          loading={update.isPending}
-          disabled={selected.length === 0 || !criteria}
+          className="w-full rounded-full"
+          disabled={selected.length === 0 || !criteria || update.isPending}
         >
           Lưu thay đổi
         </Button>
