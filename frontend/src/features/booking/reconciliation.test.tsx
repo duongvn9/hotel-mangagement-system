@@ -40,7 +40,8 @@ describe('ReconciliationPage (manager)', () => {
     })
 
     expect(await screen.findByText('BK777')).toBeInTheDocument()
-    expect(screen.getByText('Hết hạn giữ phòng')).toBeInTheDocument()
+    // StatusBadge hiển thị nhãn ngắn qua label(): EXPIRED → "Hết hạn".
+    expect(screen.getByText('Hết hạn')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Ghi chú đối soát', { exact: false }), {
       target: { value: 'Đã hoàn qua VNPay' },
