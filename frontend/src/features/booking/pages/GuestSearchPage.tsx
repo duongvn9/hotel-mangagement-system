@@ -1,9 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
+import { Badge, Button, Input } from '@/components/atoms'
+import { Alert, FormField } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import type { GuestProfile } from '../api'
 import { useGuestSearch } from '../hooks'
@@ -35,27 +34,33 @@ export function GuestSearchPage() {
   }
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div>
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">Lễ tân</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">Tìm khách</h1>
-      </div>
+    <PageContainer className="space-y-6">
+      <PageHeader
+        eyebrow="Lễ tân"
+        title="Tìm khách"
+        subtitle="Tìm theo tên, số điện thoại, email hoặc mã booking."
+      />
 
       <form
         onSubmit={submit}
-        className="flex flex-wrap items-end gap-4 rounded-lg border border-stone-300 bg-white p-6"
+        className="card-soft flex flex-wrap items-end gap-4 p-5 sm:p-6"
         aria-label="Tra cứu khách"
       >
-        <TextField
+        <FormField
           label="Tìm khách"
-          placeholder="Tên, email, số điện thoại hoặc mã booking"
-          maxLength={100}
-          value={draft}
+          htmlFor="guest-search-input"
           error={formError}
-          onChange={(event) => setDraft(event.target.value)}
           className="min-w-64 flex-1"
-        />
-        <Button type="submit" loading={search.isFetching}>
+        >
+          <Input
+            id="guest-search-input"
+            placeholder="Tên, email, số điện thoại hoặc mã booking"
+            maxLength={100}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+        </FormField>
+        <Button type="submit" disabled={search.isFetching} className="rounded-full">
           Tìm
         </Button>
       </form>
@@ -63,15 +68,17 @@ export function GuestSearchPage() {
       {search.isError && <Alert tone="danger">{getErrorMessage(search.error)}</Alert>}
 
       {!query ? (
-        <p className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700">
-          Nhập tên, email, số điện thoại hoặc mã booking để tìm khách.
-        </p>
+        <Panel>
+          <p className="text-sm text-muted-foreground">
+            Nhập tên, email, số điện thoại hoặc mã booking để tìm khách.
+          </p>
+        </Panel>
       ) : search.isPending ? (
-        <p className="text-stone-700">Đang tải…</p>
+        <p className="text-sm text-muted-foreground">Đang tải…</p>
       ) : search.data && search.data.items.length === 0 ? (
-        <p className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700">
-          Không tìm thấy khách nào phù hợp.
-        </p>
+        <Panel>
+          <p className="text-sm text-muted-foreground">Không tìm thấy khách nào phù hợp.</p>
+        </Panel>
       ) : (
         search.data && (
           <>
@@ -81,24 +88,26 @@ export function GuestSearchPage() {
               ))}
             </ul>
 
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <p className="text-sm text-stone-700">
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+              <p className="text-sm text-muted-foreground">
                 Trang {search.data.page} / {totalPages} · {search.data.total} khách
               </p>
-              <div className="flex gap-3">
+              <div className="flex gap-2">
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   size="sm"
                   disabled={pageNumber <= 1}
                   onClick={() => setPageNumber((current) => current - 1)}
+                  className="rounded-full"
                 >
                   Trang trước
                 </Button>
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   size="sm"
                   disabled={pageNumber >= totalPages}
                   onClick={() => setPageNumber((current) => current + 1)}
+                  className="rounded-full"
                 >
                   Trang sau
                 </Button>
@@ -107,12 +116,9 @@ export function GuestSearchPage() {
           </>
         )
       )}
-    </section>
+    </PageContainer>
   )
 }
-
-const actionClass =
-  'inline-flex h-9 items-center justify-center rounded border border-pearl-900 px-4 text-xs font-semibold tracking-wider text-pearl-900 uppercase hover:bg-pearl-900 hover:text-cream-100'
 
 function GuestCard({ guest }: { guest: GuestProfile }) {
   const createParams = new URLSearchParams({
@@ -124,28 +130,28 @@ function GuestCard({ guest }: { guest: GuestProfile }) {
   return (
     <li
       aria-label={guest.name}
-      className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-stone-300 bg-white p-5"
+      className="card-soft flex flex-wrap items-center justify-between gap-4 p-5"
     >
       <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold text-pearl-900">{guest.name}</span>
+          <span className="font-semibold text-foreground">{guest.name}</span>
           {guest.hasAccount && <Badge tone="info">Có tài khoản</Badge>}
         </div>
-        <p className="text-sm text-stone-700">
+        <p className="text-sm text-muted-foreground">
           {guest.email} · {guest.phone}
         </p>
-        <p className="text-xs text-stone-500">
+        <p className="text-xs text-muted-foreground">
           {guest.totalBookings} booking · {guest.completedStays} lần đã trả phòng
           {guest.lastCheckIn && ` · Nhận phòng gần nhất ${formatDate(guest.lastCheckIn)}`}
         </p>
       </div>
-      <div className="flex gap-3">
-        <Link to={`/reception/bookings?${listParams.toString()}`} className={actionClass}>
-          Xem booking
-        </Link>
-        <Link to={`/reception/booking/new?${createParams.toString()}`} className={actionClass}>
-          Tạo booking
-        </Link>
+      <div className="flex gap-2">
+        <Button asChild variant="outline" size="sm" className="rounded-full">
+          <Link to={`/reception/bookings?${listParams.toString()}`}>Xem booking</Link>
+        </Button>
+        <Button asChild size="sm" className="rounded-full">
+          <Link to={`/reception/booking/new?${createParams.toString()}`}>Tạo booking</Link>
+        </Button>
       </div>
     </li>
   )
