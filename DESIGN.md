@@ -145,7 +145,7 @@ components/
 | Component | Notes |
 |---|---|
 | `Button` | `variant`: `default` `destructive` `outline` `secondary` `ghost` `link`; `size`: `default` `sm` `lg` `icon`; `asChild`. The prototype's main buttons usually add `rounded-full` |
-| `Input`, `Textarea`, `Label`, `NativeSelect`, `Checkbox`, `Switch`, `RadioGroup`/`RadioGroupItem`, `Slider`, `Toggle`, `Separator` | Basic form controls |
+| `Input`, `Textarea`, `Label`, `NativeSelect`, `Checkbox`, `Switch`, `RadioGroup`/`RadioGroupItem`, `Slider`, `Toggle`, `Separator` | Basic form controls. `NativeSelect` is a styled native `<select>` for forms/toolbars that need `fireEvent.change`; use the Radix `Select` molecule for long/popover lists |
 | `Avatar`, `AvatarFallback`, `AvatarImage` | |
 | `Skeleton` | Loading placeholder (`animate-pulse`) |
 | `StatusBadge` | `status` (an enum code such as `CHECKED_IN`): colored dot plus Vietnamese label; an unknown status falls back to neutral |
@@ -174,7 +174,7 @@ components/
 |---|---|
 | `PageHeader` | `title`, `subtitle`, `eyebrow`, `actions` — the top of every workspace page |
 | `Panel` | A card with a title and an `action` |
-| `DataTable<T>` | `rows`, `columns`, `search`, `filters`, `pageSize`, `onRowClick`, `toolbar`, `empty`, `loading` — pagination, search, filtering, empty and loading states |
+| `DataTable<T>` | `rows`, `columns`, `search`, `filters`, `pageSize`, `onRowClick`, `toolbar`, `empty`, `loading` — client-side pagination, search, filtering, empty and loading states. Optional **server mode** props leave the default markup/behavior untouched when absent: a controlled search box (`searchValue`, `onSearchChange`, `onSearchSubmit`, `searchPlaceholder`, `searchAriaLabel`) submitting on Enter, a left toolbar slot (`toolbarStart`), and controlled pagination (`page`, `totalPages`, `onPageChange`) |
 | `Dialog*`, `AlertDialog*`, `Sheet*` | Dialog, confirmation, drawer |
 | `RevenueArea`, `SimpleBars`, `Donut` | Charts (recharts) using the `--chart-*` colors |
 | `SearchBar` | The room search bar; `initial`, `onSearch({ from, to, guests })`, `ariaLabel`, `compact` |
