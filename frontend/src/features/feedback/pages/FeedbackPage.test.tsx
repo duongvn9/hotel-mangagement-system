@@ -23,10 +23,14 @@ const REPLIED = {
   },
 }
 
-function setup(role: string) {
-  const get = vi
-    .spyOn(api, 'get')
-    .mockResolvedValue({ data: { items: [UNREPLIED, REPLIED], total: 2, page: 1, limit: 10 } })
+function setup(
+  role: string,
+  feedback: unknown = { items: [UNREPLIED, REPLIED], total: 2, page: 1, limit: 10 },
+) {
+  const get = vi.spyOn(api, 'get').mockImplementation(async () => {
+    if (feedback instanceof Error) throw feedback
+    return { data: feedback }
+  })
   const post = vi.spyOn(api, 'post').mockResolvedValue({ data: UNREPLIED })
   renderWithAuth([{ path: '/', element: <FeedbackPage /> }], {
     auth: { me: { ...ME, role }, status: 'authenticated' },
@@ -61,10 +65,31 @@ describe('FeedbackPage', () => {
     expect(screen.queryByRole('button', { name: 'Trả lời' })).toBeNull()
 
     fireEvent.change(screen.getByLabelText(/Trạng thái/), { target: { value: 'false' } })
+    // Hai thẻ số liệu cũng gọi /feedback, nên kiểm tra riêng lời gọi danh sách (limit 10).
     await waitFor(() =>
-      expect(get).toHaveBeenLastCalledWith('/feedback', {
+      expect(get).toHaveBeenCalledWith('/feedback', {
         params: { page: 1, limit: 10, replied: 'false' },
       }),
+    )
+  })
+
+  it('báo lỗi khi không tải được danh sách', async () => {
+    setup('MANAGER', new Error('offline'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Không tải được danh sách phản hồi')
+  })
+
+  it('hiển thị trạng thái rỗng khi chưa có phản hồi', async () => {
+    setup('MANAGER', { items: [], total: 0, page: 1, limit: 10 })
+    expect(await screen.findByText('Chưa có phản hồi nào')).toBeInTheDocument()
+  })
+
+  it('chuyển trang qua điều khiển phân trang', async () => {
+    const many = Array.from({ length: 10 }, (_, i) => ({ ...UNREPLIED, id: `f${i}` }))
+    const { get } = setup('MANAGER', { items: many, total: 40, page: 1, limit: 10 })
+    await screen.findAllByRole('article')
+    fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
+    await waitFor(() =>
+      expect(get).toHaveBeenCalledWith('/feedback', { params: { page: 2, limit: 10 } }),
     )
   })
 })
