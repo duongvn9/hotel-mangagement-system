@@ -161,7 +161,7 @@ components/
 | `StatCard` | `label`, `value`, `hint`, `trend`, `icon` |
 | `EmptyState` | `title`, `body`, `action`, `icon` |
 | `KeyValue` | A label–value pair in detail views |
-| `Stars` | `value`, `onChange?` (read-only without `onChange`) |
+| `Stars` | `value`, `onChange?` (read-only without `onChange`), `label?` (read-only display: renders `role="img"` with that `aria-label`, no buttons) |
 | `DateRangeField` | `from`, `to` (`yyyy-MM-dd`), `onChange(from, to)`; the end date is always at least one day after the start |
 | `SectionHeading` | `eyebrow`, `title`, `body`, `align`, `as` (`h1` or `h2`) |
 | `PhotoTile` | `src`, `alt`, `caption`, `aspect` (`square`, `4/3`, `3/4`) |
@@ -173,6 +173,7 @@ components/
 | Component | Notes |
 |---|---|
 | `PageHeader` | `title`, `subtitle`, `eyebrow`, `actions` — the top of every workspace page |
+| `Pager` | `page`, `totalPages`, `onPrev`, `onNext` — the shared "Trang x / y" + prev/next control (used by `DataTable` and by card lists) |
 | `Panel` | A card with a title and an `action` |
 | `DataTable<T>` | `rows`, `columns`, `search`, `filters`, `pageSize`, `onRowClick`, `toolbar`, `empty`, `loading` — client-side pagination, search, filtering, empty and loading states. Optional **server mode** props leave the default markup/behavior untouched when absent: a controlled search box (`searchValue`, `onSearchChange`, `onSearchSubmit`, `searchPlaceholder`, `searchAriaLabel`) submitting on Enter, a left toolbar slot (`toolbarStart`), and controlled pagination (`page`, `totalPages`, `onPageChange`) |
 | `Dialog*`, `AlertDialog*`, `Sheet*` | Dialog, confirmation, drawer |
