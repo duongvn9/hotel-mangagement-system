@@ -1,8 +1,8 @@
-import { ChevronLeft, ChevronRight, Search, SearchX } from 'lucide-react'
+import { Search, SearchX } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { label } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { Button, Input, Skeleton } from '../atoms'
+import { Input, Skeleton } from '../atoms'
 import {
   EmptyState,
   Select,
@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../molecules'
+import { Pager } from './Pager'
 
 export interface Column<T> {
   key: string
@@ -97,8 +98,6 @@ export function DataTable<T extends { id: string }>({
 
   const displayPage = serverPaged ? page! : cur + 1
   const displayPages = serverPaged ? totalPages! : clientPages
-  const atStart = serverPaged ? page! <= 1 : cur === 0
-  const atEnd = serverPaged ? page! >= totalPages! : cur >= clientPages - 1
   const goPrev = () => (serverPaged ? onPageChange!(page! - 1) : setClientPage(cur - 1))
   const goNext = () => (serverPaged ? onPageChange!(page! + 1) : setClientPage(cur + 1))
 
@@ -220,31 +219,7 @@ export function DataTable<T extends { id: string }>({
       </div>
       <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
         <span>{serverPaged ? null : `${filtered.length} kết quả`}</span>
-        <div className="flex items-center gap-2">
-          <span>
-            Trang {displayPage} / {displayPages}
-          </span>
-          <Button
-            size="icon"
-            variant="outline"
-            className="size-8 rounded-full"
-            disabled={atStart}
-            onClick={goPrev}
-            aria-label="Trang trước"
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <Button
-            size="icon"
-            variant="outline"
-            className="size-8 rounded-full"
-            disabled={atEnd}
-            onClick={goNext}
-            aria-label="Trang sau"
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-        </div>
+        <Pager page={displayPage} totalPages={displayPages} onPrev={goPrev} onNext={goNext} />
       </div>
     </div>
   )

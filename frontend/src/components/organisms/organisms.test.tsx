@@ -174,6 +174,29 @@ describe('DataTable server mode', () => {
   })
 })
 
+describe('Pager', () => {
+  it('shows the page position and moves between pages', () => {
+    const onPrev = vi.fn()
+    const onNext = vi.fn()
+    render(<organisms.Pager page={2} totalPages={4} onPrev={onPrev} onNext={onNext} />)
+    expect(screen.getByText('Trang 2 / 4')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Trang trước' }))
+    expect(onPrev).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
+    expect(onNext).toHaveBeenCalled()
+  })
+
+  it('disables the buttons at the first and last page', () => {
+    const { rerender } = render(
+      <organisms.Pager page={1} totalPages={3} onPrev={() => {}} onNext={() => {}} />,
+    )
+    expect(screen.getByRole('button', { name: 'Trang trước' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Trang sau' })).toBeEnabled()
+    rerender(<organisms.Pager page={3} totalPages={3} onPrev={() => {}} onNext={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Trang sau' })).toBeDisabled()
+  })
+})
+
 describe('SearchBar', () => {
   it('reports the chosen dates and guests when searching', () => {
     const onSearch = vi.fn()
@@ -368,6 +391,7 @@ describe('organisms barrel', () => {
       'Sheet',
       'AlertDialog',
       'PageHeader',
+      'Pager',
       'Panel',
       'DataTable',
       'SearchBar',
