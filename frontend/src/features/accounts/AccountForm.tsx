@@ -1,8 +1,6 @@
-import { useState, type FormEvent } from 'react'
-import { Alert } from '@/components/Alert'
-import { Button } from '@/components/Button'
-import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { useId, useState, type FormEvent } from 'react'
+import { Button, Input, NativeSelect, Switch } from '@/components/atoms'
+import { FormField } from '@/components/molecules'
 import type { Account, CreateAccountInput, UpdateAccountInput } from './api'
 
 interface AccountFormProps {
@@ -27,6 +25,7 @@ export function AccountForm({
   onSubmit,
   onCancel,
 }: AccountFormProps) {
+  const uid = useId()
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -58,79 +57,92 @@ export function AccountForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      aria-label={account ? 'Sửa tài khoản' : 'Tạo tài khoản'}
-      className="space-y-5 rounded-lg border border-stone-300 bg-white p-6"
-    >
-      <h2 className="font-display text-2xl font-semibold text-pearl-900">
-        {account ? `Sửa tài khoản ${account.email}` : 'Tạo tài khoản'}
-      </h2>
-      {error && <Alert tone="danger">{error}</Alert>}
-      <div className="grid gap-5 md:grid-cols-2">
+    <form onSubmit={handleSubmit} aria-label={account ? 'Sửa tài khoản' : 'Tạo tài khoản'}>
+      {error && (
+        <p
+          role="alert"
+          className="mb-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          {error}
+        </p>
+      )}
+      <div className="grid gap-4 sm:grid-cols-2">
         {!account && (
           <>
-            <TextField
-              label="Email"
-              type="email"
-              required
-              value={form.email}
-              onChange={set('email')}
-            />
-            <TextField
-              label="Mật khẩu ban đầu"
-              type="password"
-              required
-              minLength={6}
-              autoComplete="new-password"
-              value={form.password}
-              onChange={set('password')}
-            />
+            <FormField label="Email" htmlFor={`${uid}-email`} required>
+              <Input
+                id={`${uid}-email`}
+                type="email"
+                required
+                value={form.email}
+                onChange={set('email')}
+              />
+            </FormField>
+            <FormField label="Mật khẩu ban đầu" htmlFor={`${uid}-password`} required>
+              <Input
+                id={`${uid}-password`}
+                type="password"
+                required
+                minLength={6}
+                autoComplete="new-password"
+                value={form.password}
+                onChange={set('password')}
+              />
+            </FormField>
           </>
         )}
-        <TextField
-          label="Họ và tên"
-          required
-          minLength={2}
-          maxLength={100}
-          value={form.fullName}
-          onChange={set('fullName')}
-        />
-        <TextField
-          label="Số điện thoại"
-          type="tel"
-          pattern="0[0-9]{9}"
-          title="10 chữ số, bắt đầu bằng 0"
-          value={form.phone}
-          onChange={set('phone')}
-        />
-        <SelectField
-          label="Vai trò"
-          required
-          disabled={isSelf}
-          options={roleOptions}
-          value={form.role}
-          onChange={set('role')}
-        />
+        <FormField label="Họ và tên" htmlFor={`${uid}-fullName`} required>
+          <Input
+            id={`${uid}-fullName`}
+            required
+            minLength={2}
+            maxLength={100}
+            value={form.fullName}
+            onChange={set('fullName')}
+          />
+        </FormField>
+        <FormField label="Số điện thoại" htmlFor={`${uid}-phone`}>
+          <Input
+            id={`${uid}-phone`}
+            type="tel"
+            pattern="0[0-9]{9}"
+            title="10 chữ số, bắt đầu bằng 0"
+            value={form.phone}
+            onChange={set('phone')}
+          />
+        </FormField>
+        <FormField label="Vai trò" htmlFor={`${uid}-role`} required>
+          <NativeSelect
+            id={`${uid}-role`}
+            required
+            disabled={isSelf}
+            value={form.role}
+            onChange={set('role')}
+          >
+            {roleOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </FormField>
         {account && (
-          <label className="flex items-center gap-3 self-end pb-3 text-sm">
-            <input
-              type="checkbox"
-              className="size-[18px] accent-primary"
+          <FormField label="Đang hoạt động" htmlFor={`${uid}-active`}>
+            <Switch
+              id={`${uid}-active`}
               disabled={isSelf}
               checked={form.isActive}
-              onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
+              onCheckedChange={(checked) => setForm((f) => ({ ...f, isActive: checked }))}
             />
-            Đang hoạt động (bỏ chọn để khoá tài khoản)
-          </label>
+          </FormField>
         )}
       </div>
-      <div className="flex justify-end gap-3">
-        <Button variant="secondary" onClick={onCancel}>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onCancel}>
           Huỷ
         </Button>
-        <Button type="submit" loading={pending}>
-          Lưu
+        <Button type="submit" disabled={pending}>
+          {pending ? 'Đang lưu…' : 'Lưu'}
         </Button>
       </div>
     </form>

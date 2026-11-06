@@ -1,11 +1,19 @@
-import { AssetImage } from '@/components/AssetImage'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, type FormEvent } from 'react'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { Pencil, Plus } from 'lucide-react'
+import { useState } from 'react'
+import { AssetImage } from '@/components/AssetImage'
+import { Button, NativeSelect, StatusBadge } from '@/components/atoms'
+import { EmptyState } from '@/components/molecules'
+import {
+  DataTable,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  PageContainer,
+  PageHeader,
+  type Column,
+} from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
 import { listRoles } from '@/features/roles/api'
 import { getErrorMessage } from '@/lib/api-client'
@@ -64,143 +72,146 @@ export function AccountsPage() {
   }
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1
 
-  function onSearch(event: FormEvent) {
-    event.preventDefault()
-    filter({ search: search.trim() || undefined })
-  }
+  const columns: Column<Account>[] = [
+    {
+      key: 'fullName',
+      header: 'Họ tên',
+      render: (account) => (
+        <span className="inline-flex items-center gap-2 font-medium">
+          <AssetImage decorative path={account.avatarUrl} name={account.fullName} />
+          {account.fullName}
+        </span>
+      ),
+    },
+    { key: 'email', header: 'Email' },
+    { key: 'phone', header: 'Số điện thoại', render: (account) => account.phone ?? '—' },
+    { key: 'role', header: 'Vai trò', render: (account) => roleName(account.role) },
+    {
+      key: 'isActive',
+      header: 'Trạng thái',
+      render: (account) => <StatusBadge status={account.isActive ? 'ACTIVE' : 'INACTIVE'} />,
+    },
+    {
+      key: '_actions',
+      header: '',
+      className: 'w-24 text-right',
+      render: (account) => (
+        <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            aria-label={`Sửa ${account.email}`}
+            onClick={() => openForm(account)}
+          >
+            <Pencil className="size-4" />
+          </Button>
+        </div>
+      ),
+    },
+  ]
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold tracking-widest text-primary uppercase">Quản trị</p>
-          <h1 className="font-display text-4xl font-semibold text-pearl-900">Tài khoản</h1>
-        </div>
-        <Button onClick={() => openForm('new')}>Thêm mới</Button>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Tài khoản"
+        subtitle="Tạo tài khoản nhân viên, phân vai trò và khoá quyền truy cập."
+        actions={
+          <Button className="rounded-full" onClick={() => openForm('new')}>
+            <Plus className="size-4" /> Thêm tài khoản
+          </Button>
+        }
+      />
 
-      {notice && <Alert tone="success">{notice}</Alert>}
-      {editing && (
-        <AccountForm
-          key={editing === 'new' ? 'new' : editing.id}
-          account={editing === 'new' ? undefined : editing}
-          roleOptions={roleOptions}
-          isSelf={editing !== 'new' && editing.id === me?.id}
-          pending={save.isPending}
-          error={save.isError ? getErrorMessage(save.error) : undefined}
-          onSubmit={(input) => save.mutate(input)}
-          onCancel={() => setEditing(null)}
-        />
+      {notice && (
+        <p role="status" className="mb-4 rounded-lg bg-success/10 px-4 py-3 text-sm text-success">
+          {notice}
+        </p>
+      )}
+      {isError && (
+        <p
+          role="alert"
+          className="mb-4 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive"
+        >
+          Không tải được danh sách tài khoản
+        </p>
       )}
 
-      <form onSubmit={onSearch} className="grid gap-4 md:grid-cols-[2fr_1fr_1fr_auto]">
-        <TextField
-          label="Tìm kiếm"
-          type="search"
-          placeholder="Tên, email hoặc số điện thoại"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <SelectField
-          label="Vai trò"
-          options={[{ value: '', label: 'Tất cả' }, ...roleOptions]}
-          value={query.role ?? ''}
-          onChange={(e) => filter({ role: e.target.value || undefined })}
-        />
-        <SelectField
-          label="Trạng thái"
-          options={[
-            { value: '', label: 'Tất cả' },
-            { value: 'true', label: 'Đang hoạt động' },
-            { value: 'false', label: 'Đã khoá' },
-          ]}
-          value={query.isActive ?? ''}
-          onChange={(e) =>
-            filter({ isActive: (e.target.value || undefined) as AccountQuery['isActive'] })
-          }
-        />
-        <Button type="submit" variant="secondary" className="self-end">
-          Tìm
-        </Button>
-      </form>
+      <DataTable
+        rows={data?.items ?? []}
+        columns={columns}
+        loading={isPending}
+        onRowClick={(account) => openForm(account)}
+        searchValue={search}
+        onSearchChange={setSearch}
+        onSearchSubmit={() => filter({ search: search.trim() || undefined })}
+        searchPlaceholder="Tên, email hoặc số điện thoại"
+        searchAriaLabel="Tìm kiếm"
+        toolbarStart={
+          <>
+            <div className="md:w-44">
+              <NativeSelect
+                aria-label="Vai trò"
+                className="h-9 rounded-full"
+                value={query.role ?? ''}
+                onChange={(event) => filter({ role: event.target.value || undefined })}
+              >
+                <option value="">Tất cả</option>
+                {roleOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+            <div className="md:w-44">
+              <NativeSelect
+                aria-label="Trạng thái"
+                className="h-9 rounded-full"
+                value={query.isActive ?? ''}
+                onChange={(event) =>
+                  filter({
+                    isActive: (event.target.value || undefined) as AccountQuery['isActive'],
+                  })
+                }
+              >
+                <option value="">Tất cả</option>
+                <option value="true">Đang hoạt động</option>
+                <option value="false">Đã khoá</option>
+              </NativeSelect>
+            </div>
+          </>
+        }
+        page={query.page}
+        totalPages={totalPages}
+        onPageChange={(page) => setQuery((q) => ({ ...q, page }))}
+        empty={<EmptyState title="Không có tài khoản phù hợp" />}
+      />
 
-      {isError && <Alert tone="danger">Không tải được danh sách tài khoản</Alert>}
-      <div className="overflow-x-auto rounded-lg border border-stone-300 bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-stone-200 text-xs font-semibold tracking-wider text-stone-700 uppercase">
-            <tr>
-              <th className="h-11 px-4">Họ tên</th>
-              <th className="px-4">Email</th>
-              <th className="px-4">Số điện thoại</th>
-              <th className="px-4">Vai trò</th>
-              <th className="px-4">Trạng thái</th>
-              <th className="px-4">
-                <span className="sr-only">Thao tác</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data?.items.map((account) => (
-              <tr key={account.id} className="h-13 border-t border-stone-300 hover:bg-cream-50">
-                <td className="px-4 font-medium text-pearl-900">
-                  <span className="inline-flex items-center gap-2">
-                    <AssetImage decorative path={account.avatarUrl} name={account.fullName} />
-                    {account.fullName}
-                  </span>
-                </td>
-                <td className="px-4">{account.email}</td>
-                <td className="px-4">{account.phone ?? '—'}</td>
-                <td className="px-4">{roleName(account.role)}</td>
-                <td className="px-4">
-                  {account.isActive ? (
-                    <Badge tone="success">Hoạt động</Badge>
-                  ) : (
-                    <Badge tone="danger">Đã khoá</Badge>
-                  )}
-                </td>
-                <td className="px-4 text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Sửa ${account.email}`}
-                    onClick={() => openForm(account)}
-                  >
-                    Sửa
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {isPending && <p className="p-6 text-center text-stone-700">Đang tải…</p>}
-        {data && data.items.length === 0 && (
-          <p className="p-6 text-center text-stone-700">Không có tài khoản phù hợp</p>
-        )}
-      </div>
-
-      {data && data.total > data.limit && (
-        <nav aria-label="Phân trang" className="flex items-center justify-end gap-3 text-sm">
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={query.page <= 1}
-            onClick={() => setQuery((q) => ({ ...q, page: q.page - 1 }))}
-          >
-            Trước
-          </Button>
-          <span>
-            Trang {query.page} / {totalPages}
-          </span>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={query.page >= totalPages}
-            onClick={() => setQuery((q) => ({ ...q, page: q.page + 1 }))}
-          >
-            Sau
-          </Button>
-        </nav>
-      )}
-    </section>
+      <Dialog
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null)
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editing === 'new' ? 'Thêm tài khoản' : 'Sửa tài khoản'}</DialogTitle>
+          </DialogHeader>
+          {editing !== null && (
+            <AccountForm
+              key={editing === 'new' ? 'new' : editing.id}
+              account={editing === 'new' ? undefined : editing}
+              roleOptions={roleOptions}
+              isSelf={editing !== 'new' && editing.id === me?.id}
+              pending={save.isPending}
+              error={save.isError ? getErrorMessage(save.error) : undefined}
+              onSubmit={(input) => save.mutate(input)}
+              onCancel={() => setEditing(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </PageContainer>
   )
 }
