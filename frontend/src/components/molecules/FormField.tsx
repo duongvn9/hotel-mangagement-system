@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { cn } from '@/lib/utils'
 import { Label } from '../atoms'
 
 /** Nhãn + control + gợi ý + lỗi. Control con phải có `id` trùng `htmlFor`. */
@@ -9,6 +10,7 @@ export function FormField({
   hint,
   required,
   children,
+  className,
 }: {
   label: string
   htmlFor: string
@@ -16,9 +18,10 @@ export function FormField({
   hint?: string
   required?: boolean
   children: ReactNode
+  className?: string
 }) {
   return (
-    <div className="grid gap-1.5">
+    <div className={cn('grid gap-1.5', className)}>
       <Label htmlFor={htmlFor}>
         {label}
         {required && (
