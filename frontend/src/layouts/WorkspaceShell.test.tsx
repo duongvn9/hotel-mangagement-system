@@ -84,12 +84,11 @@ describe('WorkspaceShell', () => {
 
   it('shows who is signed in and lets them sign out', async () => {
     const view = renderAt('/manager/dashboard')
-    expect(screen.getByRole('link', { name: 'Hoàng Thị Quản Lý' })).toHaveAttribute(
-      'href',
-      '/profile',
-    )
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Hoàng Thị Quản Lý' }), { key: 'Enter' })
+    const profileItem = await screen.findByRole('menuitem', { name: 'Hồ sơ & cài đặt' })
+    expect(profileItem).toHaveAttribute('href', '/profile')
     expect(screen.getByText('Quản lý')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }))
     await waitFor(() => expect(view.auth.logout).toHaveBeenCalled())
     expect(await screen.findByRole('heading', { name: 'Trang đăng nhập' })).toBeInTheDocument()
   })
@@ -100,7 +99,8 @@ describe('WorkspaceShell', () => {
       path: '/manager/dashboard',
       auth: { me: manager, status: 'authenticated', logout },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất' }))
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Hoàng Thị Quản Lý' }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Đăng xuất' }))
     await waitFor(() => expect(logout).toHaveBeenCalled())
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Đăng xuất không thành công, vui lòng thử lại')
@@ -152,10 +152,21 @@ describe('WorkspaceShell', () => {
     expect(screen.queryByRole('button', { name: 'Đóng menu' })).not.toBeInTheDocument()
   })
 
-  it('does not give customers the staff menu', () => {
+  it('gives customers their own menu instead of the staff menu', () => {
     renderAt('/manager/dashboard', { ...ME, role: 'CUSTOMER', fullName: 'Khách' })
     expect(screen.queryByRole('navigation', { name: 'Menu nhân viên' })).not.toBeInTheDocument()
+    const nav = screen.getByRole('navigation', { name: 'Menu khách hàng' })
+    expect(within(nav).getByRole('link', { name: 'Booking của tôi' })).toHaveAttribute(
+      'href',
+      '/my-bookings',
+    )
+    expect(within(nav).getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
+      'href',
+      '/customer/service-orders',
+    )
     expect(screen.getByRole('heading', { name: 'Trang tổng quan' })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'Về trang chủ' })).toHaveAttribute('href', '/')
+    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument()
   })
 
   it('says so when a custom role has no menu entries yet', () => {
