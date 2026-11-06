@@ -25,7 +25,9 @@ export function ReceptionBookingDetailPage() {
     <div className="mx-auto max-w-5xl space-y-6 px-5 py-10 lg:px-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-xs font-semibold tracking-widest text-primary uppercase">Lễ tân</p>
+          <p className="mb-2 text-xs font-semibold tracking-widest text-primary uppercase">
+            Lễ tân
+          </p>
           <h1 className="font-display text-4xl font-semibold break-words">
             Chi tiết booking {code}
           </h1>
