@@ -79,13 +79,17 @@ function mockGet(initial: BookingCharges) {
   }
 }
 
-const departure = () => within(screen.getByRole('listitem', { name: 'DPI' }))
+const departure = () => within(screen.getByRole('dialog'))
 
 async function openPanel() {
   renderPage()
   fireEvent.click(await screen.findByRole('tab', { name: 'Trả phòng' }))
   await screen.findByRole('heading', { name: 'Khách đi (2)' })
-  fireEvent.click(departure().getByRole('button', { name: 'Phụ phí' }))
+  fireEvent.click(
+    within(screen.getByRole('listitem', { name: 'DPI' })).getByRole('button', {
+      name: 'Trả phòng',
+    }),
+  )
 }
 
 function fill(amount: string, reason: string) {
@@ -107,8 +111,12 @@ describe('Additional charges from the same-day list', () => {
     renderPage()
     fireEvent.click(await screen.findByRole('tab', { name: 'Trả phòng' }))
     await screen.findByRole('heading', { name: 'Khách đi (2)' })
-    expect(screen.getAllByRole('button', { name: 'Phụ phí' })).toHaveLength(1)
-    expect(departure().getByRole('button', { name: 'Phụ phí' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Trả phòng' })).toHaveLength(1)
+    expect(
+      within(screen.getByRole('listitem', { name: 'DPI' })).getByRole('button', {
+        name: 'Trả phòng',
+      }),
+    ).toBeInTheDocument()
   })
 
   it('shows recorded charges and the invoice totals', async () => {

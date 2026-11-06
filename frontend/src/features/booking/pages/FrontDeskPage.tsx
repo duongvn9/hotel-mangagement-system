@@ -173,14 +173,20 @@ function BookingCard({ booking, tab }: { booking: BookingListItem; tab: 'in' | '
               </Button>
             </div>
           )
-        ) : (
-          <div className="space-y-3">
-            {booking.status === 'CHECKED_IN' && <CheckoutCharges booking={booking} />}
-            <div className="flex gap-2">
-              <Button asChild variant="outline" className="w-full rounded-full">
+        ) : booking.status === 'CHECKED_IN' ? (
+          <CheckoutCharges
+            booking={booking}
+            detailLink={
+              <Button asChild variant="outline" className="rounded-full">
                 <Link to={`/booking/${booking.id}`}>Chi tiết</Link>
               </Button>
-            </div>
+            }
+          />
+        ) : (
+          <div className="flex gap-2">
+            <Button asChild variant="outline" className="w-full rounded-full">
+              <Link to={`/booking/${booking.id}`}>Chi tiết</Link>
+            </Button>
           </div>
         )}
       </div>

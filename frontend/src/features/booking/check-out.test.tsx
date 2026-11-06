@@ -77,13 +77,17 @@ function mockGet(initial: BookingCharges) {
   }
 }
 
-const departure = () => within(screen.getByRole('listitem', { name: 'DPI' }))
+const departure = () => within(screen.getByRole('dialog'))
 
 async function openPanel() {
   renderPage()
   fireEvent.click(await screen.findByRole('tab', { name: 'Trả phòng' }))
   await screen.findByRole('heading', { name: 'Khách đi (1)' })
-  fireEvent.click(departure().getByRole('button', { name: 'Phụ phí' }))
+  fireEvent.click(
+    within(screen.getByRole('listitem', { name: 'DPI' })).getByRole('button', {
+      name: 'Trả phòng',
+    }),
+  )
   await departure().findByText(/Tổng cộng/)
 }
 
