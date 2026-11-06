@@ -37,4 +37,3 @@ export function Badge({ tone = 'neutral', children, className }: BadgeProps) {
     </BadgePrimitive>
   )
 }
-
