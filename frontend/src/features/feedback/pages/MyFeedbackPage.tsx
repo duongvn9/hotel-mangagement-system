@@ -1,9 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { SelectField } from '@/components/SelectField'
-import { TextAreaField } from '@/components/TextAreaField'
+import { Badge, Button, NativeSelect, Textarea } from '@/components/atoms'
+import { Alert, FormField } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { formatDate, formatDateTime } from '@/features/booking/utils'
 import type { MyStay } from '../api'
@@ -22,23 +20,21 @@ export function MyFeedbackPage() {
   const stays = useMyStays()
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div>
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">Phản hồi</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">Phản hồi của tôi</h1>
-        <p className="mt-2 text-sm text-stone-700">
-          Chia sẻ trải nghiệm của bạn sau mỗi lần lưu trú. Mỗi lần lưu trú gửi được một phản hồi.
-        </p>
-      </div>
+    <PageContainer className="space-y-6">
+      <PageHeader
+        eyebrow="Phản hồi"
+        title="Phản hồi của tôi"
+        subtitle="Chia sẻ trải nghiệm của bạn sau mỗi lần lưu trú. Mỗi lần lưu trú gửi được một phản hồi."
+      />
 
       {stays.isError && <Alert tone="danger">{getErrorMessage(stays.error)}</Alert>}
 
       {stays.isPending ? (
-        <p className="text-stone-700">Đang tải…</p>
+        <p className="text-sm text-muted-foreground">Đang tải…</p>
       ) : stays.data && stays.data.items.length === 0 ? (
-        <p className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700">
-          Chưa có lần lưu trú nào để phản hồi.
-        </p>
+        <Panel>
+          <p className="text-sm text-muted-foreground">Chưa có lần lưu trú nào để phản hồi.</p>
+        </Panel>
       ) : (
         stays.data && (
           <div className="space-y-4">
@@ -48,7 +44,7 @@ export function MyFeedbackPage() {
           </div>
         )
       )}
-    </section>
+    </PageContainer>
   )
 }
 
@@ -73,14 +69,11 @@ function StayCard({ stay }: { stay: MyStay }) {
   }
 
   return (
-    <article
-      aria-label={stay.code}
-      className="space-y-4 rounded-lg border border-stone-300 bg-white p-6"
-    >
-      <header className="flex flex-wrap items-center justify-between gap-2">
+    <article aria-label={stay.code} className="card-soft space-y-4 p-5 sm:p-6">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b pb-4">
         <div>
-          <p className="font-semibold tracking-wide text-pearl-900">{stay.code}</p>
-          <p className="text-sm text-stone-700">
+          <p className="font-semibold tracking-wide text-foreground">{stay.code}</p>
+          <p className="text-sm text-muted-foreground">
             Lưu trú {formatDate(stay.checkIn)} – {formatDate(stay.checkOut)}
           </p>
         </div>
@@ -90,38 +83,56 @@ function StayCard({ stay }: { stay: MyStay }) {
       {sent ? (
         <div className="space-y-3">
           {sent.rating && <RatingStars rating={sent.rating} />}
-          <p className="text-sm whitespace-pre-line text-pearl-900">{sent.content}</p>
-          <p className="text-xs text-stone-500">Gửi lúc {formatDateTime(sent.createdAt)}</p>
+          <p className="text-sm whitespace-pre-line text-foreground">{sent.content}</p>
+          <p className="text-xs text-muted-foreground">Gửi lúc {formatDateTime(sent.createdAt)}</p>
           {sent.reply ? (
-            <div className="space-y-1 rounded border border-stone-300 bg-cream-50 p-4">
-              <p className="text-xs font-semibold tracking-wider text-stone-700 uppercase">
+            <div className="space-y-1 rounded-xl border bg-surface p-4">
+              <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                 Phản hồi từ khách sạn
               </p>
-              <p className="text-sm whitespace-pre-line text-pearl-900">{sent.reply.content}</p>
-              <p className="text-xs text-stone-500">{formatDateTime(sent.reply.repliedAt)}</p>
+              <p className="text-sm whitespace-pre-line text-foreground">{sent.reply.content}</p>
+              <p className="text-xs text-muted-foreground">
+                {formatDateTime(sent.reply.repliedAt)}
+              </p>
             </div>
           ) : (
-            <p className="text-sm text-stone-700">Chưa có câu trả lời.</p>
+            <p className="text-sm text-muted-foreground">Chưa có câu trả lời.</p>
           )}
         </div>
       ) : (
         <form onSubmit={onSubmit} className="space-y-4">
-          <SelectField
-            label="Đánh giá"
-            options={RATING_OPTIONS}
-            value={rating}
-            onChange={(event) => setRating(event.target.value)}
-            className="max-w-xs"
-          />
-          <TextAreaField
+          <FormField label="Đánh giá" htmlFor={`rating-${stay.bookingId}`} className="max-w-xs">
+            <NativeSelect
+              id={`rating-${stay.bookingId}`}
+              value={rating}
+              onChange={(event) => setRating(event.target.value)}
+            >
+              {RATING_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </FormField>
+          <FormField
             label="Nội dung phản hồi"
-            maxLength={MAX_CONTENT}
-            value={content}
+            htmlFor={`content-${stay.bookingId}`}
             hint={`${content.length}/${MAX_CONTENT}`}
-            onChange={(event) => setContent(event.target.value)}
-          />
+          >
+            <Textarea
+              id={`content-${stay.bookingId}`}
+              maxLength={MAX_CONTENT}
+              value={content}
+              onChange={(event) => setContent(event.target.value)}
+              rows={4}
+            />
+          </FormField>
           {submit.isError && <Alert tone="danger">{getErrorMessage(submit.error)}</Alert>}
-          <Button type="submit" disabled={!content.trim()} loading={submit.isPending}>
+          <Button
+            type="submit"
+            disabled={!content.trim() || submit.isPending}
+            className="rounded-full"
+          >
             Gửi phản hồi
           </Button>
         </form>

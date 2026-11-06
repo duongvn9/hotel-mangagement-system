@@ -145,7 +145,7 @@ components/
 | Component | Notes |
 |---|---|
 | `Button` | `variant`: `default` `destructive` `outline` `secondary` `ghost` `link`; `size`: `default` `sm` `lg` `icon`; `asChild`. The prototype's main buttons usually add `rounded-full` |
-| `Input`, `Textarea`, `Label`, `Checkbox`, `Switch`, `RadioGroup`/`RadioGroupItem`, `Slider`, `Toggle`, `Separator` | Basic form controls |
+| `Input`, `Textarea`, `Label`, `NativeSelect`, `Checkbox`, `Switch`, `RadioGroup`/`RadioGroupItem`, `Slider`, `Toggle`, `Separator` | Basic form controls |
 | `Avatar`, `AvatarFallback`, `AvatarImage` | |
 | `Skeleton` | Loading placeholder (`animate-pulse`) |
 | `StatusBadge` | `status` (an enum code such as `CHECKED_IN`): colored dot plus Vietnamese label; an unknown status falls back to neutral |

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import * as atoms from '.'
 import { Logo } from './Logo'
@@ -78,6 +78,22 @@ describe('Badge', () => {
   })
 })
 
+describe('NativeSelect', () => {
+  it('renders a select element and handles change events', () => {
+    const onChange = vi.fn()
+    render(
+      <atoms.NativeSelect aria-label="Lựa chọn" onChange={onChange}>
+        <option value="1">Một</option>
+        <option value="2">Hai</option>
+      </atoms.NativeSelect>,
+    )
+    const select = screen.getByLabelText('Lựa chọn')
+    expect(select).toBeInTheDocument()
+    fireEvent.change(select, { target: { value: '2' } })
+    expect(onChange).toHaveBeenCalled()
+  })
+})
+
 describe('atoms barrel', () => {
   it('re-exports the primitives pages are allowed to use', () => {
     for (const name of [
@@ -89,6 +105,7 @@ describe('atoms barrel', () => {
       'Switch',
       'Avatar',
       'Badge',
+      'NativeSelect',
     ]) {
       expect(atoms).toHaveProperty(name)
     }
