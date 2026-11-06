@@ -1,6 +1,8 @@
 import { Link } from 'react-router'
-import { Alert } from '@/components/Alert'
-import { Button } from '@/components/Button'
+import { UserPlus } from 'lucide-react'
+import { Button } from '@/components/atoms'
+import { Alert } from '@/components/molecules'
+import { PageContainer, PageHeader } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { formatDate } from '@/features/booking/utils'
 import { revenueTime } from '@/features/reports/presentation'
@@ -9,7 +11,7 @@ import { useReceptionDashboard } from '../hooks'
 import { RECEPTION_SHORTCUTS } from '../shortcuts'
 
 const linkClass =
-  'inline-flex min-h-11 items-center text-primary underline underline-offset-4 hover:text-primary-hover'
+  'inline-flex min-h-11 items-center text-primary underline underline-offset-4 hover:text-primary/80'
 const number = (value: number) => value.toLocaleString('vi-VN')
 
 function Rows({ rows }: { rows: { label: string; value: number }[] }) {
@@ -17,8 +19,10 @@ function Rows({ rows }: { rows: { label: string; value: number }[] }) {
     <dl className="space-y-2">
       {rows.map((row) => (
         <div key={row.label} className="flex items-center justify-between gap-4">
-          <dt>{row.label}</dt>
-          <dd className="text-xl font-semibold tabular-nums">{number(row.value)}</dd>
+          <dt className="text-sm text-muted-foreground">{row.label}</dt>
+          <dd className="text-xl font-semibold tabular-nums text-foreground">
+            {number(row.value)}
+          </dd>
         </div>
       ))}
     </dl>
@@ -33,21 +37,33 @@ export function ReceptionDashboardPage() {
   const loading = dashboard.isFetching
 
   return (
-    <section className="mx-auto max-w-container space-y-8 px-4 py-10 font-body">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-4xl font-semibold">Tổng quan lễ tân</h1>
-          <p className="mt-2 text-sm text-stone-700">
-            {data?.frontDesk.available
-              ? `Tình hình ngày ${formatDate(data.frontDesk.date)} và các việc đang chờ xử lý.`
-              : 'Tình hình hôm nay và các việc đang chờ xử lý.'}
-          </p>
-        </div>
-        <Button type="button" disabled={loading} onClick={refresh}>
-          Làm mới
-        </Button>
-      </header>
-      <p aria-live="polite" className="text-sm text-stone-700">
+    <PageContainer className="space-y-8">
+      <PageHeader
+        eyebrow="Lễ tân"
+        title="Tổng quan lễ tân"
+        subtitle={
+          data?.frontDesk.available
+            ? `Tình hình ngày ${formatDate(data.frontDesk.date)} và các việc đang chờ xử lý.`
+            : 'Tình hình hôm nay và các việc đang chờ xử lý.'
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" className="rounded-full">
+              <Link to="/reception/front-desk">Mở quầy lễ tân</Link>
+            </Button>
+            <Button asChild className="rounded-full">
+              <Link to="/reception/booking/new">
+                <UserPlus className="size-4" />
+                Tại quầy
+              </Link>
+            </Button>
+            <Button type="button" variant="secondary" disabled={loading} onClick={refresh}>
+              Làm mới
+            </Button>
+          </div>
+        }
+      />
+      <p aria-live="polite" className="text-sm text-muted-foreground">
         {loading
           ? 'Đang cập nhật số liệu…'
           : data
@@ -57,7 +73,7 @@ export function ReceptionDashboardPage() {
 
       {dashboard.isError ? (
         <Alert tone="danger">
-          <p>{getErrorMessage(dashboard.error)}</p>
+          <p className="mb-3">{getErrorMessage(dashboard.error)}</p>
           <Button type="button" variant="secondary" onClick={refresh} disabled={loading}>
             Thử lại
           </Button>
@@ -164,7 +180,7 @@ export function ReceptionDashboardPage() {
                   <li key={item.to}>
                     <Link
                       to={item.to}
-                      className="flex min-h-11 items-center justify-between gap-4 text-primary hover:text-primary-hover"
+                      className="flex min-h-11 items-center justify-between gap-4 text-primary hover:text-primary/80"
                     >
                       <span className="underline underline-offset-4">{item.label}</span>
                       <strong className="text-xl tabular-nums">{number(item.value)}</strong>
@@ -191,6 +207,6 @@ export function ReceptionDashboardPage() {
           ))}
         </ul>
       </nav>
-    </section>
+    </PageContainer>
   )
 }
