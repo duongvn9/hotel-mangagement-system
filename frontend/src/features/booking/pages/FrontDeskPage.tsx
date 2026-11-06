@@ -1,12 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { Button, Input, NativeSelect, StatusBadge } from '@/components/atoms'
+import { Alert, FormField } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
-import { BOOKING_STATUS_DISPLAY, type BookingListItem } from '../api'
+import type { BookingListItem } from '../api'
 import { CheckoutCharges } from '../components/CheckoutCharges'
 import { useCheckIn, useCheckInOptions, useSameDayList } from '../hooks'
 import { formatDate, money, todayISO } from '../utils'
@@ -18,27 +16,31 @@ export function FrontDeskPage() {
   const data = list.data
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div>
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">Lễ tân</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">Đến và đi trong ngày</h1>
-        {data && <p className="mt-2 text-sm text-stone-700">Ngày {formatDate(data.date)}</p>}
-      </div>
+    <PageContainer className="space-y-6">
+      <PageHeader
+        eyebrow="Lễ tân"
+        title="Đến và đi trong ngày"
+        subtitle={
+          data ? `Ngày ${formatDate(data.date)}` : 'Quản lý khách đến và khách đi trong ngày.'
+        }
+      />
 
-      <div className="max-w-xs rounded-lg border border-stone-300 bg-white p-6">
-        <TextField
-          label="Ngày"
-          type="date"
-          required
-          value={date}
-          onChange={(event) => event.target.value && setDate(event.target.value)}
-        />
+      <div className="card-soft max-w-xs p-5 sm:p-6">
+        <FormField label="Ngày" htmlFor="frontdesk-date" required>
+          <Input
+            id="frontdesk-date"
+            type="date"
+            required
+            value={date}
+            onChange={(event) => event.target.value && setDate(event.target.value)}
+          />
+        </FormField>
       </div>
 
       {list.isError && <Alert tone="danger">{getErrorMessage(list.error)}</Alert>}
 
       {list.isPending ? (
-        <p className="text-stone-700">Đang tải…</p>
+        <p className="text-sm text-muted-foreground">Đang tải…</p>
       ) : (
         data && (
           <div className="grid items-start gap-6 lg:grid-cols-2">
@@ -70,7 +72,7 @@ export function FrontDeskPage() {
           </div>
         )
       )}
-    </section>
+    </PageContainer>
   )
 }
 
@@ -99,23 +101,23 @@ function DaySection({
 }: DaySectionProps) {
   return (
     <div className="space-y-3">
-      <h2 className="font-display text-2xl font-semibold text-pearl-900">
+      <h2 className="font-display text-2xl font-semibold text-foreground">
         {title} ({total})
       </h2>
       <ul aria-label={chipsLabel} className="flex flex-wrap gap-2">
         {chips.map((chip) => (
           <li
             key={chip.label}
-            className="rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-semibold text-stone-700"
+            className="inline-flex items-center rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm"
           >
             {chip.label}: {chip.count}
           </li>
         ))}
       </ul>
       {items.length === 0 ? (
-        <p className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700">
-          {emptyText}
-        </p>
+        <Panel>
+          <p className="text-sm text-muted-foreground">{emptyText}</p>
+        </Panel>
       ) : (
         <ul className="space-y-3">
           {items.map((booking) => (
@@ -141,29 +143,25 @@ function BookingRow({
   canCheckIn: boolean
   canRecordCharges: boolean
 }) {
-  const status = BOOKING_STATUS_DISPLAY[booking.status] ?? {
-    label: booking.status,
-    tone: 'neutral' as const,
-  }
   return (
-    <li aria-label={booking.code} className="rounded-lg border border-stone-300 bg-white">
+    <li aria-label={booking.code} className="card-soft overflow-hidden">
       <Link
         to={`/booking/${booking.id}`}
-        className="block space-y-1 rounded-lg p-4 hover:bg-cream-50"
+        className="block space-y-1 p-4 transition-colors hover:bg-surface"
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold tracking-wide text-pearl-900">{booking.code}</span>
-            <Badge tone={status.tone}>{status.label}</Badge>
+            <span className="font-semibold tracking-wide text-foreground">{booking.code}</span>
+            <StatusBadge status={booking.status} />
           </div>
-          <span className="text-sm font-semibold tabular-nums">
+          <span className="text-sm font-semibold tabular-nums text-foreground">
             {money.format(booking.roomTotal)}
           </span>
         </div>
-        <p className="text-sm text-stone-700">
+        <p className="text-sm text-muted-foreground">
           {booking.guestName} · {booking.guestPhone}
         </p>
-        <p className="text-sm text-stone-700">
+        <p className="text-sm text-muted-foreground">
           {booking.rooms
             .map((room) => [room.roomNumber, room.roomTypeName].filter(Boolean).join(' · '))
             .join(', ')}{' '}
@@ -210,14 +208,14 @@ function CheckInAction({ booking }: { booking: BookingListItem }) {
   const complete = blocked.length > 0 && blocked.every((room) => Boolean(selection[room.id]))
 
   return (
-    <div className="space-y-3 border-t border-stone-200 p-4">
+    <div className="space-y-3 border-t border-border p-4">
       {checkIn.isError && <Alert tone="danger">{getErrorMessage(checkIn.error)}</Alert>}
 
       {panelOpen && options.isPending && (
-        <p className="text-sm text-stone-700">Đang tải phòng thay thế…</p>
+        <p className="text-sm text-muted-foreground">Đang tải phòng thay thế…</p>
       )}
       {panelOpen && blocked.length > 0 && (
-        <div className="space-y-3 rounded border border-stone-300 bg-cream-50 p-3">
+        <div className="space-y-3 rounded-xl border border-border bg-surface p-4">
           {blocked.map((room) => {
             const taken = Object.entries(selection)
               .filter(([id]) => id !== room.id)
@@ -225,35 +223,40 @@ function CheckInAction({ booking }: { booking: BookingListItem }) {
             const choices = room.replacements.filter((item) => !taken.includes(item.id))
             return (
               <div key={room.id} className="space-y-2">
-                <p className="text-sm font-semibold text-pearl-900">
+                <p className="text-sm font-semibold text-foreground">
                   Phòng {room.roomNumber} {ROOM_STATE_LABEL[room.status] ?? room.status}
                 </p>
                 {room.replacements.length === 0 ? (
-                  <p className="text-sm text-stone-700">Không có phòng thay thế phù hợp.</p>
+                  <p className="text-sm text-muted-foreground">Không có phòng thay thế phù hợp.</p>
                 ) : (
-                  <SelectField
+                  <FormField
                     label={`Thay phòng ${room.roomNumber} bằng`}
-                    value={selection[room.id] ?? ''}
-                    options={[
-                      { value: '', label: 'Chọn phòng' },
-                      ...choices.map((item) => ({
-                        value: item.id,
-                        label: `${item.roomNumber} (tầng ${item.floor})`,
-                      })),
-                    ]}
-                    onChange={(event) =>
-                      setSelection((current) => ({ ...current, [room.id]: event.target.value }))
-                    }
-                  />
+                    htmlFor={`replace-room-${room.id}`}
+                  >
+                    <NativeSelect
+                      id={`replace-room-${room.id}`}
+                      value={selection[room.id] ?? ''}
+                      onChange={(event) =>
+                        setSelection((current) => ({ ...current, [room.id]: event.target.value }))
+                      }
+                    >
+                      <option value="">Chọn phòng</option>
+                      {choices.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.roomNumber} (tầng {item.floor})
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </FormField>
                 )}
               </div>
             )
           })}
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
-              disabled={!complete}
-              loading={checkIn.isPending}
+              disabled={!complete || checkIn.isPending}
+              className="rounded-full"
               onClick={() =>
                 run(blocked.map((room) => ({ from: room.id, to: selection[room.id] as string })))
               }
@@ -263,6 +266,7 @@ function CheckInAction({ booking }: { booking: BookingListItem }) {
             <Button
               size="sm"
               variant="ghost"
+              className="rounded-full"
               onClick={() => {
                 setPanelOpen(false)
                 checkIn.reset()
@@ -275,7 +279,12 @@ function CheckInAction({ booking }: { booking: BookingListItem }) {
       )}
 
       {!(panelOpen && blocked.length > 0) && (
-        <Button size="sm" loading={checkIn.isPending} onClick={() => run()}>
+        <Button
+          size="sm"
+          disabled={checkIn.isPending}
+          className="rounded-full"
+          onClick={() => run()}
+        >
           Check In
         </Button>
       )}
