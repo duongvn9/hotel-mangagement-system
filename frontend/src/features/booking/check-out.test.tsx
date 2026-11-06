@@ -81,6 +81,7 @@ const departure = () => within(screen.getByRole('listitem', { name: 'DPI' }))
 
 async function openPanel() {
   renderPage()
+  fireEvent.click(await screen.findByRole('tab', { name: 'Trả phòng' }))
   await screen.findByRole('heading', { name: 'Khách đi (1)' })
   fireEvent.click(departure().getByRole('button', { name: 'Phụ phí' }))
   await departure().findByText(/Tổng cộng/)

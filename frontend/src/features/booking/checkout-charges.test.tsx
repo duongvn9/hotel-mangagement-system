@@ -83,6 +83,7 @@ const departure = () => within(screen.getByRole('listitem', { name: 'DPI' }))
 
 async function openPanel() {
   renderPage()
+  fireEvent.click(await screen.findByRole('tab', { name: 'Trả phòng' }))
   await screen.findByRole('heading', { name: 'Khách đi (2)' })
   fireEvent.click(departure().getByRole('button', { name: 'Phụ phí' }))
 }
@@ -104,6 +105,7 @@ describe('Additional charges from the same-day list', () => {
   it('offers the charges panel only to guests who are checked in and about to leave', async () => {
     mockGet(charges())
     renderPage()
+    fireEvent.click(await screen.findByRole('tab', { name: 'Trả phòng' }))
     await screen.findByRole('heading', { name: 'Khách đi (2)' })
     expect(screen.getAllByRole('button', { name: 'Phụ phí' })).toHaveLength(1)
     expect(departure().getByRole('button', { name: 'Phụ phí' })).toBeInTheDocument()
