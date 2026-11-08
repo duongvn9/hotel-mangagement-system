@@ -15,11 +15,12 @@ describe('FormField', () => {
   it('links the label to the control and shows the error as an alert', () => {
     render(
       <FormField label="Họ tên" htmlFor="name" error="Vui lòng nhập họ tên" required>
-        <Input id="name" />
+        <Input id="name" aria-describedby="name-error" />
       </FormField>,
     )
     expect(screen.getByLabelText(/Họ tên/)).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('Vui lòng nhập họ tên')
+    expect(screen.getByLabelText(/Họ tên/)).toHaveAccessibleDescription('Vui lòng nhập họ tên')
     expect(screen.getByText('*')).toHaveAttribute('aria-hidden', 'true')
   })
 

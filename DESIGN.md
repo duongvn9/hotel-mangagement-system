@@ -185,6 +185,13 @@ components/
 | `PageContainer` | Responsive page container: `mx-auto w-full max-w-7xl px-4 py-8 sm:px-8`, accepts `className` |
 
 
+### Room-type catalog presentation options
+
+- `DataTable`: optional `caption` names the table; `Column.rowHeader` renders a scoped row heading. `scrollLabel` names the keyboard-focusable scroll region. `searchMaxLength` keeps the controlled search limit. `paginationSummary` displays the server total and `paginationDisabled` locks both navigation buttons during a request. Default client behavior is unchanged.
+- `Pager`: optional `disabled` locks navigation without changing its current-page display.
+- `FormField`: an error has the stable ID `${htmlFor}-error`, which the child control can reference with `aria-describedby`.
+- The retained legacy `RoomGallery` helper accepts `compact` for a nonshrinking `size-10 rounded-lg` catalog thumbnail while preserving the full image viewer. The default gallery remains unchanged.
+
 ### Templates — `@/components/templates`
 
 | Component | Notes |

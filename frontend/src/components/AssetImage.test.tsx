@@ -40,6 +40,19 @@ describe('AssetImage', () => {
     })
   })
 
+  it('uses a compact catalog thumbnail and keeps the full gallery accessible', () => {
+    const { container, rerender } = render(
+      <RoomGallery compact images={['/images/one.jpg']} name="Suite" />,
+    )
+    expect(container.querySelector('img')).toHaveClass('size-10', 'rounded-lg')
+    expect(container.firstElementChild).toHaveClass('shrink-0')
+    fireEvent.click(screen.getByRole('button', { name: 'Xem ảnh Suite' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng ảnh' }))
+    rerender(<RoomGallery compact images={[]} name={'Very long name '.repeat(20)} />)
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(container.querySelector('[role="img"]')).toHaveClass('size-10')
+  })
+
   it('cycles images with arrows and keyboard, then restores focus when closed', () => {
     render(<RoomGallery images={['/images/first.jpg', '/images/last.jpg']} name="Deluxe" />)
     const trigger = screen.getByRole('button', { name: 'Xem ảnh Deluxe' })
