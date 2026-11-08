@@ -18,6 +18,7 @@ export interface Column<T> {
   header: string
   render?: (row: T) => ReactNode
   className?: string
+  rowHeader?: boolean
 }
 
 export interface Filter<T> {
@@ -53,6 +54,11 @@ interface DataTableProps<T extends { id: string }> {
   page?: number
   totalPages?: number
   onPageChange?: (page: number) => void
+  caption?: string
+  scrollLabel?: string
+  searchMaxLength?: number
+  paginationDisabled?: boolean
+  paginationSummary?: ReactNode
 }
 
 const LOADING_ROWS = 4
@@ -76,6 +82,11 @@ export function DataTable<T extends { id: string }>({
   page,
   totalPages,
   onPageChange,
+  caption,
+  scrollLabel,
+  searchMaxLength,
+  paginationDisabled = false,
+  paginationSummary,
 }: DataTableProps<T>) {
   const [q, setQ] = useState('')
   const [f, setF] = useState<Record<string, string>>({})
@@ -120,6 +131,7 @@ export function DataTable<T extends { id: string }>({
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder={searchPlaceholder}
                 aria-label={searchAriaLabel}
+                maxLength={searchMaxLength}
                 className="h-9 rounded-full bg-surface/60 pl-9"
               />
             </form>
@@ -165,8 +177,17 @@ export function DataTable<T extends { id: string }>({
           <div className="flex gap-2 md:ml-auto">{toolbar}</div>
         </div>
       )}
-      <div className="overflow-x-auto">
+      <div
+        role={scrollLabel ? 'region' : undefined}
+        aria-label={scrollLabel}
+        tabIndex={scrollLabel ? 0 : undefined}
+        className={cn(
+          'overflow-x-auto',
+          scrollLabel && 'focus-visible:outline-2 focus-visible:outline-ring',
+        )}
+      >
         <table className="w-full text-sm">
+          {caption && <caption className="sr-only">{caption}</caption>}
           <thead>
             <tr className="border-b bg-surface/40 text-left text-xs tracking-wider text-muted-foreground uppercase">
               {columns.map((c) => (
@@ -196,11 +217,22 @@ export function DataTable<T extends { id: string }>({
                       onRowClick && 'cursor-pointer hover:bg-surface/50',
                     )}
                   >
-                    {columns.map((c) => (
-                      <td key={c.key} className={cn('px-4 py-3.5 align-middle', c.className)}>
-                        {c.render ? c.render(r) : String(r[c.key as keyof T] ?? '')}
-                      </td>
-                    ))}
+                    {columns.map((c) => {
+                      const Cell = c.rowHeader ? 'th' : 'td'
+                      return (
+                        <Cell
+                          key={c.key}
+                          scope={c.rowHeader ? 'row' : undefined}
+                          className={cn(
+                            'px-4 py-3.5 align-middle',
+                            c.rowHeader && 'text-left font-medium',
+                            c.className,
+                          )}
+                        >
+                          {c.render ? c.render(r) : String(r[c.key as keyof T] ?? '')}
+                        </Cell>
+                      )
+                    })}
                   </tr>
                 ))}
           </tbody>
@@ -218,8 +250,14 @@ export function DataTable<T extends { id: string }>({
         )}
       </div>
       <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
-        <span>{serverPaged ? null : `${filtered.length} kết quả`}</span>
-        <Pager page={displayPage} totalPages={displayPages} onPrev={goPrev} onNext={goNext} />
+        <span>{paginationSummary ?? (serverPaged ? null : `${filtered.length} kết quả`)}</span>
+        <Pager
+          page={displayPage}
+          totalPages={displayPages}
+          onPrev={goPrev}
+          onNext={goNext}
+          disabled={paginationDisabled}
+        />
       </div>
     </div>
   )

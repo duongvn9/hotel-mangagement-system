@@ -34,7 +34,7 @@ export function FormField({
       {children}
       {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
       {error && (
-        <p role="alert" className="text-xs text-destructive">
+        <p id={`${htmlFor}-error`} role="alert" className="text-xs text-destructive">
           {error}
         </p>
       )}
