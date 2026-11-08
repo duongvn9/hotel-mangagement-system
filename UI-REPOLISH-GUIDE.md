@@ -72,6 +72,18 @@ The user approved retaining notes, activity filtering, deactivation/reactivation
 Evidence, approved differences, test assertion changes, and limitations are recorded in
 [`validation/ui/WDP301-187.md`](validation/ui/WDP301-187.md).
 
+### 2.4 WDP301-188 verification
+
+The user approved keeping images, descriptions, room-type links and counts, activity filtering, and deactivate/reactivate actions in the prototype presentation. Category management and deletion are excluded. Existing accessible names, API contracts, validation, permissions, and pagination remain. Screenshots stay local as requested.
+
+- [x] Page header, table, form, tokens, typography, spacing, and icons compared with the prototype.
+- [x] Required widths (1440, 768, and 375 pixels), long content, large counts, empty, error, and loading states checked.
+- [x] Existing behavior tests, keyboard focus restoration, image viewing, and confirmation messages checked.
+- [x] Final frontend checks and forbidden-pattern scans completed.
+
+Evidence, approved differences, assertion changes, and limitations are recorded in
+[`validation/ui/WDP301-188.md`](validation/ui/WDP301-188.md).
+
 ## 3. Prototype to app map
 
 Fill the "Jira task" column when you pick up a task. App paths come from `frontend/src/features/*/routes.tsx` and `frontend/src/pages/`.
@@ -104,7 +116,7 @@ Fill the "Jira task" column when you pick up a task. App paths come from `fronte
 | `app.roles.tsx` | `/manager/roles` | `features/roles/pages/RolesPage.tsx` | WDP301-155 |
 | `app.rooms.tsx` | `/manager/rooms` | `features/rooms/pages/RoomsPage.tsx` | WDP301-187 |
 | `app.room-types.tsx` | `/manager/room-types` | `features/room-types/pages/RoomTypesPage.tsx` | WDP301-186 |
-| `app.amenities.tsx` | `/manager/amenities` | `features/amenities/pages/AmenitiesPage.tsx` | |
+| `app.amenities.tsx` | `/manager/amenities` | `features/amenities/pages/AmenitiesPage.tsx` | WDP301-188 |
 | `app.services.tsx` | `/manager/services` | `features/services/pages/ServicesPage.tsx` | |
 | `app.task-queues.tsx` | `/manager/task-queues` (+ `/:taskId`) | `features/task-supervision/pages/TaskQueuesPage.tsx`, `TaskQueueDetailPage.tsx` | |
 | `app.tasks.tsx` | `/staff/tasks` (+ `/:id`) | `features/tasks/pages/AssignedTasksPage.tsx`, `AssignedTaskDetailPage.tsx` | |

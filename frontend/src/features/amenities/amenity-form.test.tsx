@@ -35,21 +35,6 @@ function page() {
     auth: { me: ME, status: 'authenticated' },
   })
 }
-function dialogs() {
-  for (const name of ['showModal', 'close'] as const)
-    if (!HTMLDialogElement.prototype[name])
-      Object.defineProperty(HTMLDialogElement.prototype, name, { configurable: true, value() {} })
-  vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (
-    this: HTMLDialogElement,
-  ) {
-    this.setAttribute('open', '')
-  })
-  vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (
-    this: HTMLDialogElement,
-  ) {
-    this.removeAttribute('open')
-  })
-}
 describe('UC52 amenity form', () => {
   beforeAll(() => configure({ asyncUtilTimeout: 5000 }))
   afterAll(() => configure({ asyncUtilTimeout: 1000 }))
@@ -240,6 +225,37 @@ describe('UC52 amenity form', () => {
       expect(patch).toHaveBeenCalledWith(`/amenities/${amenity.id}`, { description: 'Changed' }),
     )
   })
+  it('closes an unchanged edit without writing metadata or replacing relationships', async () => {
+    const patch = vi.spyOn(api, 'patch')
+    const { close } = form(amenity)
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu tiện nghi' }))
+    expect(close).toHaveBeenCalledOnce()
+    expect(patch).not.toHaveBeenCalled()
+  })
+  it('confirms a checkbox state change without discarding metadata or selected relationships', async () => {
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: amenity })
+    form(amenity)
+    await screen.findByLabelText('Deluxe')
+    fireEvent.change(screen.getByLabelText('Mô tả'), { target: { value: ' Draft ' } })
+    fireEvent.click(screen.getByLabelText('Đang hoạt động'))
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu tiện nghi' }))
+    expect(patch).not.toHaveBeenCalled()
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Giữ lại' }),
+    )
+    expect(screen.getByLabelText('Mô tả')).toHaveValue(' Draft ')
+    expect(screen.getByLabelText('Suite (ngừng)')).toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu tiện nghi' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Ngừng tiện nghi' }),
+    )
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(`/amenities/${amenity.id}`, {
+        description: 'Draft',
+        isActive: false,
+      }),
+    )
+  })
   it('removes inactive links and sends the complete target set', async () => {
     const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: amenity })
     form(amenity)
@@ -270,16 +286,20 @@ describe('UC52 amenity form', () => {
   })
   it('requires confirmation for separate deactivate/reactivate actions and preserves links', async () => {
     const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: amenity })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     form(amenity)
     fireEvent.change(screen.getByLabelText(/^Tên tiện nghi/), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: 'Ngừng tiện nghi' }))
-    expect(confirm).toHaveBeenCalledWith(
-      expect.stringContaining('giữ lại cùng các gắn kết hiện có, nhưng không thể gắn mới'),
+    expect(screen.getByRole('alertdialog')).toHaveTextContent(
+      'giữ lại cùng các gắn kết hiện có, nhưng không thể gắn mới',
     )
     expect(patch).not.toHaveBeenCalled()
-    confirm.mockReturnValue(true)
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Giữ lại' }),
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Ngừng tiện nghi' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Ngừng tiện nghi' }),
+    )
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith(`/amenities/${amenity.id}`, { isActive: false }),
     )
@@ -287,12 +307,18 @@ describe('UC52 amenity form', () => {
   })
   it('reactivates only after confirmation', async () => {
     const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: amenity })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     form({ ...amenity, isActive: false })
     fireEvent.click(screen.getByRole('button', { name: 'Kích hoạt lại tiện nghi' }))
     expect(patch).not.toHaveBeenCalled()
-    confirm.mockReturnValue(true)
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Giữ lại' }),
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Kích hoạt lại tiện nghi' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Kích hoạt lại tiện nghi',
+      }),
+    )
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith(`/amenities/${amenity.id}`, { isActive: true }),
     )
@@ -369,7 +395,6 @@ describe('UC52 amenity form', () => {
     expect(screen.getByLabelText(/^Tên tiện nghi/)).toHaveValue('Draft')
   })
   it('opens details, saves with filters/page intact and restores focus; create closes on Esc', async () => {
-    dialogs()
     const get = vi.mocked(api.get)
     vi.spyOn(api, 'patch').mockResolvedValue({ data: amenity })
     page()
@@ -397,10 +422,10 @@ describe('UC52 amenity form', () => {
     const listCallsBeforeSave = get.mock.calls.filter(([url]) => url === '/amenities').length
     fireEvent.click(screen.getByRole('button', { name: 'Lưu tiện nghi' }))
     await screen.findByText('Đã lưu tiện nghi.')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(screen.getByLabelText('Tìm theo tên')).toHaveValue('Wi')
     expect(screen.getByLabelText('Trạng thái')).toHaveValue('true')
-    expect(screen.getByText(/Trang 2\/3/)).toBeInTheDocument()
+    expect(screen.getByText(/Trang 2 \/ 3/)).toBeInTheDocument()
     await waitFor(() => expect(edit).toHaveFocus())
     const listCallsAfterSave = get.mock.calls.filter(([url]) => url === '/amenities')
     expect(listCallsAfterSave.length).toBeGreaterThan(listCallsBeforeSave)
@@ -415,12 +440,11 @@ describe('UC52 amenity form', () => {
     fireEvent.click(add)
     const dialog = screen.getByRole('dialog', { name: 'Thêm tiện nghi' })
     expect(within(dialog).getByLabelText(/^Tên tiện nghi/)).toHaveValue('')
-    fireEvent(dialog, new Event('cancel', { bubbles: true, cancelable: true }))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(add).toHaveFocus()
+    fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape', keyCode: 27 })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(add).toHaveFocus())
   })
   it('detail loading and errors are recoverable; Esc is blocked during submit', async () => {
-    dialogs()
     const get = vi.mocked(api.get)
     let fail = true
     get.mockImplementation(async (url) => {
@@ -442,7 +466,8 @@ describe('UC52 amenity form', () => {
     fireEvent.change(screen.getByLabelText('Mô tả'), { target: { value: 'Pending' } })
     fireEvent.click(screen.getByRole('button', { name: 'Lưu tiện nghi' }))
     await screen.findByRole('button', { name: 'Đang xử lý…' })
-    fireEvent(screen.getByRole('dialog'), new Event('cancel', { bubbles: true, cancelable: true }))
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape', keyCode: 27 })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 })
