@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { AuthContext } from '@/features/auth/auth-context'
@@ -114,7 +114,42 @@ async function confirm() {
   fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đóng' }))
   await settle()
 }
-beforeEach(() => vi.restoreAllMocks())
+beforeEach(() => {
+  vi.restoreAllMocks()
+  for (const name of ['showModal', 'close'] as const)
+    if (!HTMLDialogElement.prototype[name])
+      Object.defineProperty(HTMLDialogElement.prototype, name, { configurable: true, value() {} })
+  vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (
+    this: HTMLDialogElement,
+  ) {
+    this.setAttribute('open', '')
+    this.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus()
+  })
+  vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (
+    this: HTMLDialogElement,
+  ) {
+    this.removeAttribute('open')
+  })
+})
+
+test('closure confirmation traps focus and returns it on keyboard cancellation', async () => {
+  setup()
+  const post = vi.spyOn(api, 'post')
+  await settle()
+  const trigger = screen.getByRole('button', { name: 'Đóng sự cố' })
+  fireEvent.click(trigger)
+  const dialog = screen.getByRole('dialog', { name: 'Xác nhận đóng sự cố' })
+  expect(screen.getByRole('textbox', { name: 'Kết luận đóng sự cố*' })).toHaveFocus()
+  fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })
+  expect(screen.getByRole('button', { name: 'Hủy' })).toHaveFocus()
+  fireEvent(dialog, new Event('cancel', { cancelable: true }))
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  })
+  expect(trigger).toHaveFocus()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(post).not.toHaveBeenCalled()
+})
 
 test.each([
   ['RECEPTIONIST', concluded],
@@ -173,6 +208,29 @@ test.each(['CUSTOMER', 'SERVICE_STAFF', 'OPERATIONS_STAFF', 'CUSTOM_RECEPTIONIST
     setup(concluded, role, true)
     await settle()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  },
+)
+
+test.each(['', '   '])(
+  'blank conclusion %j has one inline alert associated inside the dialog',
+  async (value) => {
+    setup()
+    const post = vi.spyOn(api, 'post')
+    await settle()
+    open(value)
+    const dialog = screen.getByRole('dialog', { name: 'Xác nhận đóng sự cố' })
+    const input = within(dialog).getByRole('textbox', { name: 'Kết luận đóng sự cố*' })
+    expect(input).not.toHaveAttribute('aria-invalid', 'true')
+    expect(input).not.toHaveAttribute('aria-describedby')
+    await confirm()
+    const alert = within(dialog).getByRole('alert')
+    expect(alert).toHaveTextContent('Vui lòng nhập kết luận từ 1 đến 2000 ký tự.')
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(alert.id).not.toBe('')
+    expect(input).toHaveAttribute('aria-describedby', alert.id)
+    expect(input).toHaveAccessibleDescription(alert.textContent!)
+    expect(post).not.toHaveBeenCalled()
   },
 )
 

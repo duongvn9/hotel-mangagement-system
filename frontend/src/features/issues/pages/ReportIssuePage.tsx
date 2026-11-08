@@ -1,9 +1,10 @@
 import { isAxiosError } from 'axios'
 import { useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router'
-import { Button } from '@/components/Button'
-import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { CheckCircle2 } from 'lucide-react'
+import { Button, Input, NativeSelect, Textarea } from '@/components/atoms'
+import { EmptyState, FormField } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { validateIssue, type IssueErrors, type IssueInput } from '../api'
 import { useReportIssue } from '../hooks'
 
@@ -66,32 +67,43 @@ export function ReportIssuePage() {
   }
 
   return (
-    <section className="mx-auto w-full max-w-2xl px-4 py-12 sm:py-16">
-      <h1 className="font-display text-4xl font-semibold">Báo sự cố</h1>
+    <PageContainer>
+      <PageHeader
+        title="Báo sự cố"
+        subtitle="Cho chúng tôi biết vấn đề, chúng tôi sẽ cử người đến xử lý."
+      />
       {mutation.isSuccess ? (
-        <div role="status" className="mt-6 space-y-4 rounded border border-stone-300 bg-white p-6">
-          <h2 className="font-display text-2xl">Đã tiếp nhận báo cáo</h2>
-          <p>Chờ xem xét. Khách sạn sẽ xem xét báo cáo trước khi giao xử lý.</p>
-          <dl className="space-y-2 break-words text-sm">
-            <dt className="font-semibold">Mã báo cáo</dt>
-            <dd>{mutation.data.id}</dd>
-            <dt className="font-semibold">Tiêu đề</dt>
-            <dd>{mutation.data.title}</dd>
-            <dt className="font-semibold">Mã đặt phòng</dt>
-            <dd>{mutation.data.bookingId}</dd>
-            {mutation.data.roomId && (
-              <>
-                <dt className="font-semibold">Mã phòng</dt>
-                <dd>{mutation.data.roomId}</dd>
-              </>
-            )}
-            <dt className="font-semibold">Thời điểm tiếp nhận</dt>
-            <dd>{new Date(mutation.data.reportedAt).toLocaleString('vi-VN')}</dd>
-          </dl>
+        <div role="status" className="min-w-0 space-y-4 py-10">
+          <EmptyState
+            icon={CheckCircle2}
+            title="Đã tiếp nhận báo cáo"
+            body="Chờ xem xét. Khách sạn sẽ xem xét báo cáo trước khi giao xử lý."
+          />
+          <Panel>
+            <dl className="space-y-2 break-words text-sm">
+              <dt className="font-semibold">Mã báo cáo</dt>
+              <dd>{mutation.data.id}</dd>
+              <dt className="font-semibold">Tiêu đề</dt>
+              <dd>{mutation.data.title}</dd>
+              <dt className="font-semibold">Mã đặt phòng</dt>
+              <dd>{mutation.data.bookingId}</dd>
+              {mutation.data.roomId && (
+                <>
+                  <dt className="font-semibold">Mã phòng</dt>
+                  <dd>{mutation.data.roomId}</dd>
+                </>
+              )}
+              <dt className="font-semibold">Thời điểm tiếp nhận</dt>
+              <dd>{new Date(mutation.data.reportedAt).toLocaleString('vi-VN')}</dd>
+            </dl>
+          </Panel>
         </div>
       ) : (
-        <>
-          <div id="issue-context" className="my-6 space-y-3 text-sm text-stone-700">
+        <Panel>
+          <div
+            id="issue-context"
+            className="mb-6 max-w-2xl space-y-3 text-sm text-muted-foreground"
+          >
             <p>
               Hãy cung cấp mã đặt phòng của chính bạn còn hoạt động, chưa bị hủy. Không bắt buộc đã
               nhận phòng.
@@ -113,97 +125,125 @@ export function ReportIssuePage() {
             </p>
           )}
           <form
+            className="grid max-w-2xl gap-4"
             noValidate
             onSubmit={submit}
             aria-describedby="issue-context"
             aria-busy={mutation.isPending}
           >
-            <fieldset disabled={mutation.isPending || serviceContext} className="min-w-0 space-y-5">
-              <TextField
-                name="bookingId"
-                label="Mã đặt phòng"
-                required
-                value={input.bookingId}
-                error={errors.bookingId}
-                onChange={(e) => update('bookingId', e.target.value)}
-              />
-              <TextField
-                name="roomId"
-                label="Mã phòng (không bắt buộc)"
-                value={input.roomId}
-                error={errors.roomId}
-                onChange={(e) => update('roomId', e.target.value)}
-              />
-              <TextField
-                name="title"
-                label="Tiêu đề"
-                required
-                maxLength={200}
-                value={input.title}
-                error={errors.title}
-                onChange={(e) => update('title', e.target.value)}
-              />
-              <div>
-                <SelectField
-                  name="category"
-                  label="Nhóm sự cố"
+            <fieldset
+              disabled={mutation.isPending || serviceContext}
+              className="grid min-w-0 gap-4"
+            >
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                <FormField htmlFor="issue-booking" label="Mã đặt phòng" required>
+                  <Input
+                    id="issue-booking"
+                    name="bookingId"
+                    required
+                    value={input.bookingId}
+                    aria-invalid={!!errors.bookingId}
+                    aria-describedby={errors.bookingId ? 'booking-error' : undefined}
+                    onChange={(e) => update('bookingId', e.target.value)}
+                  />
+                  {errors.bookingId && (
+                    <p id="booking-error" role="alert" className="text-xs text-destructive">
+                      {errors.bookingId}
+                    </p>
+                  )}
+                </FormField>
+                <FormField htmlFor="issue-room" label="Mã phòng (không bắt buộc)">
+                  <Input
+                    id="issue-room"
+                    name="roomId"
+                    value={input.roomId}
+                    aria-invalid={!!errors.roomId}
+                    aria-describedby={errors.roomId ? 'room-error' : undefined}
+                    onChange={(e) => update('roomId', e.target.value)}
+                  />
+                  {errors.roomId && (
+                    <p id="room-error" role="alert" className="text-xs text-destructive">
+                      {errors.roomId}
+                    </p>
+                  )}
+                </FormField>
+              </div>
+              <FormField htmlFor="issue-title" label="Tiêu đề" required>
+                <Input
+                  id="issue-title"
+                  name="title"
                   required
-                  options={categories}
+                  maxLength={200}
+                  value={input.title}
+                  aria-invalid={!!errors.title}
+                  aria-describedby={errors.title ? 'title-error' : undefined}
+                  onChange={(e) => update('title', e.target.value)}
+                />
+                {errors.title && (
+                  <p id="title-error" role="alert" className="text-xs text-destructive">
+                    {errors.title}
+                  </p>
+                )}
+              </FormField>
+              <FormField htmlFor="issue-category" label="Nhóm sự cố" required>
+                <NativeSelect
+                  id="issue-category"
+                  name="category"
+                  required
                   value={input.category}
                   aria-invalid={!!errors.category}
                   aria-describedby={errors.category ? 'category-error' : undefined}
                   onChange={(e) => update('category', e.target.value)}
-                />
+                >
+                  {categories.map((category) => (
+                    <option key={category.value} value={category.value}>
+                      {category.label}
+                    </option>
+                  ))}
+                </NativeSelect>
                 {errors.category && (
-                  <p id="category-error" className="mt-1 text-xs text-danger">
+                  <p id="category-error" role="alert" className="text-xs text-destructive">
                     {errors.category}
                   </p>
                 )}
-              </div>
-              <div>
-                <label
-                  htmlFor="issue-description"
-                  className="mb-2 block text-xs font-semibold tracking-wider text-stone-700 uppercase"
-                >
-                  Mô tả <span className="text-danger">*</span>
-                </label>
-                <textarea
+              </FormField>
+              <FormField htmlFor="issue-description" label="Mô tả" required>
+                <Textarea
                   id="issue-description"
                   name="description"
                   required
-                  rows={6}
+                  rows={5}
                   maxLength={5000}
                   value={input.description}
                   onChange={(e) => update('description', e.target.value)}
                   aria-invalid={!!errors.description}
                   aria-describedby="description-help description-error"
-                  className="w-full rounded border border-stone-300 bg-white p-4 text-sm focus:border-primary"
                 />
-                <p id="description-help" className="text-xs text-stone-700">
+                <p id="description-help" className="text-xs text-muted-foreground">
                   Mô tả sự cố, vị trí và thời điểm xảy ra (tối đa 5.000 ký tự). Tiêu đề tối đa 200
                   ký tự.
                 </p>
-                <p id="description-error" className="mt-1 text-xs text-danger">
+                <p id="description-error" className="text-xs text-destructive">
                   {errors.description}
                 </p>
-              </div>
+              </FormField>
               {mutation.isError && (
                 <p role="alert" className="text-sm text-danger">
                   {errorMessage(mutation.error)}
                 </p>
               )}
-              <Button type="submit" loading={mutation.isPending} className="w-full sm:w-auto">
+              <Button type="submit" disabled={mutation.isPending} className="w-fit rounded-full">
                 Gửi báo cáo
               </Button>
               {mutation.isPending && (
-                <p role="status" className="text-sm text-stone-700">
+                <p role="status" className="text-sm text-muted-foreground">
                   Đang gửi báo cáo, vui lòng chờ xác nhận…
                 </p>
               )}
             </fieldset>
           </form>
-        </>
+        </Panel>
       )}
-    </section>
+    </PageContainer>
   )
 }

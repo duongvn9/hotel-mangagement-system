@@ -82,6 +82,29 @@ it.each(['SERVICE_STAFF', 'OPERATIONS_STAFF'])(
   },
 )
 
+it('uses workspace presentation and soft panels without losing list semantics', async () => {
+  get.mockResolvedValue({ data: list })
+  renderTasks()
+  const link = await screen.findByRole('link', { name: task.title })
+  expect(screen.getByRole('heading', { level: 1 })).toHaveClass('text-2xl')
+  expect(link.closest('li')?.querySelector('.card-soft')).toBeInTheDocument()
+  expect(screen.getByRole('search', { name: 'Lọc công việc' })).toBeInTheDocument()
+  expect(screen.getByRole('navigation', { name: 'Phân trang công việc' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Trang trước' })).toBeDisabled()
+})
+
+it('keeps long task titles, unknown priorities and encoded detail links', async () => {
+  const title = 'Công việc rất dài '.repeat(30)
+  get.mockResolvedValue({
+    data: { ...list, items: [{ ...task, id: 'task/1', title, priority: 'CUSTOM' }] },
+  })
+  renderTasks()
+  const link = await screen.findByRole('link', { name: title.trim() })
+  expect(link).toHaveAttribute('href', '/staff/tasks/task%2F1')
+  expect(link).toHaveClass('break-words')
+  expect(screen.getByText('Ưu tiên: CUSTOM')).toBeInTheDocument()
+})
+
 it.each(['CUSTOM_ROLE', 'MANAGER', 'CUSTOMER', 'RECEPTIONIST'])(
   'denies unprivileged %s without fetching',
   async (role) => {
@@ -182,6 +205,23 @@ it('renders detail and trace-only missing source without mutations', async () =>
   expect(screen.getByText(/Thông tin nguồn hiện không khả dụng/)).toBeInTheDocument()
   expect(screen.getAllByRole('link')).toHaveLength(1)
   expect(screen.queryByRole('button')).not.toBeInTheDocument()
+})
+
+it('presents long detail content in a soft panel with workspace heading and result help', async () => {
+  const title = 'Kiểm tra phòng '.repeat(40)
+  get.mockResolvedValue({ data: { ...task, title, status: 'IN_PROGRESS' } })
+  renderTasks('/staff/tasks/task-1')
+  const heading = await screen.findByRole('heading', { name: title.trim(), level: 2 })
+  expect(screen.getByRole('heading', { level: 1 })).toHaveClass('text-2xl')
+  expect(heading.closest('.card-soft')).toBeInTheDocument()
+  expect(heading).toHaveClass('break-words')
+  expect(
+    screen.getByRole('textbox', { name: 'Kết quả thực hiện (bắt buộc)' }),
+  ).toHaveAccessibleDescription(/Tối đa 2000 ký tự/)
+  expect(screen.getByRole('link', { name: 'Về công việc được giao' })).toHaveAttribute(
+    'href',
+    '/staff/tasks',
+  )
 })
 
 it('starts only after detail loads, prevents double submission and renders authoritative progress', async () => {

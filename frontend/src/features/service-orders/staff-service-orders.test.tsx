@@ -55,6 +55,18 @@ async function prepare(decision = 'ACCEPT', reason = '') {
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+    configurable: true,
+    value: function (this: HTMLDialogElement) {
+      this.setAttribute('open', '')
+    },
+  })
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+    configurable: true,
+    value: function (this: HTMLDialogElement) {
+      this.removeAttribute('open')
+    },
+  })
   current = { ...receipt }
   vi.mocked(api.get).mockImplementation(async (url) => ({
     data:
@@ -123,6 +135,47 @@ describe('Receptionist service-order access', () => {
   })
 })
 describe('staff list and detail', () => {
+  it('uses workspace list presentation without losing customer, billing or detail navigation', async () => {
+    const name = 'Dịch vụ dài '.repeat(40).trim()
+    current = { ...current, service: { ...current.service, name }, booking: null }
+    page('/staff/service-orders')
+    const link = await screen.findByRole('link', { name })
+    expect(screen.getByRole('heading', { level: 1, name: 'Yêu cầu dịch vụ' })).toHaveClass(
+      'text-2xl',
+    )
+    expect(link.closest('.card-soft')).toBeInTheDocument()
+    expect(link.closest('li')).toHaveClass('break-words')
+    expect(link).toHaveAttribute('href', '/staff/service-orders/order-1')
+    expect(screen.getByLabelText('Từ khóa dịch vụ')).toHaveClass('border-input')
+    expect(screen.getByLabelText('Từ khóa dịch vụ')).toHaveAttribute('maxlength', '100')
+    expect(screen.getByRole('button', { name: 'Tìm kiếm' })).toHaveClass('rounded-full')
+    expect(screen.getByText(/Nguyễn An/)).toHaveTextContent('customer-1')
+    expect(screen.getByText(/Không còn thông tin đặt phòng/)).toBeInTheDocument()
+    expect(screen.getByText('Chưa ghi phí')).toBeInTheDocument()
+    expect(screen.getByText(/Thời gian yêu cầu:/)).toBeInTheDocument()
+    expect(api.patch).not.toHaveBeenCalled()
+  })
+  it('retains previous-page navigation and disables it during refresh', async () => {
+    vi.mocked(api.get).mockImplementation(async (_url, config) => ({
+      data: {
+        items: [current],
+        page: (config?.params as { page?: number } | undefined)?.page ?? 1,
+        limit: 20,
+        total: 41,
+      },
+    }))
+    page('/staff/service-orders')
+    await screen.findByRole('link', { name: 'Giặt ủi' })
+    expect(screen.getByRole('button', { name: 'Trang trước' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
+    await screen.findByText('Trang 2 · 41 yêu cầu')
+    fireEvent.click(screen.getByRole('button', { name: 'Trang trước' }))
+    await screen.findByText('Trang 1 · 41 yêu cầu')
+    expect(api.get).toHaveBeenLastCalledWith('/service-orders/requests', {
+      params: { page: 1, limit: 20, reviewStatus: 'PENDING_REVIEW' },
+    })
+  })
+
   it.each([
     ['ACCEPTING', 'NOT_STARTED', 'Đang xử lý'],
     ['ACCEPTED', 'ASSIGNING', 'Đang xử lý'],
@@ -210,6 +263,50 @@ describe('staff list and detail', () => {
   })
 })
 describe('review safety', () => {
+  it('uses workspace panels and atomic review controls while keeping the standalone detail', async () => {
+    const notes = 'Ghi chú dài\n'.repeat(40).trim()
+    current = { ...current, notes }
+    page()
+    await screen.findByRole('heading', { name: 'Duyệt yêu cầu' })
+    expect(screen.getByRole('heading', { level: 1, name: 'Chi tiết yêu cầu dịch vụ' })).toHaveClass(
+      'text-2xl',
+    )
+    for (const name of [
+      'Khách hàng và đặt phòng',
+      'Giặt ủi',
+      'Ghi phí',
+      'Duyệt yêu cầu',
+      'Phân công dịch vụ',
+    ]) {
+      expect(screen.getByRole('heading', { name }).closest('.card-soft')).toBeInTheDocument()
+    }
+    expect(screen.getByLabelText('Quyết định')).toHaveClass('border-input')
+    expect(screen.getByLabelText(/Lý do \(bắt buộc/)).toHaveClass('border-input')
+    expect(screen.getByText(notes.replace(/\s+/g, ' '))).toHaveClass('whitespace-pre-wrap')
+    expect(screen.getByRole('link', { name: 'Yêu cầu dịch vụ' })).toHaveAttribute(
+      'href',
+      '/staff/service-orders',
+    )
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const trigger = screen.getByRole('button', { name: 'Xem lại quyết định' })
+    trigger.focus()
+    fireEvent.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: 'Xác nhận chấp nhận' })
+    expect(dialog.tagName).toBe('DIALOG')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Quay lại' }))
+    await waitFor(() => expect(trigger).toHaveFocus())
+    expect(api.patch).not.toHaveBeenCalled()
+  })
+  it('blocks ACCEPTING without persisted review and keeps manual refresh available', async () => {
+    current = { ...current, reviewStatus: 'ACCEPTING', billingStatus: 'PENDING' }
+    page()
+    expect(await screen.findByRole('button', { name: 'Thử lại cùng nội dung' })).toBeDisabled()
+    expect(screen.getByLabelText('Quyết định')).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Tải lại trạng thái' }))
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2))
+    expect(api.patch).not.toHaveBeenCalled()
+  })
+
   it('confirms acceptance, sends only trimmed intent, then refreshes authoritative detail and cached lists', async () => {
     const view = page('/staff/service-orders')
     fireEvent.click(await screen.findByRole('link', { name: 'Giặt ủi' }))

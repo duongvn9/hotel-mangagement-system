@@ -8,6 +8,7 @@ import {
   estimateAmount,
   normalizeOrderQuery,
   serviceOrderState,
+  type CatalogService,
   type ServiceOrder,
 } from './api'
 import { orderKeys } from './hooks'
@@ -51,7 +52,7 @@ function renderPage(path = '/customer/service-orders/new', me: typeof customer |
     { path, auth: { me, status: me ? 'authenticated' : 'anonymous' } },
   )
 }
-function choices(bookings = [context], services = [service]) {
+function choices(bookings = [context], services: CatalogService[] = [service]) {
   vi.mocked(api.get).mockImplementation(async (url) => {
     if (url === '/service-orders/order-contexts') return { data: { items: bookings } }
     if (url === '/service-orders/catalog') return { data: { items: services } }
@@ -160,7 +161,201 @@ describe('Customer service-order access', () => {
     },
   )
 })
+describe('customer service-order list workspace', () => {
+  it('uses atomic filters and history panels while retaining detail and create navigation', async () => {
+    renderPage('/customer/service-orders')
+    const link = await screen.findByRole('link', { name: 'Giặt ủi' })
+    expect(screen.getByRole('heading', { level: 1, name: 'Dịch vụ của tôi' })).toHaveClass(
+      'text-2xl',
+    )
+    expect(
+      screen.getByRole('heading', { name: 'Lịch sử đặt dịch vụ' }).closest('.card-soft'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Từ khóa')).toHaveClass('border-input')
+    expect(screen.getByLabelText('Từ khóa')).toHaveAttribute('maxlength', '100')
+    expect(screen.getByRole('button', { name: 'Tìm kiếm' })).toHaveClass('rounded-full')
+    expect(link).toHaveAttribute('href', '/customer/service-orders/order-1')
+    expect(screen.getByRole('link', { name: 'Yêu cầu dịch vụ' })).toHaveAttribute(
+      'href',
+      '/customer/service-orders/new',
+    )
+    expect(screen.getByRole('button', { name: 'Trang trước' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Trang sau' })).toBeDisabled()
+  })
+  it('retains server pagination and resets the page when filtering and searching', async () => {
+    vi.mocked(api.get).mockImplementation(async (_url, config) => ({
+      data: {
+        items: [receipt],
+        total: 41,
+        page: (config?.params as { page?: number } | undefined)?.page ?? 1,
+        limit: 20,
+      },
+    }))
+    renderPage('/customer/service-orders')
+    await screen.findByRole('link', { name: 'Giặt ủi' })
+    fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
+    await screen.findByText('Trang 2 · 41 yêu cầu')
+    fireEvent.click(screen.getByRole('button', { name: 'Trang trước' }))
+    await screen.findByText('Trang 1 · 41 yêu cầu')
+    fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
+    await screen.findByText('Trang 2 · 41 yêu cầu')
+    fireEvent.change(screen.getByLabelText('Trạng thái duyệt'), { target: { value: 'ACCEPTED' } })
+    await screen.findByText('Trang 1 · 41 yêu cầu')
+    fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
+    await screen.findByText('Trang 2 · 41 yêu cầu')
+    fireEvent.change(screen.getByLabelText('Từ khóa'), { target: { value: 'Giặt' } })
+    fireEvent.submit(screen.getByLabelText('Từ khóa').closest('form')!)
+    await waitFor(() =>
+      expect(api.get).toHaveBeenLastCalledWith('/service-orders/me', {
+        params: {
+          page: 1,
+          limit: 20,
+          reviewStatus: 'ACCEPTED',
+          keyword: 'Giặt',
+        },
+      }),
+    )
+  })
+  it('keeps loading, recoverable errors and empty feedback', async () => {
+    vi.mocked(api.get).mockRejectedValue(new Error('network'))
+    renderPage('/customer/service-orders')
+    expect(screen.getByRole('status')).toHaveTextContent('Đang tải yêu cầu dịch vụ…')
+    await screen.findByRole('alert')
+    vi.mocked(api.get).mockResolvedValue({ data: { items: [], total: 0, page: 1, limit: 20 } })
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Không có yêu cầu dịch vụ phù hợp.')
+  })
+  it('wraps long service names without losing quantity, amount or creation time', async () => {
+    const name = 'Dịch vụ dài '.repeat(40).trim()
+    vi.mocked(api.get).mockResolvedValue({
+      data: {
+        items: [{ ...receipt, service: { ...receipt.service, name } }],
+        total: 1,
+        page: 1,
+        limit: 20,
+      },
+    })
+    renderPage('/customer/service-orders')
+    expect((await screen.findByRole('link', { name })).closest('li')).toHaveClass('break-words')
+    expect(screen.getByText(/2 kg/)).toHaveTextContent('52.000')
+    expect(screen.getByText(/Tạo lúc:/)).toBeInTheDocument()
+  })
+})
+
+describe('customer service-order detail workspace', () => {
+  it('keeps the standalone page and every server receipt field inside a workspace panel', async () => {
+    const notes = 'Ghi chú dài xuống dòng\n'.repeat(40).trim()
+    vi.mocked(api.get).mockResolvedValue({ data: { ...receipt, notes } })
+    renderPage('/customer/service-orders/order-1')
+    const heading = await screen.findByRole('heading', { name: 'Giặt ủi' })
+    expect(screen.getByRole('heading', { level: 1, name: 'Chi tiết yêu cầu dịch vụ' })).toHaveClass(
+      'text-2xl',
+    )
+    expect(heading.closest('.card-soft')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    for (const label of [
+      'Mã yêu cầu',
+      'Mã đặt phòng',
+      'Số lượng',
+      'Đơn giá ghi nhận',
+      'Thành tiền ghi nhận từ máy chủ',
+      'Thời gian yêu cầu',
+      'Trạng thái duyệt',
+      'Trạng thái thực hiện',
+      'Ngày tạo',
+      'Ghi chú',
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument()
+    }
+    expect(screen.getByText(notes.replace(/\s+/g, ' '))).toHaveClass('whitespace-pre-wrap')
+    expect(screen.getByText(/chưa ghi thu phí/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
+      'href',
+      '/customer/service-orders',
+    )
+    expect(screen.getByRole('link', { name: 'Yêu cầu dịch vụ' })).toHaveAttribute(
+      'href',
+      '/customer/service-orders/new',
+    )
+    expect(api.post).not.toHaveBeenCalled()
+  })
+  it('recovers detail errors through the same owned endpoint without payment claims', async () => {
+    vi.mocked(api.get)
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValue({
+        data: { ...receipt, reviewStatus: 'ACCEPTED', executionStatus: 'COMPLETED' },
+      })
+    renderPage('/customer/service-orders/order-1')
+    await screen.findByRole('alert')
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    expect(await screen.findByText('Trạng thái yêu cầu: Đã hoàn thành')).toBeInTheDocument()
+    expect(screen.getByText(/không xác nhận đã thanh toán/)).toBeInTheDocument()
+    expect(api.get).toHaveBeenLastCalledWith('/service-orders/order-1')
+    expect(
+      screen.queryByRole('button', { name: /Duyệt|Phân công|Hoàn thành|Huỷ/ }),
+    ).not.toBeInTheDocument()
+  })
+  it.each(['/customer/service-orders', '/customer/service-orders/order-1'])(
+    'denies non-customer access to %s before fetching',
+    async (path) => {
+      renderPage(path, {
+        ...customer,
+        role: 'SERVICE_STAFF',
+        permissions: ['service:read', 'service-order:create'],
+      })
+      expect(await screen.findByText('Không có quyền truy cập')).toBeInTheDocument()
+      expect(api.get).not.toHaveBeenCalled()
+    },
+  )
+})
+
 describe('service-order form', () => {
+  it('uses workspace panels and atomic controls without adding order history to the form', async () => {
+    renderPage()
+    await fill()
+    expect(screen.getByRole('heading', { level: 1, name: 'Yêu cầu dịch vụ' })).toHaveClass(
+      'text-2xl',
+    )
+    expect(
+      screen.getByRole('heading', { name: 'Đơn mới' }).closest('.card-soft'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/Số lượng/)).toHaveClass('border-input')
+    expect(screen.getByLabelText(/Ghi chú/)).toHaveClass('border-input')
+    expect(screen.getByRole('button', { name: 'Gửi yêu cầu' })).toHaveClass('rounded-full')
+    expect(screen.getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
+      'href',
+      '/customer/service-orders',
+    )
+    expect(screen.queryByText('Lịch sử đặt dịch vụ')).not.toBeInTheDocument()
+    expect(api.get).not.toHaveBeenCalledWith('/service-orders/me', expect.anything())
+  })
+  it('keeps long selected service descriptions and photos in the form', async () => {
+    const description = 'Hướng dẫn dịch vụ dài '.repeat(40)
+    choices([context], [{ ...service, description, imageUrl: '/service-photo.jpg' }])
+    renderPage(`/customer/service-orders/new?bookingId=${bookingId}&serviceId=${serviceId}`)
+    expect(await screen.findByText(description.trim())).toHaveClass('break-words')
+    expect(screen.getByRole('button', { name: 'Xem ảnh Giặt ủi' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/Kỳ lưu trú/)).toHaveValue(bookingId)
+    expect(screen.getByLabelText(/^Dịch vụ/)).toHaveValue(serviceId)
+  })
+  it('shows the authoritative receipt in a workspace panel and retains repeat and navigation actions', async () => {
+    renderPage()
+    await fill()
+    submit()
+    expect(await screen.findByRole('heading', { name: 'Đã gửi yêu cầu dịch vụ' })).toHaveClass(
+      'text-2xl',
+    )
+    expect(
+      screen.getByRole('heading', { name: 'Giặt ủi' }).closest('.card-soft'),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Thành tiền ghi nhận từ máy chủ/)).toBeInTheDocument()
+    expect(screen.getByText(/chưa ghi thu phí/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tạo yêu cầu mới' })).toBeEnabled()
+    expect(screen.getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
+      'href',
+      '/customer/service-orders',
+    )
+  })
   it('loads only Customer choice endpoints, estimates locally, submits a whitelist, and shows server receipt', async () => {
     renderPage()
     await fill()

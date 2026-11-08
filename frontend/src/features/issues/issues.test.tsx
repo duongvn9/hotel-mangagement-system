@@ -137,6 +137,74 @@ test.each([
   expect(post).toHaveBeenCalledTimes(1)
 })
 
+test('uses the workspace form presentation without adding unsupported fields', () => {
+  renderPage()
+  const heading = screen.getByRole('heading', { name: 'Báo sự cố', level: 1 })
+  expect(heading).toHaveClass('text-2xl', 'tracking-tight')
+  expect(heading.closest('main, section, div.max-w-7xl')).toHaveClass('max-w-7xl')
+  const form = screen.getByRole('button', { name: 'Gửi báo cáo' }).closest('form')!
+  expect(form).toHaveClass('grid', 'max-w-2xl', 'gap-4')
+  expect(form.closest('section')).toHaveClass('card-soft')
+  expect(screen.getByLabelText(/Mã đặt phòng/).parentElement?.parentElement).toHaveClass(
+    'sm:grid-cols-2',
+  )
+  expect(screen.getByRole('button', { name: 'Gửi báo cáo' })).toHaveClass('rounded-full', 'w-fit')
+  expect(screen.getByLabelText(/Tiêu đề/)).toHaveAttribute('maxlength', '200')
+  expect(screen.getByLabelText(/Mô tả/)).toHaveAttribute('maxlength', '5000')
+  expect(screen.queryByLabelText(/Thiết bị|Ảnh|Mức độ/)).not.toBeInTheDocument()
+  expect(screen.getByText(/Không bắt buộc đã nhận phòng/)).toBeInTheDocument()
+})
+
+test('focuses the first invalid field and associates errors with their controls', () => {
+  renderPage()
+  fireEvent.click(screen.getByRole('button', { name: 'Gửi báo cáo' }))
+  expect(screen.getByLabelText(/Tiêu đề/)).toHaveFocus()
+  for (const label of [/Mã đặt phòng/, /Tiêu đề/, /Nhóm sự cố/, /Mô tả/]) {
+    expect(screen.getByLabelText(label)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText(label)).toHaveAccessibleDescription(/Vui lòng/)
+  }
+})
+
+test('preserves the draft after an expired session and retries only on explicit submission', async () => {
+  const post = vi
+    .spyOn(api, 'post')
+    .mockRejectedValueOnce({ isAxiosError: true, response: { status: 401 } })
+    .mockResolvedValueOnce({ data: { ...receipt, roomId } })
+  renderPage(`?bookingId=${bookingId}&roomId=${roomId}`)
+  fill()
+  fireEvent.click(screen.getByRole('button', { name: 'Gửi báo cáo' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Phiên đăng nhập đã hết hạn')
+  expect(post).toHaveBeenCalledTimes(1)
+  expect(screen.getByLabelText(/Mã đặt phòng/)).toHaveValue(bookingId)
+  expect(screen.getByLabelText(/Mã phòng/)).toHaveValue(roomId)
+  expect(screen.getByLabelText(/Tiêu đề/)).toHaveValue(input.title)
+  expect(screen.getByLabelText(/Nhóm sự cố/)).toHaveValue(input.category)
+  expect(screen.getByLabelText(/Mô tả/)).toHaveValue(input.description)
+  fireEvent.click(screen.getByRole('button', { name: 'Gửi báo cáo' }))
+  await screen.findByText('Đã tiếp nhận báo cáo')
+  expect(screen.getByRole('status')).toHaveTextContent(roomId)
+  expect(screen.getByRole('status')).toHaveTextContent(receipt.bookingId)
+  expect(screen.getByRole('status')).toHaveTextContent(receipt.title)
+  expect(screen.getByRole('status')).toHaveTextContent(
+    new Date(receipt.reportedAt).toLocaleString('vi-VN'),
+  )
+  expect(post).toHaveBeenCalledTimes(2)
+})
+
+test('renders long receipt values with wrapping in the success presentation', async () => {
+  const title = 'Sự cố trong phòng '.repeat(11)
+  vi.spyOn(api, 'post').mockResolvedValue({ data: { ...receipt, title, roomId } })
+  renderPage()
+  fill()
+  fireEvent.click(screen.getByRole('button', { name: 'Gửi báo cáo' }))
+  await screen.findByText('Đã tiếp nhận báo cáo')
+  const status = screen.getByRole('status')
+  expect(status).toHaveTextContent('Đã tiếp nhận báo cáo')
+  expect(status.querySelector('dl')).toHaveClass('break-words')
+  expect(screen.getByText(title.trim())).toBeInTheDocument()
+  expect(status.querySelector('svg')).toHaveClass('size-5')
+})
+
 test('validates blank, length limits and optional references', () => {
   expect(validateIssue(input)).toEqual({})
   expect(

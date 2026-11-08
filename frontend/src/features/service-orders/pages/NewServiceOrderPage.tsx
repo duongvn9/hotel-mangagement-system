@@ -1,9 +1,9 @@
 import { RoomGallery } from '@/components/AssetImage'
 import { useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
-import { SelectField } from '@/components/SelectField'
+import { Button, Input, NativeSelect, Skeleton, Textarea } from '@/components/atoms'
+import { EmptyState, FormField } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { dateTime, money, estimateAmount, type OrderInput, type ServiceOrder } from '../api'
 import { useCreateOrder, useOrderChoices } from '../hooks'
 import { OrderError, OrderNavigation, OrderReceipt } from '../presentation'
@@ -94,12 +94,12 @@ export function NewServiceOrderPage() {
   }
   if (receipt)
     return (
-      <section className="mx-auto max-w-container px-4 py-8">
+      <PageContainer>
         <OrderNavigation />
-        <h1 className="mb-6 font-display text-3xl">Đã gửi yêu cầu dịch vụ</h1>
-        <OrderReceipt order={receipt} />
+        <PageHeader title="Đã gửi yêu cầu dịch vụ" />
+        <OrderReceipt order={receipt} presentation="workspace" />
         <Button
-          className="mt-6"
+          className="mt-6 rounded-full"
           onClick={() => {
             setReceipt(null)
             attempt.current = null
@@ -110,139 +110,171 @@ export function NewServiceOrderPage() {
         >
           Tạo yêu cầu mới
         </Button>
-      </section>
+      </PageContainer>
     )
   return (
-    <section className="mx-auto max-w-container px-4 py-8">
+    <PageContainer>
       <OrderNavigation />
-      <h1 className="mb-6 font-display text-3xl">Yêu cầu dịch vụ</h1>
-      {loading && <p role="status">Đang tải đặt phòng và dịch vụ…</p>}
-      {contexts.isError && <OrderError error={contexts.error} retry={reload} />}
-      {catalog.isError && <OrderError error={catalog.error} retry={reload} />}
-      {!loading && !contexts.isError && !bookings.length && (
-        <p role="status">Bạn chưa có kỳ lưu trú nào (đã xác nhận trở lên) để yêu cầu dịch vụ.</p>
-      )}
-      {!loading && !catalog.isError && !services.length && (
-        <p role="status">Hiện không có dịch vụ đang hoạt động để yêu cầu.</p>
-      )}
-      {!loading && !contexts.isError && !catalog.isError && invalidPrefill && (
-        <p role="status" className="mb-4 text-stone-700">
-          Đặt phòng hoặc dịch vụ trong liên kết không có trong lựa chọn hợp lệ. Vui lòng tự chọn từ
-          danh sách.
-        </p>
-      )}
-      <button
-        type="button"
-        onClick={reload}
-        disabled={mutation.isPending}
-        className="mb-4 min-h-11 text-primary underline"
-      >
-        Tải lại lựa chọn
-      </button>
-      <form onSubmit={submit} noValidate className="max-w-2xl space-y-5">
-        <fieldset disabled={unavailable || mutation.isPending} className="min-w-0 space-y-5">
-          <SelectField
-            label="Kỳ lưu trú"
-            required
-            value={chosenBooking}
-            onChange={(e) => {
-              changed()
-              setBookingId(e.target.value)
-            }}
-            options={[
-              { value: '', label: 'Chọn đặt phòng' },
-              ...bookings.map((item) => ({
-                value: item.id,
-                label: `${item.code} · ${dateTime(item.checkIn)} – ${dateTime(item.checkOut)}`,
-              })),
-            ]}
-          />
-          <SelectField
-            label="Dịch vụ"
-            required
-            value={chosenService}
-            onChange={(e) => {
-              changed()
-              setServiceId(e.target.value)
-            }}
-            options={[
-              { value: '', label: 'Chọn dịch vụ' },
-              ...services.map((item) => ({ value: item.id, label: `${item.name} · ${item.unit}` })),
-            ]}
-          />
-          {service && (
-            <div className="space-y-2 rounded bg-cream-50 p-4">
-              <RoomGallery
-                images={service.imageUrl ? [service.imageUrl] : []}
-                name={service.name}
-              />
-              <p className="whitespace-pre-wrap break-words">{service.description}</p>
-              <p>
-                Đơn giá dự kiến: {money(service.billable ? service.unitPriceVND : 0)} /{' '}
-                {service.unit}
-                {!service.billable && ' · Không tính phí'}
-              </p>
-            </div>
-          )}
-          <TextField
-            label="Số lượng"
-            required
-            type="number"
-            min="1"
-            step="1"
-            max={Number.MAX_SAFE_INTEGER}
-            value={quantity}
-            onChange={(e) => {
-              changed()
-              setQuantity(e.target.value)
-            }}
-          />
-          <TextField
-            label="Thời gian yêu cầu (không bắt buộc)"
-            type="datetime-local"
-            value={requestedTime}
-            onChange={(e) => {
-              changed()
-              setRequestedTime(e.target.value)
-            }}
-          />
-          <p className="text-sm text-stone-700">
-            Để trống thời gian để dùng thời điểm hiện tại của máy chủ.
-          </p>
-          <label className="block text-sm font-medium">
-            Ghi chú (không bắt buộc, tối đa 2000 ký tự)
-            <textarea
-              maxLength={2000}
-              rows={4}
-              value={notes}
-              onChange={(e) => {
-                changed()
-                setNotes(e.target.value)
-              }}
-              className="mt-2 block w-full rounded border border-stone-300 bg-white p-3 disabled:bg-stone-200"
-            />
-          </label>
-          <p aria-live="polite">
-            Thành tiền ước tính: {amount === null ? 'Chưa có ước tính hợp lệ' : money(amount)}
-          </p>
-          <p className="text-sm text-stone-700">
-            Đây chỉ là ước tính. Giá và thành tiền do máy chủ xác nhận sau khi gửi. Yêu cầu sẽ chờ
-            duyệt, chưa được chấp nhận và chưa ghi thu phí.
-          </p>
-          <Button
-            type="submit"
-            disabled={amount === null || !chosenBooking || !service || mutation.isPending}
-          >
-            {mutation.isPending ? 'Đang gửi…' : 'Gửi yêu cầu'}
-          </Button>
-        </fieldset>
-        {error && (
-          <p role="alert" className="text-danger">
-            {error}
+      <PageHeader title="Yêu cầu dịch vụ" />
+      <Panel title="Đơn mới">
+        {loading && (
+          <div role="status" className="space-y-4 text-sm text-muted-foreground">
+            <p>Đang tải đặt phòng và dịch vụ…</p>
+            <Skeleton aria-hidden="true" className="h-24 rounded-xl" />
+          </div>
+        )}
+        {contexts.isError && (
+          <OrderError error={contexts.error} retry={reload} presentation="workspace" />
+        )}
+        {catalog.isError && (
+          <OrderError error={catalog.error} retry={reload} presentation="workspace" />
+        )}
+        {!loading && !contexts.isError && !bookings.length && (
+          <div role="status">
+            <EmptyState title="Bạn chưa có kỳ lưu trú nào (đã xác nhận trở lên) để yêu cầu dịch vụ." />
+          </div>
+        )}
+        {!loading && !catalog.isError && !services.length && (
+          <div role="status">
+            <EmptyState title="Hiện không có dịch vụ đang hoạt động để yêu cầu." />
+          </div>
+        )}
+        {!loading && !contexts.isError && !catalog.isError && invalidPrefill && (
+          <p role="status" className="mb-4 text-muted-foreground">
+            Đặt phòng hoặc dịch vụ trong liên kết không có trong lựa chọn hợp lệ. Vui lòng tự chọn
+            từ danh sách.
           </p>
         )}
-        {mutation.isError && <OrderError error={mutation.error} />}
-      </form>
-    </section>
+        <Button
+          type="button"
+          variant="link"
+          onClick={reload}
+          disabled={mutation.isPending}
+          className="my-4"
+        >
+          Tải lại lựa chọn
+        </Button>
+        <form onSubmit={submit} noValidate className="min-w-0 space-y-5">
+          <fieldset disabled={unavailable || mutation.isPending} className="min-w-0 space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="Kỳ lưu trú" htmlFor="order-booking" required>
+                <NativeSelect
+                  id="order-booking"
+                  required
+                  value={chosenBooking}
+                  onChange={(e) => {
+                    changed()
+                    setBookingId(e.target.value)
+                  }}
+                >
+                  <option value="">Chọn đặt phòng</option>
+                  {bookings.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.code} · {dateTime(item.checkIn)} – {dateTime(item.checkOut)}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </FormField>
+              <FormField label="Dịch vụ" htmlFor="order-service" required>
+                <NativeSelect
+                  id="order-service"
+                  required
+                  value={chosenService}
+                  onChange={(e) => {
+                    changed()
+                    setServiceId(e.target.value)
+                  }}
+                >
+                  <option value="">Chọn dịch vụ</option>
+                  {services.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} · {item.unit}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </FormField>
+            </div>
+            {service && (
+              <div className="min-w-0 space-y-3 rounded-xl border border-border bg-surface/50 p-4 text-sm">
+                <RoomGallery
+                  images={service.imageUrl ? [service.imageUrl] : []}
+                  name={service.name}
+                />
+                <p className="whitespace-pre-wrap break-words">{service.description}</p>
+                <p>
+                  Đơn giá dự kiến: {money(service.billable ? service.unitPriceVND : 0)} /{' '}
+                  {service.unit}
+                  {!service.billable && ' · Không tính phí'}
+                </p>
+              </div>
+            )}
+            <div className="grid gap-4 border-t border-border pt-6 sm:grid-cols-2">
+              <FormField label="Số lượng" htmlFor="order-quantity" required>
+                <Input
+                  id="order-quantity"
+                  required
+                  type="number"
+                  min="1"
+                  step="1"
+                  max={Number.MAX_SAFE_INTEGER}
+                  value={quantity}
+                  onChange={(e) => {
+                    changed()
+                    setQuantity(e.target.value)
+                  }}
+                />
+              </FormField>
+              <FormField label="Thời gian yêu cầu (không bắt buộc)" htmlFor="order-time">
+                <Input
+                  id="order-time"
+                  type="datetime-local"
+                  value={requestedTime}
+                  onChange={(e) => {
+                    changed()
+                    setRequestedTime(e.target.value)
+                  }}
+                />
+              </FormField>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Để trống thời gian để dùng thời điểm hiện tại của máy chủ.
+            </p>
+            <FormField label="Ghi chú (không bắt buộc, tối đa 2000 ký tự)" htmlFor="order-notes">
+              <Textarea
+                id="order-notes"
+                maxLength={2000}
+                rows={4}
+                value={notes}
+                onChange={(e) => {
+                  changed()
+                  setNotes(e.target.value)
+                }}
+                className="min-w-0"
+              />
+            </FormField>
+            <p aria-live="polite" className="text-sm font-semibold break-words">
+              Thành tiền ước tính: {amount === null ? 'Chưa có ước tính hợp lệ' : money(amount)}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Đây chỉ là ước tính. Giá và thành tiền do máy chủ xác nhận sau khi gửi. Yêu cầu sẽ chờ
+              duyệt, chưa được chấp nhận và chưa ghi thu phí.
+            </p>
+            <Button
+              type="submit"
+              className="w-full rounded-full sm:w-fit"
+              disabled={amount === null || !chosenBooking || !service || mutation.isPending}
+            >
+              {mutation.isPending ? 'Đang gửi…' : 'Gửi yêu cầu'}
+            </Button>
+          </fieldset>
+          {error && (
+            <p role="alert" className="text-danger">
+              {error}
+            </p>
+          )}
+          {mutation.isError && <OrderError error={mutation.error} presentation="workspace" />}
+        </form>
+      </Panel>
+    </PageContainer>
   )
 }

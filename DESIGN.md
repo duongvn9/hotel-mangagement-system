@@ -177,6 +177,7 @@ components/
 | `Panel` | A card with a title and an `action` |
 | `DataTable<T>` | `rows`, `columns`, `search`, `filters`, `pageSize`, `onRowClick`, `toolbar`, `empty`, `loading` — client-side pagination, search, filtering, empty and loading states. Optional **server mode** props leave the default markup/behavior untouched when absent: a controlled search box (`searchValue`, `onSearchChange`, `onSearchSubmit`, `searchPlaceholder`, `searchAriaLabel`) submitting on Enter, a left toolbar slot (`toolbarStart`), and controlled pagination (`page`, `totalPages`, `onPageChange`) |
 | `Dialog*`, `AlertDialog*`, `Sheet*` | Dialog, confirmation, drawer |
+| `ConfirmationDialog` | Native modal for existing confirmation workflows; preserves focus trapping, return focus and busy cancellation blocking. Import through the organisms barrel; the legacy flat path re-exports it for compatibility |
 | `RevenueArea`, `SimpleBars`, `Donut` | Charts (recharts) using the `--chart-*` colors |
 | `SearchBar` | The room search bar; `initial`, `onSearch({ from, to, guests })`, `ariaLabel`, `compact` |
 | `HeroBanner` | `image`, `imageAlt`, `title`, `eyebrow`, `tall`, `children` |

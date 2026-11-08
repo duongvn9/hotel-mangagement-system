@@ -100,7 +100,40 @@ function setup(detail = initial, role = 'RECEPTIONIST') {
   )
   return get
 }
-beforeEach(() => vi.restoreAllMocks())
+beforeEach(() => {
+  vi.restoreAllMocks()
+  for (const name of ['showModal', 'close'] as const)
+    if (!HTMLDialogElement.prototype[name])
+      Object.defineProperty(HTMLDialogElement.prototype, name, { configurable: true, value() {} })
+  vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (
+    this: HTMLDialogElement,
+  ) {
+    this.setAttribute('open', '')
+    this.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+  })
+  vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (
+    this: HTMLDialogElement,
+  ) {
+    this.removeAttribute('open')
+  })
+})
+
+test('review confirmation traps keyboard focus and cancels without a request', async () => {
+  setup()
+  const patch = vi.spyOn(api, 'patch')
+  await settle()
+  fireEvent.change(screen.getByLabelText('Nhóm xử lý'), { target: { value: 'SERVICE' } })
+  const trigger = screen.getByRole('button', { name: 'Xem xét' })
+  fireEvent.click(trigger)
+  const dialog = screen.getByRole('dialog', { name: 'Xác nhận xử lý sự cố' })
+  expect(screen.getByRole('button', { name: 'Xác nhận' })).toHaveFocus()
+  fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })
+  expect(screen.getByRole('button', { name: 'Hủy' })).toHaveFocus()
+  fireEvent(dialog, new Event('cancel', { cancelable: true }))
+  await waitFor(() => expect(trigger).toHaveFocus())
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(patch).not.toHaveBeenCalled()
+})
 
 test.each(['MANAGER', 'CUSTOMER'])(
   '%s cannot review or assign or fetch assignees',
