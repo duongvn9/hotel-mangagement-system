@@ -25,6 +25,7 @@ Keywords: **MUST** and **MUST NOT** are hard rules, not preferences. If a rule b
   - MUST NOT commit `.env*` (except `*.example`), service-account JSON, keys or tokens, or files the user is editing that the task does not touch.
   - Small, focused commits in [Conventional Commits](https://www.conventionalcommits.org/) form (`feat(booking): …`, `fix(auth): …`, `style(ui): …`, `test: …`, `docs: …`, `chore: …`). Each commit builds and passes tests on its own.
   - MUST NOT force-push, rewrite pushed history, push, merge, or open/close PRs unless asked. Branch from `main`, one task per branch.
+  - When the user authorizes sequential UI ticket delivery, finish and verify one ticket on its own branch, push that branch, merge it into `main`, and update the corresponding Jira ticket to Done before starting the next ticket. Never mark a ticket Done while required checks or the merge remain incomplete.
 - **Secrets.** MUST NOT print, log or hard-code credentials. Env changes go in `backend/src/config/env.validation.ts`, `configuration.ts` and every `.env.example`.
 - **Destructive actions** (deleting files or branches, `git clean`, `git reset --hard`, dropping data) need explicit approval each time.
 - **Dependencies.** MUST NOT add a package when an existing one or an existing component already does the job.

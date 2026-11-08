@@ -2,7 +2,7 @@
 import { configure, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
-import { RoomForm } from './components/RoomForm'
+import { RoomEditor, RoomForm } from './components/RoomForm'
 import { roomRoutes } from './routes'
 import { ROOM_STATUSES, ROOM_STATUS_DISPLAY, type Room } from './api'
 
@@ -31,21 +31,6 @@ async function fill() {
   fireEvent.change(screen.getByLabelText(/^Số phòng/), { target: { value: ' 201 ' } })
   fireEvent.change(screen.getByLabelText(/^Tầng/), { target: { value: '-1' } })
   fireEvent.change(screen.getByLabelText(/^Loại phòng của phòng/), { target: { value: active } })
-}
-function setupDialog() {
-  for (const name of ['showModal', 'close'] as const)
-    if (!HTMLDialogElement.prototype[name])
-      Object.defineProperty(HTMLDialogElement.prototype, name, { configurable: true, value() {} })
-  vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (
-    this: HTMLDialogElement,
-  ) {
-    this.setAttribute('open', '')
-  })
-  vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (
-    this: HTMLDialogElement,
-  ) {
-    this.removeAttribute('open')
-  })
 }
 describe('UC48 room form', () => {
   beforeAll(() => configure({ asyncUtilTimeout: 5000 }))
@@ -164,19 +149,43 @@ describe('UC48 room form', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Lưu phòng' }))
     await waitFor(() => expect(patch).toHaveBeenCalledWith(`/rooms/${room.id}`, { notes: 'Mới' }))
   })
+  it('closes an unchanged edit without sending a request', async () => {
+    const patch = vi.spyOn(api, 'patch')
+    const { close } = form(room)
+    await screen.findByRole('option', { name: 'Standard' })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu phòng' }))
+    expect(close).toHaveBeenCalledOnce()
+    expect(patch).not.toHaveBeenCalled()
+  })
+  it('confirms checkbox deactivation while preserving other edits in the save payload', async () => {
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: room })
+    form(room)
+    await screen.findByRole('option', { name: 'Standard' })
+    fireEvent.change(screen.getByLabelText('Ghi chú'), { target: { value: ' Mới ' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Đang hoạt động' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu phòng' }))
+    expect(patch).not.toHaveBeenCalled()
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Ngừng nhận đặt phòng' }),
+    )
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(`/rooms/${room.id}`, { notes: 'Mới', isActive: false }),
+    )
+  })
   it('deactivates only after confirmation, keeps reservation copy and sends only isActive', async () => {
     const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: room })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     form(room)
     fireEvent.change(screen.getByLabelText(/^Số phòng/), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: 'Ngừng nhận đặt phòng' }))
-    expect(confirm).toHaveBeenCalledWith(
-      expect.stringContaining('reservation đang hoạt động vẫn hợp lệ'),
-    )
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('không nhận đặt phòng mới'))
+    const confirmation = screen.getByRole('alertdialog')
+    expect(confirmation).toHaveTextContent('reservation đang hoạt động vẫn hợp lệ')
+    expect(confirmation).toHaveTextContent('không nhận đặt phòng mới')
     expect(patch).not.toHaveBeenCalled()
-    confirm.mockReturnValue(true)
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Giữ lại' }))
     fireEvent.click(screen.getByRole('button', { name: 'Ngừng nhận đặt phòng' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Ngừng nhận đặt phòng' }),
+    )
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith(`/rooms/${room.id}`, { isActive: false }),
     )
@@ -184,18 +193,23 @@ describe('UC48 room form', () => {
   })
   it('reactivates with confirmation and an active type', async () => {
     const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: room })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     form({ ...room, isActive: false })
     await screen.findByRole('option', { name: 'Standard' })
+    await waitFor(() => expect(screen.getByLabelText(/^Loại phòng của phòng/)).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Kích hoạt lại phòng' }))
     expect(patch).not.toHaveBeenCalled()
-    confirm.mockReturnValue(true)
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Loại phòng phải còn hoạt động.')
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Giữ lại' }),
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Kích hoạt lại phòng' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Kích hoạt lại phòng' }),
+    )
     await waitFor(() => expect(patch).toHaveBeenCalledWith(`/rooms/${room.id}`, { isActive: true }))
   })
   it('keeps the inactive type visible, allows notes edits but blocks reactivation until replacement', async () => {
     const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: room })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     form({ ...room, roomType: { id: inactive, name: 'Old', isActive: false }, isActive: false })
     expect(screen.getByRole('option', { name: 'Old (ngừng)' })).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Ghi chú'), { target: { value: 'Mới' } })
@@ -209,6 +223,9 @@ describe('UC48 room form', () => {
     expect(patch).toHaveBeenCalledTimes(1)
     fireEvent.change(screen.getByLabelText(/^Loại phòng của phòng/), { target: { value: active } })
     fireEvent.click(screen.getByRole('button', { name: 'Kích hoạt lại phòng' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Kích hoạt lại phòng' }),
+    )
     await waitFor(() =>
       expect(patch).toHaveBeenLastCalledWith(`/rooms/${room.id}`, {
         notes: 'Mới',
@@ -247,8 +264,25 @@ describe('UC48 room form', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Thử lại loại phòng khả dụng' }))
     expect(await screen.findByRole('option', { name: 'Standard' })).toBeInTheDocument()
   })
+  it('keeps the editor open while saving even when Escape or the close button is used', async () => {
+    const close = vi.fn()
+    vi.spyOn(api, 'post').mockImplementation(() => new Promise(() => {}))
+    renderWithAuth(
+      [{ path: '/', element: <RoomEditor id={null} onClose={close} onSuccess={() => {}} /> }],
+      {
+        auth: { me: ME, status: 'authenticated' },
+      },
+    )
+    await fill()
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu phòng' }))
+    await screen.findByRole('button', { name: 'Đang xử lý…' })
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape', keyCode: 27 })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(close).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Hủy' })).toBeDisabled()
+  })
   it('opens create/edit dialogs, loads details, handles Esc/restores focus and preserves filters/page on save', async () => {
-    setupDialog()
     const get = vi.mocked(api.get)
     vi.spyOn(api, 'patch').mockResolvedValue({ data: room })
     renderWithAuth(roomRoutes, {
@@ -276,15 +310,15 @@ describe('UC48 room form', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Lưu phòng' }))
     expect(await screen.findByText('Đã lưu phòng. Danh sách đã được cập nhật.')).toBeInTheDocument()
     expect(screen.getByLabelText('Tìm theo số phòng')).toHaveValue('101')
-    expect(screen.getByText(/Trang 2\/3/)).toBeInTheDocument()
+    expect(screen.getByText(/Trang 2 \/ 3/)).toBeInTheDocument()
     await waitFor(() => expect(edit).toHaveFocus())
     const add = screen.getByRole('button', { name: 'Thêm phòng' })
     add.focus()
     fireEvent.click(add)
     const dialog = screen.getByRole('dialog', { name: 'Thêm phòng' })
     expect(within(dialog).getByLabelText(/^Số phòng/)).toHaveValue('')
-    fireEvent(dialog, new Event('cancel', { bubbles: true, cancelable: true }))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(add).toHaveFocus()
+    fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape', keyCode: 27 })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(add).toHaveFocus())
   })
 })

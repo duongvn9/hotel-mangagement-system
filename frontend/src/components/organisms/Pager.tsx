@@ -7,11 +7,13 @@ export function Pager({
   totalPages,
   onPrev,
   onNext,
+  disabled = false,
 }: {
   page: number
   totalPages: number
   onPrev: () => void
   onNext: () => void
+  disabled?: boolean
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -22,7 +24,7 @@ export function Pager({
         size="icon"
         variant="outline"
         className="size-8 rounded-full"
-        disabled={page <= 1}
+        disabled={disabled || page <= 1}
         onClick={onPrev}
         aria-label="Trang trước"
       >
@@ -32,7 +34,7 @@ export function Pager({
         size="icon"
         variant="outline"
         className="size-8 rounded-full"
-        disabled={page >= totalPages}
+        disabled={disabled || page >= totalPages}
         onClick={onNext}
         aria-label="Trang sau"
       >

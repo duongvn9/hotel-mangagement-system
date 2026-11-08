@@ -178,13 +178,22 @@ components/
 | `DataTable<T>` | `rows`, `columns`, `search`, `filters`, `pageSize`, `onRowClick`, `toolbar`, `empty`, `loading` — client-side pagination, search, filtering, empty and loading states. Optional **server mode** props leave the default markup/behavior untouched when absent: a controlled search box (`searchValue`, `onSearchChange`, `onSearchSubmit`, `searchPlaceholder`, `searchAriaLabel`) submitting on Enter, a left toolbar slot (`toolbarStart`), and controlled pagination (`page`, `totalPages`, `onPageChange`) |
 | `Dialog*`, `AlertDialog*`, `Sheet*` | Dialog, confirmation, drawer |
 | `ConfirmationDialog` | Native modal for existing confirmation workflows; preserves focus trapping, return focus and busy cancellation blocking. Import through the organisms barrel; the legacy flat path re-exports it for compatibility |
-| `RevenueArea`, `SimpleBars`, `Donut` | Charts (recharts) using the `--chart-*` colors |
+| `RevenueArea`, `SimpleBars`, `Donut` | Charts (recharts) using the `--chart-*` colors. `RevenueArea` accepts `animate` (default `true`); live dashboard snapshots use `false` so an entrance-animation clip cannot hide new data |
 | `SearchBar` | The room search bar; `initial`, `onSearch({ from, to, guests })`, `ariaLabel`, `compact` |
 | `HeroBanner` | `image`, `imageAlt`, `title`, `eyebrow`, `tall`, `children` |
 | `RoomCard` | `image`, `name`, `description`, `amenities`, `price`, `priceNote`, `meta`, `actions`, `selected`, `onToggle`, `toggleLabel` |
 | `Unauthorized` | The 403 page; `homeTo`, `actionLabel`, `description` |
 | `PageContainer` | Responsive page container: `mx-auto w-full max-w-7xl px-4 py-8 sm:px-8`, accepts `className` |
 
+
+### Room-type catalog presentation options
+
+- `DataTable`: optional `caption` names the table; `Column.rowHeader` renders a scoped row heading. `scrollLabel` names the keyboard-focusable scroll region. `searchMaxLength` keeps the controlled search limit. `paginationSummary` displays the server total and `paginationDisabled` locks both navigation buttons during a request. Default client behavior is unchanged.
+- `Pager`: optional `disabled` locks navigation without changing its current-page display.
+- `DataTable`: optional `paginationLabel` preserves a named navigation landmark for server-paged lists; omitted, the existing footer semantics stay unchanged.
+- `FormField`: an error has the stable ID `${htmlFor}-error`, which the child control can reference with `aria-describedby`.
+- The retained legacy `RoomGallery` helper accepts `compact` for a nonshrinking `size-10 rounded-lg` catalog thumbnail while preserving the full image viewer. The default gallery remains unchanged.
+- The retained `ImagePicker` helper accepts `appearance="prototype"` for semantic surface and border tokens inside migrated forms. Its default legacy appearance, single-image selection, removal, and image viewer remain unchanged.
 
 ### Templates — `@/components/templates`
 
@@ -199,6 +208,11 @@ The templates are presentational only. `WorkspaceLayout` is wired through `layou
 ---
 
 ## 8. Screen patterns
+
+The Manager dashboard composes the existing atomic catalog through
+`features/dashboard/components/ManagerInsights.tsx`. This feature-only component maps read-only
+dashboard insights to `StatCard`, `Panel`, `RevenueArea`, `Donut`, `StatusBadge` and `EmptyState`.
+It accepts data through props and does not fetch data or own authentication.
 
 | Screen | Composition |
 |---|---|

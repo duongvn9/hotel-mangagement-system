@@ -1,9 +1,9 @@
 import { AssetImage } from '@/components/AssetImage'
-import { Badge } from '@/components/Badge'
+import { Badge } from '@/components/atoms'
 import type { RoomType } from '../api'
 
 export function AmenityChips({ amenities }: Pick<RoomType, 'amenities'>) {
-  if (!amenities.length) return <span className="text-stone-700">Chưa có tiện nghi</span>
+  if (!amenities.length) return <span className="text-muted-foreground">Chưa có tiện nghi</span>
   return (
     <div className="flex flex-wrap gap-2">
       {amenities.slice(0, 3).map((amenity) => (
@@ -18,7 +18,7 @@ export function AmenityChips({ amenities }: Pick<RoomType, 'amenities'>) {
         </Badge>
       ))}
       {amenities.length > 3 && (
-        <details className="text-stone-700">
+        <details className="text-muted-foreground">
           <summary className="flex min-h-11 cursor-pointer items-center text-primary hover:underline">
             +{amenities.length - 3} tiện nghi
           </summary>

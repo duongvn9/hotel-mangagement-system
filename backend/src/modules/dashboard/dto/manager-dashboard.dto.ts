@@ -1,4 +1,32 @@
 import { ApiExtraModels, ApiProperty, getSchemaPath } from '@nestjs/swagger';
+import type { DashboardInsightsService } from '../dashboard-insights.service.js';
+
+export class DashboardInsights {
+  @ApiProperty({
+    type: Object,
+    description:
+      'Fourteen-day successful receipts, previous-period change (null when the previous total is zero), and daily series. available=false when this source fails.',
+  })
+  revenue:
+    | Awaited<ReturnType<DashboardInsightsService['revenueSummary']>>
+    | UnavailableDashboardBlock;
+  @ApiProperty({
+    type: Object,
+    description:
+      'Active confirmed/checked-in booking count and the latest six active bookings ordered by createdAt descending. Includes only code, guest name, rooms, dates and status.',
+  })
+  bookings:
+    | Awaited<ReturnType<DashboardInsightsService['bookingSummary']>>
+    | UnavailableDashboardBlock;
+  @ApiProperty({
+    type: Object,
+    description:
+      'Count and mean of active integer ratings from 1 to 5; average is null when no rated feedback exists.',
+  })
+  feedback:
+    | Awaited<ReturnType<DashboardInsightsService['feedbackSummary']>>
+    | UnavailableDashboardBlock;
+}
 export class UnavailableDashboardBlock {
   @ApiProperty({ enum: [false] }) available: false;
   @ApiProperty({ enum: ['error', 'not_available'] }) reason:
@@ -44,6 +72,7 @@ export class DashboardRevenue {
   DashboardRevenue,
 )
 export class ManagerDashboard {
+  @ApiProperty({ type: DashboardInsights }) insights: DashboardInsights;
   @ApiProperty({ format: 'date-time' }) generatedAt: string;
   @ApiProperty({
     oneOf: [

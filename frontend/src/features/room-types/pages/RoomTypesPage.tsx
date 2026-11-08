@@ -1,14 +1,13 @@
-import { RoomGallery } from '@/components/AssetImage'
 import { useEffect, useState } from 'react'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { Pencil, Plus, SearchX } from 'lucide-react'
+import { RoomGallery } from '@/components/AssetImage'
+import { Badge, Button, NativeSelect } from '@/components/atoms'
+import { Alert, EmptyState } from '@/components/molecules'
+import { DataTable, PageContainer, PageHeader, type Column } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { AmenityChips } from '../components/AmenityChips'
 import { useRoomTypes } from '../hooks'
-import type { RoomTypeQuery } from '../api'
+import type { RoomType, RoomTypeQuery } from '../api'
 import { RoomTypeEditor } from '../components/RoomTypeForm'
 
 const money = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' })
@@ -33,24 +32,94 @@ export function RoomTypesPage() {
   const filtered = Boolean(query.search || query.isActive !== undefined)
   const pages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1
 
-  return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div>
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">Quản trị</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">Quản lý loại phòng</h1>
-        <p className="mt-2 text-sm text-stone-700">
-          Thông tin loại phòng và trạng thái mở đặt phòng.
+  const columns: Column<RoomType>[] = [
+    {
+      key: 'name',
+      header: 'Tên',
+      rowHeader: true,
+      render: (roomType) => (
+        <div className="flex items-center gap-3">
+          <RoomGallery images={roomType.images} name={roomType.name} compact />
+          <span className="max-w-48 min-w-24 break-words">{roomType.name}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'description',
+      header: 'Mô tả',
+      render: (roomType) => (
+        <p className="max-w-64 min-w-32 break-words text-muted-foreground">
+          {roomType.description || 'Chưa có mô tả'}
         </p>
-      </div>
+      ),
+    },
+    { key: 'adultCapacity', header: 'Người lớn', className: 'text-right' },
+    { key: 'childCapacity', header: 'Trẻ em', className: 'text-right' },
+    {
+      key: 'basePrice',
+      header: 'Giá',
+      className: 'text-right whitespace-nowrap',
+      render: (roomType) => money.format(roomType.basePrice),
+    },
+    {
+      key: 'amenities',
+      header: 'Tiện nghi',
+      render: (roomType) => (
+        <div className="min-w-32 max-w-64">
+          <AmenityChips amenities={roomType.amenities} />
+        </div>
+      ),
+    },
+    {
+      key: 'availability',
+      header: 'Trạng thái',
+      render: (roomType) => (
+        <Badge tone={roomType.availableForBooking ? 'success' : 'neutral'}>
+          {roomType.availableForBooking ? 'Có thể đặt' : 'Ngừng đặt'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Thao tác',
+      className: 'text-right',
+      render: (roomType) => (
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="size-8"
+          aria-label={`Sửa ${roomType.name}`}
+          onClick={() => {
+            setSuccess(false)
+            setEditor({ id: roomType.id })
+          }}
+        >
+          <Pencil className="size-4" />
+        </Button>
+      ),
+    },
+  ]
+  return (
+    <PageContainer>
+      <PageHeader
+        title="Quản lý loại phòng"
+        subtitle="Hạng phòng, giá mỗi đêm và sức chứa hiển thị trên trang web."
+        actions={
+          <Button
+            type="button"
+            className="rounded-full"
+            onClick={() => {
+              setSuccess(false)
+              setEditor({ id: null })
+            }}
+          >
+            <Plus className="size-4" />
+            Thêm loại phòng
+          </Button>
+        }
+      />
       {success && <Alert tone="success">Đã lưu loại phòng. Danh sách đã được cập nhật.</Alert>}
-      <Button
-        onClick={() => {
-          setSuccess(false)
-          setEditor({ id: null })
-        }}
-      >
-        Thêm loại phòng
-      </Button>
       {editor && (
         <RoomTypeEditor
           id={editor.id}
@@ -61,149 +130,76 @@ export function RoomTypesPage() {
           }}
         />
       )}
-      <div role="search" aria-label="Lọc loại phòng" className="grid gap-4 md:grid-cols-2">
-        <TextField
-          label="Tìm theo tên"
-          type="search"
-          maxLength={100}
-          value={search}
-          placeholder="Nhập tên loại phòng"
-          onChange={(event) => setSearch(event.target.value)}
-        />
-        <SelectField
-          label="Trạng thái"
-          value={query.isActive === undefined ? '' : String(query.isActive)}
-          options={[
-            { value: '', label: 'Tất cả' },
-            { value: 'true', label: 'Có thể đặt' },
-            { value: 'false', label: 'Ngừng' },
-          ]}
-          onChange={(event) => {
-            const value = event.target.value
-            setQuery((previous) => ({
-              ...previous,
-              page: 1,
-              isActive: value === '' ? undefined : value === 'true',
-            }))
-          }}
-        />
-      </div>
-      {isPending && <p role="status">Đang tải loại phòng…</p>}
+      {isPending && (
+        <p role="status" className="sr-only">
+          Đang tải loại phòng…
+        </p>
+      )}
       {isError && (
-        <div className="space-y-3">
+        <div className="mb-4 space-y-3">
           <Alert tone="danger">{getErrorMessage(error)}</Alert>
-          <Button variant="secondary" onClick={() => void refetch()} disabled={isFetching}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+          >
             Thử lại
           </Button>
         </div>
       )}
-      {!isError && data && (
-        <>
-          {data.items.length === 0 ? (
-            <p
-              role="status"
-              className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700"
+      <div role="search" aria-label="Lọc loại phòng">
+        <DataTable
+          rows={isError ? [] : (data?.items ?? [])}
+          columns={columns}
+          caption="Danh sách loại phòng"
+          scrollLabel="Danh sách loại phòng, cuộn ngang để xem đủ cột"
+          loading={isPending}
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchAriaLabel="Tìm theo tên"
+          searchPlaceholder="Nhập tên loại phòng"
+          searchMaxLength={100}
+          toolbarStart={
+            <NativeSelect
+              aria-label="Trạng thái"
+              className="h-9 rounded-full md:w-44"
+              value={query.isActive === undefined ? '' : String(query.isActive)}
+              onChange={(event) => {
+                const value = event.target.value
+                setQuery((previous) => ({
+                  ...previous,
+                  page: 1,
+                  isActive: value === '' ? undefined : value === 'true',
+                }))
+              }}
             >
-              {filtered ? 'Không có loại phòng khớp bộ lọc.' : 'Chưa có dữ liệu loại phòng.'}
-            </p>
-          ) : (
-            <div
-              role="region"
-              aria-label="Danh sách loại phòng, cuộn ngang để xem đủ cột"
-              tabIndex={0}
-              className="max-w-full overflow-x-auto rounded-lg border border-stone-300 bg-white"
-            >
-              <table className="w-full min-w-[800px] text-left text-sm">
-                <caption className="sr-only">Danh sách loại phòng</caption>
-                <thead className="bg-stone-200 text-xs text-stone-700 uppercase">
-                  <tr>
-                    {[
-                      'Tên',
-                      'Mô tả',
-                      'Người lớn',
-                      'Trẻ em',
-                      'Giá',
-                      'Tiện nghi',
-                      'Trạng thái',
-                      'Thao tác',
-                    ].map((name, index) => (
-                      <th
-                        key={name}
-                        scope="col"
-                        className={`px-4 py-4 ${[2, 3, 4].includes(index) ? 'text-right' : ''}`}
-                      >
-                        {name}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((roomType) => (
-                    <tr key={roomType.id} className="border-t border-stone-300 hover:bg-cream-50">
-                      <th scope="row" className="px-4 py-4 font-semibold">
-                        <RoomGallery images={roomType.images} name={roomType.name} />
-                        {roomType.name}
-                      </th>
-                      <td className="max-w-64 px-4 py-4 break-words text-stone-700">
-                        {roomType.description || 'Chưa có mô tả'}
-                      </td>
-                      <td className="px-4 py-4 text-right">{roomType.adultCapacity}</td>
-                      <td className="px-4 py-4 text-right">{roomType.childCapacity}</td>
-                      <td className="px-4 py-4 text-right whitespace-nowrap">
-                        {money.format(roomType.basePrice)}
-                      </td>
-                      <td className="max-w-72 px-4 py-4">
-                        <AmenityChips amenities={roomType.amenities} />
-                      </td>
-                      <td className="px-4 py-4">
-                        <Badge tone={roomType.availableForBooking ? 'success' : 'neutral'}>
-                          {roomType.availableForBooking ? 'Có thể đặt' : 'Ngừng đặt'}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-4">
-                        <Button
-                          variant="secondary"
-                          aria-label={`Sửa ${roomType.name}`}
-                          onClick={() => {
-                            setSuccess(false)
-                            setEditor({ id: roomType.id })
-                          }}
-                        >
-                          Sửa
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <option value="">Tất cả</option>
+              <option value="true">Có thể đặt</option>
+              <option value="false">Ngừng</option>
+            </NativeSelect>
+          }
+          page={query.page}
+          totalPages={pages}
+          onPageChange={(page) => setQuery((previous) => ({ ...previous, page }))}
+          paginationDisabled={isFetching}
+          paginationSummary={<span aria-live="polite">{data?.total ?? 0} loại phòng</span>}
+          empty={
+            <div role="status">
+              <EmptyState
+                icon={SearchX}
+                title={
+                  isError
+                    ? 'Không tải được danh sách loại phòng.'
+                    : filtered
+                      ? 'Không có loại phòng khớp bộ lọc.'
+                      : 'Chưa có dữ liệu loại phòng.'
+                }
+              />
             </div>
-          )}
-          <nav
-            aria-label="Phân trang loại phòng"
-            className="flex flex-wrap items-center justify-between gap-3"
-          >
-            <p className="text-sm text-stone-700" aria-live="polite">
-              {data.total} loại phòng · Trang {query.page}/{pages}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                disabled={query.page <= 1 || isFetching}
-                onClick={() => setQuery((previous) => ({ ...previous, page: previous.page - 1 }))}
-              >
-                Trang trước
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={query.page >= pages || isFetching}
-                onClick={() => setQuery((previous) => ({ ...previous, page: previous.page + 1 }))}
-              >
-                Trang sau
-              </Button>
-            </div>
-          </nav>
-        </>
-      )}
-    </section>
+          }
+        />
+      </div>
+    </PageContainer>
   )
 }

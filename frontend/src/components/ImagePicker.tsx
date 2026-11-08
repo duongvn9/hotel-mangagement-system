@@ -1,5 +1,6 @@
 import { useId, useState } from 'react'
 import { ImageLightbox } from './ImageLightbox'
+import { cn } from '@/lib/utils'
 
 export function ImagePicker({
   images,
@@ -7,20 +8,33 @@ export function ImagePicker({
   onChoose,
   onRemove,
   label = 'Ảnh tiện nghi',
+  appearance = 'legacy',
 }: {
   images: { src: string; label: string }[]
   name: string
   onChoose: (files: File[]) => void
   onRemove: (index: number) => void
   label?: string
+  appearance?: 'legacy' | 'prototype'
 }) {
   const id = useId()
   const [viewing, setViewing] = useState<number | null>(null)
+  const polished = appearance === 'prototype'
   return (
-    <div className="min-w-0 space-y-3 rounded-xl border border-stone-300 bg-cream-100/40 p-4">
+    <div
+      className={cn(
+        'min-w-0 space-y-3 rounded-xl border p-4',
+        polished ? 'border-border bg-surface/40' : 'border-stone-300 bg-cream-100/40',
+      )}
+    >
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-semibold">{label}</p>
-        <span className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-xs">
+        <span
+          className={cn(
+            'shrink-0 rounded-full border px-2.5 py-1 text-xs',
+            polished ? 'border-border bg-card' : 'border-stone-300 bg-white',
+          )}
+        >
           {images.length} / 1 ảnh
         </span>
       </div>
@@ -38,16 +52,24 @@ export function ImagePicker({
       />
       <label
         htmlFor={id}
-        className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/40 bg-white px-4 py-5 text-center transition hover:border-primary hover:bg-cream-100 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary peer-disabled:cursor-wait peer-disabled:opacity-50"
+        className={cn(
+          'flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/40 px-4 py-5 text-center transition hover:border-primary peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary peer-disabled:cursor-wait peer-disabled:opacity-50',
+          polished ? 'bg-card hover:bg-surface' : 'bg-white hover:bg-cream-100',
+        )}
       >
         <span
           aria-hidden="true"
-          className="flex size-9 items-center justify-center rounded-full bg-cream-100 text-2xl text-primary"
+          className={cn(
+            'flex size-9 items-center justify-center rounded-full text-2xl text-primary',
+            polished ? 'bg-surface' : 'bg-cream-100',
+          )}
         >
           +
         </span>
         <span className="text-sm font-semibold text-primary">Chọn ảnh từ thiết bị</span>
-        <span className="text-xs text-stone-600">Chọn ảnh mới để thay ảnh hiện tại</span>
+        <span className={cn('text-xs', polished ? 'text-muted-foreground' : 'text-stone-600')}>
+          Chọn ảnh mới để thay ảnh hiện tại
+        </span>
       </label>
       <p id={`${id}-help`} className="text-xs">
         Một ảnh JPG, PNG hoặc WebP, tối đa 5 MB.
@@ -56,7 +78,10 @@ export function ImagePicker({
         {images.map((image, index) => (
           <div
             key={`${image.src}-${index}`}
-            className="min-w-0 overflow-hidden rounded-lg border border-stone-300 bg-white shadow-sm"
+            className={cn(
+              'min-w-0 overflow-hidden rounded-lg border shadow-sm',
+              polished ? 'border-border bg-card' : 'border-stone-300 bg-white',
+            )}
           >
             <button
               type="button"
@@ -73,7 +98,12 @@ export function ImagePicker({
             <button
               type="button"
               onClick={() => onRemove(index)}
-              className="min-h-11 w-full truncate px-2 text-xs text-primary transition hover:bg-cream-100"
+              className={cn(
+                'min-h-11 w-full truncate px-2 text-xs text-primary transition',
+                polished
+                  ? 'hover:bg-surface focus-visible:outline-2 focus-visible:outline-ring'
+                  : 'hover:bg-cream-100',
+              )}
             >
               Bỏ ảnh {index + 1}
             </button>

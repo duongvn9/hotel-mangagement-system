@@ -34,6 +34,56 @@ The hard rules live in [`CLAUDE.md`](CLAUDE.md) (identical to [`AGENTS.md`](AGEN
 - [ ] **No hard-coded values:** no hex, no arbitrary `px`; no imports of `components/ui/` or of the deprecated flat components (`components/*.tsx`).
 - [ ] **Behavior unchanged:** hooks, API calls, routes, permissions and existing tests are untouched (any assertion edit is listed in the PR with its reason).
 
+### 2.1 WDP301-185 verification
+
+- [x] Structure, tokens, type, spacing and icons checked against the prototype.
+- [x] Loading, empty, error, disabled and long-content states checked.
+- [x] Required responsive widths checked; no horizontal overflow.
+- [x] Legacy-class, forbidden-import and hard-coded-color scans clean.
+- [x] Existing behavior preserved, with user-authorized additive backend insights.
+
+The detailed checklist and evidence are in
+[`validation/ui/WDP301-185.md`](validation/ui/WDP301-185.md). The existing accessible heading
+and refresh announcement remain. The user approved keeping the original summaries and
+shortcuts in a collapsed section below the prototype dashboard. Screenshot export and Jira
+completion remain subject to delivery approval recorded in that report.
+
+### 2.2 WDP301-186 verification
+
+The user approved preserving the existing images, amenities, status filter, adult/child capacities, and deactivation flow in the prototype table and dialog presentation. Area, bed configuration, and deletion are outside this ticket. Existing route guards, APIs, validation, search debounce, and server pagination remain in place. Screenshots stay local at the user's request.
+
+- [x] Table, dialog, tokens, type, spacing, and icons compared with the prototype.
+- [x] Required widths and long-content, loading, empty, and error states checked.
+- [x] Existing behavior, keyboard dismissal, and image viewing verified.
+- [x] Required frontend checks and forbidden-pattern scans passed.
+
+Evidence, runner options, approved differences, and limitations are recorded in
+[`validation/ui/WDP301-186.md`](validation/ui/WDP301-186.md).
+
+### 2.3 WDP301-187 verification
+
+The user approved retaining notes, activity filtering, deactivation/reactivation, room-type warnings, the existing floor validation, and all operational statuses in the prototype presentation. The price column and deletion are excluded. Screenshots remain local as requested.
+
+- [x] Page header, table, form, tokens, typography, spacing, and icons compared with the prototype.
+- [x] Required widths (1440, 768, and 375 pixels), long content, empty, error, and loading states checked.
+- [x] Keyboard access, Escape dismissal, focus restoration, and existing mutation semantics checked.
+- [x] Final frontend checks and forbidden-pattern scans completed.
+
+Evidence, approved differences, test assertion changes, and limitations are recorded in
+[`validation/ui/WDP301-187.md`](validation/ui/WDP301-187.md).
+
+### 2.4 WDP301-188 verification
+
+The user approved keeping images, descriptions, room-type links and counts, activity filtering, and deactivate/reactivate actions in the prototype presentation. Category management and deletion are excluded. Existing accessible names, API contracts, validation, permissions, and pagination remain. Screenshots stay local as requested.
+
+- [x] Page header, table, form, tokens, typography, spacing, and icons compared with the prototype.
+- [x] Required widths (1440, 768, and 375 pixels), long content, large counts, empty, error, and loading states checked.
+- [x] Existing behavior tests, keyboard focus restoration, image viewing, and confirmation messages checked.
+- [x] Final frontend checks and forbidden-pattern scans completed.
+
+Evidence, approved differences, assertion changes, and limitations are recorded in
+[`validation/ui/WDP301-188.md`](validation/ui/WDP301-188.md).
+
 ## 3. Prototype to app map
 
 Fill the "Jira task" column when you pick up a task. App paths come from `frontend/src/features/*/routes.tsx` and `frontend/src/pages/`.
@@ -59,14 +109,14 @@ Fill the "Jira task" column when you pick up a task. App paths come from `fronte
 | `app.room-board.tsx` | `/reception/rooms` | `features/booking/pages/RoomStatusBoardPage.tsx` | |
 | `app.reconciliation.tsx` | `/manager/payments/reconciliation` | `features/booking/pages/ReconciliationPage.tsx` | |
 | `app.reception.tsx` | `/reception/dashboard` | `features/dashboard/pages/ReceptionDashboardPage.tsx` | |
-| `app.dashboard.tsx` | `/manager/dashboard` | `features/dashboard/pages/ManagerDashboardPage.tsx` | |
+| `app.dashboard.tsx` | `/manager/dashboard` | `features/dashboard/pages/ManagerDashboardPage.tsx` | WDP301-185 |
 | `app.revenue.tsx` | `/manager/reports/revenue` | `features/reports/pages/RevenueReportPage.tsx` | |
 | `app.operations-report.tsx` | `/manager/reports/operational` | `features/reports/pages/OperationalReportPage.tsx` | |
 | `app.accounts.tsx` | `/manager/accounts` | `features/accounts/pages/AccountsPage.tsx` | WDP301-154 |
 | `app.roles.tsx` | `/manager/roles` | `features/roles/pages/RolesPage.tsx` | WDP301-155 |
-| `app.rooms.tsx` | `/manager/rooms` | `features/rooms/pages/RoomsPage.tsx` | |
-| `app.room-types.tsx` | `/manager/room-types` | `features/room-types/pages/RoomTypesPage.tsx` | |
-| `app.amenities.tsx` | `/manager/amenities` | `features/amenities/pages/AmenitiesPage.tsx` | |
+| `app.rooms.tsx` | `/manager/rooms` | `features/rooms/pages/RoomsPage.tsx` | WDP301-187 |
+| `app.room-types.tsx` | `/manager/room-types` | `features/room-types/pages/RoomTypesPage.tsx` | WDP301-186 |
+| `app.amenities.tsx` | `/manager/amenities` | `features/amenities/pages/AmenitiesPage.tsx` | WDP301-188 |
 | `app.services.tsx` | `/manager/services` | `features/services/pages/ServicesPage.tsx` | |
 | `app.task-queues.tsx` | `/manager/task-queues` (+ `/:taskId`) | `features/task-supervision/pages/TaskQueuesPage.tsx`, `TaskQueueDetailPage.tsx` | |
 | `app.tasks.tsx` | `/staff/tasks` (+ `/:id`) | `features/tasks/pages/AssignedTasksPage.tsx`, `AssignedTaskDetailPage.tsx` | |
