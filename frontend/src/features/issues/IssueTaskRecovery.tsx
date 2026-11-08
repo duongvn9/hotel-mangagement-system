@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { isAxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button } from '@/components/Button'
-import { ConfirmationDialog } from '@/components/ConfirmationDialog'
-import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { Button, Input, NativeSelect } from '@/components/atoms'
+import { FormField } from '@/components/molecules'
+import { ConfirmationDialog } from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
 import { ResolutionHistory } from '@/features/tasks/TaskResolution'
 import {
@@ -184,7 +183,10 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
         </p>
       )}
       {history.map((task) => (
-        <article key={task.id} className="space-y-2 rounded border border-stone-300 p-4">
+        <article
+          key={task.id}
+          className="min-w-0 space-y-2 rounded-xl border border-border bg-surface/40 p-4 break-words"
+        >
           <h4 className="font-semibold">
             {task.title} · {task.id}
           </h4>
@@ -258,20 +260,27 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
           >
             {!pending && !retryIntent && (
               <>
-                <TextField
-                  label="Thời hạn mới (không bắt buộc)"
-                  type="datetime-local"
-                  value={due}
-                  onChange={(event) => setDue(event.target.value)}
-                />
+                <FormField label="Thời hạn mới (không bắt buộc)" htmlFor="recovery-due">
+                  <Input
+                    id="recovery-due"
+                    type="datetime-local"
+                    value={due}
+                    onChange={(event) => setDue(event.target.value)}
+                  />
+                </FormField>
                 <p className="text-sm">
                   Giờ địa phương của thiết bị; được chuyển sang ISO UTC khi gửi.
                 </p>
-                <TextField
+                <FormField
                   label="Hướng dẫn tiếp tục (không bắt buộc)"
-                  value={instructions}
-                  onChange={(event) => setInstructions(event.target.value)}
-                />
+                  htmlFor="recovery-instructions"
+                >
+                  <Input
+                    id="recovery-instructions"
+                    value={instructions}
+                    onChange={(event) => setInstructions(event.target.value)}
+                  />
+                </FormField>
                 <Button
                   onClick={(event) => {
                     setConfirmationTrigger(event.currentTarget)
@@ -284,15 +293,20 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
             )}
             {((!pending && !retryIntent) || replacementAllowed) && (
               <>
-                <SelectField
-                  label="Nhân viên thay thế"
-                  value={assigneeId}
-                  options={[
-                    { value: '', label: 'Chọn nhân viên khác' },
-                    ...users.map((user) => ({ value: user.id, label: user.displayName })),
-                  ]}
-                  onChange={(event) => setAssigneeId(event.target.value)}
-                />
+                <FormField label="Nhân viên thay thế" htmlFor="recovery-assignee">
+                  <NativeSelect
+                    id="recovery-assignee"
+                    value={assigneeId}
+                    onChange={(event) => setAssigneeId(event.target.value)}
+                  >
+                    <option value="">Chọn nhân viên khác</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.displayName}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </FormField>
                 {assignees.isSuccess && !users.length && (
                   <p role="status">Không có nhân viên khác phù hợp đang hoạt động.</p>
                 )}
@@ -315,11 +329,13 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
               </>
             )}
             {!pending && !retryIntent && (
-              <TextField
-                label="Lý do phân công lại (bắt buộc)"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-              />
+              <FormField label="Lý do phân công lại (bắt buộc)" htmlFor="recovery-reason">
+                <Input
+                  id="recovery-reason"
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                />
+              </FormField>
             )}
             <Button
               onClick={(event) => {
@@ -356,7 +372,7 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
               : confirmation.input.instructions}
           </p>
           <Button
-            loading={mutation.isPending}
+            aria-busy={mutation.isPending}
             disabled={busy}
             onClick={() => {
               if (confirmation.kind === 'reassign') setRetryIntent(confirmation.input)

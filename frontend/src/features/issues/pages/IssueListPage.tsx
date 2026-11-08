@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
-import { SelectField } from '@/components/SelectField'
+import { Plus } from 'lucide-react'
+import { Button, Input, NativeSelect } from '@/components/atoms'
+import { EmptyState, FormField } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { issueStatuses, issuePriorities, type IssueQuery } from '../api'
 import { useIssues } from '../hooks'
 import { IssueBadges, IssueError } from '../IssuePresentation'
@@ -22,103 +23,136 @@ export function IssueListPage({ role }: { role: IssueRole }) {
   const pages = Math.min(10000, Math.max(1, Math.ceil((result.data?.total ?? 0) / query.limit)))
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-12">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="font-display text-4xl font-semibold">{view.title}</h1>
-        {role === 'CUSTOMER' && (
-          <Link
-            to="/customer/issues/report"
-            className="inline-flex min-h-11 items-center text-primary underline"
-          >
-            Báo sự cố mới
-          </Link>
-        )}
-      </div>
-      <div className="grid gap-4 rounded-lg border border-stone-300 bg-white p-6 sm:grid-cols-2 lg:grid-cols-5">
-        <TextField
-          label="Tìm theo tiêu đề"
-          value={query.keyword ?? ''}
-          maxLength={200}
-          onChange={(event) => update({ keyword: event.target.value })}
-        />
-        <TextField
-          label="Nhóm sự cố (chính xác)"
-          value={query.category ?? ''}
-          maxLength={100}
-          onChange={(event) => update({ category: event.target.value })}
-        />
-        <SelectField
-          label="Trạng thái"
-          value={query.status ?? ''}
-          options={[
-            { value: '', label: 'Tất cả' },
-            ...issueStatuses.map((value) => ({ value, label: statusLabels[value] })),
-          ]}
-          onChange={(event) =>
-            update({
-              status: (event.target.value || undefined) as IssueQuery['status'],
-            })
-          }
-        />
-        <SelectField
-          label="Mức ưu tiên"
-          value={query.priority ?? ''}
-          options={[
-            { value: '', label: 'Tất cả' },
-            ...issuePriorities.map((value) => ({ value, label: priorityLabels[value] })),
-          ]}
-          onChange={(event) =>
-            update({ priority: (event.target.value || undefined) as IssueQuery['priority'] })
-          }
-        />
-        <SelectField
-          label="Số dòng mỗi trang"
-          value={query.limit}
-          options={[20, 50, 100].map((value) => ({ value: String(value), label: String(value) }))}
-          onChange={(event) => update({ limit: Number(event.target.value) })}
-        />
-      </div>
+    <PageContainer className="space-y-6">
+      <PageHeader
+        title={view.title}
+        subtitle="Hỏng hóc do khách và nhân viên báo."
+        actions={
+          role === 'CUSTOMER' && (
+            <Button asChild className="rounded-full">
+              <Link to="/customer/issues/report">
+                <Plus className="size-4" />
+                Báo sự cố mới
+              </Link>
+            </Button>
+          )
+        }
+      />
+      <Panel>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <FormField label="Tìm theo tiêu đề" htmlFor="issue-keyword">
+            <Input
+              id="issue-keyword"
+              value={query.keyword ?? ''}
+              maxLength={200}
+              onChange={(event) => update({ keyword: event.target.value })}
+            />
+          </FormField>
+          <FormField label="Nhóm sự cố (chính xác)" htmlFor="issue-category">
+            <Input
+              id="issue-category"
+              value={query.category ?? ''}
+              maxLength={100}
+              onChange={(event) => update({ category: event.target.value })}
+            />
+          </FormField>
+          <FormField label="Trạng thái" htmlFor="issue-status">
+            <NativeSelect
+              id="issue-status"
+              value={query.status ?? ''}
+              onChange={(event) =>
+                update({ status: (event.target.value || undefined) as IssueQuery['status'] })
+              }
+            >
+              <option value="">Tất cả</option>
+              {issueStatuses.map((value) => (
+                <option key={value} value={value}>
+                  {statusLabels[value]}
+                </option>
+              ))}
+            </NativeSelect>
+          </FormField>
+          <FormField label="Mức ưu tiên" htmlFor="issue-priority">
+            <NativeSelect
+              id="issue-priority"
+              value={query.priority ?? ''}
+              onChange={(event) =>
+                update({ priority: (event.target.value || undefined) as IssueQuery['priority'] })
+              }
+            >
+              <option value="">Tất cả</option>
+              {issuePriorities.map((value) => (
+                <option key={value} value={value}>
+                  {priorityLabels[value]}
+                </option>
+              ))}
+            </NativeSelect>
+          </FormField>
+          <FormField label="Số dòng mỗi trang" htmlFor="issue-limit">
+            <NativeSelect
+              id="issue-limit"
+              value={query.limit}
+              onChange={(event) => update({ limit: Number(event.target.value) })}
+            >
+              {[20, 50, 100].map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </NativeSelect>
+          </FormField>
+        </div>
+      </Panel>
       {result.isPending ? (
         <p role="status">Đang tải danh sách sự cố…</p>
       ) : result.isError ? (
         <IssueError error={result.error} retry={() => void result.refetch()} />
       ) : (
         <>
-          <p role="status" className="text-sm text-stone-700">
+          <p role="status" className="text-sm text-muted-foreground">
             {result.data.total} sự cố · Trang {query.page}/{pages}
           </p>
           {result.data.items.length === 0 ? (
-            <p className="rounded-lg border border-stone-300 p-6">Không có sự cố phù hợp.</p>
+            <EmptyState title="Không có sự cố phù hợp." />
           ) : (
             <ul className="space-y-4">
               {result.data.items.map((issue) => (
-                <li
-                  key={issue.id}
-                  className="space-y-3 rounded-lg border border-stone-300 bg-white p-6"
-                >
-                  <Link
-                    to={`${view.path}/${encodeURIComponent(issue.id)}`}
-                    className="block min-h-11 break-words text-lg font-semibold text-primary underline"
+                <li key={issue.id} className="card-soft min-w-0 space-y-3 p-5">
+                  <Button
+                    asChild
+                    variant="link"
+                    className="h-auto min-h-11 max-w-full justify-start p-0 text-left whitespace-normal"
                   >
-                    {issue.title}
-                  </Link>
+                    <Link
+                      to={`${view.path}/${encodeURIComponent(issue.id)}`}
+                      className="break-words text-sm font-semibold"
+                    >
+                      {issue.title}
+                    </Link>
+                  </Button>
                   <IssueBadges issue={issue} />
-                  <p className="break-words text-sm text-stone-700">Nhóm sự cố: {issue.category}</p>
-                  <p className="text-sm text-stone-700">Ngày báo: {issueDate(issue.reportedAt)}</p>
+                  <p className="break-words text-sm text-muted-foreground">
+                    Nhóm sự cố: {issue.category}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Ngày báo: {issueDate(issue.reportedAt)}
+                  </p>
                 </li>
               ))}
             </ul>
           )}
-          <nav aria-label="Phân trang sự cố" className="flex flex-wrap gap-4">
+          <nav aria-label="Phân trang sự cố" className="flex flex-wrap gap-2">
             <Button
-              variant="secondary"
+              variant="outline"
+              className="rounded-full"
               disabled={query.page <= 1}
               onClick={() => setQuery((old) => ({ ...old, page: old.page - 1 }))}
             >
               Trang trước
             </Button>
             <Button
-              variant="secondary"
+              variant="outline"
+              className="rounded-full"
               disabled={query.page >= pages}
               onClick={() => setQuery((old) => ({ ...old, page: old.page + 1 }))}
             >
@@ -127,6 +161,6 @@ export function IssueListPage({ role }: { role: IssueRole }) {
           </nav>
         </>
       )}
-    </section>
+    </PageContainer>
   )
 }

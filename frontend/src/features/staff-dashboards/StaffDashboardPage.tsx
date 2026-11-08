@@ -1,11 +1,21 @@
+import { isAxiosError } from 'axios'
 import { Link } from 'react-router'
+import { Badge, Button, Skeleton } from '@/components/atoms'
+import { Alert, StatCard } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
-import { TaskError, TaskPriorityBadge, TaskStatusBadge } from '@/features/tasks/TaskPresentation'
-import { taskDate } from '@/features/tasks/presentation'
-import { Button } from '@/components/Button'
+import { taskDate, taskStatuses } from '@/features/tasks/presentation'
+import { getErrorMessage } from '@/lib/api-client'
 import { DashboardReadError, summarizeDashboard } from './api'
-import { Alert } from '@/components/Alert'
 import { useStaffDashboard } from './hooks'
+
+const priorityLabels: Record<string, string> = {
+  LOW: 'Thấp',
+  NORMAL: 'Bình thường',
+  MEDIUM: 'Trung bình',
+  HIGH: 'Cao',
+  URGENT: 'Khẩn cấp',
+}
 
 const linkClass =
   'inline-flex min-h-11 items-center rounded-md text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary'
@@ -26,137 +36,161 @@ function StaffDashboardPage({ operations }: { operations: boolean }) {
         ] as const)
       : []
 
+  const errorStatus = isAxiosError(query.error) ? query.error.response?.status : undefined
+  const denied = errorStatus === 403 || errorStatus === 404
+  const errorMessage =
+    query.error instanceof DashboardReadError
+      ? query.error.message
+      : errorStatus === 403
+        ? 'Bạn không có quyền xem công việc này.'
+        : errorStatus === 404
+          ? 'Không tìm thấy công việc hoặc công việc không được giao cho bạn.'
+          : getErrorMessage(query.error)
+
   return (
-    <section
-      className="mx-auto max-w-container space-y-6 px-4 py-8 sm:px-6"
-      aria-labelledby="dashboard-title"
-    >
-      <header className="space-y-3">
-        <h1 id="dashboard-title" className="font-display text-4xl font-semibold text-pearl-900">
-          {operations ? 'Bảng điều khiển vận hành' : 'Bảng điều khiển dịch vụ'}
-        </h1>
-        <p className="break-words text-stone-700">
-          Xin chào {me?.fullName}.{' '}
-          {operations
-            ? 'Theo dõi công việc vận hành, bảo trì và xử lý sự cố được giao cho bạn.'
-            : 'Theo dõi công việc phục vụ và xử lý sự cố được giao cho bạn.'}
-        </p>
-        <nav aria-label="Thao tác nhân viên" className="flex flex-wrap gap-x-6 gap-y-2">
-          <Link className={linkClass} to="/staff/tasks">
-            Xem công việc được giao
-          </Link>
-          {!operations && me?.role === 'SERVICE_STAFF' && (
-            <Link className={linkClass} to="/staff/service-history">
-              Lịch sử thực hiện dịch vụ
-            </Link>
-          )}
-          <Link className={linkClass} to="/profile">
-            Cập nhật hồ sơ
-          </Link>
-        </nav>
-      </header>
-      {query.isPending ? (
-        <p role="status" className="text-stone-700">
-          Đang tải bảng điều khiển…
-        </p>
-      ) : query.isError && query.error instanceof DashboardReadError ? (
-        <div className="space-y-3">
-          <Alert tone="danger">{query.error.message}</Alert>
-          <Button
-            variant="secondary"
-            disabled={query.isFetching}
-            onClick={() => void query.refetch()}
-          >
-            Thử lại
-          </Button>
-        </div>
-      ) : query.isError ? (
-        <TaskError
-          error={query.error}
-          retry={() => void query.refetch()}
-          fetching={query.isFetching}
+    <PageContainer>
+      <section aria-label={operations ? 'Bảng điều khiển vận hành' : 'Bảng điều khiển dịch vụ'}>
+        <PageHeader
+          eyebrow={operations ? 'Vận hành' : 'Đội dịch vụ'}
+          title={operations ? 'Bảng điều khiển vận hành' : 'Bảng điều khiển dịch vụ'}
+          subtitle={`Xin chào ${me?.fullName}. ${
+            operations
+              ? 'Theo dõi công việc vận hành, bảo trì và xử lý sự cố được giao cho bạn.'
+              : 'Theo dõi công việc phục vụ và xử lý sự cố được giao cho bạn.'
+          }`}
         />
-      ) : data && summary ? (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-stone-700">
-              Đọc lúc: {taskDate(new Date(data.readAt).toISOString())}
-            </p>
-            <Button
-              variant="secondary"
-              disabled={query.isFetching}
-              onClick={() => void query.refetch()}
-            >
-              Làm mới
-            </Button>
-          </div>
-          {query.isFetching && <p role="status">Đang làm mới bảng điều khiển…</p>}
-          <dl
-            aria-label="Thống kê công việc của bạn"
-            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5"
-          >
-            {metrics.map(([label, value]) => (
-              <div
-                key={label}
-                className="min-w-0 rounded-lg border border-stone-300 bg-surface p-6"
-              >
-                <dt className="text-sm font-medium text-stone-700">{label}</dt>
-                <dd className="mt-2 text-3xl font-semibold text-pearl-900">
-                  {value.toLocaleString('vi-VN')}
-                </dd>
-              </div>
-            ))}
-          </dl>
-          <p className="text-sm text-stone-700">
-            Tổng từng trạng thái do máy chủ trả về, chỉ gồm công việc của bạn; hoàn thành tính mọi
-            thời điểm. Sắp đến hạn: công việc đã giao hoặc đang thực hiện, có hạn từ lúc đọc đến 24
-            giờ sau (gồm hai mốc). Quá hạn: hạn trước lúc đọc; không gồm công việc hoàn thành hoặc
-            chưa có hạn.
-          </p>
-          <section aria-labelledby="priority-title" className="space-y-4">
-            <h2 id="priority-title" className="text-xl font-semibold">
-              {operations ? 'Công việc vận hành cần chú ý' : 'Công việc dịch vụ cần chú ý'}
-            </h2>
-            <p className="text-sm text-stone-700">
-              Tối đa 5 công việc từ toàn bộ công việc đang hoạt động: hạn sớm trước, chưa có hạn
-              sau; cùng hạn xếp theo chuỗi ưu tiên đã biết, rồi chuỗi khác và mã công việc.
-            </p>
-            {summary.priority.length === 0 ? (
-              <p>Bạn chưa có công việc đang hoạt động.</p>
-            ) : (
-              <ol className="space-y-3">
-                {summary.priority.map((task) => (
-                  <li
-                    key={task.id}
-                    className="min-w-0 space-y-3 rounded-lg border border-stone-300 bg-surface p-4 sm:p-6"
-                  >
-                    <Link
-                      className={`${linkClass} max-w-full break-words font-semibold`}
-                      to={`/staff/tasks/${encodeURIComponent(task.id)}`}
-                    >
-                      {task.title}
-                    </Link>
-                    <div className="flex flex-wrap gap-2">
-                      <TaskStatusBadge status={task.status} />
-                      <TaskPriorityBadge priority={task.priority} />
-                    </div>
-                    <p className="break-words text-sm text-stone-700">
-                      Hạn: {taskDate(task.dueAt)}
-                      {task.dueAt && Date.parse(task.dueAt) < data.readAt ? ' · Quá hạn' : ''}
-                    </p>
-                  </li>
-                ))}
-              </ol>
+        <div className="space-y-6">
+          <nav aria-label="Thao tác nhân viên" className="flex flex-wrap gap-x-6 gap-y-2">
+            <Link className={linkClass} to="/staff/tasks">
+              Xem công việc được giao
+            </Link>
+            {!operations && me?.role === 'SERVICE_STAFF' && (
+              <Link className={linkClass} to="/staff/service-history">
+                Lịch sử thực hiện dịch vụ
+              </Link>
             )}
-          </section>
-          <p className="text-sm text-stone-700">
-            Dữ liệu được đọc qua nhiều yêu cầu, không phải ảnh chụp đồng thời. Nếu phát hiện tổng
-            thay đổi, trùng hoặc thiếu trang, bảng tổng hợp sẽ báo lỗi thay vì hiển thị một phần.
-            Hãy làm mới sau khi cập nhật công việc.
-          </p>
-        </>
-      ) : null}
-    </section>
+            <Link className={linkClass} to="/profile">
+              Cập nhật hồ sơ
+            </Link>
+          </nav>
+          {query.isPending ? (
+            <div role="status" className="space-y-4 text-sm text-muted-foreground">
+              <p>Đang tải bảng điều khiển…</p>
+              <div
+                aria-hidden="true"
+                className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5"
+              >
+                {Array.from({ length: 5 }, (_, index) => (
+                  <Skeleton key={index} className="h-28 rounded-xl" />
+                ))}
+              </div>
+            </div>
+          ) : query.isError ? (
+            <div className="space-y-3">
+              <Alert tone="danger">{errorMessage}</Alert>
+              <Button
+                variant="secondary"
+                disabled={denied || query.isFetching}
+                onClick={() => void query.refetch()}
+              >
+                Thử lại
+              </Button>
+            </div>
+          ) : data && summary ? (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Đọc lúc: {taskDate(new Date(data.readAt).toISOString())}
+                </p>
+                <Button
+                  variant="secondary"
+                  disabled={query.isFetching}
+                  onClick={() => void query.refetch()}
+                >
+                  Làm mới
+                </Button>
+              </div>
+              {query.isFetching && <p role="status">Đang làm mới bảng điều khiển…</p>}
+              <dl
+                aria-label="Thống kê công việc của bạn"
+                className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5"
+              >
+                {metrics.map(([label, value]) => (
+                  <div key={label} className="min-w-0">
+                    <dt className="sr-only" aria-label={label} />
+                    <StatCard label={label} value={<dd>{value.toLocaleString('vi-VN')}</dd>} />
+                  </div>
+                ))}
+              </dl>
+              <p className="text-sm text-muted-foreground">
+                Tổng từng trạng thái do máy chủ trả về, chỉ gồm công việc của bạn; hoàn thành tính
+                mọi thời điểm. Sắp đến hạn: công việc đã giao hoặc đang thực hiện, có hạn từ lúc đọc
+                đến 24 giờ sau (gồm hai mốc). Quá hạn: hạn trước lúc đọc; không gồm công việc hoàn
+                thành hoặc chưa có hạn.
+              </p>
+              <Panel
+                title={operations ? 'Công việc vận hành cần chú ý' : 'Công việc dịch vụ cần chú ý'}
+              >
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Tối đa 5 công việc từ toàn bộ công việc đang hoạt động: hạn sớm trước, chưa có
+                    hạn sau; cùng hạn xếp theo chuỗi ưu tiên đã biết, rồi chuỗi khác và mã công
+                    việc.
+                  </p>
+                  {summary.priority.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Bạn chưa có công việc đang hoạt động.
+                    </p>
+                  ) : (
+                    <ol className="divide-y divide-border">
+                      {summary.priority.map((task) => (
+                        <li key={task.id} className="min-w-0 space-y-3 py-3 text-sm">
+                          <Link
+                            className={`${linkClass} max-w-full break-words font-semibold`}
+                            to={`/staff/tasks/${encodeURIComponent(task.id)}`}
+                          >
+                            {task.title}
+                          </Link>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge
+                              tone={
+                                task.status === 'COMPLETED'
+                                  ? 'success'
+                                  : task.status === 'IN_PROGRESS'
+                                    ? 'warning'
+                                    : 'info'
+                              }
+                            >
+                              {taskStatuses[task.status]}
+                            </Badge>
+                            <Badge
+                              tone={
+                                ['HIGH', 'URGENT'].includes(task.priority) ? 'danger' : 'neutral'
+                              }
+                            >
+                              Ưu tiên: {priorityLabels[task.priority] ?? task.priority}
+                            </Badge>
+                          </div>
+                          <p className="break-words text-sm text-muted-foreground">
+                            Hạn: {taskDate(task.dueAt)}
+                            {task.dueAt && Date.parse(task.dueAt) < data.readAt ? ' · Quá hạn' : ''}
+                          </p>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              </Panel>
+              <p className="text-sm text-muted-foreground">
+                Dữ liệu được đọc qua nhiều yêu cầu, không phải ảnh chụp đồng thời. Nếu phát hiện
+                tổng thay đổi, trùng hoặc thiếu trang, bảng tổng hợp sẽ báo lỗi thay vì hiển thị một
+                phần. Hãy làm mới sau khi cập nhật công việc.
+              </p>
+            </>
+          ) : null}
+        </div>
+      </section>
+    </PageContainer>
   )
 }
 

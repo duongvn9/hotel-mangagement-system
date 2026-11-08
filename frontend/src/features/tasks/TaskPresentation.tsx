@@ -1,7 +1,6 @@
 import { isAxiosError } from 'axios'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
+import { Badge, Button } from '@/components/atoms'
+import { Alert } from '@/components/molecules'
 import { getErrorMessage } from '@/lib/api-client'
 import type { TaskStatus } from './api'
 

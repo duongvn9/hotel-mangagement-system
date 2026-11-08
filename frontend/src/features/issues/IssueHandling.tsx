@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { isAxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button } from '@/components/Button'
-import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { Button, Input, NativeSelect } from '@/components/atoms'
+import { FormField } from '@/components/molecules'
+import { ConfirmationDialog } from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
 import {
   assignIssue,
@@ -41,6 +41,7 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
   const [due, setDue] = useState('')
   const [instructions, setInstructions] = useState('')
   const [error, setError] = useState('')
+  const [confirmationTrigger, setConfirmationTrigger] = useState<HTMLElement | null>(null)
   const [confirmation, setConfirmation] = useState<
     { kind: 'review'; input: ReviewIssueInput } | { kind: 'assignment'; input: AssignmentInput }
   >()
@@ -156,21 +157,33 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
         {issue.status === 'PENDING_REVIEW' && (
           <>
             <h3 className="font-semibold">Xem xét sự cố</h3>
-            <SelectField
-              label="Nhóm xử lý"
-              value={category}
-              options={[
-                { value: '', label: 'Chọn nhóm xử lý' },
-                ...Object.entries(handlingLabels).map(([value, label]) => ({ value, label })),
-              ]}
-              onChange={(event) => setCategory(event.target.value as HandlingCategory)}
-            />
-            <SelectField
-              label="Ưu tiên xử lý"
-              value={priority}
-              options={issuePriorities.map((value) => ({ value, label: priorityLabels[value] }))}
-              onChange={(event) => setPriority(event.target.value as IssuePriority)}
-            />
+            <FormField label="Nhóm xử lý" htmlFor="handling-category">
+              <NativeSelect
+                id="handling-category"
+                value={category}
+                onChange={(event) => setCategory(event.target.value as HandlingCategory)}
+              >
+                <option value="">Chọn nhóm xử lý</option>
+                {Object.entries(handlingLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+            <FormField label="Ưu tiên xử lý" htmlFor="handling-priority">
+              <NativeSelect
+                id="handling-priority"
+                value={priority}
+                onChange={(event) => setPriority(event.target.value as IssuePriority)}
+              >
+                {issuePriorities.map((value) => (
+                  <option key={value} value={value}>
+                    {priorityLabels[value]}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
             <label className="flex min-h-11 items-center gap-3">
               <input
                 type="checkbox"
@@ -179,16 +192,25 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
               />
               Cần nhân viên xử lý
             </label>
-            <TextField
-              label="Ghi chú xem xét"
-              value={notes}
-              maxLength={2000}
-              onChange={(event) => setNotes(event.target.value)}
-            />
-            <p className="text-sm text-stone-700">
+            <FormField label="Ghi chú xem xét" htmlFor="handling-notes">
+              <Input
+                id="handling-notes"
+                value={notes}
+                maxLength={2000}
+                onChange={(event) => setNotes(event.target.value)}
+              />
+            </FormField>
+            <p className="text-sm text-muted-foreground">
               Không cần nhân viên: kết luận sự cố, không tạo công việc.
             </p>
-            <Button onClick={review}>Xem xét</Button>
+            <Button
+              onClick={(event) => {
+                setConfirmationTrigger(event.currentTarget)
+                review()
+              }}
+            >
+              Xem xét
+            </Button>
           </>
         )}
         {eligible && (
@@ -205,7 +227,13 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
                 <p className="break-words whitespace-pre-wrap">
                   Hướng dẫn đã lưu: {issue.assignmentInstructions ?? 'Không có'}
                 </p>
-                <Button onClick={assignment} disabled={!issue.assigneeId}>
+                <Button
+                  onClick={(event) => {
+                    setConfirmationTrigger(event.currentTarget)
+                    assignment()
+                  }}
+                  disabled={!issue.assigneeId}
+                >
                   Thử lại phân công
                 </Button>
               </>
@@ -226,36 +254,48 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
                 ) : users.length === 0 ? (
                   <p role="status">Không có nhân viên phù hợp đang hoạt động.</p>
                 ) : (
-                  <SelectField
-                    label="Nhân viên xử lý"
-                    value={assigneeId}
-                    options={[
-                      { value: '', label: 'Chọn nhân viên' },
-                      ...users.map((user) => ({
-                        value: user.id,
-                        label: `${user.displayName} — ${staffRoleLabels[user.role]}`,
-                      })),
-                    ]}
-                    onChange={(event) => setAssigneeId(event.target.value)}
-                  />
+                  <FormField label="Nhân viên xử lý" htmlFor="handling-assignee">
+                    <NativeSelect
+                      id="handling-assignee"
+                      value={assigneeId}
+                      onChange={(event) => setAssigneeId(event.target.value)}
+                    >
+                      <option value="">Chọn nhân viên</option>
+                      {users.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.displayName} — {staffRoleLabels[user.role]}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </FormField>
                 )}
-                <TextField
-                  label="Thời hạn xử lý"
-                  type="datetime-local"
-                  value={due}
-                  onChange={(event) => setDue(event.target.value)}
-                />
-                <p className="text-sm text-stone-700">
+                <FormField label="Thời hạn xử lý" htmlFor="handling-due">
+                  <Input
+                    id="handling-due"
+                    type="datetime-local"
+                    value={due}
+                    onChange={(event) => setDue(event.target.value)}
+                  />
+                </FormField>
+                <p className="text-sm text-muted-foreground">
                   Giờ địa phương của thiết bị ({Intl.DateTimeFormat().resolvedOptions().timeZone});
                   được chuyển sang ISO UTC khi gửi. Thời hạn không bắt buộc.
                 </p>
-                <TextField
-                  label="Hướng dẫn xử lý"
-                  value={instructions}
-                  maxLength={2000}
-                  onChange={(event) => setInstructions(event.target.value)}
-                />
-                <Button onClick={assignment} disabled={!assignees.isSuccess || users.length === 0}>
+                <FormField label="Hướng dẫn xử lý" htmlFor="handling-instructions">
+                  <Input
+                    id="handling-instructions"
+                    value={instructions}
+                    maxLength={2000}
+                    onChange={(event) => setInstructions(event.target.value)}
+                  />
+                </FormField>
+                <Button
+                  onClick={(event) => {
+                    setConfirmationTrigger(event.currentTarget)
+                    assignment()
+                  }}
+                  disabled={!assignees.isSuccess || users.length === 0}
+                >
                   Phân công
                 </Button>
               </>
@@ -264,11 +304,11 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
         )}
       </fieldset>
       {confirmation && (
-        <section
-          role="dialog"
-          aria-modal="true"
-          aria-label="Xác nhận xử lý sự cố"
-          className="space-y-4 rounded-lg border border-stone-300 bg-cream-50 p-4"
+        <ConfirmationDialog
+          label="Xác nhận xử lý sự cố"
+          returnFocus={confirmationTrigger}
+          busy={mutation.isPending}
+          onCancel={() => setConfirmation(undefined)}
         >
           <h3 className="font-semibold">Xác nhận xử lý sự cố</h3>
           {confirmation.kind === 'review' ? (
@@ -306,7 +346,7 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
           >
             Hủy
           </Button>
-        </section>
+        </ConfirmationDialog>
       )}
       {mutation.isPending && <p role="status">Đang lưu và cập nhật trạng thái…</p>}
     </section>

@@ -153,6 +153,69 @@ test('literal filters, pagination and resets use the live list contract', async 
   )
 })
 
+test.each(views)(
+  '%s list uses the shared workspace presentation without losing long content',
+  async (role, path) => {
+    const title = 'Sự cố dài '.repeat(60)
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: { items: [{ ...detail, title }], total: 1, page: 1, limit: 20 },
+    })
+    page(path, role)
+    const link = await screen.findByRole('link', { name: title.trim() })
+    expect(link.closest('li')).toHaveClass('card-soft')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveClass('text-2xl')
+    expect(screen.getByLabelText('Tìm theo tiêu đề')).toHaveAttribute('maxlength', '200')
+    expect(screen.getByRole('navigation', { name: 'Phân trang sự cố' })).toBeInTheDocument()
+  },
+)
+
+test.each(views)(
+  '%s detail uses workspace panels and protects internal audit data',
+  async (role, path) => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: {
+        ...detail,
+        reviewedBy: 'internal-reviewer',
+        reviewNotes: 'internal-review-note',
+        closureConclusion: 'internal-conclusion',
+        closedBy: 'internal-closer',
+        assigneeId: 'internal-assignee',
+        linkedTasksAvailable: true,
+        linkedTasks: [
+          {
+            id: 'task-private',
+            title: 'Internal task',
+            taskType: 'ISSUE_RESOLUTION',
+            priority: 'NORMAL',
+            status: 'COMPLETED',
+            assigneeId: 'internal-worker',
+            assignedAt: detail.reportedAt,
+          },
+        ],
+      },
+    })
+    page(`${path}/${detail.id}`, role)
+    const title = await screen.findByRole('heading', { level: 2, name: detail.title })
+    expect(title.closest('section')).toHaveClass('card-soft')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveClass('text-2xl')
+    for (const value of [
+      'internal-reviewer',
+      'internal-review-note',
+      'internal-conclusion',
+      'internal-closer',
+    ]) {
+      if (role === 'CUSTOMER') expect(screen.queryByText(value)).not.toBeInTheDocument()
+      else expect(screen.getByText(value)).toBeInTheDocument()
+    }
+    if (role === 'CUSTOMER') {
+      expect(
+        screen.queryByText(/Internal task|internal-worker|task-private/),
+      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Theo dõi xử lý sự cố' })).not.toBeInTheDocument()
+    }
+  },
+)
+
 test('API whitelists query fields and bounds pagination without actor parameters', async () => {
   const get = vi.spyOn(api, 'get').mockResolvedValue({ data: {} })
   await listIssues({

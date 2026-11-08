@@ -52,6 +52,18 @@ async function select() {
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+    configurable: true,
+    value: function (this: HTMLDialogElement) {
+      this.setAttribute('open', '')
+    },
+  })
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+    configurable: true,
+    value: function (this: HTMLDialogElement) {
+      this.removeAttribute('open')
+    },
+  })
   current = { ...base }
   vi.mocked(api.get).mockImplementation(async (url) => ({
     data: url.toString().endsWith('/assignees')
@@ -74,6 +86,26 @@ beforeEach(() => {
 })
 
 describe('assignment', () => {
+  it('uses atomic assignment controls and a focus-safe confirmation without sending on cancel', async () => {
+    page()
+    await screen.findByRole('option', { name: 'Nhân viên thật' })
+    expect(
+      screen.getByRole('heading', { name: 'Phân công dịch vụ' }).closest('.card-soft'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Nhân viên dịch vụ')).toHaveClass('border-input')
+    expect(screen.getByLabelText(/Hạn hoàn thành/)).toHaveClass('border-input')
+    fireEvent.change(screen.getByLabelText('Nhân viên dịch vụ'), { target: { value: 'staff-1' } })
+    const trigger = screen.getByRole('button', { name: 'Xem lại phân công' })
+    trigger.focus()
+    fireEvent.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: 'Xác nhận phân công' })
+    expect(dialog.tagName).toBe('DIALOG')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Quay lại' }))
+    await waitFor(() => expect(trigger).toHaveFocus())
+    expect(api.post).not.toHaveBeenCalled()
+    expect(api.patch).not.toHaveBeenCalled()
+  })
+
   it.each(['PENDING_REVIEW', 'ACCEPTING', 'REJECTED'] as const)(
     'cannot assign %s',
     async (reviewStatus) => {
@@ -264,6 +296,92 @@ describe('assignment', () => {
 })
 
 describe('history', () => {
+  it('uses the workspace header, atomic filters and a shared panel for history results', async () => {
+    page('/staff/service-history', 'SERVICE_STAFF')
+    await screen.findByRole('link', { name: 'Giặt ủi' })
+    expect(screen.getByRole('heading', { name: 'Lịch sử thực hiện dịch vụ' })).toHaveClass(
+      'text-2xl',
+      'font-semibold',
+    )
+    expect(screen.getByLabelText('Từ khóa dịch vụ')).toHaveClass('border-input')
+    expect(screen.getByLabelText('Hoàn thành từ ngày')).toHaveClass('border-input')
+    expect(screen.getByLabelText('Hoàn thành đến ngày')).toHaveClass('border-input')
+    expect(screen.getByLabelText('Số kết quả mỗi trang')).toHaveClass('border-input')
+    expect(screen.getByRole('link', { name: 'Giặt ủi' }).closest('.card-soft')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tìm kiếm' })).toHaveClass('rounded-full')
+  })
+
+  it('rejects reversed dates without requesting and keeps list links and pagination boundaries', async () => {
+    page('/staff/service-history', 'SERVICE_STAFF')
+    const link = await screen.findByRole('link', { name: 'Giặt ủi' })
+    expect(link).toHaveAttribute('href', '/staff/service-history/order-1')
+    expect(screen.getByRole('link', { name: 'Bảng điều khiển dịch vụ' })).toHaveAttribute(
+      'href',
+      '/staff/service/dashboard',
+    )
+    expect(screen.getByRole('button', { name: 'Trang trước' })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Hoàn thành từ ngày'), {
+      target: { value: '2026-10-25' },
+    })
+    fireEvent.change(screen.getByLabelText('Hoàn thành đến ngày'), {
+      target: { value: '2026-10-24' },
+    })
+    const calls = vi.mocked(api.get).mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: 'Tìm kiếm' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Khoảng ngày hoàn thành không hợp lệ.')
+    expect(api.get).toHaveBeenCalledTimes(calls)
+    fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Trang sau' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Trang trước' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Trang trước' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Trang trước' })).toBeDisabled())
+    expect(api.post).not.toHaveBeenCalled()
+    expect(api.patch).not.toHaveBeenCalled()
+  })
+
+  it.each([403, 404, 503])('retries list error %s without exposing results', async (status) => {
+    vi.mocked(api.get).mockRejectedValueOnce({ isAxiosError: true, response: { status } })
+    page('/staff/service-history', 'SERVICE_STAFF')
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(
+      status === 403
+        ? 'không có quyền'
+        : status === 404
+          ? 'không thuộc tài khoản'
+          : 'Không thể tải',
+    )
+    expect(screen.queryByRole('link', { name: 'Giặt ủi' })).not.toBeInTheDocument()
+    fireEvent.click(within(alert).getByRole('button', { name: 'Thử lại' }))
+    await screen.findByRole('link', { name: 'Giặt ủi' })
+  })
+
+  it('disables list controls during fetching and retains long results as plain text', async () => {
+    let finish!: (value: unknown) => void
+    vi.mocked(api.get).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    page('/staff/service-history', 'SERVICE_STAFF')
+    expect(screen.getByRole('button', { name: 'Tìm kiếm' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Tải lại lịch sử' })).toBeDisabled()
+    const name = 'Dịch vụ dài '.repeat(40)
+    await act(async () =>
+      finish({
+        data: {
+          items: [{ ...history, service: { ...history.service, name } }],
+          total: 1,
+          page: 1,
+          limit: 20,
+        },
+      }),
+    )
+    expect(await screen.findByRole('link', { name: name.trim() })).toBeInTheDocument()
+    expect(screen.getByText(task.workResult)).toBeInTheDocument()
+    expect(document.querySelector('img')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Trang sau' })).toBeDisabled()
+  })
+
   it.each(['OPERATIONS_STAFF', 'MANAGER', 'RECEPTIONIST', 'CUSTOMER', 'CUSTOM_ROLE', null])(
     'denies %s despite identical permissions',
     async (role) => {
@@ -341,6 +459,59 @@ describe('history', () => {
     )
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
+  it('shows detail loading, retries a forbidden response and preserves optional due date and fallback result', async () => {
+    let finish!: (value: unknown) => void
+    vi.mocked(api.get).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    const view = page('/staff/service-history/order-1', 'SERVICE_STAFF')
+    expect(screen.getByRole('status')).toHaveTextContent('Đang tải lịch sử dịch vụ…')
+    const dueAt = '2026-10-24T13:00:00Z'
+    await act(async () =>
+      finish({ data: { ...history, task: { ...task, dueAt, workResult: '' } } }),
+    )
+    await screen.findByText('Không có kết quả ghi nhận.')
+    expect(screen.getByText(/Hạn hoàn thành:/)).toBeInTheDocument()
+    expect(screen.getByText(/Số lượng: 2 kg/)).toBeInTheDocument()
+    expect(screen.getByText(/Thời gian yêu cầu:/)).toBeInTheDocument()
+    expect(screen.getByText(/Đã giao:/)).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    view.unmount()
+    vi.mocked(api.get).mockRejectedValueOnce({ isAxiosError: true, response: { status: 403 } })
+    page('/staff/service-history/order-1', 'SERVICE_STAFF')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Bạn không có quyền xem lịch sử dịch vụ.',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    await screen.findByText(task.workResult)
+    expect(screen.queryByText(/Hạn hoàn thành:/)).not.toBeInTheDocument()
+    expect(api.post).not.toHaveBeenCalled()
+    expect(api.patch).not.toHaveBeenCalled()
+  })
+
+  it('uses the workspace detail header and shared result panel with responsive plain-text content', async () => {
+    const result = 'Kết quả dài\n'.repeat(50)
+    vi.mocked(api.get).mockResolvedValueOnce({
+      data: { ...history, task: { ...task, workResult: result } },
+    })
+    page('/staff/service-history/order-1', 'SERVICE_STAFF')
+    const source = await screen.findByRole('link', { name: 'Xem công việc nguồn của tôi' })
+    expect(screen.getByRole('heading', { name: 'Chi tiết lịch sử dịch vụ' })).toHaveClass(
+      'text-2xl',
+      'font-semibold',
+    )
+    expect(source.closest('.card-soft')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Kết quả thực hiện' })).toHaveClass(
+      'text-sm',
+      'font-semibold',
+    )
+    expect(screen.getByText(result.trim().replace(/\s+/g, ' '))).toHaveClass('whitespace-pre-wrap')
+    expect(source).toHaveClass('focus-visible:ring-ring')
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
   it('loads detail by order ID, renders result as text, links own source and stays read only', async () => {
     page('/staff/service-history/order-1', 'SERVICE_STAFF')
     expect(await screen.findByText(task.workResult)).toBeInTheDocument()

@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { isAxiosError } from 'axios'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Button } from '@/components/Button'
-import { ConfirmationDialog } from '@/components/ConfirmationDialog'
+import { Button, Textarea } from '@/components/atoms'
+import { FormField } from '@/components/molecules'
+import { ConfirmationDialog } from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
 import { reportUnableToResolve, type AssignedTask, type TaskResolution } from './api'
 import { taskDate } from './presentation'
@@ -18,7 +19,7 @@ export function ResolutionHistory({ task }: { task: TaskResolution }) {
       {task.overdue && <p className="text-danger">Quá hạn</p>}
       {task.instructions && <p className="whitespace-pre-wrap">Hướng dẫn: {task.instructions}</p>}
       {task.blockerHistory?.map((report) => (
-        <div key={report.id} className="border-l-2 border-stone-300 pl-3">
+        <div key={report.id} className="border-l-2 border-border pl-3">
           <p className="whitespace-pre-wrap">Lý do không thể xử lý: {report.reason}</p>
           <p>
             Người báo: {report.reportedBy} · {taskDate(report.reportedAt)}
@@ -81,7 +82,7 @@ export function UnableToResolve({ task, fetching }: { task: AssignedTask; fetchi
   if (!eligible) return null
   const busy = mutation.isPending || fetching
   return (
-    <section className="space-y-4 border-t border-stone-300 pt-6" aria-label="Báo không thể xử lý">
+    <section className="space-y-4 border-t border-border pt-6" aria-label="Báo không thể xử lý">
       <h3 className="font-semibold">Báo không thể xử lý</h3>
       <p>Giữ nguyên tiến độ công việc, không hủy. Lễ tân sẽ xem xét báo cáo.</p>
       {mutation.isSuccess && <p role="status">Đã báo không thể xử lý. Chờ lễ tân xem xét.</p>}
@@ -113,20 +114,18 @@ export function UnableToResolve({ task, fetching }: { task: AssignedTask; fetchi
           setConfirmation(reason.trim())
         }}
       >
-        <label htmlFor="unable-reason" className="block font-semibold">
-          Lý do không thể xử lý (bắt buộc)
-        </label>
-        <textarea
-          id="unable-reason"
-          rows={4}
-          value={reason}
-          required
-          disabled={busy || Boolean(confirmation) || status === 403 || status === 404}
-          aria-invalid={Boolean(validation)}
-          aria-describedby="unable-reason-help"
-          onChange={(event) => setReason(event.target.value)}
-          className="w-full rounded border border-stone-300 p-3"
-        />
+        <FormField label="Lý do không thể xử lý (bắt buộc)" htmlFor="unable-reason">
+          <Textarea
+            id="unable-reason"
+            rows={4}
+            value={reason}
+            required
+            disabled={busy || Boolean(confirmation) || status === 403 || status === 404}
+            aria-invalid={Boolean(validation)}
+            aria-describedby="unable-reason-help"
+            onChange={(event) => setReason(event.target.value)}
+          />
+        </FormField>
         <p id="unable-reason-help">Tối đa 2000 ký tự sau khi bỏ khoảng trắng đầu và cuối.</p>
         {validation && (
           <p role="alert" className="text-danger">
@@ -149,7 +148,7 @@ export function UnableToResolve({ task, fetching }: { task: AssignedTask; fetchi
         >
           <p className="whitespace-pre-wrap">{confirmation}</p>
           <Button
-            loading={mutation.isPending}
+            aria-busy={mutation.isPending}
             disabled={busy}
             onClick={() => mutation.mutate(confirmation)}
           >
