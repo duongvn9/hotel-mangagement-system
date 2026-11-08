@@ -15,6 +15,7 @@ import { TaskSupervisionModule } from '../task-supervision/task-supervision.modu
 import { ReportsModule } from '../reports/reports.module.js';
 import { DashboardController } from './dashboard.controller.js';
 import { DashboardClock, DashboardService } from './dashboard.service.js';
+import { DashboardInsightsService } from './dashboard-insights.service.js';
 import { ReceptionDashboardController } from './reception-dashboard.controller.js';
 import { ReceptionDashboardService } from './reception-dashboard.service.js';
 @Module({
@@ -30,7 +31,12 @@ import { ReceptionDashboardService } from './reception-dashboard.service.js';
     ]),
   ],
   controllers: [DashboardController, ReceptionDashboardController],
-  providers: [DashboardService, DashboardClock, ReceptionDashboardService],
+  providers: [
+    DashboardService,
+    DashboardClock,
+    ReceptionDashboardService,
+    DashboardInsightsService,
+  ],
   exports: [DashboardService],
 })
 export class DashboardModule {}

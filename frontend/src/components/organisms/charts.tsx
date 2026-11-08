@@ -23,7 +23,13 @@ const tip = {
   },
 }
 
-export function RevenueArea({ series }: { series: { d: string; revenue: number }[] }) {
+export function RevenueArea({
+  series,
+  animate = true,
+}: {
+  series: { d: string; revenue: number }[]
+  animate?: boolean
+}) {
   return (
     <ResponsiveContainer width="100%" height={260}>
       <AreaChart data={series}>
@@ -41,6 +47,7 @@ export function RevenueArea({ series }: { series: { d: string; revenue: number }
           formatter={(v) => new Intl.NumberFormat('vi-VN').format(Number(v)) + ' ₫'}
         />
         <Area
+          isAnimationActive={animate}
           type="monotone"
           dataKey="revenue"
           stroke="var(--primary)"

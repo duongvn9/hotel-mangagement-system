@@ -34,6 +34,20 @@ The hard rules live in [`CLAUDE.md`](CLAUDE.md) (identical to [`AGENTS.md`](AGEN
 - [ ] **No hard-coded values:** no hex, no arbitrary `px`; no imports of `components/ui/` or of the deprecated flat components (`components/*.tsx`).
 - [ ] **Behavior unchanged:** hooks, API calls, routes, permissions and existing tests are untouched (any assertion edit is listed in the PR with its reason).
 
+### 2.1 WDP301-185 verification
+
+- [x] Structure, tokens, type, spacing and icons checked against the prototype.
+- [x] Loading, empty, error, disabled and long-content states checked.
+- [x] Required responsive widths checked; no horizontal overflow.
+- [x] Legacy-class, forbidden-import and hard-coded-color scans clean.
+- [x] Existing behavior preserved, with user-authorized additive backend insights.
+
+The detailed checklist and evidence are in
+[`validation/ui/WDP301-185.md`](validation/ui/WDP301-185.md). The existing accessible heading
+and refresh announcement remain. The user approved keeping the original summaries and
+shortcuts in a collapsed section below the prototype dashboard. Screenshot export and Jira
+completion remain subject to delivery approval recorded in that report.
+
 ## 3. Prototype to app map
 
 Fill the "Jira task" column when you pick up a task. App paths come from `frontend/src/features/*/routes.tsx` and `frontend/src/pages/`.
@@ -59,7 +73,7 @@ Fill the "Jira task" column when you pick up a task. App paths come from `fronte
 | `app.room-board.tsx` | `/reception/rooms` | `features/booking/pages/RoomStatusBoardPage.tsx` | |
 | `app.reconciliation.tsx` | `/manager/payments/reconciliation` | `features/booking/pages/ReconciliationPage.tsx` | |
 | `app.reception.tsx` | `/reception/dashboard` | `features/dashboard/pages/ReceptionDashboardPage.tsx` | |
-| `app.dashboard.tsx` | `/manager/dashboard` | `features/dashboard/pages/ManagerDashboardPage.tsx` | |
+| `app.dashboard.tsx` | `/manager/dashboard` | `features/dashboard/pages/ManagerDashboardPage.tsx` | WDP301-185 |
 | `app.revenue.tsx` | `/manager/reports/revenue` | `features/reports/pages/RevenueReportPage.tsx` | |
 | `app.operations-report.tsx` | `/manager/reports/operational` | `features/reports/pages/OperationalReportPage.tsx` | |
 | `app.accounts.tsx` | `/manager/accounts` | `features/accounts/pages/AccountsPage.tsx` | WDP301-154 |

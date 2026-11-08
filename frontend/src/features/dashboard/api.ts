@@ -2,7 +2,30 @@ import { api } from '@/lib/api-client'
 import type { RoomStatus } from '@/features/rooms/api'
 export type DashboardBlock<T> =
   ({ available: true } & T) | { available: false; reason: 'error' | 'not_available' }
+export interface DashboardInsights {
+  revenue: DashboardBlock<{
+    from: string
+    to: string
+    amount: number
+    changePercent: number | null
+    series: { day: string; revenue: number }[]
+  }>
+  bookings: DashboardBlock<{
+    activeCount: number
+    recent: {
+      id: string
+      code: string
+      guestName: string | null
+      rooms: string[]
+      checkIn: string
+      checkOut: string
+      status: string
+    }[]
+  }>
+  feedback: DashboardBlock<{ count: number; average: number | null }>
+}
 export interface ManagerDashboard {
+  insights?: DashboardInsights
   generatedAt: string
   tasks: DashboardBlock<{
     counts: { assigned: number; inProgress: number; completed: number }
