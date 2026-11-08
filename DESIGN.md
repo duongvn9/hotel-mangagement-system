@@ -177,7 +177,7 @@ components/
 | `Panel` | A card with a title and an `action` |
 | `DataTable<T>` | `rows`, `columns`, `search`, `filters`, `pageSize`, `onRowClick`, `toolbar`, `empty`, `loading` — client-side pagination, search, filtering, empty and loading states. Optional **server mode** props leave the default markup/behavior untouched when absent: a controlled search box (`searchValue`, `onSearchChange`, `onSearchSubmit`, `searchPlaceholder`, `searchAriaLabel`) submitting on Enter, a left toolbar slot (`toolbarStart`), and controlled pagination (`page`, `totalPages`, `onPageChange`) |
 | `Dialog*`, `AlertDialog*`, `Sheet*` | Dialog, confirmation, drawer |
-| `RevenueArea`, `SimpleBars`, `Donut` | Charts (recharts) using the `--chart-*` colors |
+| `RevenueArea`, `SimpleBars`, `Donut` | Charts (recharts) using the `--chart-*` colors. `RevenueArea` accepts `animate` (default `true`); live dashboard snapshots use `false` so an entrance-animation clip cannot hide new data |
 | `SearchBar` | The room search bar; `initial`, `onSearch({ from, to, guests })`, `ariaLabel`, `compact` |
 | `HeroBanner` | `image`, `imageAlt`, `title`, `eyebrow`, `tall`, `children` |
 | `RoomCard` | `image`, `name`, `description`, `amenities`, `price`, `priceNote`, `meta`, `actions`, `selected`, `onToggle`, `toggleLabel` |
@@ -198,6 +198,11 @@ The templates are presentational only. `WorkspaceLayout` is wired through `layou
 ---
 
 ## 8. Screen patterns
+
+The Manager dashboard composes the existing atomic catalog through
+`features/dashboard/components/ManagerInsights.tsx`. This feature-only component maps read-only
+dashboard insights to `StatCard`, `Panel`, `RevenueArea`, `Donut`, `StatusBadge` and `EmptyState`.
+It accepts data through props and does not fetch data or own authentication.
 
 | Screen | Composition |
 |---|---|
