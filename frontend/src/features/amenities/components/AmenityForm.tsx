@@ -1,9 +1,23 @@
-﻿import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
+﻿import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { Alert } from '@/components/Alert'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
+import { Button, Input, Label, Textarea } from '@/components/atoms'
+import { Alert, FormField } from '@/components/molecules'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { ImagePicker } from '@/components/ImagePicker'
 import { assetUrl } from '@/lib/asset-url'
@@ -26,55 +40,68 @@ export function AmenityEditor({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const dialog = useRef<HTMLDialogElement>(null)
+  const dialog = useRef<HTMLDivElement>(null)
+  const previous = useRef(
+    document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  )
   const query = useQuery({
     queryKey: ['amenity', id],
     queryFn: () => getAmenity(id!),
     enabled: id !== null,
   })
-  useLayoutEffect(() => {
-    const element = dialog.current!
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    element.showModal()
-    return () => {
-      element.close()
-      previous?.focus()
-    }
-  }, [])
+  const busy = () => Boolean(dialog.current?.querySelector('[aria-busy="true"]'))
   return (
-    <dialog
-      ref={dialog}
-      aria-labelledby="amenity-form-title"
-      className="m-auto max-h-[92dvh] w-[calc(100%_-_2rem)] max-w-2xl overflow-y-auto rounded-2xl border border-stone-300 bg-white p-5 font-body text-pearl-900 shadow-xl backdrop:bg-pearl-900/60 sm:p-8"
-      onCancel={(event) => {
-        event.preventDefault()
-        if (!dialog.current?.querySelector('[aria-busy="true"]')) onClose()
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy()) onClose()
       }}
     >
-      <h2 id="amenity-form-title" className="mb-6 font-display text-3xl">
-        {id ? 'Sửa tiện nghi' : 'Thêm tiện nghi'}
-      </h2>
-      {id && query.isPending ? (
-        <>
-          <p role="status">Đang tải chi tiết…</p>
-          <Button onClick={onClose}>Đóng</Button>
-        </>
-      ) : id && query.isError ? (
-        <>
-          <Alert tone="danger">{getErrorMessage(query.error)}</Alert>
-          <Button onClick={() => void query.refetch()}>Thử lại</Button>
-          <Button onClick={onClose}>Đóng</Button>
-        </>
-      ) : (
-        <AmenityForm
-          initial={id ? query.data : undefined}
-          onClose={onClose}
-          onSuccess={onSuccess}
-        />
-      )}
-    </dialog>
+      <DialogContent
+        ref={dialog}
+        aria-describedby={undefined}
+        className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => {
+          if (busy() || document.querySelector('dialog[open]')) event.preventDefault()
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          previous.current?.focus()
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{id ? 'Sửa tiện nghi' : 'Thêm tiện nghi'}</DialogTitle>
+        </DialogHeader>
+        {id && query.isPending ? (
+          <>
+            <p role="status">Đang tải chi tiết…</p>
+            <Button type="button" onClick={onClose}>
+              Đóng
+            </Button>
+          </>
+        ) : id && query.isError ? (
+          <>
+            <Alert tone="danger">{getErrorMessage(query.error)}</Alert>
+            <Button type="button" onClick={() => void query.refetch()}>
+              Thử lại
+            </Button>
+            <Button type="button" onClick={onClose}>
+              Đóng
+            </Button>
+          </>
+        ) : (
+          <AmenityForm
+            initial={id ? query.data : undefined}
+            onClose={onClose}
+            onSuccess={onSuccess}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
+
 const deactivate =
   'Tiện nghi được giữ lại cùng các gắn kết hiện có, nhưng không thể gắn mới. Bạn muốn ngừng tiện nghi này?'
 const reactivate = 'Bạn muốn kích hoạt lại tiện nghi này để có thể gắn mới vào loại phòng?'
@@ -112,6 +139,7 @@ export function AmenityForm({
   const [search, setSearch] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [general, setGeneral] = useState('')
+  const [confirmationMode, setConfirmationMode] = useState<'toggle' | 'save' | null>(null)
   const choices = [
     ...(options.data ?? []).map((type) => ({ ...type, isActive: true })),
     ...(initial?.roomTypes.filter(
@@ -174,13 +202,16 @@ export function AmenityForm({
       locked.current = false
     },
   })
-  function save(event?: FormEvent, toggle = false) {
+  function save(event?: FormEvent, toggle = false, confirmed = false) {
     event?.preventDefault()
     if (locked.current) return
     setGeneral('')
     setErrors({})
     if (toggle && initial) {
-      if (!window.confirm(initial.isActive ? deactivate : reactivate)) return
+      if (!confirmed) {
+        setConfirmationMode('toggle')
+        return
+      }
       locked.current = true
       mutation.mutate({ isActive: !initial.isActive })
       return
@@ -198,8 +229,10 @@ export function AmenityForm({
       focusError()
       return
     }
-    if (initial && active !== initial.isActive && !window.confirm(active ? reactivate : deactivate))
+    if (initial && active !== initial.isActive && !confirmed) {
+      setConfirmationMode('save')
       return
+    }
     const input: AmenityInput = {
       ...(images.length || originalImages.length || files.length ? { images } : {}),
       name: name.trim(),
@@ -228,47 +261,41 @@ export function AmenityForm({
     locked.current = true
     mutation.mutate(changes)
   }
+  const confirmingActive = confirmationMode === 'toggle' ? !initial?.isActive : active
   return (
     <form
       ref={form}
       noValidate
       onSubmit={save}
       aria-busy={mutation.isPending}
-      className="space-y-4"
+      className="space-y-4 py-2"
     >
       {general && <Alert tone="danger">{general}</Alert>}
-      <fieldset disabled={mutation.isPending} className="min-w-0 space-y-5">
-        <TextField
-          label="Tên tiện nghi"
-          required
-          maxLength={100}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          error={errors.name}
-        />
-        <div>
-          <label
-            htmlFor={id + '-description'}
-            className="mb-2 block text-xs font-semibold tracking-wider text-stone-700 uppercase"
-          >
-            Mô tả
-          </label>
-          <textarea
+      <fieldset disabled={mutation.isPending} className="grid min-w-0 grid-cols-1 gap-4">
+        <FormField label="Tên tiện nghi" htmlFor={id + '-name'} required error={errors.name}>
+          <Input
+            id={id + '-name'}
+            required
+            autoFocus
+            maxLength={100}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            aria-invalid={errors.name ? true : undefined}
+            aria-describedby={errors.name ? id + '-name-error' : undefined}
+          />
+        </FormField>
+        <FormField label="Mô tả" htmlFor={id + '-description'} error={errors.description}>
+          <Textarea
             id={id + '-description'}
             rows={3}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             aria-invalid={errors.description ? true : undefined}
             aria-describedby={errors.description ? id + '-description-error' : undefined}
-            className="min-h-11 w-full rounded border border-stone-300 bg-white px-4 py-3 text-sm hover:border-stone-500 focus:border-primary disabled:bg-stone-200"
           />
-          {errors.description && (
-            <p id={id + '-description-error'} className="text-xs text-danger">
-              {errors.description}
-            </p>
-          )}
-        </div>
+        </FormField>
         <ImagePicker
+          appearance="prototype"
           name={name}
           images={[
             ...images.map((path, index) => ({ src: assetUrl(path)!, label: `Ảnh ${index + 1}` })),
@@ -310,15 +337,17 @@ export function AmenityForm({
           tabIndex={-1}
           aria-invalid={errors.roomTypeIds ? true : undefined}
           aria-describedby={errors.roomTypeIds ? id + '-types-error' : undefined}
-          className="space-y-3 rounded-xl border border-stone-300 p-4"
+          className="min-w-0 space-y-3 rounded-xl border border-border p-4 focus-visible:outline-2 focus-visible:outline-ring"
         >
           <legend className="text-sm font-semibold">Gắn vào Room Type</legend>
-          <TextField
-            label="Tìm loại phòng"
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
+          <FormField label="Tìm loại phòng" htmlFor={id + '-search'}>
+            <Input
+              id={id + '-search'}
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </FormField>
           {options.isPending && <p role="status">Đang tải loại phòng…</p>}
           {options.isError && (
             <>
@@ -334,20 +363,21 @@ export function AmenityForm({
           )}
           {options.isSuccess && !choices.length && <p>Chưa có Room Type nào</p>}
           {!active && (
-            <p className="text-sm text-stone-700">
+            <p className="text-sm text-muted-foreground">
               Tiện nghi đang ngừng: bật lại để gắn thêm loại phòng. Bạn vẫn có thể gỡ gắn kết cũ.
             </p>
           )}
-          <p className="text-sm text-stone-700">Đã chọn {selected.length} loại phòng</p>
+          <p className="text-sm text-muted-foreground">Đã chọn {selected.length} loại phòng</p>
           <div className="grid max-h-64 grid-cols-1 gap-x-4 overflow-y-auto sm:grid-cols-2">
             {choices
               .filter((type) =>
                 type.name.toLocaleLowerCase('vi').includes(search.trim().toLocaleLowerCase('vi')),
               )
               .map((type) => (
-                <label key={type.id} className="flex min-h-11 items-center gap-3 text-sm">
-                  <input
+                <Label key={type.id} className="flex min-h-11 min-w-0 items-center gap-3 text-sm">
+                  <Input
                     type="checkbox"
+                    className="size-4 shrink-0"
                     checked={selected.includes(type.id)}
                     disabled={
                       !selected.includes(type.id) &&
@@ -364,9 +394,11 @@ export function AmenityForm({
                       )
                     }
                   />
-                  {type.name}
-                  {type.isActive ? '' : ' (ngừng)'}
-                </label>
+                  <span className="min-w-0 break-words">
+                    {type.name}
+                    {type.isActive ? '' : ' (ngừng)'}
+                  </span>
+                </Label>
               ))}
             {choices.length > 0 &&
               !choices.some((type) =>
@@ -374,45 +406,80 @@ export function AmenityForm({
               ) && <p>Không có loại phòng khớp tìm kiếm.</p>}
           </div>
           {errors.roomTypeIds && (
-            <p id={id + '-types-error'} className="text-sm text-danger">
+            <p id={id + '-types-error'} role="alert" className="text-sm text-danger">
               {errors.roomTypeIds}
             </p>
           )}
         </fieldset>
-        <label className="flex min-h-11 items-center gap-3 text-sm">
-          <input
+        <Label className="flex min-h-11 items-center gap-3 text-sm">
+          <Input
             type="checkbox"
+            className="size-4 shrink-0"
             checked={active}
             onChange={(event) => setActive(event.target.checked)}
             aria-invalid={errors.isActive ? true : undefined}
             aria-describedby={errors.isActive ? id + '-active-error' : undefined}
           />
           Đang hoạt động
-        </label>
+        </Label>
         {errors.isActive && (
-          <p id={id + '-active-error'} className="text-xs text-danger">
+          <p id={id + '-active-error'} role="alert" className="text-xs text-danger">
             {errors.isActive}
           </p>
         )}
       </fieldset>
-      <div className="flex flex-wrap gap-3 border-t border-stone-300 pt-5">
-        <Button type="submit" loading={mutation.isPending}>
-          Lưu tiện nghi
+      <DialogFooter className="flex-wrap gap-2 pt-2 sm:space-x-0">
+        <Button type="button" variant="outline" disabled={mutation.isPending} onClick={onClose}>
+          Hủy
         </Button>
         {initial && (
           <Button
             type="button"
-            variant={initial.isActive ? 'danger' : 'secondary'}
+            variant={initial.isActive ? 'destructive' : 'outline'}
             disabled={mutation.isPending}
             onClick={() => save(undefined, true)}
           >
             {initial.isActive ? 'Ngừng tiện nghi' : 'Kích hoạt lại tiện nghi'}
           </Button>
         )}
-        <Button type="button" variant="secondary" disabled={mutation.isPending} onClick={onClose}>
-          Hủy
+        <Button
+          type="submit"
+          disabled={mutation.isPending}
+          aria-busy={mutation.isPending || undefined}
+        >
+          {mutation.isPending ? 'Đang xử lý…' : 'Lưu tiện nghi'}
         </Button>
-      </div>
+      </DialogFooter>
+      <AlertDialog
+        open={confirmationMode !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmationMode(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmingActive ? 'Kích hoạt lại tiện nghi?' : 'Ngừng tiện nghi?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmingActive ? reactivate : deactivate}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Giữ lại</AlertDialogCancel>
+            <AlertDialogAction
+              className={
+                confirmingActive
+                  ? undefined
+                  : 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+              }
+              onClick={() => save(undefined, confirmationMode === 'toggle', true)}
+            >
+              {confirmingActive ? 'Kích hoạt lại tiện nghi' : 'Ngừng tiện nghi'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   )
 }

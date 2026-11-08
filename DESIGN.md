@@ -192,6 +192,7 @@ components/
 - `DataTable`: optional `paginationLabel` preserves a named navigation landmark for server-paged lists; omitted, the existing footer semantics stay unchanged.
 - `FormField`: an error has the stable ID `${htmlFor}-error`, which the child control can reference with `aria-describedby`.
 - The retained legacy `RoomGallery` helper accepts `compact` for a nonshrinking `size-10 rounded-lg` catalog thumbnail while preserving the full image viewer. The default gallery remains unchanged.
+- The retained `ImagePicker` helper accepts `appearance="prototype"` for semantic surface and border tokens inside migrated forms. Its default legacy appearance, single-image selection, removal, and image viewer remain unchanged.
 
 ### Templates — `@/components/templates`
 
