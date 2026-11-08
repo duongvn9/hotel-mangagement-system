@@ -59,6 +59,7 @@ interface DataTableProps<T extends { id: string }> {
   searchMaxLength?: number
   paginationDisabled?: boolean
   paginationSummary?: ReactNode
+  paginationLabel?: string
 }
 
 const LOADING_ROWS = 4
@@ -87,6 +88,7 @@ export function DataTable<T extends { id: string }>({
   searchMaxLength,
   paginationDisabled = false,
   paginationSummary,
+  paginationLabel,
 }: DataTableProps<T>) {
   const [q, setQ] = useState('')
   const [f, setF] = useState<Record<string, string>>({})
@@ -249,7 +251,11 @@ export function DataTable<T extends { id: string }>({
           </div>
         )}
       </div>
-      <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
+      <div
+        role={paginationLabel ? 'navigation' : undefined}
+        aria-label={paginationLabel}
+        className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground"
+      >
         <span>{paginationSummary ?? (serverPaged ? null : `${filtered.length} kết quả`)}</span>
         <Pager
           page={displayPage}

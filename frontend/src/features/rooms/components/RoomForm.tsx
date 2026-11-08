@@ -1,10 +1,23 @@
-﻿import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
+﻿import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { Alert } from '@/components/Alert'
-import { Button } from '@/components/Button'
-import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { Button, Input, Label, NativeSelect, Textarea } from '@/components/atoms'
+import { Alert, FormField } from '@/components/molecules'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import {
   createRoom,
@@ -27,49 +40,61 @@ export function RoomEditor({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const dialog = useRef<HTMLDialogElement>(null)
+  const dialog = useRef<HTMLDivElement>(null)
+  const previous = useRef(
+    document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  )
   const query = useQuery({
     queryKey: ['room', id],
     queryFn: () => getRoom(id!),
     enabled: id !== null,
   })
-  useLayoutEffect(() => {
-    const element = dialog.current!
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    element.showModal()
-    return () => {
-      element.close()
-      previous?.focus()
-    }
-  }, [])
+  const busy = () => Boolean(dialog.current?.querySelector('[aria-busy="true"]'))
   return (
-    <dialog
-      ref={dialog}
-      aria-labelledby="room-form-title"
-      className="m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-xl overflow-y-auto rounded-lg border border-stone-300 bg-white p-6 font-body text-pearl-900 backdrop:bg-pearl-900/50"
-      onCancel={(event) => {
-        event.preventDefault()
-        if (!dialog.current?.querySelector('[aria-busy="true"]')) onClose()
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy()) onClose()
       }}
     >
-      <h2 id="room-form-title" className="mb-6 font-display text-3xl">
-        {id ? 'Sửa phòng' : 'Thêm phòng'}
-      </h2>
-      {id && query.isPending ? (
-        <>
-          <p role="status">Đang tải chi tiết…</p>
-          <Button onClick={onClose}>Đóng</Button>
-        </>
-      ) : id && query.isError ? (
-        <>
-          <Alert tone="danger">{getErrorMessage(query.error)}</Alert>
-          <Button onClick={() => void query.refetch()}>Thử lại</Button>
-          <Button onClick={onClose}>Đóng</Button>
-        </>
-      ) : (
-        <RoomForm initial={id ? query.data : undefined} onClose={onClose} onSuccess={onSuccess} />
-      )}
-    </dialog>
+      <DialogContent
+        ref={dialog}
+        aria-describedby={undefined}
+        className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => {
+          if (busy()) event.preventDefault()
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          previous.current?.focus()
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{id ? 'Sửa phòng' : 'Thêm phòng'}</DialogTitle>
+        </DialogHeader>
+        {id && query.isPending ? (
+          <>
+            <p role="status">Đang tải chi tiết…</p>
+            <Button type="button" onClick={onClose}>
+              Đóng
+            </Button>
+          </>
+        ) : id && query.isError ? (
+          <>
+            <Alert tone="danger">{getErrorMessage(query.error)}</Alert>
+            <Button type="button" onClick={() => void query.refetch()}>
+              Thử lại
+            </Button>
+            <Button type="button" onClick={onClose}>
+              Đóng
+            </Button>
+          </>
+        ) : (
+          <RoomForm initial={id ? query.data : undefined} onClose={onClose} onSuccess={onSuccess} />
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -99,6 +124,7 @@ export function RoomForm({
   const [active, setActive] = useState(initial?.isActive ?? true)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [general, setGeneral] = useState('')
+  const [confirmationToggle, setConfirmationToggle] = useState<boolean | null>(null)
   const focusError = () =>
     window.setTimeout(
       () => form.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
@@ -144,7 +170,7 @@ export function RoomForm({
       locked.current = false
     },
   })
-  function save(event?: FormEvent, toggle = false) {
+  function save(event?: FormEvent, toggle = false, confirmed = false) {
     event?.preventDefault()
     if (locked.current) return
     setGeneral('')
@@ -161,7 +187,10 @@ export function RoomForm({
     // Deactivation alone must remain possible, even with stale/invalid editable fields.
     if (toggle && initial?.isActive) {
       setErrors({})
-      if (!window.confirm(deactivateMessage)) return
+      if (!confirmed) {
+        setConfirmationToggle(true)
+        return
+      }
       locked.current = true
       mutation.mutate({ isActive: false })
       return
@@ -171,12 +200,10 @@ export function RoomForm({
       focusError()
       return
     }
-    if (
-      initial &&
-      nextActive !== initial.isActive &&
-      !window.confirm(nextActive ? reactivateMessage : deactivateMessage)
-    )
+    if (initial && nextActive !== initial.isActive && !confirmed) {
+      setConfirmationToggle(toggle)
       return
+    }
     const input: RoomInput = {
       roomNumber: roomNumber.trim(),
       floor: Number(floor),
@@ -213,48 +240,63 @@ export function RoomForm({
         ]
       : []),
   ]
+  const confirmingActive = confirmationToggle ? !initial?.isActive : active
   return (
     <form
       ref={form}
       noValidate
       onSubmit={save}
       aria-busy={mutation.isPending}
-      className="space-y-4"
+      className="space-y-4 py-2"
     >
       {general && <Alert tone="danger">{general}</Alert>}
-      <fieldset disabled={mutation.isPending} className="space-y-4">
-        <TextField
-          label="Số phòng"
-          required
-          value={roomNumber}
-          onChange={(event) => setRoomNumber(event.target.value)}
-          error={errors.roomNumber}
-        />
-        <TextField
-          label="Tầng"
-          type="number"
-          step={1}
-          required
-          value={floor}
-          onChange={(event) => setFloor(event.target.value)}
-          error={errors.floor}
-        />
-        <div>
-          <SelectField
-            label="Loại phòng của phòng"
+      <fieldset disabled={mutation.isPending} className="grid min-w-0 grid-cols-1 gap-4">
+        <FormField label="Số phòng" htmlFor="room-number" required error={errors.roomNumber}>
+          <Input
+            id="room-number"
+            autoFocus
             required
-            value={roomType}
-            options={choices}
-            disabled={options.isPending || options.isError}
-            aria-invalid={errors.roomType ? true : undefined}
-            aria-describedby={errors.roomType ? 'room-type-error' : undefined}
-            onChange={(event) => setRoomType(event.target.value)}
+            value={roomNumber}
+            onChange={(event) => setRoomNumber(event.target.value)}
+            aria-invalid={errors.roomNumber ? true : undefined}
+            aria-describedby={errors.roomNumber ? 'room-number-error' : undefined}
           />
-          {errors.roomType && (
-            <p id="room-type-error" className="mt-1 text-xs text-danger">
-              {errors.roomType}
-            </p>
-          )}
+        </FormField>
+        <FormField label="Tầng" htmlFor="room-floor" required error={errors.floor}>
+          <Input
+            id="room-floor"
+            type="number"
+            step={1}
+            required
+            value={floor}
+            onChange={(event) => setFloor(event.target.value)}
+            aria-invalid={errors.floor ? true : undefined}
+            aria-describedby={errors.floor ? 'room-floor-error' : undefined}
+          />
+        </FormField>
+        <div className="min-w-0 space-y-2">
+          <FormField
+            label="Loại phòng của phòng"
+            htmlFor="room-type"
+            required
+            error={errors.roomType}
+          >
+            <NativeSelect
+              id="room-type"
+              required
+              value={roomType}
+              disabled={options.isPending || options.isError}
+              aria-invalid={errors.roomType ? true : undefined}
+              aria-describedby={errors.roomType ? 'room-type-error' : undefined}
+              onChange={(event) => setRoomType(event.target.value)}
+            >
+              {choices.map((choice) => (
+                <option key={choice.value} value={choice.value}>
+                  {choice.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </FormField>
           {options.isPending && <p role="status">Đang tải loại phòng khả dụng…</p>}
           {options.isError && (
             <>
@@ -271,13 +313,16 @@ export function RoomForm({
           {options.isSuccess && !options.data.length && (
             <Alert tone="warning">
               Chưa có loại phòng hoạt động.{' '}
-              <a className="underline" href="/manager/room-types">
+              <a
+                className="underline focus-visible:outline-2 focus-visible:outline-ring"
+                href="/manager/room-types"
+              >
                 Quản lý loại phòng
               </a>
             </Alert>
           )}
           {initial?.roomType?.isActive === false && (
-            <p className="text-sm text-stone-700">
+            <p className="text-sm text-muted-foreground">
               Loại phòng hiện tại đã ngừng; chọn loại phòng hoạt động để kích hoạt lại.
             </p>
           )}
@@ -287,84 +332,106 @@ export function RoomForm({
             </Alert>
           )}
         </div>
-        <div>
-          <SelectField
-            label="Trạng thái vận hành của phòng"
+        <FormField
+          label="Trạng thái vận hành của phòng"
+          htmlFor="room-status"
+          error={errors.status}
+        >
+          <NativeSelect
+            id="room-status"
             value={status}
-            options={ROOM_STATUSES.map((value) => ({
-              value,
-              label: ROOM_STATUS_DISPLAY[value].label,
-            }))}
             aria-invalid={errors.status ? true : undefined}
             aria-describedby={errors.status ? 'room-status-error' : undefined}
             onChange={(event) => setStatus(event.target.value as RoomStatus)}
-          />
-          {errors.status && (
-            <p id="room-status-error" className="mt-1 text-xs text-danger">
-              {errors.status}
-            </p>
-          )}
-        </div>
-        <div>
-          <label
-            htmlFor="room-notes"
-            className="mb-2 block text-xs font-semibold tracking-wider text-stone-700 uppercase"
           >
-            Ghi chú
-          </label>
-          <textarea
+            {ROOM_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {ROOM_STATUS_DISPLAY[value].label}
+              </option>
+            ))}
+          </NativeSelect>
+        </FormField>
+        <FormField label="Ghi chú" htmlFor="room-notes" error={errors.notes}>
+          <Textarea
             id="room-notes"
             rows={3}
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
             aria-invalid={errors.notes ? true : undefined}
             aria-describedby={errors.notes ? 'room-notes-error' : undefined}
-            className="min-h-11 w-full rounded border border-stone-300 bg-white px-4 py-3 text-sm hover:border-stone-500 focus:border-primary disabled:bg-stone-200"
           />
-          {errors.notes && (
-            <p id="room-notes-error" className="text-xs text-danger">
-              {errors.notes}
+        </FormField>
+        <div>
+          <Label className="flex min-h-11 items-center gap-3 text-sm">
+            <Input
+              type="checkbox"
+              className="size-4 shrink-0"
+              checked={active}
+              onChange={(event) => setActive(event.target.checked)}
+              aria-invalid={errors.isActive ? true : undefined}
+              aria-describedby={errors.isActive ? 'room-active-error' : undefined}
+            />
+            Đang hoạt động
+          </Label>
+          {errors.isActive && (
+            <p id="room-active-error" role="alert" className="text-xs text-danger">
+              {errors.isActive}
             </p>
           )}
         </div>
-        <label className="flex min-h-11 items-center gap-3 text-sm">
-          <input
-            type="checkbox"
-            checked={active}
-            onChange={(event) => setActive(event.target.checked)}
-            aria-invalid={errors.isActive ? true : undefined}
-            aria-describedby={errors.isActive ? 'room-active-error' : undefined}
-          />
-          Đang hoạt động
-        </label>
-        {errors.isActive && (
-          <p id="room-active-error" className="text-xs text-danger">
-            {errors.isActive}
-          </p>
-        )}
       </fieldset>
-      <div className="flex flex-wrap gap-3">
+      <DialogFooter className="flex-wrap gap-2 pt-2 sm:space-x-0">
+        <Button type="button" variant="outline" disabled={mutation.isPending} onClick={onClose}>
+          Hủy
+        </Button>
         <Button
           type="submit"
-          loading={mutation.isPending}
-          disabled={!initial && !options.data?.length}
+          disabled={mutation.isPending || (!initial && !options.data?.length)}
+          aria-busy={mutation.isPending || undefined}
         >
-          Lưu phòng
+          {mutation.isPending ? 'Đang xử lý…' : 'Lưu phòng'}
         </Button>
         {initial && (
           <Button
             type="button"
-            variant={initial.isActive ? 'danger' : 'secondary'}
+            variant={initial.isActive ? 'destructive' : 'outline'}
             disabled={mutation.isPending}
             onClick={() => save(undefined, true)}
           >
             {initial.isActive ? 'Ngừng nhận đặt phòng' : 'Kích hoạt lại phòng'}
           </Button>
         )}
-        <Button type="button" variant="secondary" disabled={mutation.isPending} onClick={onClose}>
-          Hủy
-        </Button>
-      </div>
+      </DialogFooter>
+      <AlertDialog
+        open={confirmationToggle !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmationToggle(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmingActive ? 'Kích hoạt lại phòng?' : 'Ngừng nhận đặt phòng?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmingActive ? reactivateMessage : deactivateMessage}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Giữ lại</AlertDialogCancel>
+            <AlertDialogAction
+              className={
+                confirmingActive
+                  ? undefined
+                  : 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+              }
+              onClick={() => save(undefined, confirmationToggle === true, true)}
+            >
+              {confirmingActive ? 'Kích hoạt lại phòng' : 'Ngừng nhận đặt phòng'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   )
 }

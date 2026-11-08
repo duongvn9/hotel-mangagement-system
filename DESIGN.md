@@ -189,6 +189,7 @@ components/
 
 - `DataTable`: optional `caption` names the table; `Column.rowHeader` renders a scoped row heading. `scrollLabel` names the keyboard-focusable scroll region. `searchMaxLength` keeps the controlled search limit. `paginationSummary` displays the server total and `paginationDisabled` locks both navigation buttons during a request. Default client behavior is unchanged.
 - `Pager`: optional `disabled` locks navigation without changing its current-page display.
+- `DataTable`: optional `paginationLabel` preserves a named navigation landmark for server-paged lists; omitted, the existing footer semantics stay unchanged.
 - `FormField`: an error has the stable ID `${htmlFor}-error`, which the child control can reference with `aria-describedby`.
 - The retained legacy `RoomGallery` helper accepts `compact` for a nonshrinking `size-10 rounded-lg` catalog thumbnail while preserving the full image viewer. The default gallery remains unchanged.
 

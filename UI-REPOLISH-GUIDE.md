@@ -60,6 +60,18 @@ The user approved preserving the existing images, amenities, status filter, adul
 Evidence, runner options, approved differences, and limitations are recorded in
 [`validation/ui/WDP301-186.md`](validation/ui/WDP301-186.md).
 
+### 2.3 WDP301-187 verification
+
+The user approved retaining notes, activity filtering, deactivation/reactivation, room-type warnings, the existing floor validation, and all operational statuses in the prototype presentation. The price column and deletion are excluded. Screenshots remain local as requested.
+
+- [x] Page header, table, form, tokens, typography, spacing, and icons compared with the prototype.
+- [x] Required widths (1440, 768, and 375 pixels), long content, empty, error, and loading states checked.
+- [x] Keyboard access, Escape dismissal, focus restoration, and existing mutation semantics checked.
+- [x] Final frontend checks and forbidden-pattern scans completed.
+
+Evidence, approved differences, test assertion changes, and limitations are recorded in
+[`validation/ui/WDP301-187.md`](validation/ui/WDP301-187.md).
+
 ## 3. Prototype to app map
 
 Fill the "Jira task" column when you pick up a task. App paths come from `frontend/src/features/*/routes.tsx` and `frontend/src/pages/`.
@@ -90,7 +102,7 @@ Fill the "Jira task" column when you pick up a task. App paths come from `fronte
 | `app.operations-report.tsx` | `/manager/reports/operational` | `features/reports/pages/OperationalReportPage.tsx` | |
 | `app.accounts.tsx` | `/manager/accounts` | `features/accounts/pages/AccountsPage.tsx` | WDP301-154 |
 | `app.roles.tsx` | `/manager/roles` | `features/roles/pages/RolesPage.tsx` | WDP301-155 |
-| `app.rooms.tsx` | `/manager/rooms` | `features/rooms/pages/RoomsPage.tsx` | |
+| `app.rooms.tsx` | `/manager/rooms` | `features/rooms/pages/RoomsPage.tsx` | WDP301-187 |
 | `app.room-types.tsx` | `/manager/room-types` | `features/room-types/pages/RoomTypesPage.tsx` | WDP301-186 |
 | `app.amenities.tsx` | `/manager/amenities` | `features/amenities/pages/AmenitiesPage.tsx` | |
 | `app.services.tsx` | `/manager/services` | `features/services/pages/ServicesPage.tsx` | |

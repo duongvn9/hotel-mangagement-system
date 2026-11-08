@@ -18,6 +18,7 @@ describe('DataTable server accessibility', () => {
         onPageChange={() => {}}
         paginationDisabled
         paginationSummary="21 kết quả"
+        paginationLabel="Phân trang danh sách"
       />,
     )
     expect(screen.getByRole('table', { name: 'Danh sách' })).toBeInTheDocument()
@@ -30,5 +31,8 @@ describe('DataTable server accessibility', () => {
     expect(screen.getByRole('button', { name: 'Trang trước' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Trang sau' })).toBeDisabled()
     expect(screen.getByText('21 kết quả')).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Phân trang danh sách' })).toHaveTextContent(
+      'Trang 2 / 3',
+    )
   })
 })
