@@ -268,6 +268,18 @@ export async function listBookings(params: BookingListParams): Promise<BookingLi
   return (await api.get<BookingListPage>('/bookings', { params })).data
 }
 
+/** Số đơn lễ tân cần chú ý: quá hạn và sắp tới hạn nhận/trả phòng. */
+export interface BookingAttention {
+  overdueCheckOut: number
+  overdueCheckIn: number
+  dueCheckOut: number
+  dueCheckIn: number
+}
+
+export async function getBookingAttention(): Promise<BookingAttention> {
+  return (await api.get<BookingAttention>('/bookings/attention')).data
+}
+
 export interface InvoiceTotals {
   roomTotal: number
   serviceTotal: number

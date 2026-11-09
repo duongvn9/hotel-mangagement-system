@@ -1,14 +1,16 @@
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { Pencil, UserPlus } from 'lucide-react'
 import { Badge, Button, Input, NativeSelect, StatusBadge } from '@/components/atoms'
 import { Alert, FormField } from '@/components/molecules'
 import { PageContainer, PageHeader, Panel } from '@/components/organisms'
+import { BookingAttentionAlert } from '../components/BookingAttentionAlert'
 import { getErrorMessage } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { BOOKING_STATUS_DISPLAY, type BookingListParams } from '../api'
+import { ATTENTION_META, classifyAttention } from '../attention'
 import { useBookingList } from '../hooks'
-import { formatDate, money } from '../utils'
+import { formatDate, money, todayISO } from '../utils'
 
 const PAGE_SIZE = 20
 
@@ -52,6 +54,19 @@ export function BookingListPage() {
   const list = useBookingList(params)
   const totalPages = Math.max(1, Math.ceil((list.data?.total ?? 0) / PAGE_SIZE))
 
+  // Đánh dấu đơn cần xử lý và đưa chúng lên đầu trang (quá hạn trước, rồi tới hạn hôm nay).
+  const today = todayISO()
+  const rows = useMemo(() => {
+    const items = list.data?.items ?? []
+    return items
+      .map((booking) => ({ booking, attention: classifyAttention(booking, today) }))
+      .sort(
+        (a, b) =>
+          (a.attention ? ATTENTION_META[a.attention].priority : 99) -
+          (b.attention ? ATTENTION_META[b.attention].priority : 99),
+      )
+  }, [list.data?.items, today])
+
   function applyFilters(event: FormEvent) {
     event.preventDefault()
     setApplied({ ...draft, q: draft.q.trim() })
@@ -79,6 +94,8 @@ export function BookingListPage() {
           </Button>
         }
       />
+
+      <BookingAttentionAlert showLink={false} />
 
       <form
         onSubmit={applyFilters}
@@ -146,7 +163,7 @@ export function BookingListPage() {
         list.data && (
           <>
             <ul className="space-y-3">
-              {list.data.items.map((booking) => (
+              {rows.map(({ booking, attention }) => (
                 <li
                   key={booking.id}
                   className="card-soft flex items-center gap-3 p-5 transition-colors hover:bg-surface"
@@ -162,6 +179,11 @@ export function BookingListPage() {
                         </span>
                         <StatusBadge status={booking.status} />
                         {booking.source === 'FRONT_DESK' && <Badge tone="info">Tại quầy</Badge>}
+                        {attention && (
+                          <Badge tone={ATTENTION_META[attention].tone}>
+                            {ATTENTION_META[attention].label}
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-sm text-foreground">{booking.guestName}</p>
                       <p className="text-xs text-muted-foreground">
