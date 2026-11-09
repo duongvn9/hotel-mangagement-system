@@ -113,6 +113,20 @@ in the prototype form presentation. Prototype-only title and severity are exclud
 Evidence, approved differences, and limitations are recorded in
 [`validation/ui/WDP301-190.md`](validation/ui/WDP301-190.md).
 
+### 2.7 WDP301-191 verification
+
+The user approved keeping the existing filters, columns, data, and behavior; using
+the prototype table and Panel for detail; and omitting statistics unavailable in
+the API. The prototype does not provide a matching detail screen.
+
+- [x] Header, table, tokens, typography, spacing, and pagination compared with the prototype.
+- [x] List and detail checked at 1440, 768, and 375 pixels, including long content and empty, error, and loading states.
+- [x] Keyboard focus, filter-preserving navigation, validation, read-only behavior, and permissions checked.
+- [x] Required frontend checks and forbidden-pattern scans passed; existing assertions unchanged.
+
+Evidence, approved differences, and limitations are recorded in
+[`validation/ui/WDP301-191.md`](validation/ui/WDP301-191.md).
+
 ## 3. Prototype to app map
 
 Fill the "Jira task" column when you pick up a task. App paths come from `frontend/src/features/*/routes.tsx` and `frontend/src/pages/`.
@@ -155,7 +169,7 @@ Fill the "Jira task" column when you pick up a task. App paths come from `fronte
 | `app.operations.tsx` | `/staff/operations/dashboard` | `features/staff-dashboards/StaffDashboardPage.tsx` | |
 | `app.issues.tsx` | `/customer/issues`, `/staff/issues`, `/manager/issues` | `features/issues/pages/IssueListPage.tsx`, `IssueDetailPage.tsx` | |
 | `app.report-issue.tsx` | `/customer/issues/report`, `/operations/maintenance/report` | `features/issues/pages/ReportIssuePage.tsx`, `features/maintenance/pages/ReportFaultPage.tsx` | WDP301-190 (maintenance) |
-| `app.maintenance.tsx` | `/operations/maintenance/history` | `features/maintenance/pages/MaintenanceHistoryPage.tsx` | |
+| `app.maintenance.tsx` | `/operations/maintenance/history` | `features/maintenance/pages/MaintenanceHistoryPage.tsx`, `MaintenanceHistoryDetailPage.tsx` | WDP301-191 |
 | `app.feedback.tsx` | `/my-feedback` | `features/feedback/pages/MyFeedbackPage.tsx` | |
 | `app.feedback-review.tsx` | `/staff/feedback` | `features/feedback/pages/FeedbackPage.tsx` | WDP301-156 |
 | `app.tsx` (workspace shell) | every staff and customer account route | `layouts/WorkspaceShell.tsx` now renders `templates/WorkspaceLayout` for all roles (staff and `CUSTOMER`). `StaffNav.tsx` deleted. | Done |
