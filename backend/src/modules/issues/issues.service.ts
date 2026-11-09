@@ -52,6 +52,7 @@ export interface IssueResponse {
 
 export interface IssueRead extends Omit<IssueResponse, 'reportedAt'> {
   reportedAt: string;
+  roomNumber?: string | null;
   closedAt?: string;
   closedBy?: string;
   closureConclusion?: string;
@@ -197,6 +198,10 @@ export class IssuesService {
         .lean(),
       this.issues.countDocuments(filter),
     ]);
+    const roomIds = items.flatMap((issue) => (issue.room ? [issue.room] : []));
+    const roomNumbers = roomIds.length
+      ? await this.contexts.roomNumbers(roomIds)
+      : new Map<string, string>();
     return {
       items: await Promise.all(
         items.map(async (issue) => {
@@ -207,10 +212,13 @@ export class IssuesService {
                   String(issue.linkedTask),
                 )
               : null;
-          return this.readResponse(
-            task ? { ...issue, assignmentDueAt: task.dueAt } : issue,
-            user,
-          );
+          return {
+            ...this.readResponse(
+              task ? { ...issue, assignmentDueAt: task.dueAt } : issue,
+              user,
+            ),
+            roomNumber: roomNumbers.get(String(issue.room)) ?? null,
+          };
         }),
       ),
       total,
@@ -229,6 +237,9 @@ export class IssuesService {
       .select(this.readProjection)
       .lean();
     if (!issue) throw new NotFoundException('Issue not found');
+    const roomNumbers = issue.room
+      ? await this.contexts.roomNumbers([issue.room])
+      : new Map<string, string>();
     const staff = user.role !== Role.Customer;
     const task =
       staff && issue.linkedTask
@@ -239,6 +250,7 @@ export class IssuesService {
         task ? { ...issue, assignmentDueAt: task.dueAt } : issue,
         user,
       ),
+      roomNumber: roomNumbers.get(String(issue.room)) ?? null,
       linkedTasks:
         task && String(task._id) === String(issue.linkedTask)
           ? [

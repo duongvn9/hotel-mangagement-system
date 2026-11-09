@@ -3,7 +3,13 @@ import { Button } from '@/components/atoms'
 import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { useIssue } from '../hooks'
 import { IssueBadges, IssueError } from '../IssuePresentation'
-import { issueDate, issueViews, handlingLabels, type IssueRole } from '../presentation'
+import {
+  issueDate,
+  issueRoomLabel,
+  issueViews,
+  handlingLabels,
+  type IssueRole,
+} from '../presentation'
 import { IssueHandling } from '../IssueHandling'
 import { IssueClosure } from '../IssueClosure'
 import { IssueTaskRecovery } from '../IssueTaskRecovery'
@@ -121,7 +127,13 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
                 <dt className="font-semibold">Mã đặt phòng tham chiếu</dt>
                 <dd className="break-all">{issue.bookingId}</dd>
               </div>
-              {issue.roomId && (
+              {role === 'CUSTOMER' && (
+                <div>
+                  <dt className="font-semibold">Phòng</dt>
+                  <dd>{issueRoomLabel(issue)}</dd>
+                </div>
+              )}
+              {role !== 'CUSTOMER' && issue.roomId && (
                 <div>
                   <dt className="font-semibold">Mã phòng tham chiếu</dt>
                   <dd className="break-all">{issue.roomId}</dd>
@@ -135,8 +147,9 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
               </p>
             </div>
             <p className="text-sm text-muted-foreground">
-              Chỉ hiển thị mã tham chiếu; thông tin nguồn đặt phòng và phòng chưa được cung cấp
-              trong phạm vi truy cập này.
+              {role === 'CUSTOMER'
+                ? 'Thông tin nguồn đặt phòng chỉ hiển thị mã tham chiếu trong phạm vi truy cập này.'
+                : 'Chỉ hiển thị mã tham chiếu; thông tin nguồn đặt phòng và phòng chưa được cung cấp trong phạm vi truy cập này.'}
             </p>
             {role !== 'CUSTOMER' && issue.reviewNotes && (
               <div>
