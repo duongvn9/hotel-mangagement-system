@@ -84,6 +84,21 @@ The user approved keeping images, descriptions, room-type links and counts, acti
 Evidence, approved differences, assertion changes, and limitations are recorded in
 [`validation/ui/WDP301-188.md`](validation/ui/WDP301-188.md).
 
+### 2.5 WDP301-189 verification
+
+The user approved retaining service images, descriptions, units, billable/free settings,
+activity filtering, and deactivate/reactivate actions in the prototype table and dialog.
+Categories and deletion are excluded. Existing API contracts, validation, permissions,
+accessible names, search debounce, and server pagination remain.
+
+- [x] Page header, table, dialog, tokens, typography, spacing, and icons compared with the prototype.
+- [x] Required widths (1440, 768, and 375 pixels), long content, empty, error, and loading states checked.
+- [x] Existing behavior, keyboard focus restoration, image viewing, and confirmation messages checked.
+- [x] Final frontend checks and forbidden-pattern scans completed.
+
+Evidence, approved differences, assertion changes, and limitations are recorded in
+[`validation/ui/WDP301-189.md`](validation/ui/WDP301-189.md).
+
 ## 3. Prototype to app map
 
 Fill the "Jira task" column when you pick up a task. App paths come from `frontend/src/features/*/routes.tsx` and `frontend/src/pages/`.
@@ -117,7 +132,7 @@ Fill the "Jira task" column when you pick up a task. App paths come from `fronte
 | `app.rooms.tsx` | `/manager/rooms` | `features/rooms/pages/RoomsPage.tsx` | WDP301-187 |
 | `app.room-types.tsx` | `/manager/room-types` | `features/room-types/pages/RoomTypesPage.tsx` | WDP301-186 |
 | `app.amenities.tsx` | `/manager/amenities` | `features/amenities/pages/AmenitiesPage.tsx` | WDP301-188 |
-| `app.services.tsx` | `/manager/services` | `features/services/pages/ServicesPage.tsx` | |
+| `app.services.tsx` | `/manager/services` | `features/services/pages/ServicesPage.tsx` | WDP301-189 |
 | `app.task-queues.tsx` | `/manager/task-queues` (+ `/:taskId`) | `features/task-supervision/pages/TaskQueuesPage.tsx`, `TaskQueueDetailPage.tsx` | |
 | `app.tasks.tsx` | `/staff/tasks` (+ `/:id`) | `features/tasks/pages/AssignedTasksPage.tsx`, `AssignedTaskDetailPage.tsx` | |
 | `app.service-orders.tsx` | `/staff/service-orders`, `/staff/service-history` | `features/service-orders/pages/StaffServiceOrdersPage.tsx`, `ServiceHistoryPage.tsx` | |
