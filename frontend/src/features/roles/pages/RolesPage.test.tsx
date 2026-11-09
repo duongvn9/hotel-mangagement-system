@@ -32,7 +32,9 @@ function setup() {
   }))
   const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { ...CUSTOM, code: 'NEW_ROLE' } })
   const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: CUSTOM })
-  const put = vi.spyOn(api, 'put').mockResolvedValue({ data: CUSTOM })
+  const put = vi
+    .spyOn(api, 'put')
+    .mockResolvedValue({ data: { ...CUSTOM, permissions: ['task:execute'] } })
   renderWithAuth([{ path: '/', element: <RolesPage /> }], {
     auth: { me: ME, status: 'authenticated' },
   })
@@ -45,7 +47,7 @@ describe('RolesPage', () => {
   it('tạo vai trò, mã tự viết hoa', async () => {
     const { post } = setup()
     await screen.findByText('Buồng phòng')
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm mới' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm vai trò' }))
     const form = screen.getByRole('form', { name: 'Tạo vai trò' })
     fireEvent.change(within(form).getByLabelText(/Mã vai trò/), { target: { value: 'new_role' } })
     fireEvent.change(within(form).getByLabelText(/Tên vai trò/), { target: { value: 'Mới' } })
@@ -63,19 +65,34 @@ describe('RolesPage', () => {
     setup()
     fireEvent.click(await screen.findByRole('button', { name: 'Sửa MANAGER' }))
     const form = screen.getByRole('form', { name: 'Sửa vai trò' })
-    expect(within(form).queryByRole('checkbox')).toBeNull()
+    expect(within(form).queryByRole('switch')).toBeNull()
     expect(within(form).queryByLabelText(/Mã vai trò/)).toBeNull()
   })
 
-  it('gán quyền cho vai trò', async () => {
+  it('tick một ô trong ma trận lưu ngay cả danh sách mới', async () => {
     const { put } = setup()
-    fireEvent.click(await screen.findByRole('button', { name: 'Phân quyền HOUSEKEEPING' }))
-    const panel = await screen.findByRole('region', { name: 'Phân quyền HOUSEKEEPING' })
-    fireEvent.click(within(panel).getByLabelText(/Làm công việc được giao/))
-    fireEvent.click(within(panel).getByRole('button', { name: 'Lưu phân quyền' }))
-
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'HOUSEKEEPING task:execute' }))
     await waitFor(() =>
       expect(put).toHaveBeenCalledWith('/roles/r2/permissions', { permissions: ['task:execute'] }),
     )
+    expect(await screen.findByText('Đã cập nhật quyền của Buồng phòng')).toBeInTheDocument()
+  })
+
+  it('báo lỗi khi lưu quyền thất bại', async () => {
+    const { put } = setup()
+    put.mockRejectedValue(new Error('Không lưu được'))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'HOUSEKEEPING task:execute' }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+  })
+
+  it('khoá cột vai trò khi đang lưu quyền của vai trò đó', async () => {
+    const { put } = setup()
+    put.mockImplementation(() => new Promise(() => {}))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'HOUSEKEEPING task:execute' }))
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'HOUSEKEEPING role:manage' })).toBeDisabled(),
+    )
+    // Cột của vai trò khác vẫn bấm được.
+    expect(screen.getByRole('checkbox', { name: 'MANAGER role:manage' })).toBeEnabled()
   })
 })

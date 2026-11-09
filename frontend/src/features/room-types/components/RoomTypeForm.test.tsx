@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { roomTypeRoutes } from '../routes'
@@ -183,18 +183,74 @@ describe('UC50 form', () => {
   })
   it('requires confirmation before deactivating', async () => {
     const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: room })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     renderForm(room)
     fireEvent.click(screen.getByRole('button', { name: 'Ngừng nhận đặt phòng' }))
-    expect(confirm).toHaveBeenCalledWith(
-      expect.stringContaining('booking đang hoạt động vẫn hợp lệ'),
-    )
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('booking đang hoạt động vẫn hợp lệ')
     expect(patch).not.toHaveBeenCalled()
-    confirm.mockReturnValue(true)
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Giữ lại' }),
+    )
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Ngừng nhận đặt phòng' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Ngừng nhận đặt phòng' }),
+    )
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith(`/room-types/${room.id}`, { isActive: false }),
     )
+  })
+
+  it('confirms an inactive checkbox change without losing the other edits', async () => {
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: room })
+    renderForm(room)
+    fireEvent.change(screen.getByLabelText('Mô tả'), { target: { value: 'Mô tả mới' } })
+    fireEvent.click(screen.getByLabelText('Kích hoạt'))
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu loại phòng' }))
+    expect(patch).not.toHaveBeenCalled()
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Ngừng nhận đặt phòng' }),
+    )
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(`/room-types/${room.id}`, {
+        description: 'Mô tả mới',
+        isActive: false,
+      }),
+    )
+  })
+
+  it('closes an unchanged edit without sending a patch', () => {
+    const patch = vi.spyOn(api, 'patch')
+    const { close } = renderForm(room)
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu loại phòng' }))
+    expect(close).toHaveBeenCalledOnce()
+    expect(patch).not.toHaveBeenCalled()
+  })
+
+  it('keeps the editor open when Escape belongs to the image lightbox', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => ({
+      data:
+        url === '/amenities/options'
+          ? []
+          : url.includes('/room-types/')
+            ? { ...room, images: ['/images/room.jpg'] }
+            : { items: [room], total: 1, page: 1, limit: 10 },
+    }))
+    renderWithAuth(roomTypeRoutes, {
+      path: '/manager/room-types',
+      auth: { me: ME, status: 'authenticated' },
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa Standard' }))
+    await screen.findByLabelText('Mô tả')
+    // A native top-layer lightbox is portaled outside the Radix editor.
+    const lightbox = document.createElement('dialog')
+    lightbox.setAttribute('open', '')
+    document.body.append(lightbox)
+    try {
+      fireEvent.keyDown(document, { key: 'Escape' })
+      expect(screen.getByRole('dialog', { name: 'Sửa loại phòng' })).toBeInTheDocument()
+    } finally {
+      lightbox.remove()
+    }
   })
   it('shows amenity loading, empty and error states with retry', async () => {
     let finish!: (value: unknown) => void
@@ -272,10 +328,10 @@ describe('UC50 form', () => {
       await screen.findByText('Đã lưu loại phòng. Danh sách đã được cập nhật.'),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Tìm theo tên')).toHaveValue('Standard')
-    expect(screen.getByText(/Trang 2\/3/)).toBeInTheDocument()
+    expect(screen.getByText(/Trang 2 \/ 3/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Thêm loại phòng' }))
     expect(screen.getByLabelText(/Tên loại phòng/)).toHaveValue('')
-    fireEvent(screen.getByRole('dialog'), new Event('cancel', { bubbles: true, cancelable: true }))
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

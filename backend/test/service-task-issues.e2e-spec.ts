@@ -157,6 +157,21 @@ describe('UC34 service task reports (HTTP + MongoDB)', () => {
     await app.close();
   });
 
+  it('never replays request keys across customer and staff report origins', async () => {
+    const requestId = randomUUID();
+    const original = await post({ ...payload, requestId }).expect(201);
+    await request(app.getHttpServer())
+      .post('/api/v1/issues')
+      .set({ ...headers, 'x-dev-role': 'CUSTOMER' })
+      .send({ ...payload, bookingId: String(booking), requestId })
+      .expect(409);
+    await issues.updateOne(
+      { _id: original.body.id },
+      { $unset: { sourceTask: 1 } },
+    );
+    await post({ ...payload, requestId }).expect(409);
+  });
+
   it('returns only safe context even for an inactive service and checked-out booking', async () => {
     const response = await get().expect(200);
     expect(response.body).toEqual({

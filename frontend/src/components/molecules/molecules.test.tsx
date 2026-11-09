@@ -15,11 +15,12 @@ describe('FormField', () => {
   it('links the label to the control and shows the error as an alert', () => {
     render(
       <FormField label="Họ tên" htmlFor="name" error="Vui lòng nhập họ tên" required>
-        <Input id="name" />
+        <Input id="name" aria-describedby="name-error" />
       </FormField>,
     )
     expect(screen.getByLabelText(/Họ tên/)).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('Vui lòng nhập họ tên')
+    expect(screen.getByLabelText(/Họ tên/)).toHaveAccessibleDescription('Vui lòng nhập họ tên')
     expect(screen.getByText('*')).toHaveAttribute('aria-hidden', 'true')
   })
 
@@ -84,6 +85,13 @@ describe('Stars', () => {
     rerender(<Stars value={2} onChange={onChange} />)
     fireEvent.click(screen.getByRole('button', { name: '5 stars' }))
     expect(onChange).toHaveBeenCalledWith(5)
+  })
+
+  it('renders a labelled read-only image with no buttons when given a label', () => {
+    render(<Stars value={2} label="2 trên 5 sao" />)
+    expect(screen.getByRole('img', { name: '2 trên 5 sao' })).toBeInTheDocument()
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(document.querySelectorAll('svg.fill-primary')).toHaveLength(2)
   })
 })
 

@@ -1,9 +1,22 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { Alert } from '@/components/Alert'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
+import { Alert, FormField } from '@/components/molecules'
+import { Button, Input, Label, Textarea } from '@/components/atoms'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { AssetImage } from '@/components/AssetImage'
 import { ImageLightbox } from '@/components/ImageLightbox'
@@ -27,53 +40,65 @@ export function RoomTypeEditor({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const dialog = useRef<HTMLDialogElement>(null)
+  const dialog = useRef<HTMLDivElement>(null)
+  const previous = useRef(
+    document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  )
   const query = useQuery({
     queryKey: ['room-type', id],
     queryFn: () => getRoomType(id!),
     enabled: id !== null,
   })
-  useEffect(() => {
-    const element = dialog.current!
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    element.showModal()
-    return () => {
-      element.close()
-      previous?.focus()
-    }
-  }, [])
+  const busy = () => Boolean(dialog.current?.querySelector('[aria-busy="true"]'))
   return (
-    <dialog
-      ref={dialog}
-      aria-labelledby="room-type-form-title"
-      className="m-auto max-h-[92dvh] w-[calc(100%_-_2rem)] max-w-2xl overflow-y-auto rounded-2xl border border-stone-300 bg-white p-5 font-body text-pearl-900 shadow-xl backdrop:bg-pearl-900/60 sm:p-8"
-      onCancel={(event) => {
-        event.preventDefault()
-        if (!dialog.current?.querySelector('[aria-busy="true"]')) onClose()
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy()) onClose()
       }}
     >
-      <h2 id="room-type-form-title" className="mb-6 font-display text-3xl">
-        {id ? 'Sửa loại phòng' : 'Thêm loại phòng'}
-      </h2>
-      {id && query.isPending ? (
-        <>
-          <p role="status">Đang tải chi tiết…</p>
-          <Button onClick={onClose}>Đóng</Button>
-        </>
-      ) : id && query.isError ? (
-        <>
-          <Alert tone="danger">{getErrorMessage(query.error)}</Alert>
-          <Button onClick={() => void query.refetch()}>Thử lại</Button>
-          <Button onClick={onClose}>Đóng</Button>
-        </>
-      ) : (
-        <RoomTypeForm
-          initial={id ? query.data : undefined}
-          onClose={onClose}
-          onSuccess={onSuccess}
-        />
-      )}
-    </dialog>
+      <DialogContent
+        ref={dialog}
+        aria-describedby={undefined}
+        className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => {
+          if (busy() || document.querySelector('dialog[open]')) event.preventDefault()
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          previous.current?.focus()
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{id ? 'Sửa loại phòng' : 'Thêm loại phòng'}</DialogTitle>
+        </DialogHeader>
+        {id && query.isPending ? (
+          <>
+            <p role="status">Đang tải chi tiết…</p>
+            <Button type="button" onClick={onClose}>
+              Đóng
+            </Button>
+          </>
+        ) : id && query.isError ? (
+          <>
+            <Alert tone="danger">{getErrorMessage(query.error)}</Alert>
+            <Button type="button" onClick={() => void query.refetch()}>
+              Thử lại
+            </Button>
+            <Button type="button" onClick={onClose}>
+              Đóng
+            </Button>
+          </>
+        ) : (
+          <RoomTypeForm
+            initial={id ? query.data : undefined}
+            onClose={onClose}
+            onSuccess={onSuccess}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -113,6 +138,7 @@ export function RoomTypeForm({
   }, [])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [general, setGeneral] = useState('')
+  const [confirmationMode, setConfirmationMode] = useState<'deactivate' | 'save' | null>(null)
   const focusError = () =>
     window.setTimeout(
       () => form.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
@@ -162,12 +188,15 @@ export function RoomTypeForm({
       locked.current = false
     },
   })
-  function save(event?: FormEvent, deactivate = false) {
+  function save(event?: FormEvent, deactivate = false, confirmed = false) {
     event?.preventDefault()
     if (locked.current) return
     setGeneral('')
     if (deactivate) {
-      if (!window.confirm(confirmation)) return
+      if (!confirmed) {
+        setConfirmationMode('deactivate')
+        return
+      }
       locked.current = true
       mutation.mutate({ isActive: false })
       return
@@ -196,7 +225,10 @@ export function RoomTypeForm({
       return
     }
     const isActive = deactivate ? false : active
-    if (initial?.isActive && !isActive && !window.confirm(confirmation)) return
+    if (initial?.isActive && !isActive && !confirmed) {
+      setConfirmationMode('save')
+      return
+    }
     const input: RoomTypeInput = {
       ...(images.length || initial?.images !== undefined || files.length ? { images } : {}),
       name: name.trim(),
@@ -239,43 +271,108 @@ export function RoomTypeForm({
       ref={form}
       noValidate
       onSubmit={save}
-      className="space-y-4"
+      className="space-y-4 py-2"
       aria-busy={mutation.isPending}
     >
       {general && <Alert tone="danger">{general}</Alert>}
-      <fieldset
-        disabled={mutation.isPending}
-        className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2"
-      >
-        <div className="sm:col-span-2">
-          <TextField
-            label="Tên loại phòng"
+      <fieldset disabled={mutation.isPending} className="grid min-w-0 grid-cols-1 gap-4">
+        <div className="min-w-0">
+          <FormField label="Tên loại phòng" htmlFor="room-type-name" required error={errors.name}>
+            <Input
+              id="room-type-name"
+              aria-invalid={errors.name ? true : undefined}
+              aria-describedby={errors.name ? 'room-type-name-error' : undefined}
+              required
+              maxLength={100}
+              autoFocus
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </FormField>
+        </div>
+        <div className="min-w-0">
+          <FormField
+            label="Giá VND"
+            htmlFor="room-type-basePrice"
             required
-            maxLength={100}
-            autoFocus
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            error={errors.name}
-          />
+            error={errors.basePrice}
+          >
+            <Input
+              id="room-type-basePrice"
+              aria-invalid={errors.basePrice ? true : undefined}
+              aria-describedby={errors.basePrice ? 'room-type-basePrice-error' : undefined}
+              required
+              inputMode="numeric"
+              value={price}
+              onChange={(event) => setPrice(event.target.value)}
+              onBlur={() => {
+                const number = Number(price.replaceAll('.', ''))
+                if (
+                  /^(\d{1,3}(\.\d{3})*|\d+)$/.test(price) &&
+                  Number.isSafeInteger(number) &&
+                  number > 0
+                )
+                  setPrice(new Intl.NumberFormat('vi-VN').format(number))
+              }}
+            />
+          </FormField>
         </div>
-        <div className="sm:col-span-2">
-          <TextField
-            label="Mô tả"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
+        <FormField
+          label="Người lớn"
+          htmlFor="room-type-adultCapacity"
+          required
+          error={errors.adultCapacity}
+        >
+          <Input
+            id="room-type-adultCapacity"
+            aria-invalid={errors.adultCapacity ? true : undefined}
+            aria-describedby={errors.adultCapacity ? 'room-type-adultCapacity-error' : undefined}
+            required
+            type="number"
+            min={1}
+            step={1}
+            value={adultCapacity}
+            onChange={(event) => setAdultCapacity(event.target.value)}
           />
+        </FormField>
+        <FormField
+          label="Trẻ em"
+          htmlFor="room-type-childCapacity"
+          required
+          error={errors.childCapacity}
+        >
+          <Input
+            id="room-type-childCapacity"
+            aria-invalid={errors.childCapacity ? true : undefined}
+            aria-describedby={errors.childCapacity ? 'room-type-childCapacity-error' : undefined}
+            required
+            type="number"
+            min={0}
+            step={1}
+            value={childCapacity}
+            onChange={(event) => setChildCapacity(event.target.value)}
+          />
+        </FormField>
+        <div className="min-w-0">
+          <FormField label="Mô tả" htmlFor="room-type-description">
+            <Textarea
+              id="room-type-description"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </FormField>
         </div>
-        <div className="min-w-0 space-y-3 rounded-xl border border-stone-300 bg-cream-100/40 p-4 sm:col-span-2">
+        <div className="min-w-0 space-y-3 rounded-xl border border-border bg-surface/40 p-4 ">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold">Ảnh loại phòng</p>
-            <span className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-xs">
+            <span className="rounded-full border border-border bg-card px-2.5 py-1 text-xs">
               {images.length + files.length} / 10 ảnh
             </span>
           </div>
-          <input
+          <Input
             id="room-type-images"
             aria-label="Ảnh loại phòng"
-            className="peer sr-only"
+            className="peer sr-only size-px border-0 p-0"
             type="file"
             accept="image/jpeg,image/png,image/webp"
             multiple
@@ -308,19 +405,19 @@ export function RoomTypeForm({
               setFiles((previous) => [...previous, ...added])
             }}
           />
-          <label
+          <Label
             htmlFor="room-type-images"
-            className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/40 bg-white px-4 py-5 text-center transition hover:border-primary hover:bg-cream-100 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary peer-disabled:cursor-wait peer-disabled:opacity-50"
+            className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/40 bg-card px-4 py-5 text-center transition hover:border-primary hover:bg-surface peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary peer-disabled:cursor-wait peer-disabled:opacity-50"
           >
             <span
               aria-hidden="true"
-              className="flex size-9 items-center justify-center rounded-full bg-cream-100 text-2xl text-primary"
+              className="flex size-9 items-center justify-center rounded-full bg-surface text-2xl text-primary"
             >
               +
             </span>
             <span className="text-sm font-semibold text-primary">Chọn ảnh từ thiết bị</span>
-            <span className="text-xs text-stone-600">Có thể chọn nhiều ảnh cùng lúc</span>
-          </label>
+            <span className="text-xs text-muted-foreground">Có thể chọn nhiều ảnh cùng lúc</span>
+          </Label>
           <p id="room-type-images-help" className="text-xs">
             Tối đa 10 ảnh JPG, PNG hoặc WebP, mỗi ảnh tối đa 5 MB. Ảnh đầu tiên là ảnh đại diện.
           </p>
@@ -328,39 +425,42 @@ export function RoomTypeForm({
             {images.map((path, index) => (
               <div
                 key={path}
-                className="min-w-0 overflow-hidden rounded-lg border border-stone-300 bg-white shadow-sm"
+                className="min-w-0 overflow-hidden rounded-lg border border-border bg-card shadow-sm"
               >
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   aria-label={`Phóng to ảnh ${index + 1}`}
                   onClick={() => setViewing(index)}
-                  className="group block w-full overflow-hidden focus-visible:outline-2 focus-visible:outline-primary"
+                  className="group block h-auto w-full overflow-hidden rounded-none p-0 focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   <AssetImage
                     path={path}
                     name={`Ảnh ${index + 1}`}
                     className="aspect-[4/3] w-full object-cover transition group-hover:scale-105"
                   />
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="ghost"
                   type="button"
-                  className="min-h-11 w-full px-2 text-xs text-primary transition hover:bg-cream-100"
+                  className="min-h-11 w-full rounded-none px-2 text-xs text-primary transition hover:bg-surface"
                   onClick={() => setImages((previous) => previous.filter((_, i) => i !== index))}
                 >
                   Bỏ ảnh {index + 1}
-                </button>
+                </Button>
               </div>
             ))}
             {files.map((file, index) => (
               <div
                 key={`${file.name}-${index}`}
-                className="min-w-0 overflow-hidden rounded-lg border border-stone-300 bg-white shadow-sm"
+                className="min-w-0 overflow-hidden rounded-lg border border-border bg-card shadow-sm"
               >
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   aria-label={`Phóng to ${file.name}`}
                   onClick={() => setViewing(images.length + index)}
-                  className="group block w-full overflow-hidden focus-visible:outline-2 focus-visible:outline-primary"
+                  className="group block h-auto w-full overflow-hidden rounded-none p-0 focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   {previewUrls.get(file) && (
                     <img
@@ -369,62 +469,24 @@ export function RoomTypeForm({
                       className="aspect-[4/3] w-full object-cover transition group-hover:scale-105"
                     />
                   )}
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="ghost"
                   type="button"
-                  className="min-h-11 w-full truncate px-2 text-xs text-primary transition hover:bg-cream-100"
+                  className="min-h-11 w-full min-w-0 truncate rounded-none px-2 text-xs text-primary transition hover:bg-surface"
                   onClick={() => setFiles((previous) => previous.filter((_, i) => i !== index))}
                 >
                   Bỏ {file.name}
-                </button>
+                </Button>
               </div>
             ))}
           </div>
-        </div>
-        <TextField
-          label="Người lớn"
-          required
-          type="number"
-          min={1}
-          step={1}
-          value={adultCapacity}
-          onChange={(event) => setAdultCapacity(event.target.value)}
-          error={errors.adultCapacity}
-        />
-        <TextField
-          label="Trẻ em"
-          required
-          type="number"
-          min={0}
-          step={1}
-          value={childCapacity}
-          onChange={(event) => setChildCapacity(event.target.value)}
-          error={errors.childCapacity}
-        />
-        <div className="sm:col-span-2">
-          <TextField
-            label="Giá VND"
-            required
-            inputMode="numeric"
-            value={price}
-            onChange={(event) => setPrice(event.target.value)}
-            onBlur={() => {
-              const number = Number(price.replaceAll('.', ''))
-              if (
-                /^(\d{1,3}(\.\d{3})*|\d+)$/.test(price) &&
-                Number.isSafeInteger(number) &&
-                number > 0
-              )
-                setPrice(new Intl.NumberFormat('vi-VN').format(number))
-            }}
-            error={errors.basePrice}
-          />
         </div>
         <fieldset
           tabIndex={-1}
           aria-invalid={errors.amenities ? true : undefined}
           aria-describedby={errors.amenities ? 'amenities-error' : undefined}
-          className="grid grid-cols-1 gap-x-4 rounded-xl border border-stone-300 p-4 sm:col-span-2 sm:grid-cols-2"
+          className="grid grid-cols-1 gap-x-4 rounded-xl border border-border p-4  sm:grid-cols-2"
         >
           <legend className="text-sm font-semibold">Tiện nghi</legend>
           {options.isPending && <p role="status">Đang tải tiện nghi…</p>}
@@ -438,9 +500,10 @@ export function RoomTypeForm({
           )}
           {options.isSuccess && choices.length === 0 && <p>Chưa có tiện nghi nào</p>}
           {choices.map((option) => (
-            <label key={option.id} className="flex min-h-11 items-center gap-3 text-sm">
-              <input
+            <Label key={option.id} className="flex min-h-11 items-center gap-3 text-sm">
+              <Input
                 type="checkbox"
+                className="size-4 shrink-0"
                 checked={selected.includes(option.id)}
                 disabled={
                   !options.data?.some((a) => a.id === option.id) && !selected.includes(option.id)
@@ -453,8 +516,8 @@ export function RoomTypeForm({
                   )
                 }
               />
-              {option.name}
-            </label>
+              <span className="min-w-0 break-words">{option.name}</span>
+            </Label>
           ))}
           {errors.amenities && (
             <p id="amenities-error" className="text-sm text-danger">
@@ -462,33 +525,59 @@ export function RoomTypeForm({
             </p>
           )}
         </fieldset>
-        <label className="flex min-h-11 items-center gap-3 text-sm">
-          <input
+        <Label className="flex min-h-11 items-center gap-3 text-sm">
+          <Input
             type="checkbox"
+            className="size-4 shrink-0"
             checked={active}
             onChange={(event) => setActive(event.target.checked)}
           />
           Kích hoạt
-        </label>
+        </Label>
       </fieldset>
-      <div className="flex flex-wrap gap-3 border-t border-stone-300 pt-5">
-        <Button type="submit" loading={mutation.isPending}>
-          Lưu loại phòng
+      <div className="flex flex-wrap justify-end gap-2 pt-2">
+        <Button
+          type="submit"
+          disabled={mutation.isPending}
+          aria-busy={mutation.isPending || undefined}
+        >
+          {mutation.isPending ? 'Đang xử lý…' : 'Lưu loại phòng'}
         </Button>
         {initial?.isActive && (
           <Button
             type="button"
-            variant="danger"
+            variant="destructive"
             disabled={mutation.isPending}
             onClick={() => save(undefined, true)}
           >
             Ngừng nhận đặt phòng
           </Button>
         )}
-        <Button type="button" variant="secondary" disabled={mutation.isPending} onClick={onClose}>
+        <Button type="button" variant="outline" disabled={mutation.isPending} onClick={onClose}>
           Hủy
         </Button>
       </div>
+      <AlertDialog
+        open={confirmationMode !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmationMode(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ngừng nhận đặt phòng?</AlertDialogTitle>
+            <AlertDialogDescription>{confirmation}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Giữ lại</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => save(undefined, confirmationMode === 'deactivate', true)}
+            >
+              Ngừng nhận đặt phòng
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {viewing !== null && (
         <ImageLightbox
           images={[

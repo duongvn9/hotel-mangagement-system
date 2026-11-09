@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import * as atoms from '.'
 import { Logo } from './Logo'
+import { NativeSelect } from './NativeSelect'
 import { StatusBadge } from './StatusBadge'
 
 describe('StatusBadge', () => {
@@ -79,18 +80,64 @@ describe('Badge', () => {
 })
 
 describe('NativeSelect', () => {
-  it('renders a select element and handles change events', () => {
+  it('renders options and reflects the controlled value', () => {
+    render(
+      <NativeSelect aria-label="Vai trò" value="b" onChange={() => {}}>
+        <option value="a">Alpha</option>
+        <option value="b">Beta</option>
+      </NativeSelect>,
+    )
+    const select = screen.getByRole('combobox', { name: 'Vai trò' })
+    expect(select).toHaveValue('b')
+    expect(screen.getByRole('option', { name: 'Alpha' })).toBeInTheDocument()
+  })
+
+  it('forwards change events', () => {
     const onChange = vi.fn()
     render(
-      <atoms.NativeSelect aria-label="Lựa chọn" onChange={onChange}>
-        <option value="1">Một</option>
-        <option value="2">Hai</option>
-      </atoms.NativeSelect>,
+      <NativeSelect aria-label="Vai trò" value="a" onChange={onChange}>
+        <option value="a">Alpha</option>
+        <option value="b">Beta</option>
+      </NativeSelect>,
     )
-    const select = screen.getByLabelText('Lựa chọn')
-    expect(select).toBeInTheDocument()
-    fireEvent.change(select, { target: { value: '2' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Vai trò' }), {
+      target: { value: 'b' },
+    })
     expect(onChange).toHaveBeenCalled()
+  })
+
+  it('can be disabled', () => {
+    render(
+      <NativeSelect aria-label="Vai trò" disabled>
+        <option value="a">Alpha</option>
+      </NativeSelect>,
+    )
+    expect(screen.getByRole('combobox', { name: 'Vai trò' })).toBeDisabled()
+  })
+
+  it('associates with a <label htmlFor> and forwards the ref', () => {
+    const ref = { current: null as HTMLSelectElement | null }
+    render(
+      <>
+        <label htmlFor="role">Vai trò</label>
+        <NativeSelect id="role" ref={ref}>
+          <option value="a">Alpha</option>
+        </NativeSelect>
+      </>,
+    )
+    expect(screen.getByLabelText('Vai trò')).toBe(screen.getByRole('combobox'))
+    expect(ref.current).toBe(screen.getByRole('combobox'))
+  })
+
+  it('keeps long option text selectable', () => {
+    const long = 'Nhân viên lễ tân khách sạn '.repeat(10)
+    render(
+      <NativeSelect aria-label="Vai trò" defaultValue="long">
+        <option value="short">Ngắn</option>
+        <option value="long">{long}</option>
+      </NativeSelect>,
+    )
+    expect(screen.getByRole('combobox', { name: 'Vai trò' })).toHaveValue('long')
   })
 })
 
@@ -110,6 +157,7 @@ describe('atoms barrel', () => {
       expect(atoms).toHaveProperty(name)
     }
     expect(atoms.StatusBadge).toBe(StatusBadge)
+    expect(atoms.NativeSelect).toBe(NativeSelect)
     expect(atoms.Logo).toBe(Logo)
   })
 })

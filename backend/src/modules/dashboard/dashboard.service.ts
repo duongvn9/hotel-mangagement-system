@@ -9,6 +9,7 @@ import { Room } from '../rooms/schemas/room.schema.js';
 import { TaskSupervisionService } from '../task-supervision/task-supervision.service.js';
 import { RevenueReportService } from '../reports/revenue-report.service.js';
 import { RevenueReportQuery } from '../reports/dto/revenue-report.dto.js';
+import { DashboardInsightsService } from './dashboard-insights.service.js';
 import {
   type DashboardRoomCounts,
   type ManagerDashboard,
@@ -28,6 +29,7 @@ export class DashboardService {
     @InjectModel(Room.name) private readonly rooms: Model<Room>,
     private readonly revenue: RevenueReportService,
     private readonly clock: DashboardClock,
+    private readonly insights?: DashboardInsightsService,
   ) {}
   private result<T>(
     source: string,
@@ -102,16 +104,30 @@ export class DashboardService {
     if (actor.role !== Role.Manager)
       throw new ForbiddenException('Chỉ Manager được xem Tổng quan');
     const now = this.clock.now();
-    const [tasks, rooms, revenue] = await Promise.allSettled([
-      this.taskSummary(actor),
-      this.roomSummary(now),
-      this.revenueSummary(actor, now),
-    ] as const);
+    const missing = () =>
+      Promise.resolve({
+        available: false as const,
+        reason: 'not_available' as const,
+      });
+    const [tasks, rooms, revenue, revenue14Days, bookings, feedback] =
+      await Promise.allSettled([
+        this.taskSummary(actor),
+        this.roomSummary(now),
+        this.revenueSummary(actor, now),
+        this.insights?.revenueSummary(actor, now) ?? missing(),
+        this.insights?.bookingSummary() ?? missing(),
+        this.insights?.feedbackSummary() ?? missing(),
+      ] as const);
     return {
       generatedAt: now.toISOString(),
       tasks: this.result('tasks', tasks),
       rooms: this.result('rooms', rooms),
       revenue: this.result('revenue', revenue),
+      insights: {
+        revenue: this.result('revenue14Days', revenue14Days),
+        bookings: this.result('bookings', bookings),
+        feedback: this.result('feedback', feedback),
+      },
     };
   }
 }

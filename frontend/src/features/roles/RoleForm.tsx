@@ -1,7 +1,6 @@
-import { useState, type FormEvent } from 'react'
-import { Alert } from '@/components/Alert'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
+import { useId, useState, type FormEvent } from 'react'
+import { Button, Input, Switch } from '@/components/atoms'
+import { FormField } from '@/components/molecules'
 import type { CreateRoleInput, RoleItem, UpdateRoleInput } from './api'
 
 interface RoleFormProps {
@@ -15,6 +14,7 @@ interface RoleFormProps {
 
 /** UC46 Create / Update Role. Mã role chỉ nhập khi tạo (BR-RBAC-05). */
 export function RoleForm({ role, pending, error, onSubmit, onCancel }: RoleFormProps) {
+  const uid = useId()
   const [code, setCode] = useState('')
   const [name, setName] = useState(role?.name ?? '')
   const [description, setDescription] = useState(role?.description ?? '')
@@ -31,60 +31,70 @@ export function RoleForm({ role, pending, error, onSubmit, onCancel }: RoleFormP
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      aria-label={role ? 'Sửa vai trò' : 'Tạo vai trò'}
-      className="space-y-5 rounded-lg border border-stone-300 bg-white p-6"
-    >
-      <h2 className="font-display text-2xl font-semibold text-pearl-900">
-        {role ? `Sửa vai trò ${role.code}` : 'Tạo vai trò'}
-      </h2>
-      {error && <Alert tone="danger">{error}</Alert>}
-      <div className="grid gap-5 md:grid-cols-2">
+    <form onSubmit={handleSubmit} aria-label={role ? 'Sửa vai trò' : 'Tạo vai trò'}>
+      {error && (
+        <p
+          role="alert"
+          className="mb-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          {error}
+        </p>
+      )}
+      <div className="grid gap-4 sm:grid-cols-2">
         {!role && (
-          <TextField
+          <FormField
             label="Mã vai trò"
+            htmlFor={`${uid}-code`}
             required
-            pattern="[A-Za-z][A-Za-z0-9_]{2,31}"
-            title="3-32 ký tự chữ, số, dấu gạch dưới; bắt đầu bằng chữ. Không đổi được sau khi tạo."
-            placeholder="VD: HOUSEKEEPING"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-          />
-        )}
-        <TextField
-          label="Tên vai trò"
-          required
-          minLength={2}
-          maxLength={60}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <TextField
-          label="Mô tả"
-          maxLength={255}
-          className="md:col-span-2"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        {role && !role.isSystem && (
-          <label className="flex items-center gap-3 text-sm">
-            <input
-              type="checkbox"
-              className="size-[18px] accent-primary"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
+            hint="3-32 ký tự chữ, số, gạch dưới; không đổi được sau khi tạo."
+          >
+            <Input
+              id={`${uid}-code`}
+              required
+              pattern="[A-Za-z][A-Za-z0-9_]{2,31}"
+              title="3-32 ký tự chữ, số, dấu gạch dưới; bắt đầu bằng chữ. Không đổi được sau khi tạo."
+              placeholder="VD: HOUSEKEEPING"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
             />
-            Đang dùng (bỏ chọn để ngừng dùng vai trò)
-          </label>
+          </FormField>
+        )}
+        <FormField label="Tên vai trò" htmlFor={`${uid}-name`} required>
+          <Input
+            id={`${uid}-name`}
+            required
+            minLength={2}
+            maxLength={60}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </FormField>
+        <div className="sm:col-span-2">
+          <FormField label="Mô tả" htmlFor={`${uid}-desc`}>
+            <Input
+              id={`${uid}-desc`}
+              maxLength={255}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </FormField>
+        </div>
+        {role && !role.isSystem && (
+          <FormField label="Đang dùng" htmlFor={`${uid}-active`}>
+            <Switch
+              id={`${uid}-active`}
+              checked={isActive}
+              onCheckedChange={(checked) => setIsActive(checked)}
+            />
+          </FormField>
         )}
       </div>
-      <div className="flex justify-end gap-3">
-        <Button variant="secondary" onClick={onCancel}>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onCancel}>
           Huỷ
         </Button>
-        <Button type="submit" loading={pending}>
-          Lưu
+        <Button type="submit" disabled={pending}>
+          {pending ? 'Đang lưu…' : 'Lưu'}
         </Button>
       </div>
     </form>

@@ -1,8 +1,8 @@
-import { ChevronLeft, ChevronRight, Search, SearchX } from 'lucide-react'
+import { Search, SearchX } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { label } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { Button, Input, Skeleton } from '../atoms'
+import { Input, Skeleton } from '../atoms'
 import {
   EmptyState,
   Select,
@@ -11,12 +11,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../molecules'
+import { Pager } from './Pager'
 
 export interface Column<T> {
   key: string
   header: string
   render?: (row: T) => ReactNode
   className?: string
+  rowHeader?: boolean
 }
 
 export interface Filter<T> {
@@ -36,6 +38,28 @@ interface DataTableProps<T extends { id: string }> {
   toolbar?: ReactNode
   empty?: ReactNode
   loading?: boolean
+  /**
+   * Chế độ server (tùy chọn). Khi không truyền các prop dưới đây, bảng lọc/tìm/
+   * phân trang trên client đúng như cũ. Truyền vào để trang tự điều khiển.
+   */
+  // Ô tìm kiếm có kiểm soát, gửi khi nhấn Enter.
+  searchValue?: string
+  onSearchChange?: (value: string) => void
+  onSearchSubmit?: () => void
+  searchPlaceholder?: string
+  searchAriaLabel?: string
+  // Khe cho các điều khiển thêm ở bên trái thanh công cụ (ví dụ ô lọc).
+  toolbarStart?: ReactNode
+  // Phân trang có kiểm soát (page tính từ 1).
+  page?: number
+  totalPages?: number
+  onPageChange?: (page: number) => void
+  caption?: string
+  scrollLabel?: string
+  searchMaxLength?: number
+  paginationDisabled?: boolean
+  paginationSummary?: ReactNode
+  paginationLabel?: string
 }
 
 const LOADING_ROWS = 4
@@ -50,10 +74,28 @@ export function DataTable<T extends { id: string }>({
   toolbar,
   empty,
   loading = false,
+  searchValue,
+  onSearchChange,
+  onSearchSubmit,
+  searchPlaceholder = 'Tìm kiếm…',
+  searchAriaLabel,
+  toolbarStart,
+  page,
+  totalPages,
+  onPageChange,
+  caption,
+  scrollLabel,
+  searchMaxLength,
+  paginationDisabled = false,
+  paginationSummary,
+  paginationLabel,
 }: DataTableProps<T>) {
   const [q, setQ] = useState('')
   const [f, setF] = useState<Record<string, string>>({})
-  const [page, setPage] = useState(0)
+  const [clientPage, setClientPage] = useState(0)
+
+  const controlledSearch = onSearchChange !== undefined
+  const serverPaged = page !== undefined && totalPages !== undefined && onPageChange !== undefined
 
   const filtered = useMemo(
     () =>
@@ -63,35 +105,62 @@ export function DataTable<T extends { id: string }>({
       }),
     [rows, q, f, search, filters],
   )
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize))
-  const cur = Math.min(page, pages - 1)
-  const view = filtered.slice(cur * pageSize, cur * pageSize + pageSize)
+  const clientPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const cur = Math.min(clientPage, clientPages - 1)
+  const view = serverPaged ? rows : filtered.slice(cur * pageSize, cur * pageSize + pageSize)
+
+  const displayPage = serverPaged ? page! : cur + 1
+  const displayPages = serverPaged ? totalPages! : clientPages
+  const goPrev = () => (serverPaged ? onPageChange!(page! - 1) : setClientPage(cur - 1))
+  const goNext = () => (serverPaged ? onPageChange!(page! + 1) : setClientPage(cur + 1))
 
   return (
     <div className="card-soft overflow-hidden">
-      {(search || filters.length > 0 || toolbar) && (
+      {(search || controlledSearch || toolbarStart || filters.length > 0 || toolbar) && (
         <div className="flex flex-col gap-3 border-b p-4 md:flex-row md:items-center">
-          {search && (
-            <div className="relative md:w-72">
+          {controlledSearch ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                onSearchSubmit?.()
+              }}
+              className="relative md:w-72"
+            >
               <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                value={q}
-                onChange={(e) => {
-                  setQ(e.target.value)
-                  setPage(0)
-                }}
-                placeholder="Tìm kiếm…"
+                type="search"
+                value={searchValue ?? ''}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder={searchPlaceholder}
+                aria-label={searchAriaLabel}
+                maxLength={searchMaxLength}
                 className="h-9 rounded-full bg-surface/60 pl-9"
               />
-            </div>
+            </form>
+          ) : (
+            search && (
+              <div className="relative md:w-72">
+                <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={q}
+                  onChange={(e) => {
+                    setQ(e.target.value)
+                    setClientPage(0)
+                  }}
+                  placeholder="Tìm kiếm…"
+                  className="h-9 rounded-full bg-surface/60 pl-9"
+                />
+              </div>
+            )
           )}
+          {toolbarStart}
           {filters.map((fl) => (
             <Select
               key={fl.key}
               value={f[fl.key] ?? 'all'}
               onValueChange={(v) => {
                 setF({ ...f, [fl.key]: v })
-                setPage(0)
+                setClientPage(0)
               }}
             >
               <SelectTrigger className="h-9 rounded-full md:w-44">
@@ -110,8 +179,17 @@ export function DataTable<T extends { id: string }>({
           <div className="flex gap-2 md:ml-auto">{toolbar}</div>
         </div>
       )}
-      <div className="overflow-x-auto">
+      <div
+        role={scrollLabel ? 'region' : undefined}
+        aria-label={scrollLabel}
+        tabIndex={scrollLabel ? 0 : undefined}
+        className={cn(
+          'overflow-x-auto',
+          scrollLabel && 'focus-visible:outline-2 focus-visible:outline-ring',
+        )}
+      >
         <table className="w-full text-sm">
+          {caption && <caption className="sr-only">{caption}</caption>}
           <thead>
             <tr className="border-b bg-surface/40 text-left text-xs tracking-wider text-muted-foreground uppercase">
               {columns.map((c) => (
@@ -141,11 +219,22 @@ export function DataTable<T extends { id: string }>({
                       onRowClick && 'cursor-pointer hover:bg-surface/50',
                     )}
                   >
-                    {columns.map((c) => (
-                      <td key={c.key} className={cn('px-4 py-3.5 align-middle', c.className)}>
-                        {c.render ? c.render(r) : String(r[c.key as keyof T] ?? '')}
-                      </td>
-                    ))}
+                    {columns.map((c) => {
+                      const Cell = c.rowHeader ? 'th' : 'td'
+                      return (
+                        <Cell
+                          key={c.key}
+                          scope={c.rowHeader ? 'row' : undefined}
+                          className={cn(
+                            'px-4 py-3.5 align-middle',
+                            c.rowHeader && 'text-left font-medium',
+                            c.className,
+                          )}
+                        >
+                          {c.render ? c.render(r) : String(r[c.key as keyof T] ?? '')}
+                        </Cell>
+                      )
+                    })}
                   </tr>
                 ))}
           </tbody>
@@ -162,33 +251,19 @@ export function DataTable<T extends { id: string }>({
           </div>
         )}
       </div>
-      <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
-        <span>{filtered.length} kết quả</span>
-        <div className="flex items-center gap-2">
-          <span>
-            Trang {cur + 1} / {pages}
-          </span>
-          <Button
-            size="icon"
-            variant="outline"
-            className="size-8 rounded-full"
-            disabled={cur === 0}
-            onClick={() => setPage(cur - 1)}
-            aria-label="Trang trước"
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <Button
-            size="icon"
-            variant="outline"
-            className="size-8 rounded-full"
-            disabled={cur >= pages - 1}
-            onClick={() => setPage(cur + 1)}
-            aria-label="Trang sau"
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-        </div>
+      <div
+        role={paginationLabel ? 'navigation' : undefined}
+        aria-label={paginationLabel}
+        className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground"
+      >
+        <span>{paginationSummary ?? (serverPaged ? null : `${filtered.length} kết quả`)}</span>
+        <Pager
+          page={displayPage}
+          totalPages={displayPages}
+          onPrev={goPrev}
+          onNext={goNext}
+          disabled={paginationDisabled}
+        />
       </div>
     </div>
   )

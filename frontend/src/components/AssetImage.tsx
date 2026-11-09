@@ -50,31 +50,51 @@ export function AssetImage({
   )
 }
 
-export function RoomGallery({ images = [], name }: { images?: string[]; name: string }) {
+export function RoomGallery({
+  images = [],
+  name,
+  compact = false,
+}: {
+  images?: string[]
+  name: string
+  compact?: boolean
+}) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="flex items-center gap-2">
+    <div className={compact ? 'flex shrink-0 items-center gap-2' : 'flex items-center gap-2'}>
       {images.length ? (
         <button
           type="button"
           aria-label={`Xem ảnh ${name}`}
           onClick={() => setOpen(true)}
-          className="group relative shrink-0 overflow-hidden rounded-lg border border-stone-300 focus-visible:outline-2 focus-visible:outline-primary"
+          className={
+            compact
+              ? 'group relative shrink-0 overflow-hidden rounded-lg focus-visible:outline-2 focus-visible:outline-ring'
+              : 'group relative shrink-0 overflow-hidden rounded-lg border border-stone-300 focus-visible:outline-2 focus-visible:outline-primary'
+          }
         >
           <AssetImage
             decorative
             path={images[0]}
             name={name}
-            className="h-16 w-24 object-cover transition group-hover:scale-105"
+            className={
+              compact
+                ? 'size-10 rounded-lg object-cover'
+                : 'h-16 w-24 object-cover transition group-hover:scale-105'
+            }
           />
-          {images.length > 1 && (
+          {!compact && images.length > 1 && (
             <span className="absolute bottom-1 right-1 rounded bg-pearl-900/80 px-1.5 py-0.5 text-xs text-white">
               +{images.length - 1}
             </span>
           )}
         </button>
       ) : (
-        <AssetImage decorative name={name} />
+        <AssetImage
+          decorative
+          name={name}
+          className={compact ? 'size-10 rounded-lg bg-surface object-cover' : undefined}
+        />
       )}
       {open && (
         <ImageLightbox

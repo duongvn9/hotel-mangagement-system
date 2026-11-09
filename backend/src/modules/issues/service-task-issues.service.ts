@@ -177,7 +177,7 @@ export class ServiceTaskIssuesService implements OnModuleInit {
         .select('+requestFingerprint')
         .lean();
       if (!issue) return null;
-      if (issue.requestFingerprint !== fingerprint)
+      if (!issue.sourceTask || issue.requestFingerprint !== fingerprint)
         throw new ConflictException(
           'requestId already used for a different report',
         );

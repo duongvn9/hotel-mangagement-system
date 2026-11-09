@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { TextField } from '@/components/TextField'
-import { SelectField } from '@/components/SelectField'
-import { Button } from '@/components/Button'
+import { Button, Input, NativeSelect, Skeleton } from '@/components/atoms'
+import { EmptyState, FormField } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import {
   dateTime,
   money,
@@ -24,103 +24,133 @@ export function ServiceOrdersPage() {
     setQuery({ ...query, keyword, page: 1 })
   }
   return (
-    <section className="mx-auto max-w-container px-4 py-8">
+    <PageContainer>
       <OrderNavigation />
-      <h1 className="mb-6 font-display text-3xl">Dịch vụ của tôi</h1>
-      <form onSubmit={search} className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <TextField
-          label="Từ khóa"
-          maxLength={100}
-          value={keyword}
-          onChange={(event) => setKeyword(event.target.value)}
-        />
-        <SelectField
-          label="Trạng thái duyệt"
-          value={query.reviewStatus ?? ''}
-          onChange={(event) =>
-            setQuery({
-              ...query,
-              page: 1,
-              reviewStatus: (event.target.value || undefined) as OrderQuery['reviewStatus'],
-            })
-          }
-          options={[
-            { value: '', label: 'Tất cả' },
-            ...reviewStatuses.map((value) => ({ value, label: reviewLabels[value] })),
-          ]}
-        />
-        <SelectField
-          label="Trạng thái thực hiện"
-          value={query.executionStatus ?? ''}
-          onChange={(event) =>
-            setQuery({
-              ...query,
-              page: 1,
-              executionStatus: (event.target.value || undefined) as OrderQuery['executionStatus'],
-            })
-          }
-          options={[
-            { value: '', label: 'Tất cả' },
-            ...executionStatuses.map((value) => ({ value, label: executionLabels[value] })),
-          ]}
-        />
-        <Button type="submit" className="self-end">
-          Tìm kiếm
-        </Button>
-      </form>
-      {orders.isPending && <p role="status">Đang tải yêu cầu dịch vụ…</p>}
-      {orders.isError && <OrderError error={orders.error} retry={() => void orders.refetch()} />}
-      {orders.isSuccess && (
-        <>
-          {!orders.data.items.length ? (
-            <p role="status">Không có yêu cầu dịch vụ phù hợp.</p>
-          ) : (
-            <ul className="grid gap-4 md:grid-cols-2">
-              {orders.data.items.map((order) => (
-                <li
-                  key={order.id}
-                  className="min-w-0 space-y-2 rounded border border-stone-300 bg-white p-4 break-words"
-                >
-                  <h2 className="font-display text-xl">
-                    <Link
-                      to={`/customer/service-orders/${encodeURIComponent(order.id)}`}
-                      className="inline-flex min-h-11 items-center text-primary underline"
-                    >
-                      {order.service.name}
-                    </Link>
-                  </h2>
-                  <p>
-                    {order.quantity} {order.service.unit} · {money(order.amount)}
-                  </p>
-                  <OrderBusinessState order={order} />
-                  <p className="text-sm text-stone-700">Tạo lúc: {dateTime(order.createdAt)}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="mt-6 flex flex-wrap items-center gap-4">
-            <Button
-              variant="secondary"
-              disabled={orders.data.page <= 1}
-              onClick={() => setQuery({ ...query, page: query.page - 1 })}
-            >
-              Trang trước
-            </Button>
-            <span>
-              Trang {orders.data.page} · {orders.data.total} yêu cầu
-            </span>
-            <Button
-              variant="secondary"
-              disabled={
-                orders.data.page * orders.data.limit >= orders.data.total || query.page >= 10000
+      <PageHeader title="Dịch vụ của tôi" />
+      <Panel title="Lịch sử đặt dịch vụ">
+        <form onSubmit={search} className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <FormField label="Từ khóa" htmlFor="order-keyword">
+            <Input
+              id="order-keyword"
+              maxLength={100}
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+            />
+          </FormField>
+          <FormField label="Trạng thái duyệt" htmlFor="order-review-status">
+            <NativeSelect
+              id="order-review-status"
+              value={query.reviewStatus ?? ''}
+              onChange={(event) =>
+                setQuery({
+                  ...query,
+                  page: 1,
+                  reviewStatus: (event.target.value || undefined) as OrderQuery['reviewStatus'],
+                })
               }
-              onClick={() => setQuery({ ...query, page: query.page + 1 })}
             >
-              Trang sau
-            </Button>
+              <option value="">Tất cả</option>
+              {reviewStatuses.map((value) => (
+                <option key={value} value={value}>
+                  {reviewLabels[value]}
+                </option>
+              ))}
+            </NativeSelect>
+          </FormField>
+          <FormField label="Trạng thái thực hiện" htmlFor="order-execution-status">
+            <NativeSelect
+              id="order-execution-status"
+              value={query.executionStatus ?? ''}
+              onChange={(event) =>
+                setQuery({
+                  ...query,
+                  page: 1,
+                  executionStatus: (event.target.value ||
+                    undefined) as OrderQuery['executionStatus'],
+                })
+              }
+            >
+              <option value="">Tất cả</option>
+              {executionStatuses.map((value) => (
+                <option key={value} value={value}>
+                  {executionLabels[value]}
+                </option>
+              ))}
+            </NativeSelect>
+          </FormField>
+          <Button type="submit" className="self-end rounded-full">
+            Tìm kiếm
+          </Button>
+        </form>
+        {orders.isPending && (
+          <div role="status" className="space-y-3">
+            <p className="text-sm text-muted-foreground">Đang tải yêu cầu dịch vụ…</p>
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
           </div>
-        </>
-      )}
-    </section>
+        )}
+        {orders.isError && (
+          <OrderError
+            error={orders.error}
+            retry={() => void orders.refetch()}
+            presentation="workspace"
+          />
+        )}
+        {orders.isSuccess && (
+          <>
+            {!orders.data.items.length ? (
+              <div role="status">
+                <EmptyState title="Không có yêu cầu dịch vụ phù hợp." />
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {orders.data.items.map((order) => (
+                  <li key={order.id} className="min-w-0 space-y-2 py-3 text-sm break-words">
+                    <h2 className="font-medium">
+                      <Link
+                        to={`/customer/service-orders/${encodeURIComponent(order.id)}`}
+                        className="inline-flex min-h-11 items-center rounded-sm text-primary underline transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {order.service.name}
+                      </Link>
+                    </h2>
+                    <p>
+                      {order.quantity} {order.service.unit} · {money(order.amount)}
+                    </p>
+                    <OrderBusinessState order={order} />
+                    <p className="text-xs text-muted-foreground">
+                      Tạo lúc: {dateTime(order.createdAt)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-6 flex flex-wrap items-center gap-4">
+              <Button
+                variant="outline"
+                className="rounded-full"
+                disabled={orders.data.page <= 1}
+                onClick={() => setQuery({ ...query, page: query.page - 1 })}
+              >
+                Trang trước
+              </Button>
+              <span>
+                Trang {orders.data.page} · {orders.data.total} yêu cầu
+              </span>
+              <Button
+                variant="outline"
+                className="rounded-full"
+                disabled={
+                  orders.data.page * orders.data.limit >= orders.data.total || query.page >= 10000
+                }
+                onClick={() => setQuery({ ...query, page: query.page + 1 })}
+              >
+                Trang sau
+              </Button>
+            </div>
+          </>
+        )}
+      </Panel>
+    </PageContainer>
   )
 }

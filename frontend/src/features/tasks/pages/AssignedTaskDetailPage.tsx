@@ -1,7 +1,9 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { isAxiosError } from 'axios'
 import { Link, useParams } from 'react-router'
-import { Button } from '@/components/Button'
+import { Button, Textarea } from '@/components/atoms'
+import { FormField } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
 import { ServiceTaskIssueReport } from '@/features/issues/ServiceTaskIssueReport'
 import type { AssignedTask, TaskProgressInput } from '../api'
@@ -52,7 +54,7 @@ function TaskProgress({ task, fetching }: { task: AssignedTask; fetching: boolea
   }
 
   return (
-    <div className="min-w-0 space-y-4 border-t border-stone-300 pt-6">
+    <div className="min-w-0 space-y-4 border-t border-border pt-6">
       {mutation.isPending && <p role="status">Đang cập nhật công việc…</p>}
       {mutation.isSuccess && (
         <p role="status" className="text-success">
@@ -67,8 +69,8 @@ function TaskProgress({ task, fetching }: { task: AssignedTask; fetching: boolea
       )}
       {task.status === 'ASSIGNED' && (
         <Button
-          className="w-full sm:w-auto"
-          loading={mutation.isPending}
+          className="w-full rounded-full sm:w-auto"
+          aria-busy={mutation.isPending}
           disabled={busy || blocked}
           onClick={() => void submit({ status: 'IN_PROGRESS' })}
         >
@@ -77,24 +79,23 @@ function TaskProgress({ task, fetching }: { task: AssignedTask; fetching: boolea
       )}
       {task.status === 'IN_PROGRESS' && (
         <form onSubmit={complete} noValidate className="min-w-0 space-y-3">
-          <label htmlFor="task-work-result" className="block text-sm font-semibold">
-            Kết quả thực hiện (bắt buộc)
-          </label>
-          <textarea
-            id="task-work-result"
-            required
-            rows={5}
-            value={workResult}
-            disabled={busy || blocked}
-            aria-invalid={Boolean(validation)}
-            aria-describedby={`task-result-help${validation ? ' task-result-error' : ''}`}
-            onChange={(event) => {
-              setWorkResult(event.target.value)
-              setValidation('')
-            }}
-            className="w-full min-w-0 rounded border border-stone-300 bg-white p-3 text-sm focus-visible:outline-2 focus-visible:outline-focus"
-          />
-          <p id="task-result-help" className="text-sm text-stone-700">
+          <FormField label="Kết quả thực hiện (bắt buộc)" htmlFor="task-work-result">
+            <Textarea
+              id="task-work-result"
+              required
+              rows={5}
+              value={workResult}
+              disabled={busy || blocked}
+              aria-invalid={Boolean(validation)}
+              aria-describedby={`task-result-help${validation ? ' task-result-error' : ''}`}
+              onChange={(event) => {
+                setWorkResult(event.target.value)
+                setValidation('')
+              }}
+              className="min-w-0"
+            />
+          </FormField>
+          <p id="task-result-help" className="text-sm text-muted-foreground">
             Tối đa 2000 ký tự sau khi bỏ khoảng trắng đầu và cuối. {workResult.trim().length}/2000
           </p>
           {validation && (
@@ -104,8 +105,8 @@ function TaskProgress({ task, fetching }: { task: AssignedTask; fetching: boolea
           )}
           <Button
             type="submit"
-            className="w-full sm:w-auto"
-            loading={mutation.isPending}
+            className="w-full rounded-full sm:w-auto"
+            aria-busy={mutation.isPending}
             disabled={busy || blocked}
           >
             Hoàn thành công việc
@@ -122,45 +123,51 @@ export function AssignedTaskDetailPage() {
   const { data: task, isPending, isError, error, refetch, isFetching } = useAssignedTask(id)
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <Link to="/staff/tasks" className="inline-flex min-h-11 items-center text-primary underline">
-        Về công việc được giao
-      </Link>
-      <h1 className="font-display text-4xl font-semibold">Chi tiết công việc</h1>
+    <PageContainer className="space-y-6">
+      <PageHeader
+        title="Chi tiết công việc"
+        actions={
+          <Button asChild variant="outline" className="rounded-full">
+            <Link to="/staff/tasks">Về công việc được giao</Link>
+          </Button>
+        }
+      />
       {isPending && <p role="status">Đang tải công việc…</p>}
       {isError && <TaskError error={error} retry={() => void refetch()} fetching={isFetching} />}
       {!isError && task && (
-        <article className="min-w-0 space-y-6 rounded-lg border border-stone-300 bg-white p-4 sm:p-6">
-          <h2 className="text-xl font-semibold break-words">{task.title}</h2>
-          <div className="flex flex-wrap gap-2">
-            <TaskStatusBadge status={task.status} />
-            <TaskPriorityBadge priority={task.priority} />
-          </div>
-          <dl className="grid gap-4 text-sm sm:grid-cols-2">
-            {[
-              ['Mã công việc', task.id],
-              ['Loại công việc', task.taskType],
-              ['Ngày giao', taskDate(task.assignedAt)],
-              ['Hạn hoàn thành', taskDate(task.dueAt)],
-              ['Ngày hoàn thành', taskDate(task.completedAt)],
-              ['Kết quả thực hiện', task.workResult || 'Chưa có kết quả'],
-              ['Nguồn công việc', taskSources[task.sourceType]],
-              ['Mã nguồn tham chiếu', task.sourceId],
-            ].map(([label, value]) => (
-              <div key={label} className="min-w-0">
-                <dt className="font-semibold text-stone-700">{label}</dt>
-                <dd className="mt-1 break-words whitespace-pre-wrap">{value}</dd>
-              </div>
-            ))}
-          </dl>
-          <p className="text-sm text-stone-700">
-            Thông tin nguồn hiện không khả dụng. Công việc vẫn có thể được xem; mã nguồn chỉ dùng để
-            đối chiếu.
-          </p>
-          <ResolutionHistory task={task} />
-          <TaskProgress key={task.id} task={task} fetching={isFetching} />
-          <UnableToResolve key={`unable-${task.id}`} task={task} fetching={isFetching} />
-        </article>
+        <Panel className="min-w-0">
+          <article className="min-w-0 space-y-6">
+            <h2 className="text-sm font-semibold break-words">{task.title}</h2>
+            <div className="flex flex-wrap gap-2">
+              <TaskStatusBadge status={task.status} />
+              <TaskPriorityBadge priority={task.priority} />
+            </div>
+            <dl className="grid gap-4 text-sm sm:grid-cols-2">
+              {[
+                ['Mã công việc', task.id],
+                ['Loại công việc', task.taskType],
+                ['Ngày giao', taskDate(task.assignedAt)],
+                ['Hạn hoàn thành', taskDate(task.dueAt)],
+                ['Ngày hoàn thành', taskDate(task.completedAt)],
+                ['Kết quả thực hiện', task.workResult || 'Chưa có kết quả'],
+                ['Nguồn công việc', taskSources[task.sourceType]],
+                ['Mã nguồn tham chiếu', task.sourceId],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <dt className="font-semibold text-muted-foreground">{label}</dt>
+                  <dd className="mt-1 break-words whitespace-pre-wrap">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="text-sm text-muted-foreground">
+              Thông tin nguồn hiện không khả dụng. Công việc vẫn có thể được xem; mã nguồn chỉ dùng
+              để đối chiếu.
+            </p>
+            <ResolutionHistory task={task} />
+            <TaskProgress key={task.id} task={task} fetching={isFetching} />
+            <UnableToResolve key={`unable-${task.id}`} task={task} fetching={isFetching} />
+          </article>
+        </Panel>
       )}
       {me?.role === 'SERVICE_STAFF' && task && (
         <ServiceTaskIssueReport
@@ -174,6 +181,6 @@ export function AssignedTaskDetailPage() {
           }
         />
       )}
-    </section>
+    </PageContainer>
   )
 }

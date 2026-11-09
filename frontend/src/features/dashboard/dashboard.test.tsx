@@ -186,6 +186,7 @@ describe('Manager Dashboard', () => {
   it('shows loading separately in every card and disables refresh while fetching', () => {
     vi.mocked(api.get).mockImplementation(() => new Promise(() => {}))
     renderPage()
+    expect(screen.getByLabelText('Đang tải tổng quan')).toHaveAttribute('aria-busy', 'true')
     expect(screen.getAllByText('Đang tải…')).toHaveLength(3)
     for (const name of ['Hàng đợi task', 'Trạng thái phòng', 'Thực thu tháng này'])
       expect(region(name).getByRole('status')).toHaveTextContent('Đang tải')
@@ -230,6 +231,28 @@ describe('Manager Dashboard', () => {
     focusManager.setFocused(false)
     focusManager.setFocused(true)
     await waitFor(() => expect(vi.mocked(api.get).mock.calls.length).toBeGreaterThan(before))
+  })
+  it('opens the summary section when a refresh fails after prototype insights were loaded', async () => {
+    const unavailable = { available: false, reason: 'not_available' } as const
+    vi.mocked(api.get)
+      .mockResolvedValueOnce({
+        data: {
+          ...data,
+          insights: { revenue: unavailable, bookings: unavailable, feedback: unavailable },
+        },
+      })
+      .mockRejectedValueOnce({
+        isAxiosError: true,
+        response: { data: { message: 'Làm mới thất bại' } },
+      })
+    renderPage()
+    await screen.findByText('Cập nhật lúc 10:15')
+    const disclosure = screen.getByText('Số liệu hiện tại và lối tắt').closest('details')!
+    expect(disclosure).not.toHaveAttribute('open')
+    fireEvent.click(screen.getByRole('button', { name: 'Làm mới' }))
+    await screen.findByText('Làm mới thất bại')
+    expect(disclosure).toHaveAttribute('open')
+    expect(screen.getByRole('alert')).toBeVisible()
   })
   it.each(['CUSTOMER', 'RECEPTIONIST', 'SERVICE_STAFF', 'OPERATIONS_STAFF', 'CUSTOM_REPORTER'])(
     'blocks %s even with report/facility permissions',
