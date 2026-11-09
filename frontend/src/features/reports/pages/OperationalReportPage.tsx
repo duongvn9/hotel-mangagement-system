@@ -3,9 +3,9 @@ import { useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { useAuth } from '@/features/auth/auth-context'
-import { Alert } from '@/components/Alert'
-import { Button } from '@/components/Button'
-import { SelectField } from '@/components/SelectField'
+import { Button, NativeSelect } from '@/components/atoms'
+import { Alert, FormField } from '@/components/molecules'
+import { DataTable, PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import {
   getOperationalReport,
@@ -77,49 +77,51 @@ function OperationalContent() {
     else setParams(next)
   }
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <header>
-        <h1 className="font-display text-4xl font-semibold">Báo cáo vận hành</h1>
-        <p className="mt-2 text-sm text-stone-700">
-          Thống kê từ bản ghi vận hành thực tế, theo ngày Việt Nam.
+    <PageContainer>
+      <PageHeader
+        title="Báo cáo vận hành"
+        subtitle="Thống kê từ bản ghi vận hành thực tế, theo ngày Việt Nam."
+      />
+      <div className="space-y-6">
+        <Panel>
+          <form
+            onSubmit={submit}
+            noValidate
+            aria-label="Bộ lọc báo cáo vận hành"
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            <ReportPeriodFields
+              from={from}
+              to={to}
+              granularity={granularity}
+              onFrom={setFrom}
+              onTo={setTo}
+              onGranularity={setGranularity}
+              error={error || undefined}
+            />
+            <div className="flex items-end">
+              <Button type="submit" className="rounded-full" disabled={report.isFetching}>
+                Xem báo cáo
+              </Button>
+            </div>
+          </form>
+        </Panel>
+        <p className="text-sm text-muted-foreground">
+          Gồm cả ngày đầu và cuối, tối đa 366 ngày. Bấm “Xem báo cáo” để áp dụng bộ lọc.
         </p>
-      </header>
-      <form
-        onSubmit={submit}
-        noValidate
-        aria-label="Bộ lọc báo cáo vận hành"
-        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-      >
-        <ReportPeriodFields
-          from={from}
-          to={to}
-          granularity={granularity}
-          onFrom={setFrom}
-          onTo={setTo}
-          onGranularity={setGranularity}
-          error={error || undefined}
-        />
-        <div className="flex items-end">
-          <Button type="submit" disabled={report.isFetching}>
-            Xem báo cáo
-          </Button>
-        </div>
-      </form>
-      <p className="text-sm text-stone-700">
-        Gồm cả ngày đầu và cuối, tối đa 366 ngày. Bấm “Xem báo cáo” để áp dụng bộ lọc.
-      </p>
-      {appliedError && <Alert tone="danger">{appliedError}</Alert>}
-      {report.isFetching && <p role="status">Đang tải báo cáo…</p>}
-      {report.isError && (
-        <Alert tone="danger">
-          <p>{getErrorMessage(report.error)}</p>
-          <Button variant="secondary" onClick={() => void report.refetch()}>
-            Thử lại
-          </Button>
-        </Alert>
-      )}
-      {report.data && !report.isError && <Report data={report.data} />}
-    </section>
+        {appliedError && <Alert tone="danger">{appliedError}</Alert>}
+        {report.isFetching && <p role="status">Đang tải báo cáo…</p>}
+        {report.isError && (
+          <Alert tone="danger">
+            <p>{getErrorMessage(report.error)}</p>
+            <Button variant="secondary" onClick={() => void report.refetch()}>
+              Thử lại
+            </Button>
+          </Alert>
+        )}
+        {report.data && !report.isError && <Report data={report.data} />}
+      </div>
+    </PageContainer>
   )
 }
 function Block({
@@ -132,12 +134,12 @@ function Block({
   children?: ReactNode
 }) {
   return (
-    <section
-      className="min-w-0 space-y-3 rounded border border-stone-300 bg-white p-4"
-      aria-label={title}
-    >
-      <h3 className="text-lg font-semibold">{title}</h3>
-      {available ? children : <p>Chưa có dữ liệu nguồn cho mục này</p>}
+    <section className="min-w-0" aria-label={title}>
+      <Panel title={title}>
+        <div className="min-w-0 space-y-3 break-words">
+          {available ? children : <p>Chưa có dữ liệu nguồn cho mục này</p>}
+        </div>
+      </Panel>
     </section>
   )
 }
@@ -151,9 +153,9 @@ function Counts({
   return (
     <dl className="space-y-2">
       {Object.entries(values).map(([key, value]) => (
-        <div key={key} className="flex justify-between gap-4">
-          <dt>{revenueLabel(labels, key)}</dt>
-          <dd className="tabular-nums">
+        <div key={key} className="flex min-w-0 justify-between gap-4">
+          <dt className="min-w-0 break-words">{revenueLabel(labels, key)}</dt>
+          <dd className="shrink-0 tabular-nums">
             {value === null ? 'Không xác định' : new Intl.NumberFormat('vi-VN').format(value)}
           </dd>
         </div>
@@ -164,7 +166,7 @@ function Counts({
 function Report({ data: d }: { data: OperationalReport }) {
   return (
     <>
-      <p className="text-sm text-stone-700">
+      <p className="text-sm text-muted-foreground">
         Kỳ {displayReportDay(d.period.from)} – {displayReportDay(d.period.to)} · Cập nhật lúc{' '}
         {revenueTime(d.generatedAt)}
       </p>
@@ -202,7 +204,7 @@ function Report({ data: d }: { data: OperationalReport }) {
                         'Đêm-phòng khả dụng': d.occupancy.availableRoomNights,
                       }}
                     />
-                    <p className="text-sm text-stone-700">{d.occupancy.note}</p>
+                    <p className="text-sm text-muted-foreground">{d.occupancy.note}</p>
                     {d.occupancy.rate !== null && d.occupancy.rate > 1 && (
                       <Alert tone="warning">
                         Công suất ước tính vượt 100%. Cần kiểm tra dữ liệu và số phòng hiện tại.
@@ -289,7 +291,7 @@ function Report({ data: d }: { data: OperationalReport }) {
                 )}
               </Block>
             </div>
-            <p className="text-sm text-stone-700">
+            <p className="text-sm text-muted-foreground">
               Mỗi số đếm theo thời điểm sự kiện riêng. Phân bố trạng thái hiện tại áp dụng cho bản
               ghi được báo/yêu cầu/giao trong kỳ. Trung bình chỉ tính bản ghi đóng/hoàn thành trong
               kỳ có thời gian hợp lệ.
@@ -344,52 +346,49 @@ function Series({ rows }: { rows: OperationalReport['series'] }) {
   return (
     <section className="space-y-4" aria-label="Chuỗi thời gian vận hành">
       <h3 className="text-xl font-semibold">Chuỗi thời gian</h3>
-      <SelectField
-        label="Chỉ số biểu đồ"
-        value={metric}
-        onChange={(e) => setMetric(e.target.value as typeof metric)}
-        options={Object.entries(METRICS).map(([value, label]) => ({ value, label }))}
-      />
-      <figure>
-        <ReportBarChart
-          rows={rows.map((row) => ({ bucket: row.bucket, value: row[metric] }))}
-          label={`Biểu đồ ${METRICS[metric]}; dữ liệu đầy đủ trong bảng bên dưới`}
-        />
-        <figcaption>Cột biểu thị số lượng; bảng có đầy đủ sáu chỉ số, gồm cả kỳ bằng 0.</figcaption>
-      </figure>
-      <div className="overflow-x-auto rounded border border-stone-300">
-        <table
-          aria-label="Dữ liệu vận hành theo thời gian"
-          className="w-full min-w-[760px] text-sm"
+      <FormField label="Chỉ số biểu đồ" htmlFor="operational-metric" className="min-w-0">
+        <NativeSelect
+          id="operational-metric"
+          value={metric}
+          onChange={(e) => setMetric(e.target.value as typeof metric)}
         >
-          <thead className="bg-stone-200">
-            <tr>
-              <th scope="col" className="p-3 text-left">
-                Kỳ
-              </th>
-              {Object.values(METRICS).map((label) => (
-                <th key={label} scope="col" className="p-3 text-right">
-                  {label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.bucket} className="border-t border-stone-300">
-                <th scope="row" className="p-3 text-left">
-                  {revenueBucketLabel(row.bucket)}
-                </th>
-                {(Object.keys(METRICS) as (keyof typeof METRICS)[]).map((key) => (
-                  <td key={key} className="p-3 text-right tabular-nums">
-                    {row[key]}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          {Object.entries(METRICS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </NativeSelect>
+      </FormField>
+      <Panel>
+        <figure>
+          <ReportBarChart
+            rows={rows.map((row) => ({ bucket: row.bucket, value: row[metric] }))}
+            label={`Biểu đồ ${METRICS[metric]}; dữ liệu đầy đủ trong bảng bên dưới`}
+          />
+          <figcaption className="mt-2 text-sm text-muted-foreground">
+            Cột biểu thị số lượng; bảng có đầy đủ sáu chỉ số, gồm cả kỳ bằng 0.
+          </figcaption>
+        </figure>
+      </Panel>
+      <DataTable
+        rows={rows.map((row) => ({ ...row, id: row.bucket }))}
+        showPagination={false}
+        caption="Dữ liệu vận hành theo thời gian"
+        scrollLabel="Bảng dữ liệu vận hành theo thời gian"
+        columns={[
+          {
+            key: 'bucket',
+            header: 'Kỳ',
+            rowHeader: true,
+            render: (row) => revenueBucketLabel(row.bucket),
+          },
+          ...(Object.keys(METRICS) as (keyof typeof METRICS)[]).map((key) => ({
+            key,
+            header: METRICS[key],
+            className: 'text-right tabular-nums',
+          })),
+        ]}
+      />
     </section>
   )
 }
