@@ -5,6 +5,7 @@ import { Alert } from '@/components/molecules'
 import { PageContainer, PageHeader } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { formatDate } from '@/features/booking/utils'
+import { BookingAttentionAlert } from '@/features/booking/components/BookingAttentionAlert'
 import { revenueTime } from '@/features/reports/presentation'
 import { DashboardCard } from '../components/DashboardCard'
 import { useReceptionDashboard } from '../hooks'
@@ -70,6 +71,8 @@ export function ReceptionDashboardPage() {
             ? `Cập nhật lúc ${revenueTime(data.generatedAt)}`
             : ''}
       </p>
+
+      <BookingAttentionAlert />
 
       {dashboard.isError ? (
         <Alert tone="danger">

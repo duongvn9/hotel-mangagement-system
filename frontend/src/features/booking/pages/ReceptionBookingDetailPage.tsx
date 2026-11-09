@@ -28,7 +28,7 @@ export function ReceptionBookingDetailPage() {
           <p className="mb-2 text-xs font-semibold tracking-widest text-primary uppercase">
             Lễ tân
           </p>
-          <h1 className="font-display text-4xl font-semibold break-words">
+          <h1 className="font-display text-4xl font-semibold break-words lining-nums">
             Chi tiết booking {code}
           </h1>
           {booking && (

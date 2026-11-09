@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Plus } from 'lucide-react'
 import { Link } from 'react-router'
 import { Button, Input, NativeSelect, Skeleton } from '@/components/atoms'
 import { EmptyState, FormField } from '@/components/molecules'
@@ -13,7 +14,7 @@ import {
   type OrderQuery,
 } from '../api'
 import { useOrders } from '../hooks'
-import { OrderBusinessState, OrderError, OrderNavigation } from '../presentation'
+import { OrderBusinessState, OrderError } from '../presentation'
 
 export function ServiceOrdersPage() {
   const [query, setQuery] = useState<OrderQuery>({ page: 1, limit: 20 })
@@ -25,8 +26,17 @@ export function ServiceOrdersPage() {
   }
   return (
     <PageContainer>
-      <OrderNavigation />
-      <PageHeader title="Dịch vụ của tôi" />
+      <PageHeader
+        title="Dịch vụ của tôi"
+        actions={
+          <Button asChild className="rounded-full">
+            <Link to="/customer/service-orders/new">
+              <Plus className="size-4" />
+              Yêu cầu dịch vụ
+            </Link>
+          </Button>
+        }
+      />
       <Panel title="Lịch sử đặt dịch vụ">
         <form onSubmit={search} className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <FormField label="Từ khóa" htmlFor="order-keyword">

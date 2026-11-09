@@ -130,12 +130,17 @@ describe('Reception dashboard', () => {
   })
 
   it('keeps the other cards when one source fails and lets staff retry', async () => {
-    const get = vi
-      .spyOn(api, 'get')
-      .mockResolvedValueOnce({
-        data: data({ rooms: { available: false, reason: 'error' } }),
-      })
-      .mockResolvedValue({ data: data() })
+    // Trang còn gọi /bookings/attention; đếm riêng lời gọi dashboard và cho lần đầu lỗi phòng.
+    let dashboardCalls = 0
+    vi.spyOn(api, 'get').mockImplementation(async (url) => {
+      if (url === '/bookings/attention')
+        return { data: { overdueCheckOut: 0, overdueCheckIn: 0, dueCheckOut: 0, dueCheckIn: 0 } }
+      dashboardCalls += 1
+      return {
+        data:
+          dashboardCalls === 1 ? data({ rooms: { available: false, reason: 'error' } }) : data(),
+      }
+    })
     renderPage()
 
     const rooms = screen.getByRole('region', { name: 'Phòng hôm nay' })
@@ -143,7 +148,7 @@ describe('Reception dashboard', () => {
     expect(region('Khách đến hôm nay').getByText('Tổng')).toBeInTheDocument()
 
     fireEvent.click(within(rooms).getByRole('button', { name: 'Thử lại' }))
-    await waitFor(() => expect(get).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(dashboardCalls).toBe(2))
     expect(await region('Phòng hôm nay').findByText('Tổng số phòng')).toBeInTheDocument()
   })
 
@@ -158,11 +163,20 @@ describe('Reception dashboard', () => {
   })
 
   it('refreshes on demand and shows when the numbers were taken', async () => {
-    const get = vi.spyOn(api, 'get').mockResolvedValue({ data: data() })
+    // Trang còn gọi /bookings/attention; chỉ đếm lời gọi dashboard.
+    const get = vi
+      .spyOn(api, 'get')
+      .mockImplementation(async (url) =>
+        url === '/bookings/attention'
+          ? { data: { overdueCheckOut: 0, overdueCheckIn: 0, dueCheckOut: 0, dueCheckIn: 0 } }
+          : { data: data() },
+      )
     renderPage()
     expect(await screen.findByText(/Cập nhật lúc/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Làm mới' }))
-    await waitFor(() => expect(get).toHaveBeenCalledTimes(2))
+    await waitFor(() =>
+      expect(get.mock.calls.filter((call) => call[0] === '/dashboard/reception')).toHaveLength(2),
+    )
   })
 })

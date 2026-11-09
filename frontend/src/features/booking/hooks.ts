@@ -6,6 +6,7 @@ import {
   checkOutBooking,
   createWalkInBooking,
   getBooking,
+  getBookingAttention,
   getMyBookings,
   getRoomTypeOverview,
   getServiceCatalog,
@@ -58,6 +59,10 @@ export function useBookingList(params: BookingListParams) {
     queryFn: () => listBookings(params),
     placeholderData: keepPreviousData,
   })
+}
+
+export function useBookingAttention() {
+  return useQuery({ queryKey: ['booking-attention'], queryFn: getBookingAttention })
 }
 
 export function useSameDayList(date: string) {

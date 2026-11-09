@@ -15,6 +15,7 @@ describe('IssueContextAdapter', () => {
     rooms: [roomId],
     isActive: true,
     status: BookingStatus.CheckedIn,
+    checkOut: new Date('3000-01-01'),
   });
   const setup = (
     value: unknown = booking(),
@@ -76,11 +77,21 @@ describe('IssueContextAdapter', () => {
     expect(await adapter.roomNumbers([roomId])).toEqual(new Map());
   });
 
-  it('allows owned active checked-in bookings without date restrictions', async () => {
+  it('allows owned active checked-in bookings on or before the checkout date', async () => {
     const { adapter } = setup();
     await expect(
       adapter.resolve(String(owner), String(bookingId)),
     ).resolves.toEqual({ booking: bookingId });
+  });
+
+  it('rejects checked-in bookings whose checkout date has already passed', async () => {
+    const { adapter } = setup({
+      ...booking(),
+      checkOut: new Date('2000-01-01'),
+    });
+    await expect(
+      adapter.resolve(String(owner), String(bookingId)),
+    ).rejects.toThrow(new NotFoundException('Booking not found'));
   });
 
   it.each(

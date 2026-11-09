@@ -1,13 +1,16 @@
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { UserPlus } from 'lucide-react'
+import { Pencil, UserPlus } from 'lucide-react'
 import { Badge, Button, Input, NativeSelect, StatusBadge } from '@/components/atoms'
 import { Alert, FormField } from '@/components/molecules'
 import { PageContainer, PageHeader, Panel } from '@/components/organisms'
+import { BookingAttentionAlert } from '../components/BookingAttentionAlert'
 import { getErrorMessage } from '@/lib/api-client'
+import { cn } from '@/lib/utils'
 import { BOOKING_STATUS_DISPLAY, type BookingListParams } from '../api'
+import { ATTENTION_META, classifyAttention } from '../attention'
 import { useBookingList } from '../hooks'
-import { formatDate, money } from '../utils'
+import { formatDate, money, todayISO } from '../utils'
 
 const PAGE_SIZE = 20
 
@@ -51,6 +54,19 @@ export function BookingListPage() {
   const list = useBookingList(params)
   const totalPages = Math.max(1, Math.ceil((list.data?.total ?? 0) / PAGE_SIZE))
 
+  // Đánh dấu đơn cần xử lý và đưa chúng lên đầu trang (quá hạn trước, rồi tới hạn hôm nay).
+  const today = todayISO()
+  const rows = useMemo(() => {
+    const items = list.data?.items ?? []
+    return items
+      .map((booking) => ({ booking, attention: classifyAttention(booking, today) }))
+      .sort(
+        (a, b) =>
+          (a.attention ? ATTENTION_META[a.attention].priority : 99) -
+          (b.attention ? ATTENTION_META[b.attention].priority : 99),
+      )
+  }, [list.data?.items, today])
+
   function applyFilters(event: FormEvent) {
     event.preventDefault()
     setApplied({ ...draft, q: draft.q.trim() })
@@ -78,6 +94,8 @@ export function BookingListPage() {
           </Button>
         }
       />
+
+      <BookingAttentionAlert showLink={false} />
 
       <form
         onSubmit={applyFilters}
@@ -145,11 +163,14 @@ export function BookingListPage() {
         list.data && (
           <>
             <ul className="space-y-3">
-              {list.data.items.map((booking) => (
-                <li key={booking.id} className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+              {rows.map(({ booking, attention }) => (
+                <li
+                  key={booking.id}
+                  className="card-soft flex items-center gap-3 p-5 transition-colors hover:bg-surface"
+                >
                   <Link
                     to={`/reception/bookings/${encodeURIComponent(booking.code)}`}
-                    className="card-soft grid flex-1 gap-3 p-5 transition-colors hover:bg-surface md:grid-cols-[1.2fr_1fr_1fr_auto] md:items-center"
+                    className="grid flex-1 gap-3 md:grid-cols-[1.2fr_1fr_1fr_auto] md:items-center"
                   >
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -158,6 +179,11 @@ export function BookingListPage() {
                         </span>
                         <StatusBadge status={booking.status} />
                         {booking.source === 'FRONT_DESK' && <Badge tone="info">Tại quầy</Badge>}
+                        {attention && (
+                          <Badge tone={ATTENTION_META[attention].tone}>
+                            {ATTENTION_META[attention].label}
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-sm text-foreground">{booking.guestName}</p>
                       <p className="text-xs text-muted-foreground">
@@ -183,18 +209,21 @@ export function BookingListPage() {
                       {money.format(booking.roomTotal)}
                     </p>
                   </Link>
-                  {EDITABLE_STATUSES.includes(booking.status) && (
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="self-center rounded-full"
-                    >
-                      <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}/edit`}>
-                        Sửa
-                      </Link>
-                    </Button>
-                  )}
+                  <div
+                    className={cn(
+                      'flex items-center justify-end sm:w-20 sm:shrink-0',
+                      !EDITABLE_STATUSES.includes(booking.status) && 'hidden sm:flex',
+                    )}
+                  >
+                    {EDITABLE_STATUSES.includes(booking.status) && (
+                      <Button asChild variant="outline" size="sm" className="rounded-full">
+                        <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}/edit`}>
+                          <Pencil className="size-4" />
+                          Sửa
+                        </Link>
+                      </Button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

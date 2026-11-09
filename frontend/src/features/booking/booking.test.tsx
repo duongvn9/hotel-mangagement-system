@@ -170,6 +170,21 @@ describe('MyBookingsPage', () => {
     },
   }
 
+  const myItem = (over: Record<string, unknown>) => ({
+    id: 'x',
+    code: 'BK',
+    status: 'CONFIRMED',
+    checkIn: '2099-01-01',
+    checkOut: '2099-01-02',
+    adultCount: 1,
+    childCount: 0,
+    roomCount: 1,
+    roomTotal: 1_000_000,
+    depositAmount: 100_000,
+    createdAt: '2099-01-01T00:00:00.000Z',
+    ...over,
+  })
+
   it('requires login and lists the customer bookings from the server', async () => {
     const get = vi.spyOn(api, 'get').mockResolvedValue({ data: [] })
     const empty = renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
@@ -196,6 +211,83 @@ describe('MyBookingsPage', () => {
     renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
     expect(await screen.findByText('BK123')).toBeInTheDocument()
     expect(screen.getByText('Chờ đặt cọc')).toBeInTheDocument()
+  })
+
+  it('sorts bookings by check-in date, newest first by default', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: [
+        myItem({ id: 'b1', code: 'BK-A', checkIn: '2099-03-10' }),
+        myItem({ id: 'b2', code: 'BK-B', checkIn: '2099-05-10' }),
+        myItem({ id: 'b3', code: 'BK-C', checkIn: '2099-01-10' }),
+      ],
+    })
+    renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
+    await screen.findByText('BK-A')
+    const codes = screen.getAllByText(/^BK-[A-C]$/).map((el) => el.textContent)
+    expect(codes).toEqual(['BK-B', 'BK-A', 'BK-C'])
+  })
+
+  it('can sort bookings by check-in date oldest first', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: [
+        myItem({ id: 'b1', code: 'BK-A', checkIn: '2099-03-10' }),
+        myItem({ id: 'b2', code: 'BK-B', checkIn: '2099-05-10' }),
+        myItem({ id: 'b3', code: 'BK-C', checkIn: '2099-01-10' }),
+      ],
+    })
+    renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
+    await screen.findByText('BK-A')
+    fireEvent.change(screen.getByLabelText('Sắp xếp'), { target: { value: 'checkin-asc' } })
+    const codes = screen.getAllByText(/^BK-[A-C]$/).map((el) => el.textContent)
+    expect(codes).toEqual(['BK-C', 'BK-A', 'BK-B'])
+  })
+
+  it('filters bookings by status', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: [
+        myItem({ id: 'b1', code: 'BK-A', checkIn: '2099-03-10', status: 'CHECKED_OUT' }),
+        myItem({ id: 'b2', code: 'BK-B', checkIn: '2099-05-10', status: 'PENDING_DEPOSIT' }),
+      ],
+    })
+    renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
+    await screen.findByText('BK-A')
+    fireEvent.change(screen.getByLabelText('Trạng thái'), { target: { value: 'CHECKED_OUT' } })
+    expect(screen.getByText('BK-A')).toBeInTheDocument()
+    expect(screen.queryByText('BK-B')).not.toBeInTheDocument()
+  })
+
+  it('filters bookings by check-in date range', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: [
+        myItem({ id: 'b1', code: 'BK-A', checkIn: '2099-03-10' }),
+        myItem({ id: 'b2', code: 'BK-B', checkIn: '2099-05-10' }),
+        myItem({ id: 'b3', code: 'BK-C', checkIn: '2099-01-10' }),
+      ],
+    })
+    renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
+    await screen.findByText('BK-A')
+    fireEvent.change(screen.getByLabelText('Nhận phòng từ'), { target: { value: '2099-02-01' } })
+    fireEvent.change(screen.getByLabelText('Nhận phòng đến'), { target: { value: '2099-04-01' } })
+    expect(screen.getByText('BK-A')).toBeInTheDocument()
+    expect(screen.queryByText('BK-B')).not.toBeInTheDocument()
+    expect(screen.queryByText('BK-C')).not.toBeInTheDocument()
+  })
+
+  it('paginates bookings with 8 per page', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: Array.from({ length: 10 }, (_, i) =>
+        myItem({
+          id: `b${i}`,
+          code: `BK-${i}`,
+          checkIn: `2099-01-${String(i + 1).padStart(2, '0')}`,
+        }),
+      ),
+    })
+    renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
+    await screen.findAllByText('Tiền cọc')
+    expect(screen.getAllByText('Tiền cọc')).toHaveLength(8)
+    fireEvent.click(screen.getByLabelText('Trang sau'))
+    expect(screen.getAllByText('Tiền cọc')).toHaveLength(2)
   })
 })
 

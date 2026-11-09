@@ -19,10 +19,13 @@ const addDays = (day: string, days: number) =>
 export interface SampleBooking {
   code: string;
   roomNumber: string;
-  /** Ngày nhận phòng `YYYY-MM-DD`; CHECKED_IN tính từ ngày chạy seed. */
+  /** Ngày nhận phòng `YYYY-MM-DD`; các mốc động tính từ ngày chạy seed. */
   checkInDay: string;
   nights: number;
-  status: BookingStatus.CheckedIn | BookingStatus.CheckedOut;
+  status:
+    | BookingStatus.Confirmed
+    | BookingStatus.CheckedIn
+    | BookingStatus.CheckedOut;
 }
 
 /**
@@ -59,6 +62,39 @@ export const sampleBookings = (today = toBusinessDate()): SampleBooking[] => [
     checkInDay: '2026-10-02',
     nights: 2,
     status: BookingStatus.CheckedOut,
+  },
+  // Các đơn minh hoạ cảnh báo lễ tân (quá hạn / sắp tới hạn), mốc tính từ ngày chạy seed.
+  {
+    // CHECKED_IN nhưng đã qua ngày trả phòng (hôm qua): quá hạn trả phòng.
+    code: 'SEED-OVERDUE-CHECKOUT-001',
+    roomNumber: '201',
+    checkInDay: addDays(today, -3),
+    nights: 2,
+    status: BookingStatus.CheckedIn,
+  },
+  {
+    // CONFIRMED nhưng đã qua ngày nhận phòng mà chưa check-in: no-show.
+    code: 'SEED-OVERDUE-CHECKIN-001',
+    roomNumber: '202',
+    checkInDay: addDays(today, -2),
+    nights: 2,
+    status: BookingStatus.Confirmed,
+  },
+  {
+    // CHECKED_IN có ngày trả phòng là hôm nay: sắp tới hạn trả phòng.
+    code: 'SEED-DUE-CHECKOUT-001',
+    roomNumber: '301',
+    checkInDay: addDays(today, -1),
+    nights: 1,
+    status: BookingStatus.CheckedIn,
+  },
+  {
+    // CONFIRMED có ngày nhận phòng là hôm nay: sắp tới hạn nhận phòng.
+    code: 'SEED-DUE-CHECKIN-001',
+    roomNumber: '102',
+    checkInDay: today,
+    nights: 2,
+    status: BookingStatus.Confirmed,
   },
 ];
 
@@ -101,7 +137,8 @@ export const seedBookings: Seed = async (app) => {
       rateSnapshot: [{ room: room._id, ratePerNight }],
       checkIn,
       checkOut,
-      checkedInAt: checkIn,
+      checkedInAt:
+        sample.status === BookingStatus.Confirmed ? undefined : checkIn,
       checkedOutAt:
         sample.status === BookingStatus.CheckedOut ? checkOut : undefined,
       adultCount: 1,

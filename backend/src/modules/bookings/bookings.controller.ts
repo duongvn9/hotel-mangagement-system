@@ -138,6 +138,17 @@ export class BookingsController {
     return this.bookings.listForCustomer(user.id);
   }
 
+  @Get('attention')
+  @Roles(Role.Receptionist, Role.Manager)
+  @ApiOperation({
+    summary:
+      'Counts of bookings needing attention: overdue and due-today check-ins/outs',
+  })
+  @ApiOkResponse({ description: 'Attention counts for reception' })
+  attention() {
+    return this.bookings.attention();
+  }
+
   @Post('walk-in')
   @Roles(Role.Receptionist, Role.Manager)
   @ApiOperation({
