@@ -86,16 +86,20 @@ describe('FrontDeskPage', () => {
   })
 
   it('reloads for another day', async () => {
+    // Ô ngày là DateField (popover + lịch); pin đồng hồ để lịch mở đúng tháng.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-10T12:00:00Z') })
     const get = vi.spyOn(api, 'get').mockResolvedValue({ data: list() })
     renderPage()
     await screen.findByRole('heading', { name: 'Khách đến (3)' })
 
-    fireEvent.change(screen.getByLabelText(/^Ngày/), { target: { value: '2099-01-10' } })
+    fireEvent.click(screen.getByLabelText(/^Ngày/))
+    fireEvent.click(screen.getByText('20'))
     await waitFor(() =>
       expect(get).toHaveBeenLastCalledWith('/front-desk/same-day', {
-        params: { date: '2099-01-10' },
+        params: { date: '2026-11-20' },
       }),
     )
+    vi.useRealTimers()
   })
 
   it('shows empty lists and an error state', async () => {

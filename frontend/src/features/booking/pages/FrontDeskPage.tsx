@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { Button, Input, NativeSelect, StatusBadge } from '@/components/atoms'
-import { Alert, FormField } from '@/components/molecules'
+import { Button, NativeSelect, StatusBadge } from '@/components/atoms'
+import { Alert, DateField, FormField } from '@/components/molecules'
 import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import type { BookingListItem } from '../api'
@@ -27,13 +27,7 @@ export function FrontDeskPage() {
 
       <div className="card-soft max-w-xs p-5 sm:p-6">
         <FormField label="Ngày" htmlFor="frontdesk-date" required>
-          <Input
-            id="frontdesk-date"
-            type="date"
-            required
-            value={date}
-            onChange={(event) => event.target.value && setDate(event.target.value)}
-          />
+          <DateField id="frontdesk-date" value={date} onChange={setDate} />
         </FormField>
       </div>
 
