@@ -99,6 +99,20 @@ accessible names, search debounce, and server pagination remain.
 Evidence, approved differences, assertion changes, and limitations are recorded in
 [`validation/ui/WDP301-189.md`](validation/ui/WDP301-189.md).
 
+### 2.6 WDP301-190 verification
+
+The user approved preserving room, equipment, and facility modes, search, images,
+maintenance and safe-use flags, retry semantics, and truthful confirmation details
+in the prototype form presentation. Prototype-only title and severity are excluded.
+
+- [x] Header, panel, grid, tokens, typography, spacing, and success icon compared with the prototype.
+- [x] Required widths (1440, 768, and 375 pixels), long content, loading, empty, error, and success checked.
+- [x] Validation focus, disabled controls, selection retention, and identical retry requests verified.
+- [x] Final frontend checks and forbidden-pattern scans passed; existing assertions unchanged.
+
+Evidence, approved differences, and limitations are recorded in
+[`validation/ui/WDP301-190.md`](validation/ui/WDP301-190.md).
+
 ## 3. Prototype to app map
 
 Fill the "Jira task" column when you pick up a task. App paths come from `frontend/src/features/*/routes.tsx` and `frontend/src/pages/`.
@@ -140,7 +154,7 @@ Fill the "Jira task" column when you pick up a task. App paths come from `fronte
 | `app.service-desk.tsx` | `/staff/service/dashboard` | `features/staff-dashboards/StaffDashboardPage.tsx` | |
 | `app.operations.tsx` | `/staff/operations/dashboard` | `features/staff-dashboards/StaffDashboardPage.tsx` | |
 | `app.issues.tsx` | `/customer/issues`, `/staff/issues`, `/manager/issues` | `features/issues/pages/IssueListPage.tsx`, `IssueDetailPage.tsx` | |
-| `app.report-issue.tsx` | `/customer/issues/report`, `/operations/maintenance/report` | `features/issues/pages/ReportIssuePage.tsx`, `features/maintenance/pages/ReportFaultPage.tsx` | |
+| `app.report-issue.tsx` | `/customer/issues/report`, `/operations/maintenance/report` | `features/issues/pages/ReportIssuePage.tsx`, `features/maintenance/pages/ReportFaultPage.tsx` | WDP301-190 (maintenance) |
 | `app.maintenance.tsx` | `/operations/maintenance/history` | `features/maintenance/pages/MaintenanceHistoryPage.tsx` | |
 | `app.feedback.tsx` | `/my-feedback` | `features/feedback/pages/MyFeedbackPage.tsx` | |
 | `app.feedback-review.tsx` | `/staff/feedback` | `features/feedback/pages/FeedbackPage.tsx` | WDP301-156 |
