@@ -10,10 +10,11 @@ import { getErrorMessage } from '@/lib/api-client'
 import { env } from '@/lib/env'
 import { getDevAccounts, type DevAccount } from '../api'
 import { useAuth } from '../auth-context'
+import { GoogleSignInButton } from '../components/GoogleSignInButton'
 
 /** UC02 Login. */
 export function LoginPage() {
-  const { me, isDevMode, login, loginAsDev } = useAuth()
+  const { me, isDevMode, login, loginAsDev, loginWithGoogle } = useAuth()
   const from = (useLocation().state as { from?: string } | null)?.from
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -97,6 +98,12 @@ export function LoginPage() {
             </Button>
           </div>
         </form>
+      )}
+
+      {!isDevMode && (
+        <div className="mt-4">
+          <GoogleSignInButton pending={pending} onClick={() => void run(loginWithGoogle)} />
+        </div>
       )}
 
       <div className="mt-6 space-y-2 text-sm text-muted-foreground">

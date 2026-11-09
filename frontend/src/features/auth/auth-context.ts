@@ -8,6 +8,8 @@ export interface AuthContextValue {
   isDevMode: boolean
   login(email: string, password: string): Promise<void>
   loginAsDev(account: DevAccount): Promise<void>
+  /** Đăng nhập bằng Google; lần đầu thì tự tạo tài khoản Customer bằng tên Google. */
+  loginWithGoogle(): Promise<void>
   /** UC01: tạo tài khoản, gửi email xác minh rồi đăng xuất (phải xác minh mới đăng nhập được). */
   register(input: ProfileInput & { email: string; password: string }): Promise<void>
   logout(): Promise<void>
