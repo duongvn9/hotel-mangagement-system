@@ -2,6 +2,23 @@ import { render, screen } from '@testing-library/react'
 import { DataTable } from './DataTable'
 
 describe('DataTable server accessibility', () => {
+  it('can show all workload rows without an extra pagination control', () => {
+    const rows = Array.from({ length: 12 }, (_, index) => ({
+      id: String(index),
+      name: `Nhân viên ${index}`,
+    }))
+    render(
+      <DataTable
+        rows={rows}
+        columns={[{ key: 'name', header: 'Tên' }]}
+        caption="Nhân viên"
+        pageSize={3}
+        showPagination={false}
+      />,
+    )
+    expect(screen.getByText('Nhân viên 11')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Trang sau' })).not.toBeInTheDocument()
+  })
   it('names the table and preserves row headers, search limits and pending pagination', () => {
     render(
       <DataTable

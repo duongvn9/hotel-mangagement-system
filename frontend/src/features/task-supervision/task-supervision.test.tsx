@@ -408,6 +408,33 @@ describe('UC55 Manager task supervision', () => {
     expect(screen.queryByText('Nguồn bảo trì')).not.toBeInTheDocument()
     expect(screen.getByText('Không còn nhân viên')).toBeInTheDocument()
   })
+  it('preserves blocked task details and recovery history without write controls', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      data: {
+        ...detail,
+        blocked: true,
+        instructions: 'Kiểm tra nguồn điện',
+        blockerHistory: [
+          {
+            id: 'block1',
+            reason: 'Thiếu linh kiện',
+            reportedBy: 'ops1',
+            reportedAt: '2026-10-25T03:00:00Z',
+          },
+        ],
+      },
+    })
+    const post = vi.spyOn(api, 'post')
+    const patch = vi.spyOn(api, 'patch')
+    renderPage(root + '/task1')
+    expect(await screen.findByText('Lý do không thể xử lý: Thiếu linh kiện')).toBeInTheDocument()
+    expect(screen.getByText('Hướng dẫn: Kiểm tra nguồn điện')).toBeInTheDocument()
+    expect(
+      screen.getByText('Bị chặn — chờ lễ tân tiếp tục hoặc phân công lại.'),
+    ).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+    expect(patch).not.toHaveBeenCalled()
+  })
   it('shows a 404 with a return link and permits retrying other detail errors', async () => {
     vi.mocked(api.get).mockRejectedValue({
       isAxiosError: true,

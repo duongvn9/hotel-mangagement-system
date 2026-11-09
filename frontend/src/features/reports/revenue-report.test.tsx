@@ -241,6 +241,25 @@ describe('UC56 Manager revenue page', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(screen.getByText('Chưa hỗ trợ ghi nhận hoàn tiền')).toBeInTheDocument()
   })
+  it('does not treat a period with only failed transactions as empty', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      data: {
+        ...report,
+        totals: {
+          ...report.totals,
+          successCount: 0,
+          successAmount: 0,
+          failedCount: 1,
+          cancelledCount: 0,
+          pendingCount: 0,
+        },
+      },
+    })
+    renderPage()
+    await screen.findByRole('table', { name: 'Theo phương thức' })
+    expect(screen.getByText('Thất bại: 1')).toBeInTheDocument()
+    expect(screen.queryByText('Không có giao dịch trong kỳ đã chọn')).not.toBeInTheDocument()
+  })
   it.each(['CUSTOMER', 'RECEPTIONIST', 'SERVICE_STAFF', 'OPERATIONS_STAFF'])(
     'blocks %s even with report:view',
     async (role) => {

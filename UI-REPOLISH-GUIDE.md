@@ -84,6 +84,79 @@ The user approved keeping images, descriptions, room-type links and counts, acti
 Evidence, approved differences, assertion changes, and limitations are recorded in
 [`validation/ui/WDP301-188.md`](validation/ui/WDP301-188.md).
 
+### 2.5 WDP301-189 verification
+
+The user approved retaining service images, descriptions, units, billable/free settings,
+activity filtering, and deactivate/reactivate actions in the prototype table and dialog.
+Categories and deletion are excluded. Existing API contracts, validation, permissions,
+accessible names, search debounce, and server pagination remain.
+
+- [x] Page header, table, dialog, tokens, typography, spacing, and icons compared with the prototype.
+- [x] Required widths (1440, 768, and 375 pixels), long content, empty, error, and loading states checked.
+- [x] Existing behavior, keyboard focus restoration, image viewing, and confirmation messages checked.
+- [x] Final frontend checks and forbidden-pattern scans completed.
+
+Evidence, approved differences, assertion changes, and limitations are recorded in
+[`validation/ui/WDP301-189.md`](validation/ui/WDP301-189.md).
+
+### 2.6 WDP301-190 verification
+
+The user approved preserving room, equipment, and facility modes, search, images,
+maintenance and safe-use flags, retry semantics, and truthful confirmation details
+in the prototype form presentation. Prototype-only title and severity are excluded.
+
+- [x] Header, panel, grid, tokens, typography, spacing, and success icon compared with the prototype.
+- [x] Required widths (1440, 768, and 375 pixels), long content, loading, empty, error, and success checked.
+- [x] Validation focus, disabled controls, selection retention, and identical retry requests verified.
+- [x] Final frontend checks and forbidden-pattern scans passed; existing assertions unchanged.
+
+Evidence, approved differences, and limitations are recorded in
+[`validation/ui/WDP301-190.md`](validation/ui/WDP301-190.md).
+
+### 2.7 WDP301-191 verification
+
+The user approved keeping the existing filters, columns, data, and behavior; using
+the prototype table and Panel for detail; and omitting statistics unavailable in
+the API. The prototype does not provide a matching detail screen.
+
+- [x] Header, table, tokens, typography, spacing, and pagination compared with the prototype.
+- [x] List and detail checked at 1440, 768, and 375 pixels, including long content and empty, error, and loading states.
+- [x] Keyboard focus, filter-preserving navigation, validation, read-only behavior, and permissions checked.
+- [x] Required frontend checks and forbidden-pattern scans passed; existing assertions unchanged.
+
+Evidence, approved differences, and limitations are recorded in
+[`validation/ui/WDP301-191.md`](validation/ui/WDP301-191.md).
+
+### 2.8 WDP301-192 verification
+
+The user approved keeping read-only supervision, existing filters, queues,
+metrics, workload, and detail; using the prototype table and shared Panels for
+additional content. Prototype create/reassign actions are excluded.
+
+- [x] Header, cards, table, tokens, typography, spacing, and pagination compared with the prototype.
+- [x] List and detail checked at 1440, 768, and 375 pixels, including long content, loading, empty, and error states.
+- [x] Keyboard navigation, table focus, filter-preserving return, access, and read-only behavior checked.
+- [x] Required frontend checks and forbidden-pattern scans passed; existing assertions unchanged.
+
+Evidence, approved differences, and limitations are recorded in
+[`validation/ui/WDP301-192.md`](validation/ui/WDP301-192.md).
+
+### 2.9 WDP301-193 verification
+
+The user approved keeping real transaction totals, filters, warnings, the existing
+bar chart, and detailed tables, with prototype cards and Panels. Room-type
+revenue, online ratio, and simulated export are excluded. The shared period
+controls also use the new appearance on the operational report; its behavior was
+checked with the existing tests.
+
+- [x] Header, cards, Panel, tokens, typography, and spacing compared with the prototype.
+- [x] Required widths and long, loading, empty, error, anomaly, and refund states checked.
+- [x] Filtering, validation, data tables, keyboard focus, access, and read-only behavior checked.
+- [x] Required frontend checks and forbidden-pattern scans passed; existing assertions unchanged.
+
+Evidence, approved differences, and limitations are recorded in
+[`validation/ui/WDP301-193.md`](validation/ui/WDP301-193.md).
+
 ## 3. Prototype to app map
 
 Fill the "Jira task" column when you pick up a task. App paths come from `frontend/src/features/*/routes.tsx` and `frontend/src/pages/`.
@@ -110,23 +183,23 @@ Fill the "Jira task" column when you pick up a task. App paths come from `fronte
 | `app.reconciliation.tsx` | `/manager/payments/reconciliation` | `features/booking/pages/ReconciliationPage.tsx` | |
 | `app.reception.tsx` | `/reception/dashboard` | `features/dashboard/pages/ReceptionDashboardPage.tsx` | |
 | `app.dashboard.tsx` | `/manager/dashboard` | `features/dashboard/pages/ManagerDashboardPage.tsx` | WDP301-185 |
-| `app.revenue.tsx` | `/manager/reports/revenue` | `features/reports/pages/RevenueReportPage.tsx` | |
+| `app.revenue.tsx` | `/manager/reports/revenue` | `features/reports/pages/RevenueReportPage.tsx` | WDP301-193 |
 | `app.operations-report.tsx` | `/manager/reports/operational` | `features/reports/pages/OperationalReportPage.tsx` | |
 | `app.accounts.tsx` | `/manager/accounts` | `features/accounts/pages/AccountsPage.tsx` | WDP301-154 |
 | `app.roles.tsx` | `/manager/roles` | `features/roles/pages/RolesPage.tsx` | WDP301-155 |
 | `app.rooms.tsx` | `/manager/rooms` | `features/rooms/pages/RoomsPage.tsx` | WDP301-187 |
 | `app.room-types.tsx` | `/manager/room-types` | `features/room-types/pages/RoomTypesPage.tsx` | WDP301-186 |
 | `app.amenities.tsx` | `/manager/amenities` | `features/amenities/pages/AmenitiesPage.tsx` | WDP301-188 |
-| `app.services.tsx` | `/manager/services` | `features/services/pages/ServicesPage.tsx` | |
-| `app.task-queues.tsx` | `/manager/task-queues` (+ `/:taskId`) | `features/task-supervision/pages/TaskQueuesPage.tsx`, `TaskQueueDetailPage.tsx` | |
+| `app.services.tsx` | `/manager/services` | `features/services/pages/ServicesPage.tsx` | WDP301-189 |
+| `app.task-queues.tsx` | `/manager/task-queues` (+ `/:taskId`) | `features/task-supervision/pages/TaskQueuesPage.tsx`, `TaskQueueDetailPage.tsx` | WDP301-192 |
 | `app.tasks.tsx` | `/staff/tasks` (+ `/:id`) | `features/tasks/pages/AssignedTasksPage.tsx`, `AssignedTaskDetailPage.tsx` | |
 | `app.service-orders.tsx` | `/staff/service-orders`, `/staff/service-history` | `features/service-orders/pages/StaffServiceOrdersPage.tsx`, `ServiceHistoryPage.tsx` | |
 | `app.order-service.tsx` | `/customer/service-orders/new` (and the list at `/customer/service-orders`) | `features/service-orders/pages/NewServiceOrderPage.tsx`, `ServiceOrdersPage.tsx` | |
 | `app.service-desk.tsx` | `/staff/service/dashboard` | `features/staff-dashboards/StaffDashboardPage.tsx` | |
 | `app.operations.tsx` | `/staff/operations/dashboard` | `features/staff-dashboards/StaffDashboardPage.tsx` | |
 | `app.issues.tsx` | `/customer/issues`, `/staff/issues`, `/manager/issues` | `features/issues/pages/IssueListPage.tsx`, `IssueDetailPage.tsx` | |
-| `app.report-issue.tsx` | `/customer/issues/report`, `/operations/maintenance/report` | `features/issues/pages/ReportIssuePage.tsx`, `features/maintenance/pages/ReportFaultPage.tsx` | |
-| `app.maintenance.tsx` | `/operations/maintenance/history` | `features/maintenance/pages/MaintenanceHistoryPage.tsx` | |
+| `app.report-issue.tsx` | `/customer/issues/report`, `/operations/maintenance/report` | `features/issues/pages/ReportIssuePage.tsx`, `features/maintenance/pages/ReportFaultPage.tsx` | WDP301-190 (maintenance) |
+| `app.maintenance.tsx` | `/operations/maintenance/history` | `features/maintenance/pages/MaintenanceHistoryPage.tsx`, `MaintenanceHistoryDetailPage.tsx` | WDP301-191 |
 | `app.feedback.tsx` | `/my-feedback` | `features/feedback/pages/MyFeedbackPage.tsx` | |
 | `app.feedback-review.tsx` | `/staff/feedback` | `features/feedback/pages/FeedbackPage.tsx` | WDP301-156 |
 | `app.tsx` (workspace shell) | every staff and customer account route | `layouts/WorkspaceShell.tsx` now renders `templates/WorkspaceLayout` for all roles (staff and `CUSTOMER`). `StaffNav.tsx` deleted. | Done |

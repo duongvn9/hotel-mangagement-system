@@ -47,6 +47,10 @@ function dialogs() {
 const change = (label: string | RegExp, value: string) =>
   fireEvent.change(screen.getByLabelText(label), { target: { value } })
 const save = () => fireEvent.click(screen.getByRole('button', { name: 'Lưu dịch vụ' }))
+const accept = () =>
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Tiếp tục' }))
+const cancel = () =>
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Giữ lại' }))
 describe('UC54 service form', () => {
   beforeAll(() => configure({ asyncUtilTimeout: 5000 }))
   afterAll(() => configure({ asyncUtilTimeout: 1000 }))
@@ -272,7 +276,6 @@ describe('UC54 service form', () => {
     expect(patch.mock.calls[0]).toEqual(patch.mock.calls[1])
   })
   it('keeps a conflicting draft until explicit reload confirmation, then loads the new data', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     vi.spyOn(api, 'patch').mockRejectedValue({
       isAxiosError: true,
       response: { status: 409, data: { message: 'Dữ liệu đã thay đổi, hãy tải lại' } },
@@ -284,18 +287,18 @@ describe('UC54 service form', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Dữ liệu đã thay đổi')
     expect(screen.getByLabelText('Mô tả')).toHaveValue('Unsaved draft')
     fireEvent.click(screen.getByRole('button', { name: 'Tải lại dữ liệu' }))
+    cancel()
     expect(get).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Mô tả')).toHaveValue('Unsaved draft')
-    confirm.mockReturnValue(true)
     get.mockResolvedValueOnce({ data: { ...service, description: 'Winner data', price: 0 } })
     fireEvent.click(screen.getByRole('button', { name: 'Tải lại dữ liệu' }))
+    accept()
     await waitFor(() => expect(screen.getByLabelText('Mô tả')).toHaveValue('Winner data'))
     expect(screen.getByLabelText(/^Giá VND/)).toHaveValue('0')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     await waitFor(() => expect(screen.getByLabelText(/^Tên dịch vụ/)).toHaveFocus())
   })
   it('retains the draft if reloading fails and offers another reload', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     vi.spyOn(api, 'patch').mockRejectedValue({
       isAxiosError: true,
       response: { status: 409, data: { message: 'Dữ liệu đã thay đổi, hãy tải lại' } },
@@ -306,6 +309,7 @@ describe('UC54 service form', () => {
     await screen.findByRole('alert')
     vi.mocked(api.get).mockRejectedValueOnce(new Error('Offline'))
     fireEvent.click(screen.getByRole('button', { name: 'Tải lại dữ liệu' }))
+    accept()
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Tải lại dữ liệu' })).toBeEnabled(),
     )
@@ -314,23 +318,22 @@ describe('UC54 service form', () => {
   })
   it('deactivates only after confirmation using only isActive, preserving existing-request copy', async () => {
     const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: service })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     form(service)
     change(/^Tên dịch vụ/, '')
     fireEvent.click(screen.getByRole('button', { name: 'Ngừng dịch vụ' }))
     expect(patch).not.toHaveBeenCalled()
-    expect(confirm).toHaveBeenCalledWith(
-      expect.stringContaining('các yêu cầu dịch vụ đã có không bị ảnh hưởng'),
+    expect(screen.getByRole('alertdialog')).toHaveTextContent(
+      'các yêu cầu dịch vụ đã có không bị ảnh hưởng',
     )
-    confirm.mockReturnValue(true)
+    cancel()
     fireEvent.click(screen.getByRole('button', { name: 'Ngừng dịch vụ' }))
+    accept()
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith(`/services/${service.id}`, { isActive: false }),
     )
     expect(screen.queryByRole('button', { name: /Xóa/ })).not.toBeInTheDocument()
   })
   it('reactivates with confirmation and maps missing stored price from the server before saving price plus activation', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     const patch = vi
       .spyOn(api, 'patch')
       .mockRejectedValueOnce({
@@ -343,12 +346,14 @@ describe('UC54 service form', () => {
       .mockResolvedValue({ data: service })
     form({ ...service, isActive: false, price: null })
     fireEvent.click(screen.getByRole('button', { name: 'Kích hoạt lại dịch vụ' }))
+    accept()
     await screen.findByText('price: cần giá hợp lệ để kích hoạt dịch vụ tính phí')
     expect(patch).toHaveBeenCalledWith(`/services/${service.id}`, { isActive: true })
     change(/^Giá VND/, '0')
     fireEvent.click(screen.getByLabelText('Đang hoạt động'))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu dịch vụ' })).toBeEnabled())
     save()
+    accept()
     await waitFor(() =>
       expect(patch).toHaveBeenLastCalledWith(`/services/${service.id}`, {
         price: 0,
@@ -389,7 +394,7 @@ describe('UC54 service form', () => {
     expect(screen.getByLabelText('Tìm theo tên')).toHaveValue('Laundry')
     expect(screen.getByLabelText('Tính phí')).toHaveValue('true')
     expect(screen.getByLabelText('Trạng thái')).toHaveValue('true')
-    expect(screen.getByText(/Trang 2\/3/)).toBeInTheDocument()
+    expect(screen.getByText(/Trang 2\s*\/\s*3/)).toBeInTheDocument()
     expect(get.mock.calls.filter(([url]) => url === '/services').length).toBeGreaterThan(before)
     await waitFor(() => expect(edit).toHaveFocus())
     const add = screen.getByRole('button', { name: 'Thêm dịch vụ' })
@@ -397,9 +402,9 @@ describe('UC54 service form', () => {
     fireEvent.click(add)
     const dialog = screen.getByRole('dialog', { name: 'Thêm dịch vụ' })
     expect(within(dialog).getByLabelText(/^Tên dịch vụ/)).toHaveValue('')
-    fireEvent(dialog, new Event('cancel', { bubbles: true, cancelable: true }))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(add).toHaveFocus()
+    fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(add).toHaveFocus())
   })
   it('handles detail loading/error/retry and prevents Esc during a submit', async () => {
     dialogs()
@@ -422,7 +427,7 @@ describe('UC54 service form', () => {
     change('Mô tả', 'Pending')
     save()
     await screen.findByRole('button', { name: 'Đang xử lý…' })
-    fireEvent(screen.getByRole('dialog'), new Event('cancel', { bubbles: true, cancelable: true }))
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' })
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 })
