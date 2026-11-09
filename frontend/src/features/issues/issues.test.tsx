@@ -136,6 +136,7 @@ test('context query is identity scoped and disabled for non-customers', async ()
     isDevMode: false,
     login: vi.fn(),
     loginAsDev: vi.fn(),
+    loginWithGoogle: vi.fn(),
     register: vi.fn(),
     logout: vi.fn(),
     refresh: vi.fn(),

@@ -38,6 +38,33 @@ describe('RegisterPage', () => {
   })
 })
 
+describe('RegisterPage: Google', () => {
+  it('đăng ký bằng Google rồi về trang chủ', async () => {
+    const loginWithGoogle = vi.fn().mockResolvedValue(undefined)
+    renderWithAuth(
+      [
+        { path: '/register', element: <RegisterPage /> },
+        { path: '/', element: <p>trang chủ</p> },
+      ],
+      { path: '/register', auth: { loginWithGoogle } },
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục với Google' }))
+    expect(await screen.findByText('trang chủ')).toBeInTheDocument()
+    expect(loginWithGoogle).toHaveBeenCalledOnce()
+  })
+
+  it('lỗi Google thì hiện thông báo', async () => {
+    const loginWithGoogle = vi
+      .fn()
+      .mockRejectedValue(new Error('Bạn đã đóng cửa sổ đăng nhập Google'))
+    renderWithAuth([{ path: '/', element: <RegisterPage /> }], { auth: { loginWithGoogle } })
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục với Google' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Bạn đã đóng cửa sổ đăng nhập Google',
+    )
+  })
+})
+
 describe('ProfilePage', () => {
   afterEach(() => vi.restoreAllMocks())
 
