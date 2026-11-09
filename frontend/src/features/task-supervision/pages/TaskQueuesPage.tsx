@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { Badge, Button, Input, Label, NativeSelect } from '@/components/atoms'
+import { Alert, EmptyState, FormField } from '@/components/molecules'
+import { DataTable, PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { ROLE_LABELS } from '@/features/auth/api'
-import type { QueueFilters, QueueQuery, QueueStatus } from '../api'
+import type { QueueFilters, QueueQuery, QueueStatus, QueueTask } from '../api'
 import { useQueueSummary, useQueueTasks } from '../hooks'
 import {
   priorityOption,
@@ -101,330 +99,371 @@ export function TaskQueuesPage() {
   }
   const staff = summary.data?.workload.flatMap((row) => (row.assignee ? [row.assignee] : [])) ?? []
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-4xl font-semibold">Hàng đợi task</h1>
-          <p className="mt-2 text-sm text-stone-700">
-            Giám sát công việc hiện tại trong toàn khách sạn. Chỉ xem.
-          </p>
-        </div>
-        <Button
-          disabled={summary.isFetching || tasks.isFetching}
-          onClick={() => {
-            void summary.refetch()
-            void tasks.refetch()
-          }}
-        >
-          Làm mới
-        </Button>
-      </div>
-      <div
-        role="search"
-        aria-label="Lọc hàng đợi task"
-        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-      >
-        <TextField
-          label="Tìm tiêu đề"
-          type="search"
-          maxLength={100}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <SelectField
-          label="Loại task"
-          value={filters.taskType ?? ''}
-          options={[
-            { value: '', label: 'Tất cả loại task' },
-            ...(summary.data?.facets.taskTypes ?? []).map((value) => ({ value, label: value })),
-          ]}
-          onChange={(e) => change({ taskType: e.target.value })}
-        />
-        <SelectField
-          label="Nguồn task"
-          value={filters.sourceType ?? ''}
-          options={[
-            { value: '', label: 'Tất cả nguồn' },
-            ...Object.entries(SOURCE_LABELS).map(([value, label]) => ({ value, label })),
-          ]}
-          onChange={(e) => change({ sourceType: e.target.value })}
-        />
-        <SelectField
-          label="Ưu tiên"
-          value={filters.priority ?? ''}
-          options={[
-            { value: '', label: 'Tất cả ưu tiên' },
-            ...(summary.data?.facets.priorities ?? []).map((value) => ({
-              value,
-              label: priorityOption(value),
-            })),
-          ]}
-          onChange={(e) => change({ priority: e.target.value })}
-        />
-        <SelectField
-          label="Người thực hiện"
-          value={filters.assigneeId ?? ''}
-          options={[
-            { value: '', label: 'Tất cả nhân viên' },
-            ...staff.map((person) => ({
-              value: person.id,
-              label: `${person.fullName} · ${ROLE_LABELS[person.role] ?? person.role}`,
-            })),
-            ...(filters.assigneeId && !staff.some((p) => p.id === filters.assigneeId)
-              ? [{ value: filters.assigneeId, label: 'Nhân viên đã chọn' }]
-              : []),
-          ]}
-          onChange={(e) => change({ assigneeId: e.target.value })}
-        />
-        <label className="flex min-h-11 items-center gap-3 text-sm">
-          <input
-            className="size-5"
-            type="checkbox"
-            checked={Boolean(query.overdue)}
-            onChange={(e) => change({ overdue: e.target.checked ? 'true' : '' })}
-          />
-          Chỉ quá hạn trong bảng
-        </label>
-      </div>
-      <section aria-label="Số liệu hàng đợi" className="space-y-3">
-        {summary.isFetching && summary.data && <p role="status">Đang cập nhật số liệu hàng đợi…</p>}
-        {summary.isPending && <p role="status">Đang tải số liệu hàng đợi…</p>}
-        {summary.isError && (
-          <QueueError error={summary.error} retry={() => void summary.refetch()} />
-        )}
-        <div role="tablist" aria-label="Chọn hàng đợi" className="grid gap-3 sm:grid-cols-3">
-          {QUEUE_STATES.map((value, index) => (
-            <button
-              key={value}
-              ref={(element) => {
-                tabs.current[index] = element
-              }}
-              type="button"
-              role="tab"
-              id={`queue-${value}`}
-              aria-selected={value === status}
-              aria-controls="queue-panel"
-              tabIndex={value === status ? 0 : -1}
-              onClick={() => selectTab(value)}
-              onKeyDown={(e) => tabKey(e, index)}
-              className={`min-h-24 rounded border p-4 text-left hover:border-primary ${value === status ? 'border-primary bg-brandy-100' : 'border-stone-300 bg-white'}`}
-            >
-              <span className="block text-sm font-semibold">{QUEUE_LABELS[value]}</span>
-              <span className="mt-2 block text-3xl font-semibold">
-                {counts
-                  ? counts[
-                      value === 'ASSIGNED'
-                        ? 'assigned'
-                        : value === 'IN_PROGRESS'
-                          ? 'inProgress'
-                          : 'completed'
-                    ]
-                  : '—'}
-              </span>
-            </button>
-          ))}
-        </div>
-        {summary.data && (
-          <div className="flex flex-wrap items-center gap-4">
-            <Badge tone="warning">Quá hạn: {summary.data.overdue}</Badge>
-            <p aria-live="polite" className="text-sm text-stone-700">
-              Cập nhật lúc{' '}
-              <time dateTime={summary.data.generatedAt}>{queueTime(summary.data.generatedAt)}</time>{' '}
-              · {summary.data.counts.total} task
-            </p>
-          </div>
-        )}
-        {!!counts?.other && (
-          <Alert tone="warning">Có {counts.other} task có trạng thái không xác định.</Alert>
-        )}
-        <p className="text-xs text-stone-700">
-          Số liệu tính theo các bộ lọc chung. “Chỉ quá hạn” áp dụng cho bảng task. Dữ liệu làm mới
-          khi quay lại cửa sổ hoặc bấm Làm mới.
-        </p>
-      </section>
-      <section
-        role="tabpanel"
-        id="queue-panel"
-        aria-labelledby={`queue-${status}`}
-        className="space-y-4"
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <SelectField
-            label="Sắp xếp theo"
-            value={query.sortBy}
-            options={[
-              { value: 'dueAt', label: 'Hạn hoàn thành' },
-              { value: 'assignedAt', label: 'Thời điểm giao' },
-              { value: 'completedAt', label: 'Thời điểm hoàn thành' },
-            ]}
-            onChange={(e) => change({ sortBy: e.target.value })}
-          />
-          <SelectField
-            label="Thứ tự"
-            value={query.sortOrder}
-            options={[
-              { value: 'asc', label: 'Sớm nhất trước' },
-              { value: 'desc', label: 'Mới nhất trước' },
-            ]}
-            onChange={(e) => change({ sortOrder: e.target.value })}
-          />
-        </div>
-        {tasks.isPending && <p role="status">Đang tải task…</p>}
-        {tasks.isError && <QueueError error={tasks.error} retry={() => void tasks.refetch()} />}
-        {tasks.data &&
-          (tasks.data.items.length ? (
-            <>
-              <div className="overflow-x-auto rounded border border-stone-300 bg-white">
-                <table
-                  aria-label="Task trong hàng đợi"
-                  className="w-full min-w-200 text-left text-sm"
-                >
-                  <thead className="bg-stone-200 text-xs text-stone-700 uppercase">
-                    <tr>
-                      {[
-                        'Tiêu đề',
-                        'Loại',
-                        'Ưu tiên',
-                        'Người thực hiện',
-                        'Hạn',
-                        'Giao lúc',
-                        ...(status === 'COMPLETED' ? ['Hoàn thành lúc'] : []),
-                      ].map((label) => (
-                        <th scope="col" className="px-4 py-3" key={label}>
-                          {label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tasks.data.items.map((task) => (
-                      <tr key={task.id} className="border-t border-stone-300 hover:bg-cream-50">
-                        <td className="max-w-72 px-4 py-2">
-                          <Link
-                            className="inline-flex min-h-11 items-center break-words text-primary underline"
-                            to={`/manager/task-queues/${task.id}${location.search}`}
-                          >
-                            {' '}
-                            {task.title}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3">{task.taskType}</td>
-                        <td className="px-4 py-3">
-                          <QueuePriority priority={task.priority} />
-                        </td>
-                        <td className="px-4 py-3">
-                          {task.assignee?.fullName ?? 'Không còn nhân viên'}
-                        </td>
-                        <td className="space-y-1 px-4 py-3">
-                          <p>{queueDate(task.dueAt)}</p>
-                          <Badge tone="neutral">
-                            {QUEUE_LABELS[task.status as QueueStatus] ?? task.status}
-                          </Badge>
-                          {task.blocked && <Badge tone="danger">Bị chặn</Badge>}
-                          {task.overdue && <Badge tone="danger">Quá hạn</Badge>}
-                        </td>
-                        <td className="px-4 py-3">{queueDate(task.assignedAt)}</td>
-                        {status === 'COMPLETED' && (
-                          <td className="px-4 py-3">{queueDate(task.completedAt)}</td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <nav aria-label="Phân trang task" className="flex flex-wrap items-center gap-4">
-                <Button
-                  variant="secondary"
-                  disabled={query.page <= 1}
-                  onClick={() => change({ page: String(query.page - 1) }, false)}
-                >
-                  Trang trước
-                </Button>
-                <span>
-                  Trang {query.page}/{pages} · {tasks.data.total} task
-                </span>
-                <Button
-                  variant="secondary"
-                  disabled={query.page >= pages}
-                  onClick={() => change({ page: String(query.page + 1) }, false)}
-                >
-                  Trang sau
-                </Button>
-              </nav>
-            </>
-          ) : (
-            <p role="status">{empty}</p>
-          ))}
-      </section>
-      <section aria-label="Khối lượng công việc" className="space-y-4">
-        <h2 className="text-xl font-semibold">Khối lượng công việc</h2>
-        {summary.isPending && <p role="status">Đang tải khối lượng công việc…</p>}
-        {summary.isError && (
-          <QueueError error={summary.error} retry={() => void summary.refetch()} />
-        )}
-        {summary.data &&
-          (summary.data.workload.length ? (
-            <div className="overflow-x-auto rounded border border-stone-300 bg-white">
-              <table
-                aria-label="Khối lượng công việc theo nhân viên"
-                className="w-full min-w-160 text-left text-sm"
+    <PageContainer>
+      <PageHeader
+        title="Hàng đợi task"
+        subtitle="Giám sát công việc hiện tại trong toàn khách sạn. Chỉ xem."
+        actions={
+          <Button
+            className="rounded-full"
+            disabled={summary.isFetching || tasks.isFetching}
+            onClick={() => {
+              void summary.refetch()
+              void tasks.refetch()
+            }}
+          >
+            Làm mới
+          </Button>
+        }
+      />
+      <div className="space-y-6">
+        <Panel>
+          <div
+            role="search"
+            aria-label="Lọc hàng đợi task"
+            className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            <FormField label="Tìm tiêu đề" htmlFor="queue-search" className="min-w-0">
+              <Input
+                id="queue-search"
+                type="search"
+                maxLength={100}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </FormField>
+            <FormField label="Loại task" htmlFor="queue-type" className="min-w-0">
+              <NativeSelect
+                id="queue-type"
+                value={filters.taskType ?? ''}
+                onChange={(e) => change({ taskType: e.target.value })}
               >
-                <thead className="bg-stone-200 text-xs text-stone-700 uppercase">
-                  <tr>
-                    {[
-                      'Nhân viên',
-                      'Vai trò',
-                      'Đang giao',
-                      'Đang xử lý',
-                      'Hoàn thành',
-                      'Quá hạn',
-                    ].map((label) => (
-                      <th className="px-4 py-3" scope="col" key={label}>
-                        {label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {summary.data.workload.map((row, index) => (
-                    <tr
-                      key={row.assignee?.id ?? `missing-${index}`}
-                      className="border-t border-stone-300"
-                    >
-                      <td className="px-4 py-1">
-                        {row.assignee ? (
-                          <Button
-                            variant="ghost"
-                            onClick={() => change({ assigneeId: row.assignee!.id })}
-                          >
-                            {row.assignee.fullName}
-                          </Button>
-                        ) : (
-                          'Không còn nhân viên'
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {row.assignee ? (ROLE_LABELS[row.assignee.role] ?? row.assignee.role) : '—'}
-                      </td>
-                      {[row.assigned, row.inProgress, row.completed, row.overdue].map(
-                        (value, i) => (
-                          <td className="px-4 py-3 text-right" key={i}>
-                            {value}
-                          </td>
-                        ),
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                {[
+                  { value: '', label: 'Tất cả loại task' },
+                  ...(summary.data?.facets.taskTypes ?? []).map((value) => ({
+                    value,
+                    label: value,
+                  })),
+                ].map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+            <FormField label="Nguồn task" htmlFor="queue-source" className="min-w-0">
+              <NativeSelect
+                id="queue-source"
+                value={filters.sourceType ?? ''}
+                onChange={(e) => change({ sourceType: e.target.value })}
+              >
+                {[
+                  { value: '', label: 'Tất cả nguồn' },
+                  ...Object.entries(SOURCE_LABELS).map(([value, label]) => ({ value, label })),
+                ].map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+            <FormField label="Ưu tiên" htmlFor="queue-priority" className="min-w-0">
+              <NativeSelect
+                id="queue-priority"
+                value={filters.priority ?? ''}
+                onChange={(e) => change({ priority: e.target.value })}
+              >
+                {[
+                  { value: '', label: 'Tất cả ưu tiên' },
+                  ...(summary.data?.facets.priorities ?? []).map((value) => ({
+                    value,
+                    label: priorityOption(value),
+                  })),
+                ].map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+            <FormField label="Người thực hiện" htmlFor="queue-assignee" className="min-w-0">
+              <NativeSelect
+                id="queue-assignee"
+                value={filters.assigneeId ?? ''}
+                onChange={(e) => change({ assigneeId: e.target.value })}
+              >
+                {[
+                  { value: '', label: 'Tất cả nhân viên' },
+                  ...staff.map((person) => ({
+                    value: person.id,
+                    label: `${person.fullName} · ${ROLE_LABELS[person.role] ?? person.role}`,
+                  })),
+                  ...(filters.assigneeId && !staff.some((p) => p.id === filters.assigneeId)
+                    ? [{ value: filters.assigneeId, label: 'Nhân viên đã chọn' }]
+                    : []),
+                ].map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+            <Label className="flex min-h-11 items-center gap-3 text-sm">
+              <Input
+                className="size-4 shrink-0 p-0 accent-primary shadow-none"
+                type="checkbox"
+                checked={Boolean(query.overdue)}
+                onChange={(e) => change({ overdue: e.target.checked ? 'true' : '' })}
+              />
+              Chỉ quá hạn trong bảng
+            </Label>
+          </div>
+        </Panel>
+        <section aria-label="Số liệu hàng đợi" className="space-y-3">
+          {summary.isFetching && summary.data && (
+            <p role="status">Đang cập nhật số liệu hàng đợi…</p>
+          )}
+          {summary.isPending && <p role="status">Đang tải số liệu hàng đợi…</p>}
+          {summary.isError && (
+            <QueueError error={summary.error} retry={() => void summary.refetch()} />
+          )}
+          <div role="tablist" aria-label="Chọn hàng đợi" className="grid gap-3 sm:grid-cols-3">
+            {QUEUE_STATES.map((value, index) => (
+              <Button
+                variant="outline"
+                key={value}
+                ref={(element) => {
+                  tabs.current[index] = element
+                }}
+                type="button"
+                role="tab"
+                id={`queue-${value}`}
+                aria-selected={value === status}
+                aria-controls="queue-panel"
+                tabIndex={value === status ? 0 : -1}
+                onClick={() => selectTab(value)}
+                onKeyDown={(e) => tabKey(e, index)}
+                className={`h-auto min-h-24 flex-col items-start justify-start whitespace-normal rounded-xl p-5 text-left focus-visible:ring-2 focus-visible:ring-ring ${value === status ? 'border-primary bg-primary/10' : 'border-border bg-card'}`}
+              >
+                <span className="block text-sm font-semibold">{QUEUE_LABELS[value]}</span>
+                <span className="mt-2 block text-3xl font-semibold">
+                  {counts
+                    ? counts[
+                        value === 'ASSIGNED'
+                          ? 'assigned'
+                          : value === 'IN_PROGRESS'
+                            ? 'inProgress'
+                            : 'completed'
+                      ]
+                    : '—'}
+                </span>
+              </Button>
+            ))}
+          </div>
+          {summary.data && (
+            <div className="flex flex-wrap items-center gap-4">
+              <Badge tone="warning">
+                <span>Quá hạn: {summary.data.overdue}</span>
+              </Badge>
+              <p aria-live="polite" className="text-sm text-muted-foreground">
+                Cập nhật lúc{' '}
+                <time dateTime={summary.data.generatedAt}>
+                  {queueTime(summary.data.generatedAt)}
+                </time>{' '}
+                · {summary.data.counts.total} task
+              </p>
             </div>
-          ) : (
-            <p role="status">{filtered ? 'Không có task khớp bộ lọc.' : 'Chưa có task nào.'}</p>
-          ))}
-        <p className="text-xs text-stone-700">
-          Tối đa 100 nhân viên, ưu tiên khối lượng công việc đang mở nhiều nhất.
-        </p>
-      </section>
-    </section>
+          )}
+          {!!counts?.other && (
+            <Alert tone="warning">Có {counts.other} task có trạng thái không xác định.</Alert>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Số liệu tính theo các bộ lọc chung. “Chỉ quá hạn” áp dụng cho bảng task. Dữ liệu làm mới
+            khi quay lại cửa sổ hoặc bấm Làm mới.
+          </p>
+        </section>
+        <section
+          role="tabpanel"
+          id="queue-panel"
+          aria-labelledby={`queue-${status}`}
+          className="space-y-4"
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Sắp xếp theo" htmlFor="queue-sort" className="min-w-0">
+              <NativeSelect
+                id="queue-sort"
+                value={query.sortBy}
+                onChange={(e) => change({ sortBy: e.target.value })}
+              >
+                {[
+                  { value: 'dueAt', label: 'Hạn hoàn thành' },
+                  { value: 'assignedAt', label: 'Thời điểm giao' },
+                  { value: 'completedAt', label: 'Thời điểm hoàn thành' },
+                ].map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+            <FormField label="Thứ tự" htmlFor="queue-order" className="min-w-0">
+              <NativeSelect
+                id="queue-order"
+                value={query.sortOrder}
+                onChange={(e) => change({ sortOrder: e.target.value })}
+              >
+                {[
+                  { value: 'asc', label: 'Sớm nhất trước' },
+                  { value: 'desc', label: 'Mới nhất trước' },
+                ].map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+          </div>
+          {tasks.isPending && <p role="status">Đang tải task…</p>}
+          {tasks.isError && <QueueError error={tasks.error} retry={() => void tasks.refetch()} />}
+          {tasks.data &&
+            (tasks.data.items.length ? (
+              <DataTable
+                rows={tasks.data.items}
+                caption="Task trong hàng đợi"
+                scrollLabel="Bảng task trong hàng đợi"
+                page={query.page}
+                totalPages={pages}
+                onPageChange={(page) => change({ page: String(page) }, false)}
+                paginationLabel="Phân trang task"
+                paginationSummary={`${tasks.data.total} task`}
+                columns={[
+                  {
+                    key: 'title',
+                    header: 'Tiêu đề',
+                    className: 'min-w-48 max-w-72',
+                    render: (task) => (
+                      <Link
+                        className="flex min-h-11 min-w-0 items-center text-primary underline focus-visible:outline-2 focus-visible:outline-ring"
+                        to={`/manager/task-queues/${task.id}${location.search}`}
+                      >
+                        <span className="min-w-0 break-all">{task.title}</span>
+                      </Link>
+                    ),
+                  },
+                  { key: 'taskType', header: 'Loại' },
+                  {
+                    key: 'priority',
+                    header: 'Ưu tiên',
+                    render: (task) => <QueuePriority priority={task.priority} />,
+                  },
+                  {
+                    key: 'assignee',
+                    header: 'Người thực hiện',
+                    className: 'min-w-40 max-w-64 break-words',
+                    render: (task) => task.assignee?.fullName ?? 'Không còn nhân viên',
+                  },
+                  {
+                    key: 'dueAt',
+                    header: 'Hạn',
+                    render: (task) => (
+                      <div className="space-y-1">
+                        <p>{queueDate(task.dueAt)}</p>
+                        <Badge tone="neutral">
+                          <span>{QUEUE_LABELS[task.status as QueueStatus] ?? task.status}</span>
+                        </Badge>
+                        {task.blocked && (
+                          <Badge tone="danger">
+                            <span>Bị chặn</span>
+                          </Badge>
+                        )}
+                        {task.overdue && (
+                          <Badge tone="danger">
+                            <span>Quá hạn</span>
+                          </Badge>
+                        )}
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'assignedAt',
+                    header: 'Giao lúc',
+                    render: (task) => queueDate(task.assignedAt),
+                  },
+                  ...(status === 'COMPLETED'
+                    ? [
+                        {
+                          key: 'completedAt',
+                          header: 'Hoàn thành lúc',
+                          render: (task: QueueTask) => queueDate(task.completedAt),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            ) : (
+              <div role="status">
+                <EmptyState title={empty} />
+              </div>
+            ))}
+        </section>
+        <section aria-label="Khối lượng công việc" className="space-y-4">
+          <h2 className="text-xl font-semibold">Khối lượng công việc</h2>
+          {summary.isPending && <p role="status">Đang tải khối lượng công việc…</p>}
+          {summary.isError && (
+            <QueueError error={summary.error} retry={() => void summary.refetch()} />
+          )}
+          {summary.data &&
+            (summary.data.workload.length ? (
+              <DataTable
+                rows={summary.data.workload.map((row, index) => ({
+                  ...row,
+                  id: row.assignee?.id ?? `missing-${index}`,
+                }))}
+                showPagination={false}
+                caption="Khối lượng công việc theo nhân viên"
+                scrollLabel="Bảng khối lượng công việc"
+                columns={[
+                  {
+                    key: 'assignee',
+                    header: 'Nhân viên',
+                    className: 'min-w-40 max-w-64',
+                    render: (row) =>
+                      row.assignee ? (
+                        <Button
+                          variant="ghost"
+                          className="h-auto max-w-full justify-start whitespace-normal"
+                          onClick={() => change({ assigneeId: row.assignee!.id })}
+                        >
+                          <span className="min-w-0 break-all text-left">
+                            {row.assignee.fullName}
+                          </span>
+                        </Button>
+                      ) : (
+                        'Không còn nhân viên'
+                      ),
+                  },
+                  {
+                    key: 'role',
+                    header: 'Vai trò',
+                    render: (row) =>
+                      row.assignee ? (ROLE_LABELS[row.assignee.role] ?? row.assignee.role) : '—',
+                  },
+                  { key: 'assigned', header: 'Đang giao', className: 'text-right' },
+                  { key: 'inProgress', header: 'Đang xử lý', className: 'text-right' },
+                  { key: 'completed', header: 'Hoàn thành', className: 'text-right' },
+                  { key: 'overdue', header: 'Quá hạn', className: 'text-right' },
+                ]}
+              />
+            ) : (
+              <div role="status">
+                <EmptyState title={filtered ? 'Không có task khớp bộ lọc.' : 'Chưa có task nào.'} />
+              </div>
+            ))}
+          <p className="text-xs text-muted-foreground">
+            Tối đa 100 nhân viên, ưu tiên khối lượng công việc đang mở nhiều nhất.
+          </p>
+        </section>
+      </div>
+    </PageContainer>
   )
 }
