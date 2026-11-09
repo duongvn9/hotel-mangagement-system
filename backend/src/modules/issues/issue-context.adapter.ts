@@ -22,6 +22,16 @@ export class IssueContextAdapter {
     private readonly orders: Model<ServiceOrder>,
   ) {}
 
+  async roomNumbers(roomIds: Types.ObjectId[]): Promise<Map<string, string>> {
+    const ids = [...new Map(roomIds.map((id) => [String(id), id])).values()];
+    if (ids.length === 0) return new Map();
+    const rooms = await this.rooms
+      .find({ _id: { $in: ids } })
+      .select({ _id: 1, roomNumber: 1 })
+      .lean();
+    return new Map(rooms.map((room) => [String(room._id), room.roomNumber]));
+  }
+
   async reportContext(userId: string) {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);

@@ -36,6 +36,7 @@ const NAV_BY_ROLE: Record<string, NavGroup[]> = {
         { to: '/customer/service-orders', label: 'Dịch vụ phòng' },
         { to: '/my-feedback', label: 'Đánh giá' },
         { to: '/customer/issues/report', label: 'Báo sự cố' },
+        { to: '/customer/issues', label: 'Danh sách sự cố' },
       ],
     },
     ACCOUNT_GROUP,

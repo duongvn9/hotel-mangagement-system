@@ -39,6 +39,28 @@ function page(path: string, role: string | null = 'CUSTOMER') {
 
 beforeEach(() => vi.restoreAllMocks())
 
+test.each([
+  [{ roomId: detail.roomId, roomNumber: '101' }, 'Phòng 101'],
+  [{ roomId: detail.roomId, roomNumber: null }, 'Không có thông tin phòng'],
+  [{ roomId: detail.roomId }, 'Không có thông tin phòng'],
+  [{ roomId: detail.roomId, roomNumber: '  ' }, 'Không có thông tin phòng'],
+  [{ roomId: undefined, roomNumber: null }, 'Không gắn với phòng'],
+])('customer list and detail share safe room labels for %j', async (room, label) => {
+  const issue = { ...detail, ...room }
+  const get = vi.spyOn(api, 'get').mockImplementation(async (url) => ({
+    data: url === '/issues' ? { items: [issue], total: 1, page: 1, limit: 20 } : issue,
+  }))
+  page('/customer/issues')
+  expect(await screen.findByText(label)).toBeInTheDocument()
+  expect(screen.queryByText(detail.roomId!)).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('link', { name: detail.title }))
+  expect(await screen.findByRole('heading', { level: 2 })).toHaveTextContent(detail.title)
+  expect(screen.getByText(label)).toBeInTheDocument()
+  expect(screen.queryByText(detail.roomId!)).not.toBeInTheDocument()
+  expect(screen.queryByText('Mã phòng tham chiếu')).not.toBeInTheDocument()
+  expect(get.mock.calls.map(([url]) => url)).toEqual(['/issues', `/issues/${detail.id}`])
+})
+
 test.each(views)('%s sees exact role title, list and detail', async (role, path, title) => {
   vi.spyOn(api, 'get').mockImplementation(async (url) => ({
     data: url === '/issues' ? { items: [detail], total: 1, page: 1, limit: 20 } : detail,

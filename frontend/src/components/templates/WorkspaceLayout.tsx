@@ -45,11 +45,13 @@ function SideNav({
   onNavigate: () => void
 }) {
   const { pathname } = useLocation()
+  const destinations = groups.flatMap((group) => group.items.map((item) => item.to))
+  const isActive = (to: string) => isNavActive(pathname, to, destinations)
   // Mặc định mọi nhóm đều mở. Nhóm do người dùng đóng giữ nguyên khi chuyển trang, trừ khi trang mới
   // thuộc chính nhóm đó thì mở ra để thấy mục đang chọn.
   const [closed, setClosed] = useState<Record<string, boolean>>({})
   const [prevPathname, setPrevPathname] = useState(pathname)
-  const activeTitle = groups.find((g) => g.items.some((i) => isNavActive(pathname, i.to)))?.title
+  const activeTitle = groups.find((g) => g.items.some((i) => isActive(i.to)))?.title
   if (prevPathname !== pathname) {
     setPrevPathname(pathname)
     if (activeTitle && closed[activeTitle]) setClosed({ ...closed, [activeTitle]: false })
@@ -73,7 +75,7 @@ function SideNav({
       )}
       {groups.map((g) => {
         const open = isOpen(g.title)
-        const hasActive = g.items.some((i) => isNavActive(pathname, i.to))
+        const hasActive = g.items.some((i) => isActive(i.to))
         return (
           <div key={g.title} className="relative">
             <button
@@ -108,7 +110,7 @@ function SideNav({
               <div className="min-h-0 overflow-hidden">
                 <div className="grid gap-1 pt-1">
                   {g.items.map((i) => {
-                    const active = isNavActive(pathname, i.to)
+                    const active = isActive(i.to)
                     return (
                       <Link
                         key={i.to}

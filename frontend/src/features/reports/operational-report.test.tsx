@@ -190,6 +190,22 @@ describe('UC57 labels and report', () => {
       within(screen.getByRole('region', { name: 'Yêu cầu dịch vụ' })).queryByText('0'),
     ).not.toBeInTheDocument()
   })
+  it('preserves unknown occupancy and maintenance status counts without inventing values', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      data: {
+        ...report,
+        occupancy: { ...report.occupancy, rate: null },
+        maintenance: { ...report.maintenance, unknownStatus: 3 },
+      },
+    })
+    renderPage()
+    const occupancy = await screen.findByRole('region', { name: 'Công suất phòng (ước tính)' })
+    expect(within(occupancy).getByText('Không xác định')).toBeInTheDocument()
+    expect(within(occupancy).queryByText(/vượt 100%/)).not.toBeInTheDocument()
+    const maintenance = screen.getByRole('region', { name: 'Bảo trì' })
+    expect(within(maintenance).getByText('Không xác định')).toBeInTheDocument()
+    expect(within(maintenance).getByText('3')).toBeInTheDocument()
+  })
   it('keeps form while loading and supports retry on errors', async () => {
     vi.mocked(api.get).mockRejectedValueOnce(new Error('offline'))
     renderPage()

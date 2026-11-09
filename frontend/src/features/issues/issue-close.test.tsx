@@ -92,6 +92,7 @@ function setup(detail = concluded, role = 'RECEPTIONIST', direct = false) {
           isDevMode: false,
           login: vi.fn(),
           loginAsDev: vi.fn(),
+          loginWithGoogle: vi.fn(),
           register: vi.fn(),
           logout: vi.fn(),
           refresh: vi.fn(),
