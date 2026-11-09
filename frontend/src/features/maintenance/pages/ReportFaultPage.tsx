@@ -3,10 +3,10 @@ import { isAxiosError } from 'axios'
 import { Link } from 'react-router'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert } from '@/components/Alert'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
-import { SelectField } from '@/components/SelectField'
+import { CheckCircle2 } from 'lucide-react'
+import { Button, Input, Label, NativeSelect, Textarea } from '@/components/atoms'
+import { Alert, EmptyState, FormField } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
 import { getErrorMessage } from '@/lib/api-client'
 import { reportFault, searchTargets, type FaultInput, type MaintenanceTargets } from '../api'
@@ -127,222 +127,275 @@ export function ReportFaultPage() {
     setSearch('')
   }
   return (
-    <section className="mx-auto w-full max-w-2xl px-4 py-12 sm:py-16">
-      <h1 className="font-display text-4xl font-semibold">Báo hỏng thiết bị</h1>
-      <p className="mt-3 text-sm text-stone-700">
-        Ghi nhận lỗi thiết bị, hư hại cơ sở vật chất hoặc vấn đề cần bảo trì.
-      </p>
+    <PageContainer>
+      <PageHeader
+        title="Báo hỏng thiết bị"
+        subtitle="Ghi nhận lỗi thiết bị, hư hại cơ sở vật chất hoặc vấn đề cần bảo trì."
+      />
       {mutation.isSuccess ? (
-        <div className="mt-6 space-y-5 rounded-xl border border-stone-300 bg-white p-4 shadow-sm sm:p-6">
-          <Alert tone="success">Đã ghi nhận báo cáo bảo trì.</Alert>
-          <p>
-            {mutation.data.taskId
-              ? 'Đã tạo công việc bảo trì và giao cho bạn.'
-              : 'Không yêu cầu tạo công việc bảo trì.'}
-          </p>
-          <p>
-            {mutation.data.roomMarkedUnavailable
-              ? 'Phòng đã được đánh dấu bảo trì, không khả dụng.'
-              : 'Báo cáo này chưa đánh dấu phòng không khả dụng.'}
-          </p>
-          {mutation.data.warnings.map((warning) => (
-            <Alert key={warning} tone="warning">
-              {warning}
-            </Alert>
-          ))}
-          <div className="flex flex-col gap-3 border-t border-stone-300 pt-5 sm:flex-row sm:flex-wrap">
-            <Link
-              className="inline-flex min-h-11 items-center justify-center rounded border border-pearl-900 px-4 py-3 text-center text-xs font-semibold tracking-wider text-pearl-900 uppercase transition-colors hover:bg-pearl-900 hover:text-cream-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-              to="/operations/maintenance/history"
-            >
-              Xem lịch sử bảo trì
-            </Link>
-            <Button onClick={reset}>Báo cáo vấn đề khác</Button>
+        <div className="py-10">
+          <div role="status">
+            <EmptyState
+              icon={CheckCircle2}
+              title="Đã ghi nhận báo cáo bảo trì."
+              body={
+                mutation.data.taskId
+                  ? 'Đã tạo công việc bảo trì và giao cho bạn.'
+                  : 'Không yêu cầu tạo công việc bảo trì.'
+              }
+              action={
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button asChild variant="outline" className="rounded-full">
+                    <Link to="/operations/maintenance/history">Xem lịch sử bảo trì</Link>
+                  </Button>
+                  <Button type="button" className="rounded-full" onClick={reset}>
+                    Báo cáo vấn đề khác
+                  </Button>
+                </div>
+              }
+            />
+          </div>
+          <div className="mt-4 space-y-3 text-center text-sm break-words text-muted-foreground">
+            <p>
+              {mutation.data.roomMarkedUnavailable
+                ? 'Phòng đã được đánh dấu bảo trì, không khả dụng.'
+                : 'Báo cáo này chưa đánh dấu phòng không khả dụng.'}
+            </p>
+            {mutation.data.warnings.map((warning) => (
+              <Alert key={warning} tone="warning">
+                {warning}
+              </Alert>
+            ))}
           </div>
         </div>
       ) : (
-        <form
-          className="mt-6 space-y-5"
-          noValidate
-          onSubmit={submit}
-          aria-busy={mutation.isPending}
-        >
-          <fieldset disabled={locked || mutation.isPending} className="min-w-0 space-y-5">
-            <SelectField
-              name="mode"
-              label="Đối tượng bị ảnh hưởng"
-              value={mode}
-              options={[
-                { value: 'ROOM', label: 'Phòng' },
-                { value: 'EQUIPMENT', label: 'Thiết bị' },
-                { value: 'FACILITY', label: 'Khu vực / cơ sở khác' },
-              ]}
-              onChange={(e) => {
-                setMode(e.target.value)
-                setErrors({})
-              }}
-            />
-            {mode === 'FACILITY' ? (
-              <TextField
-                name="facilityLocation"
-                label="Vị trí cơ sở"
-                required
-                maxLength={200}
-                value={location}
-                onChange={(e) => {
-                  setLocation(e.target.value)
-                  clearErrors('facilityLocation')
-                }}
-                error={errors.facilityLocation}
-              />
-            ) : (
-              <>
-                <TextField
-                  name="search"
-                  label="Tìm phòng hoặc thiết bị"
-                  maxLength={100}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                {targets.isPending && <p role="status">Đang tải đối tượng…</p>}
-                {targets.isError && (
-                  <Alert tone="danger">
-                    {getErrorMessage(targets.error, 'Không tải được đối tượng.')}{' '}
-                    <Button variant="ghost" onClick={() => void targets.refetch()}>
-                      Thử lại tìm kiếm
-                    </Button>
-                  </Alert>
+        <Panel>
+          <form
+            className="grid min-w-0 max-w-2xl grid-cols-1 gap-4"
+            noValidate
+            onSubmit={submit}
+            aria-busy={mutation.isPending}
+          >
+            <fieldset
+              disabled={locked || mutation.isPending}
+              className="grid min-w-0 grid-cols-1 gap-4"
+            >
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                <FormField label="Đối tượng bị ảnh hưởng" htmlFor="fault-mode" className="min-w-0">
+                  <NativeSelect
+                    id="fault-mode"
+                    name="mode"
+                    value={mode}
+                    onChange={(e) => {
+                      setMode(e.target.value)
+                      setErrors({})
+                    }}
+                  >
+                    <option value="ROOM">Phòng</option>
+                    <option value="EQUIPMENT">Thiết bị</option>
+                    <option value="FACILITY">Khu vực / cơ sở khác</option>
+                  </NativeSelect>
+                </FormField>
+                {mode === 'FACILITY' ? (
+                  <FormField
+                    label="Vị trí cơ sở"
+                    htmlFor="fault-location"
+                    required
+                    error={errors.facilityLocation}
+                    className="min-w-0"
+                  >
+                    <Input
+                      id="fault-location"
+                      name="facilityLocation"
+                      required
+                      maxLength={200}
+                      value={location}
+                      aria-invalid={!!errors.facilityLocation}
+                      aria-describedby={
+                        errors.facilityLocation ? 'fault-location-error' : undefined
+                      }
+                      onChange={(e) => {
+                        setLocation(e.target.value)
+                        clearErrors('facilityLocation')
+                      }}
+                    />
+                  </FormField>
+                ) : (
+                  <FormField
+                    label="Tìm phòng hoặc thiết bị"
+                    htmlFor="fault-search"
+                    className="min-w-0"
+                  >
+                    <Input
+                      id="fault-search"
+                      name="search"
+                      maxLength={100}
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </FormField>
                 )}
-                {!targets.isPending &&
-                  !targets.isError &&
-                  !(mode === 'ROOM'
-                    ? targets.data?.rooms.length
-                    : targets.data?.equipment.length) && (
-                    <p role="status">Không tìm thấy phòng/thiết bị phù hợp.</p>
+              </div>
+              {mode !== 'FACILITY' && (
+                <>
+                  {targets.isPending && (
+                    <p role="status" className="text-sm text-muted-foreground">
+                      Đang tải đối tượng…
+                    </p>
                   )}
-                <SelectField
-                  name="targetId"
-                  label={mode === 'ROOM' ? 'Phòng bị ảnh hưởng' : 'Thiết bị bị ảnh hưởng'}
-                  required
-                  value={mode === 'ROOM' ? (room?.id ?? '') : (equipment?.id ?? '')}
-                  aria-invalid={!!errors.targetId}
-                  aria-describedby="target-error"
-                  options={[
-                    { value: '', label: 'Chọn đối tượng' },
-                    ...(mode === 'ROOM'
-                      ? rooms.map((r) => ({
-                          value: r.id,
-                          label: `Phòng ${r.roomNumber} — tầng ${r.floor}`,
-                        }))
-                      : devices.map((e) => ({
-                          value: e.id,
-                          label: `${e.assetCode} — ${e.name} — ${e.location}`,
-                        }))),
-                  ]}
-                  onChange={(e) => {
-                    if (mode === 'ROOM') setRoom(rooms.find((r) => r.id === e.target.value))
-                    else setEquipment(devices.find((item) => item.id === e.target.value))
-                    clearErrors('targetId', 'preventsSafeUse')
-                  }}
-                />
-                <p id="target-error" className="text-sm text-danger">
-                  {errors.targetId}
-                </p>
-                {mode === 'EQUIPMENT' && equipment && (
-                  <AssetImage path={equipment.imageUrl} name={equipment.name} />
-                )}
-                {mode === 'EQUIPMENT' && equipment && (
-                  <p className="text-sm text-stone-700">
-                    {equipment.roomNumber
-                      ? `Phòng liên quan: ${equipment.roomNumber}`
-                      : 'Thiết bị cơ sở chung, không gắn phòng.'}
-                  </p>
-                )}
-              </>
-            )}
-            <div>
-              <label
-                htmlFor="fault-description"
-                className="mb-2 block text-xs font-semibold tracking-wider text-stone-700 uppercase"
-              >
-                Mô tả lỗi / hư hại <span className="text-danger">*</span>
-              </label>
-              <textarea
-                id="fault-description"
-                name="description"
-                required
-                maxLength={2000}
-                rows={5}
-                value={description}
-                onChange={(e) => {
-                  setDescription(e.target.value)
-                  clearErrors('description')
-                }}
-                aria-invalid={!!errors.description}
-                aria-describedby="description-count description-error"
-                className="w-full rounded border border-stone-300 bg-white p-3 text-sm focus:border-primary disabled:bg-stone-200"
-              />
-              <p id="description-count" className="text-xs text-stone-700">
-                {description.length}/2000 ký tự
-              </p>
-              <p id="description-error" className="text-sm text-danger">
-                {errors.description}
-              </p>
-            </div>
-            <label className="flex min-h-11 items-center gap-3 text-sm">
-              <input
-                type="checkbox"
-                className="h-5 w-5"
-                checked={action}
-                disabled={unsafe}
-                onChange={(e) => setAction(e.target.checked)}
-              />
-              Cần xử lý/bảo trì
-            </label>
-            <div>
-              <label className="flex min-h-11 items-center gap-3 text-sm">
-                <input
-                  name="preventsSafeUse"
-                  type="checkbox"
-                  className="h-5 w-5"
-                  checked={unsafe}
-                  onChange={(e) => {
-                    setUnsafe(e.target.checked)
-                    clearErrors('preventsSafeUse')
-                    if (e.target.checked) setAction(true)
-                  }}
-                  aria-invalid={!!errors.preventsSafeUse}
-                  aria-describedby="safe-help safe-error"
-                />
-                Ngăn việc sử dụng phòng an toàn
-              </label>
-              <p id="safe-help" className="text-sm text-stone-700">
-                Phòng sẽ được coi là không khả dụng cho tới khi xử lý xong. Phòng đang có khách cần
-                lễ tân xử lý.
-              </p>
-              <p id="safe-error" className="text-sm text-danger">
-                {errors.preventsSafeUse}
-              </p>
-            </div>
-          </fieldset>
-          {mutation.isError && (
-            <Alert tone="danger">
-              {getErrorMessage(
-                mutation.error,
-                'Chưa nhận được xác nhận. Giữ nguyên nội dung và gửi lại để tiếp tục an toàn.',
+                  {targets.isError && (
+                    <Alert tone="danger">
+                      {getErrorMessage(targets.error, 'Không tải được đối tượng.')}{' '}
+                      <Button type="button" variant="ghost" onClick={() => void targets.refetch()}>
+                        Thử lại tìm kiếm
+                      </Button>
+                    </Alert>
+                  )}
+                  {!targets.isPending &&
+                    !targets.isError &&
+                    !(mode === 'ROOM'
+                      ? targets.data?.rooms.length
+                      : targets.data?.equipment.length) && (
+                      <p role="status" className="text-sm text-muted-foreground">
+                        Không tìm thấy phòng/thiết bị phù hợp.
+                      </p>
+                    )}
+                  <FormField
+                    label={mode === 'ROOM' ? 'Phòng bị ảnh hưởng' : 'Thiết bị bị ảnh hưởng'}
+                    htmlFor="fault-target"
+                    required
+                    className="min-w-0"
+                  >
+                    <NativeSelect
+                      id="fault-target"
+                      name="targetId"
+                      required
+                      value={mode === 'ROOM' ? (room?.id ?? '') : (equipment?.id ?? '')}
+                      aria-invalid={!!errors.targetId}
+                      aria-describedby="target-error"
+                      onChange={(e) => {
+                        if (mode === 'ROOM') setRoom(rooms.find((r) => r.id === e.target.value))
+                        else setEquipment(devices.find((item) => item.id === e.target.value))
+                        clearErrors('targetId', 'preventsSafeUse')
+                      }}
+                    >
+                      <option value="">Chọn đối tượng</option>
+                      {mode === 'ROOM'
+                        ? rooms.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {'Phòng ' + r.roomNumber + ' — tầng ' + r.floor}
+                            </option>
+                          ))
+                        : devices.map((e) => (
+                            <option key={e.id} value={e.id}>
+                              {e.assetCode + ' — ' + e.name + ' — ' + e.location}
+                            </option>
+                          ))}
+                    </NativeSelect>
+                    <p id="target-error" className="text-sm text-danger">
+                      {errors.targetId}
+                    </p>
+                  </FormField>
+                  {mode === 'EQUIPMENT' && equipment && (
+                    <AssetImage path={equipment.imageUrl} name={equipment.name} />
+                  )}
+                  {mode === 'EQUIPMENT' && equipment && (
+                    <p className="text-sm break-words text-muted-foreground">
+                      {equipment.roomNumber
+                        ? 'Phòng liên quan: ' + equipment.roomNumber
+                        : 'Thiết bị cơ sở chung, không gắn phòng.'}
+                    </p>
+                  )}
+                </>
               )}
-            </Alert>
-          )}
-          {locked && mutation.isError && (
-            <p className="text-sm text-stone-700">
-              Nội dung được giữ nguyên để gửi lại cùng báo cáo, tránh tạo trùng công việc.
-            </p>
-          )}
-          <Button type="submit" loading={mutation.isPending} className="w-full sm:w-auto">
-            {locked && mutation.isError ? 'Gửi lại báo cáo' : 'Gửi báo cáo'}
-          </Button>
-        </form>
+              <FormField
+                label="Mô tả lỗi / hư hại"
+                htmlFor="fault-description"
+                required
+                className="min-w-0"
+              >
+                <Textarea
+                  id="fault-description"
+                  name="description"
+                  required
+                  maxLength={2000}
+                  rows={5}
+                  value={description}
+                  onChange={(e) => {
+                    setDescription(e.target.value)
+                    clearErrors('description')
+                  }}
+                  aria-invalid={!!errors.description}
+                  aria-describedby="description-count description-error"
+                />
+                <p id="description-count" className="text-xs text-muted-foreground">
+                  {description.length}/2000 ký tự
+                </p>
+                <p id="description-error" className="text-sm text-danger">
+                  {errors.description}
+                </p>
+              </FormField>
+              <Label htmlFor="fault-action" className="flex min-h-11 items-center gap-3 text-sm">
+                <Input
+                  id="fault-action"
+                  type="checkbox"
+                  className="size-4 shrink-0 p-0 accent-primary shadow-none"
+                  checked={action}
+                  disabled={unsafe}
+                  onChange={(e) => setAction(e.target.checked)}
+                />
+                Cần xử lý/bảo trì
+              </Label>
+              <div>
+                <Label htmlFor="fault-unsafe" className="flex min-h-11 items-center gap-3 text-sm">
+                  <Input
+                    id="fault-unsafe"
+                    name="preventsSafeUse"
+                    type="checkbox"
+                    className="size-4 shrink-0 p-0 accent-primary shadow-none"
+                    checked={unsafe}
+                    onChange={(e) => {
+                      setUnsafe(e.target.checked)
+                      clearErrors('preventsSafeUse')
+                      if (e.target.checked) setAction(true)
+                    }}
+                    aria-invalid={!!errors.preventsSafeUse}
+                    aria-describedby="safe-help safe-error"
+                  />
+                  Ngăn việc sử dụng phòng an toàn
+                </Label>
+                <p id="safe-help" className="text-sm text-muted-foreground">
+                  Phòng sẽ được coi là không khả dụng cho tới khi xử lý xong. Phòng đang có khách
+                  cần lễ tân xử lý.
+                </p>
+                <p id="safe-error" className="text-sm text-danger">
+                  {errors.preventsSafeUse}
+                </p>
+              </div>
+            </fieldset>
+            {mutation.isError && (
+              <Alert tone="danger">
+                {getErrorMessage(
+                  mutation.error,
+                  'Chưa nhận được xác nhận. Giữ nguyên nội dung và gửi lại để tiếp tục an toàn.',
+                )}
+              </Alert>
+            )}
+            {locked && mutation.isError && (
+              <p className="text-sm text-muted-foreground">
+                Nội dung được giữ nguyên để gửi lại cùng báo cáo, tránh tạo trùng công việc.
+              </p>
+            )}
+            <Button type="submit" disabled={mutation.isPending} className="w-fit rounded-full">
+              {mutation.isPending
+                ? 'Đang xử lý…'
+                : locked && mutation.isError
+                  ? 'Gửi lại báo cáo'
+                  : 'Gửi báo cáo'}
+            </Button>
+          </form>
+        </Panel>
       )}
-    </section>
+    </PageContainer>
   )
 }
