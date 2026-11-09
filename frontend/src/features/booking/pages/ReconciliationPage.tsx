@@ -1,13 +1,11 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
+import { Button, Input, StatusBadge } from '@/components/atoms'
+import { EmptyState, FormField } from '@/components/molecules'
 import { getErrorMessage } from '@/lib/api-client'
-import { BOOKING_STATUS_DISPLAY } from '../api'
+import { vnd } from '@/lib/format'
 import { useReconcilePayment, useReconciliationList } from '../hooks'
-import { formatDateTime, money } from '../utils'
+import { formatDateTime } from '../utils'
 
 /**
  * Issue ② — Hàng đợi đối soát (Manager). Liệt kê các khoản VNPay đã về SUCCESS nhưng
@@ -34,86 +32,101 @@ export function ReconciliationPage() {
   }
 
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
+    <div className="mx-auto max-w-5xl space-y-6 px-5 py-10 lg:px-8">
       <div>
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">Quản lý</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">Đối soát thanh toán</h1>
-        <p className="mt-2 max-w-2xl text-sm text-stone-700">
+        <p className="mb-2 text-xs font-semibold tracking-widest text-primary uppercase">Quản lý</p>
+        <h1 className="font-display text-4xl font-semibold">Đối soát thanh toán</h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
           Tiền đã về nhưng phòng không còn được giữ (thanh toán về sau thời hạn). Hãy hoàn tiền cho
           khách qua cổng VNPay rồi đánh dấu đã xử lý tại đây.
         </p>
       </div>
 
-      {reconcile.isError && <Alert tone="danger">{getErrorMessage(reconcile.error)}</Alert>}
+      {reconcile.isError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
+        >
+          {getErrorMessage(reconcile.error)}
+        </div>
+      )}
       {list.isError && (
-        <Alert tone="danger">{getErrorMessage(list.error, 'Không tải được danh sách.')}</Alert>
+        <div
+          role="alert"
+          className="rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
+        >
+          {getErrorMessage(list.error, 'Không tải được danh sách.')}
+        </div>
       )}
 
       {list.isPending ? (
-        <p className="text-stone-700">Đang tải…</p>
+        <div role="status" className="py-8">
+          <p className="text-muted-foreground">Đang tải…</p>
+        </div>
       ) : list.data && list.data.items.length === 0 ? (
-        <p className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700">
-          Không có khoản nào cần đối soát.
-        </p>
+        <EmptyState
+          title="Không có khoản nào cần đối soát"
+          body="Mọi khoản thanh toán đều đã khớp sao kê."
+        />
       ) : (
         list.data && (
           <ul className="space-y-4">
             {list.data.items.map((item) => {
-              const statusDisplay = item.bookingStatus
-                ? (BOOKING_STATUS_DISPLAY[
-                    item.bookingStatus as keyof typeof BOOKING_STATUS_DISPLAY
-                  ] ?? { label: item.bookingStatus, tone: 'neutral' as const })
-                : undefined
               const resolving = reconcile.isPending && reconcile.variables?.id === item.id
               return (
-                <li
-                  key={item.id}
-                  className="space-y-4 rounded-lg border border-stone-300 bg-white p-6"
-                >
+                <li key={item.id} className="card-soft space-y-4 p-6">
                   <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="space-y-1">
+                    <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold tracking-wide text-pearl-900">
+                        <span className="font-semibold tracking-wide text-foreground">
                           {item.bookingCode ?? '—'}
                         </span>
-                        {statusDisplay && (
-                          <Badge tone={statusDisplay.tone}>{statusDisplay.label}</Badge>
-                        )}
+                        {item.bookingStatus && <StatusBadge status={item.bookingStatus} />}
                       </div>
-                      <p className="text-xs break-all text-stone-500">
+                      <p className="text-xs break-all text-muted-foreground">
                         Mã GD {item.transactionRef}
                         {item.providerTransactionRef
                           ? ` · VNPay ${item.providerTransactionRef}`
                           : ''}
                       </p>
-                      <p className="text-xs text-stone-500">
-                        {item.paidAt ? `Tiền về ${formatDateTime(item.paidAt)}` : ''}
-                      </p>
+                      {item.paidAt && (
+                        <p className="text-xs text-muted-foreground">
+                          Tiền về {formatDateTime(item.paidAt)}
+                        </p>
+                      )}
                       <Link
                         to={`/booking/${item.bookingId}`}
-                        className="text-xs font-semibold text-primary underline"
+                        className="inline-block text-xs font-semibold text-primary underline underline-offset-4"
                       >
                         Xem booking
                       </Link>
                     </div>
                     <p className="text-lg font-semibold whitespace-nowrap text-primary tabular-nums">
-                      {money.format(item.amount)}
+                      {vnd(item.amount)}
                     </p>
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                    <TextField
-                      label="Ghi chú đối soát"
-                      placeholder="VD: đã hoàn tiền qua cổng VNPay"
-                      maxLength={500}
-                      value={notes[item.id] ?? ''}
-                      onChange={(event) =>
-                        setNotes((current) => ({ ...current, [item.id]: event.target.value }))
-                      }
-                      className="flex-1"
-                    />
-                    <Button loading={resolving} onClick={() => void resolve(item.id)}>
-                      Đánh dấu đã xử lý
+                    <div className="sm:flex-1">
+                      <FormField label="Ghi chú đối soát" htmlFor={`note-${item.id}`}>
+                        <Input
+                          id={`note-${item.id}`}
+                          placeholder="VD: đã hoàn tiền qua cổng VNPay"
+                          maxLength={500}
+                          value={notes[item.id] ?? ''}
+                          onChange={(event) =>
+                            setNotes((current) => ({ ...current, [item.id]: event.target.value }))
+                          }
+                        />
+                      </FormField>
+                    </div>
+                    <Button
+                      className="rounded-full"
+                      disabled={resolving}
+                      aria-busy={resolving}
+                      onClick={() => void resolve(item.id)}
+                    >
+                      {resolving ? 'Đang xử lý…' : 'Đánh dấu đã xử lý'}
                     </Button>
                   </div>
                 </li>
@@ -122,6 +135,6 @@ export function ReconciliationPage() {
           </ul>
         )
       )}
-    </section>
+    </div>
   )
 }

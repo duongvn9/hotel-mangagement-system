@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { SelectField } from '@/components/SelectField'
-import { TextField } from '@/components/TextField'
+import { Pencil, Plus, SearchX } from 'lucide-react'
+import { Badge, Button, NativeSelect, StatusBadge } from '@/components/atoms'
+import { Alert, EmptyState } from '@/components/molecules'
+import { DataTable, PageContainer, PageHeader, type Column } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import {
   ROOM_STATUSES,
   ROOM_STATUS_DISPLAY as statusDisplay,
+  type Room,
   type RoomQuery,
   type RoomStatus,
 } from '../api'
@@ -46,33 +46,111 @@ export function RoomsPage() {
     setQuery((previous) => ({ ...previous, ...change, page: 1 }))
   }
 
+  const columns: Column<Room>[] = [
+    {
+      key: 'roomNumber',
+      header: 'Số phòng',
+      rowHeader: true,
+      render: (room) => (
+        <span className="block min-w-16 max-w-32 break-words">{room.roomNumber}</span>
+      ),
+    },
+    { key: 'floor', header: 'Tầng' },
+    {
+      key: 'roomType',
+      header: 'Loại phòng',
+      render: (room) => (
+        <div className="flex min-w-32 max-w-64 flex-wrap items-center gap-2 break-words">
+          {room.roomType ? (
+            <>
+              <span className="min-w-0 break-words">{room.roomType.name}</span>
+              {!room.roomType.isActive && <Badge tone="neutral">Loại phòng ngừng</Badge>}
+            </>
+          ) : (
+            <span className="text-muted-foreground">Không tìm thấy loại phòng</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Trạng thái vận hành',
+      render: (room) => <StatusBadge status={room.status} />,
+    },
+    {
+      key: 'notes',
+      header: 'Ghi chú',
+      render: (room) => (
+        <span
+          className="block max-w-64 min-w-32 truncate text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          title={room.notes || undefined}
+          tabIndex={room.notes ? 0 : undefined}
+          aria-label={room.notes || undefined}
+        >
+          {room.notes || 'Không có ghi chú'}
+        </span>
+      ),
+    },
+    {
+      key: 'isActive',
+      header: 'Hoạt động',
+      render: (room) => (
+        <Badge tone={room.isActive ? 'success' : 'neutral'}>
+          {room.isActive ? 'Đang hoạt động' : 'Ngừng'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Thao tác',
+      className: 'text-right',
+      render: (room) => (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          aria-label={'Sửa phòng ' + room.roomNumber}
+          onClick={() => {
+            setSuccess(false)
+            setEditor({ id: room.id })
+          }}
+        >
+          <Pencil className="size-4" />
+        </Button>
+      ),
+    },
+  ]
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div>
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">Quản trị</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">Quản lý phòng</h1>
-        <p className="mt-2 text-sm text-stone-700">
-          Danh sách phòng và trạng thái vận hành đã ghi nhận.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Quản lý phòng"
+        subtitle="Thêm phòng, gán loại phòng và kiểm soát tình trạng."
+        actions={
+          <Button
+            type="button"
+            className="rounded-full"
+            disabled={!activeTypes.data?.length || activeTypes.isError || activeTypes.isPending}
+            onClick={() => {
+              setSuccess(false)
+              setEditor({ id: null })
+            }}
+          >
+            <Plus className="size-4" />
+            Thêm phòng
+          </Button>
+        }
+      />
       {success && <Alert tone="success">Đã lưu phòng. Danh sách đã được cập nhật.</Alert>}
-      <Button
-        disabled={!activeTypes.data?.length || activeTypes.isError || activeTypes.isPending}
-        onClick={() => {
-          setSuccess(false)
-          setEditor({ id: null })
-        }}
-      >
-        Thêm phòng
-      </Button>
       {activeTypes.isPending && <p role="status">Đang kiểm tra loại phòng khả dụng…</p>}
       {activeTypes.isError && (
-        <div className="space-y-3">
+        <div className="mb-4 space-y-3">
           <Alert tone="danger">
             Không tải được loại phòng khả dụng: {getErrorMessage(activeTypes.error)}
           </Alert>
           <Button
-            variant="secondary"
+            type="button"
+            variant="outline"
             disabled={activeTypes.isFetching}
             onClick={() => void activeTypes.refetch()}
           >
@@ -83,7 +161,10 @@ export function RoomsPage() {
       {activeTypes.isSuccess && !activeTypes.data.length && (
         <Alert tone="warning">
           Chưa có loại phòng hoạt động nên chưa thể thêm phòng.{' '}
-          <a href="/manager/room-types" className="underline">
+          <a
+            href="/manager/room-types"
+            className="underline focus-visible:outline-2 focus-visible:outline-ring"
+          >
             Quản lý loại phòng
           </a>
         </Alert>
@@ -98,88 +179,37 @@ export function RoomsPage() {
           }}
         />
       )}
-      <div
-        role="search"
-        aria-label="Lọc danh sách phòng"
-        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-      >
-        <TextField
-          label="Tìm theo số phòng"
-          type="search"
-          maxLength={100}
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Nhập số phòng"
-        />
-        <div className="min-w-0 space-y-2">
-          <SelectField
-            label="Loại phòng"
-            value={query.roomTypeId ?? ''}
-            disabled={types.isPending || types.isError}
-            options={[
-              { value: '', label: 'Tất cả loại phòng' },
-              ...(types.data ?? []).map((type) => ({
-                value: type.id,
-                label: `${type.name}${type.isActive ? '' : ' (ngừng)'}`,
-              })),
-            ]}
-            onChange={(event) => filter({ roomTypeId: event.target.value || undefined })}
-          />
-          {types.isPending && (
-            <p role="status" className="text-sm text-stone-700">
-              Đang tải loại phòng…
-            </p>
-          )}
-          {types.isError && (
-            <>
-              <Alert tone="danger">
-                Không tải được bộ lọc loại phòng: {getErrorMessage(types.error)}
-              </Alert>
-              <Button
-                variant="secondary"
-                disabled={types.isFetching}
-                onClick={() => void types.refetch()}
-              >
-                Thử lại loại phòng
-              </Button>
-            </>
-          )}
+      {types.isPending && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Đang tải loại phòng…
+        </p>
+      )}
+      {types.isError && (
+        <div className="mb-4 space-y-3">
+          <Alert tone="danger">
+            Không tải được bộ lọc loại phòng: {getErrorMessage(types.error)}
+          </Alert>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={types.isFetching}
+            onClick={() => void types.refetch()}
+          >
+            Thử lại loại phòng
+          </Button>
         </div>
-        <SelectField
-          label="Trạng thái vận hành"
-          value={query.status ?? ''}
-          options={[
-            { value: '', label: 'Tất cả trạng thái' },
-            ...ROOM_STATUSES.map((status) => ({
-              value: status,
-              label: statusDisplay[status].label,
-            })),
-          ]}
-          onChange={(event) =>
-            filter({ status: (event.target.value || undefined) as RoomStatus | undefined })
-          }
-        />
-        <SelectField
-          label="Hoạt động"
-          value={query.isActive === undefined ? '' : String(query.isActive)}
-          options={[
-            { value: '', label: 'Tất cả' },
-            { value: 'true', label: 'Đang hoạt động' },
-            { value: 'false', label: 'Ngừng' },
-          ]}
-          onChange={(event) =>
-            filter({
-              isActive: event.target.value === '' ? undefined : event.target.value === 'true',
-            })
-          }
-        />
-      </div>
-      {rooms.isPending && <p role="status">Đang tải phòng…</p>}
+      )}
+      {rooms.isPending && (
+        <p role="status" className="sr-only">
+          Đang tải phòng…
+        </p>
+      )}
       {rooms.isError && (
-        <div className="space-y-3">
+        <div className="mb-4 space-y-3">
           <Alert tone="danger">{getErrorMessage(rooms.error)}</Alert>
           <Button
-            variant="secondary"
+            type="button"
+            variant="outline"
             disabled={rooms.isFetching}
             onClick={() => void rooms.refetch()}
           >
@@ -187,130 +217,88 @@ export function RoomsPage() {
           </Button>
         </div>
       )}
-      {!rooms.isError && rooms.data && (
-        <>
-          {rooms.data.items.length === 0 ? (
-            <p
-              role="status"
-              className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700"
-            >
-              {filtered ? 'Không có kết quả khớp bộ lọc.' : 'Chưa có phòng nào.'}
-            </p>
-          ) : (
-            <div
-              role="region"
-              aria-label="Danh sách phòng, cuộn ngang để xem đủ cột"
-              tabIndex={0}
-              className="max-w-full overflow-x-auto rounded-lg border border-stone-300 bg-white"
-            >
-              <table className="w-full min-w-[850px] text-left text-sm">
-                <caption className="sr-only">Danh sách phòng</caption>
-                <thead className="bg-stone-200 text-xs text-stone-700 uppercase">
-                  <tr>
-                    {[
-                      'Số phòng',
-                      'Tầng',
-                      'Loại phòng',
-                      'Trạng thái vận hành',
-                      'Ghi chú',
-                      'Hoạt động',
-                      'Thao tác',
-                    ].map((name, index) => (
-                      <th
-                        scope="col"
-                        key={name}
-                        className={`px-4 py-4 ${index < 2 ? 'text-right' : ''}`}
-                      >
-                        {name}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rooms.data.items.map((room) => (
-                    <tr key={room.id} className="border-t border-stone-300 hover:bg-cream-50">
-                      <th scope="row" className="px-4 py-4 text-right font-semibold">
-                        {room.roomNumber}
-                      </th>
-                      <td className="px-4 py-4 text-right">{room.floor}</td>
-                      <td className="px-4 py-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {room.roomType ? (
-                            <>
-                              {room.roomType.name}
-                              {!room.roomType.isActive && (
-                                <Badge tone="neutral">Loại phòng ngừng</Badge>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-stone-700">Không tìm thấy loại phòng</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <Badge tone={statusDisplay[room.status]?.tone ?? 'neutral'}>
-                          {statusDisplay[room.status]?.label ?? 'Chưa rõ trạng thái'}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span
-                          className="block max-w-64 truncate text-stone-700"
-                          title={room.notes || undefined}
-                          tabIndex={room.notes ? 0 : undefined}
-                          aria-label={room.notes || undefined}
-                        >
-                          {room.notes || 'Không có ghi chú'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4">
-                        <Badge tone={room.isActive ? 'success' : 'neutral'}>
-                          {room.isActive ? 'Đang hoạt động' : 'Ngừng'}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-4">
-                        <Button
-                          variant="secondary"
-                          aria-label={`Sửa phòng ${room.roomNumber}`}
-                          onClick={() => {
-                            setSuccess(false)
-                            setEditor({ id: room.id })
-                          }}
-                        >
-                          Sửa
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <nav
-            aria-label="Phân trang phòng"
-            className="flex flex-wrap items-center justify-between gap-3"
-          >
-            <p className="text-sm text-stone-700" aria-live="polite">
-              {rooms.data.total} phòng · Trang {query.page}/{pages}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                disabled={query.page <= 1 || rooms.isFetching}
-                onClick={() => setQuery((previous) => ({ ...previous, page: previous.page - 1 }))}
+      <div role="search" aria-label="Lọc danh sách phòng">
+        <DataTable
+          rows={rooms.isError ? [] : (rooms.data?.items ?? [])}
+          columns={columns}
+          caption="Danh sách phòng"
+          scrollLabel="Danh sách phòng, cuộn ngang để xem đủ cột"
+          loading={rooms.isPending}
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchAriaLabel="Tìm theo số phòng"
+          searchPlaceholder="Nhập số phòng"
+          searchMaxLength={100}
+          toolbarStart={
+            <>
+              <NativeSelect
+                aria-label="Trạng thái vận hành"
+                className="h-9 rounded-full md:w-44"
+                value={query.status ?? ''}
+                onChange={(event) =>
+                  filter({ status: (event.target.value || undefined) as RoomStatus | undefined })
+                }
               >
-                Trang trước
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={query.page >= pages || rooms.isFetching}
-                onClick={() => setQuery((previous) => ({ ...previous, page: previous.page + 1 }))}
+                <option value="">Tất cả trạng thái</option>
+                {ROOM_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {statusDisplay[status].label}
+                  </option>
+                ))}
+              </NativeSelect>
+              <NativeSelect
+                aria-label="Loại phòng"
+                className="h-9 rounded-full md:w-44"
+                value={query.roomTypeId ?? ''}
+                disabled={types.isPending || types.isError}
+                onChange={(event) => filter({ roomTypeId: event.target.value || undefined })}
               >
-                Trang sau
-              </Button>
+                <option value="">Tất cả loại phòng</option>
+                {(types.data ?? []).map((type) => (
+                  <option key={type.id} value={type.id}>
+                    {type.name}
+                    {type.isActive ? '' : ' (ngừng)'}
+                  </option>
+                ))}
+              </NativeSelect>
+              <NativeSelect
+                aria-label="Hoạt động"
+                className="h-9 rounded-full md:w-44"
+                value={query.isActive === undefined ? '' : String(query.isActive)}
+                onChange={(event) =>
+                  filter({
+                    isActive: event.target.value === '' ? undefined : event.target.value === 'true',
+                  })
+                }
+              >
+                <option value="">Tất cả</option>
+                <option value="true">Đang hoạt động</option>
+                <option value="false">Ngừng</option>
+              </NativeSelect>
+            </>
+          }
+          page={query.page}
+          totalPages={pages}
+          onPageChange={(page) => setQuery((previous) => ({ ...previous, page }))}
+          paginationDisabled={rooms.isFetching}
+          paginationLabel="Phân trang phòng"
+          paginationSummary={<span aria-live="polite">{rooms.data?.total ?? 0} phòng</span>}
+          empty={
+            <div role="status">
+              <EmptyState
+                icon={SearchX}
+                title={
+                  rooms.isError
+                    ? 'Không tải được danh sách phòng.'
+                    : filtered
+                      ? 'Không có kết quả khớp bộ lọc.'
+                      : 'Chưa có phòng nào.'
+                }
+              />
             </div>
-          </nav>
-        </>
-      )}
-    </section>
+          }
+        />
+      </div>
+    </PageContainer>
   )
 }

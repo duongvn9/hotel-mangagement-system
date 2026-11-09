@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 import { isAxiosError } from 'axios'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
+import { Button, Input } from '@/components/atoms'
+import { FormField } from '@/components/molecules'
+import { ConfirmationDialog } from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
 import { canCloseIssue, closeIssue, type IssueDetail } from './api'
 import { issueKeys } from './hooks'
@@ -24,6 +25,7 @@ export function IssueClosure({ issue }: { issue: IssueDetail }) {
   const locked = useRef(false)
   const [conclusion, setConclusion] = useState('')
   const [confirming, setConfirming] = useState(false)
+  const [confirmationTrigger, setConfirmationTrigger] = useState<HTMLElement | null>(null)
   const [error, setError] = useState('')
   const eligible = canCloseIssue(issue)
   const mutation = useMutation({
@@ -58,14 +60,16 @@ export function IssueClosure({ issue }: { issue: IssueDetail }) {
   }
   return (
     <section className="space-y-4" aria-label="Đóng sự cố">
-      {error && (
+      {error && !confirming && (
         <p role="alert" className="text-danger">
           {error}
         </p>
       )}
-      {eligible && !confirming && (
+      {eligible && (
         <Button
-          onClick={() => {
+          hidden={confirming}
+          onClick={(event) => {
+            setConfirmationTrigger(event.currentTarget)
             setError('')
             setConfirming(true)
           }}
@@ -75,22 +79,35 @@ export function IssueClosure({ issue }: { issue: IssueDetail }) {
         </Button>
       )}
       {eligible && confirming && (
-        <section
-          role="dialog"
-          aria-modal="true"
-          aria-label="Xác nhận đóng sự cố"
-          className="space-y-4 rounded-lg border border-stone-300 bg-cream-50 p-4"
+        <ConfirmationDialog
+          label="Xác nhận đóng sự cố"
+          returnFocus={confirmationTrigger}
+          busy={mutation.isPending}
+          onCancel={() => {
+            setConfirming(false)
+            setError('')
+          }}
         >
           <h3 className="font-semibold">Xác nhận đóng sự cố</h3>
           <p>Máy chủ sẽ kiểm tra lại quyền và kết quả xử lý đã lưu trước khi đóng sự cố.</p>
-          <TextField
-            label="Kết luận đóng sự cố"
-            value={conclusion}
-            maxLength={2000}
-            required
-            disabled={mutation.isPending}
-            onChange={(event) => setConclusion(event.target.value)}
-          />
+          <FormField label="Kết luận đóng sự cố" htmlFor="closure-conclusion" required>
+            <Input
+              aria-label="Kết luận đóng sự cố*"
+              id="closure-conclusion"
+              aria-invalid={!!error}
+              aria-describedby={error ? 'closure-conclusion-error' : undefined}
+              value={conclusion}
+              maxLength={2000}
+              required
+              disabled={mutation.isPending}
+              onChange={(event) => setConclusion(event.target.value)}
+            />
+            {error && (
+              <p id="closure-conclusion-error" role="alert" className="text-xs text-destructive">
+                {error}
+              </p>
+            )}
+          </FormField>
           <Button disabled={mutation.isPending} onClick={submit}>
             Xác nhận đóng
           </Button>
@@ -104,7 +121,7 @@ export function IssueClosure({ issue }: { issue: IssueDetail }) {
           >
             Hủy
           </Button>
-        </section>
+        </ConfirmationDialog>
       )}
       {mutation.isPending && <p role="status">Đang đóng và cập nhật trạng thái…</p>}
     </section>

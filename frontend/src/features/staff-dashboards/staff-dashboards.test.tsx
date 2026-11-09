@@ -111,6 +111,82 @@ it.each([
   },
 )
 
+it('presents the service dashboard with atomic cards and a priority panel', async () => {
+  respond([base], 1234)
+  dashboard()
+  await screen.findByText('1.234')
+  expect(screen.getByRole('heading', { name: 'Bảng điều khiển dịch vụ', level: 1 })).toHaveClass(
+    'text-2xl',
+    'tracking-tight',
+  )
+  expect(screen.getByText('Đội dịch vụ')).toBeInTheDocument()
+  const metrics = screen.getByLabelText('Thống kê công việc của bạn')
+  expect(metrics.querySelectorAll('.card-soft')).toHaveLength(5)
+  expect(
+    within(metrics)
+      .getAllByRole('definition')
+      .map((item) => item.textContent),
+  ).toEqual(['1', '0', '1.234', '0', '0'])
+  expect(
+    screen
+      .getByRole('heading', { name: 'Công việc dịch vụ cần chú ý', level: 2 })
+      .closest('section'),
+  ).toHaveClass('card-soft')
+  expect(screen.getByRole('list')).toHaveClass('divide-y')
+  expect(screen.getByText('Ưu tiên: Cao')).toBeInTheDocument()
+})
+
+it('presents operations with five atomic metrics and preserves long task names and unknown priorities', async () => {
+  const title = 'Kiểm tra thiết bị '.repeat(40)
+  respond([{ ...base, title, priority: 'FUTURE_PRIORITY' }], 42)
+  dashboard(operationsPath, 'OPERATIONS_STAFF')
+  await screen.findByText('42')
+  expect(screen.getByRole('heading', { name: 'Bảng điều khiển vận hành', level: 1 })).toHaveClass(
+    'text-2xl',
+    'tracking-tight',
+  )
+  expect(screen.getByText('Vận hành')).toBeInTheDocument()
+  const metrics = screen.getByLabelText('Thống kê công việc của bạn')
+  expect(metrics).toHaveClass('grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-5')
+  expect(metrics.querySelectorAll('.card-soft')).toHaveLength(5)
+  expect(
+    within(metrics)
+      .getAllByRole('definition')
+      .map((item) => item.textContent),
+  ).toEqual(['1', '0', '42', '0', '0'])
+  expect(
+    screen
+      .getByRole('heading', { name: 'Công việc vận hành cần chú ý', level: 2 })
+      .closest('section'),
+  ).toHaveClass('card-soft')
+  expect(screen.getByRole('list')).toHaveClass('divide-y')
+  expect(screen.getByRole('link', { name: title.trim() })).toHaveClass('break-words', 'max-w-full')
+  expect(screen.getByText('Ưu tiên: FUTURE_PRIORITY')).toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'Lịch sử thực hiện dịch vụ' })).not.toBeInTheDocument()
+})
+
+it.each([
+  [servicePath, 'SERVICE_STAFF'],
+  [operationsPath, 'OPERATIONS_STAFF'],
+])(
+  'refreshes %s without changing navigation or displaying stale task counts',
+  async (path, role) => {
+    respond([base], 42)
+    dashboard(path, role)
+    await screen.findByText('42')
+    respond([], 99)
+    fireEvent.click(screen.getByRole('button', { name: 'Làm mới' }))
+    expect(await screen.findByText('99')).toBeInTheDocument()
+    expect(screen.queryByText('42')).not.toBeInTheDocument()
+    expect(screen.getByText('Bạn chưa có công việc đang hoạt động.')).toBeInTheDocument()
+    expect(screen.getAllByRole('definition')).toHaveLength(5)
+    expect(screen.getByRole('link', { name: 'Xem công việc được giao' })).toHaveAttribute(
+      'href',
+      '/staff/tasks',
+    )
+  },
+)
+
 it.each([servicePath, operationsPath])(
   'denies all other roles at %s even with task permission',
   async (path) => {

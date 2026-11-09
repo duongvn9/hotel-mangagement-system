@@ -78,6 +78,7 @@ describe('UC47 RoomsPage', () => {
   it('shows all columns, Vietnamese statuses, inactive room/type and missing reference safely', async () => {
     mockApi()
     renderPage()
+    await screen.findByRole('rowheader', { name: '20' })
     const table = await screen.findByRole('table', { name: 'Danh sách phòng' })
     for (const name of [
       'Số phòng',

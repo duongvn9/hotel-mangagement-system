@@ -306,8 +306,24 @@ describe('Manager dashboard — real sources and isolated Mongo', () => {
       successCount: 0,
     });
     expect(Object.values(body.rooms.byStatus)).toEqual([0, 0, 0, 0]);
+    expect(body.insights.bookings).toEqual({
+      available: true,
+      activeCount: 0,
+      recent: [],
+    });
+    expect(body.insights.feedback).toEqual({
+      available: true,
+      count: 0,
+      average: null,
+    });
+    expect(body.insights.revenue).toMatchObject({
+      available: true,
+      amount: 0,
+      changePercent: null,
+    });
+    expect(body.insights.revenue.series).toHaveLength(14);
   });
-  it('uses exactly three aggregations regardless of row count and leaves all data/collections unchanged', async () => {
+  it('keeps aggregation counts bounded with current-month and two 14-day periods, without writes', async () => {
     await task();
     await room('MAINTENANCE');
     await payment();
@@ -331,7 +347,9 @@ describe('Manager dashboard — real sources and isolated Mongo', () => {
       vi.spyOn(payments, 'aggregate'),
     ];
     await get().expect(200);
-    for (const spy of spies) expect(spy).toHaveBeenCalledTimes(1);
+    expect(spies[0]).toHaveBeenCalledTimes(1);
+    expect(spies[1]).toHaveBeenCalledTimes(1);
+    expect(spies[2]).toHaveBeenCalledTimes(3);
     expect(await snapshot()).toBe(before);
     for (let i = 0; i < 8; i++) {
       await task();
@@ -341,7 +359,9 @@ describe('Manager dashboard — real sources and isolated Mongo', () => {
     const afterFixtures = await snapshot();
     await get().expect(200);
     await get().expect(200);
-    for (const spy of spies) expect(spy).toHaveBeenCalledTimes(3);
+    expect(spies[0]).toHaveBeenCalledTimes(3);
+    expect(spies[1]).toHaveBeenCalledTimes(3);
+    expect(spies[2]).toHaveBeenCalledTimes(9);
     expect(await snapshot()).toBe(afterFixtures);
     expect(await collections()).toEqual(collectionNames);
   });

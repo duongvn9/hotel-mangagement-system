@@ -1,12 +1,11 @@
 import { RoomGallery } from '@/components/AssetImage'
 import { useEffect, useState } from 'react'
-import { Alert } from '@/components/Alert'
-import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
-import { SelectField } from '@/components/SelectField'
+import { Pencil, Plus, SearchX } from 'lucide-react'
+import { Badge, Button, NativeSelect } from '@/components/atoms'
+import { Alert, EmptyState } from '@/components/molecules'
+import { DataTable, PageContainer, PageHeader, type Column } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
-import type { AmenityQuery } from '../api'
+import type { Amenity, AmenityQuery } from '../api'
 import { useAmenities } from '../hooks'
 import { RoomTypeChips } from '../components/RoomTypeChips'
 import { AmenityEditor } from '../components/AmenityForm'
@@ -32,23 +31,97 @@ export function AmenitiesPage() {
   const pages = amenities.data
     ? Math.max(1, Math.ceil(amenities.data.total / amenities.data.limit))
     : 1
+  const columns: Column<Amenity>[] = [
+    {
+      key: 'name',
+      header: 'Tên',
+      rowHeader: true,
+      render: (amenity) => (
+        <div className="flex items-center gap-3">
+          <RoomGallery
+            compact
+            images={
+              amenity.images?.length ? amenity.images : amenity.iconUrl ? [amenity.iconUrl] : []
+            }
+            name={amenity.name}
+          />
+          <span className="min-w-24 max-w-48 break-words">{amenity.name}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'description',
+      header: 'Mô tả',
+      render: (amenity) => (
+        <span
+          className="block min-w-32 max-w-64 truncate text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          title={amenity.description || undefined}
+          aria-label={amenity.description || undefined}
+          tabIndex={amenity.description ? 0 : undefined}
+        >
+          {amenity.description || 'Chưa có mô tả'}
+        </span>
+      ),
+    },
+    {
+      key: 'roomTypes',
+      header: 'Gắn vào Room Type',
+      render: (amenity) => (
+        <div className="min-w-40 max-w-80">
+          <RoomTypeChips roomTypes={amenity.roomTypes} />
+        </div>
+      ),
+    },
+    { key: 'roomTypeCount', header: 'Số loại phòng', className: 'text-right' },
+    {
+      key: 'isActive',
+      header: 'Trạng thái',
+      render: (amenity) => (
+        <Badge tone={amenity.isActive ? 'success' : 'neutral'}>
+          {amenity.isActive ? 'Đang hoạt động' : 'Ngừng'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Thao tác',
+      className: 'text-right',
+      render: (amenity) => (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          aria-label={'Sửa tiện nghi ' + amenity.name}
+          onClick={() => {
+            setSuccess(false)
+            setEditor({ id: amenity.id })
+          }}
+        >
+          <Pencil className="size-4" />
+        </Button>
+      ),
+    },
+  ]
   return (
-    <section className="mx-auto max-w-container space-y-6 px-4 py-10 font-body">
-      <div>
-        <p className="text-xs font-semibold tracking-widest text-primary uppercase">Quản trị</p>
-        <h1 className="font-display text-4xl font-semibold text-pearl-900">Quản lý tiện nghi</h1>
-        <p className="mt-2 text-sm text-stone-700">
-          Thông tin tiện nghi và các loại phòng đang gắn.
-        </p>
-      </div>
-      <Button
-        onClick={() => {
-          setSuccess(false)
-          setEditor({ id: null })
-        }}
-      >
-        Thêm tiện nghi
-      </Button>
+    <PageContainer>
+      <PageHeader
+        title="Quản lý tiện nghi"
+        subtitle="Tiện nghi hiển thị trên phòng và trang web."
+        actions={
+          <Button
+            type="button"
+            className="rounded-full"
+            onClick={() => {
+              setSuccess(false)
+              setEditor({ id: null })
+            }}
+          >
+            <Plus className="size-4" />
+            Thêm tiện nghi
+          </Button>
+        }
+      />
       {success && <Alert tone="success">Đã lưu tiện nghi.</Alert>}
       {editor && (
         <AmenityEditor
@@ -60,39 +133,17 @@ export function AmenitiesPage() {
           }}
         />
       )}
-      <div role="search" aria-label="Lọc tiện nghi" className="grid gap-4 md:grid-cols-2">
-        <TextField
-          label="Tìm theo tên"
-          type="search"
-          maxLength={100}
-          value={search}
-          placeholder="Nhập tên tiện nghi"
-          onChange={(event) => setSearch(event.target.value)}
-        />
-        <SelectField
-          label="Trạng thái"
-          value={query.isActive === undefined ? '' : String(query.isActive)}
-          options={[
-            { value: '', label: 'Tất cả' },
-            { value: 'true', label: 'Đang hoạt động' },
-            { value: 'false', label: 'Ngừng' },
-          ]}
-          onChange={(event) => {
-            const value = event.target.value
-            setQuery((previous) => ({
-              ...previous,
-              page: 1,
-              isActive: value === '' ? undefined : value === 'true',
-            }))
-          }}
-        />
-      </div>
-      {amenities.isPending && <p role="status">Đang tải tiện nghi…</p>}
+      {amenities.isPending && (
+        <p role="status" className="sr-only">
+          Đang tải tiện nghi…
+        </p>
+      )}
       {amenities.isError && (
-        <div className="space-y-3">
+        <div className="mb-4 space-y-3">
           <Alert tone="danger">{getErrorMessage(amenities.error)}</Alert>
           <Button
-            variant="secondary"
+            type="button"
+            variant="outline"
             disabled={amenities.isFetching}
             onClick={() => void amenities.refetch()}
           >
@@ -100,125 +151,59 @@ export function AmenitiesPage() {
           </Button>
         </div>
       )}
-      {!amenities.isError && amenities.data && (
-        <>
-          {!amenities.data.items.length ? (
-            <p
-              role="status"
-              className="rounded-lg border border-stone-300 bg-white p-6 text-stone-700"
+      <div role="search" aria-label="Lọc tiện nghi" className="[&_tbody_tr]:hover:bg-surface/50">
+        <DataTable
+          rows={amenities.isError ? [] : (amenities.data?.items ?? [])}
+          columns={columns}
+          loading={amenities.isPending}
+          caption="Danh sách tiện nghi"
+          scrollLabel="Danh sách tiện nghi, cuộn ngang để xem đủ cột"
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchAriaLabel="Tìm theo tên"
+          searchPlaceholder="Nhập tên tiện nghi"
+          searchMaxLength={100}
+          toolbarStart={
+            <NativeSelect
+              aria-label="Trạng thái"
+              className="h-9 rounded-full md:w-44"
+              value={query.isActive === undefined ? '' : String(query.isActive)}
+              onChange={(event) => {
+                const value = event.target.value
+                setQuery((previous) => ({
+                  ...previous,
+                  page: 1,
+                  isActive: value === '' ? undefined : value === 'true',
+                }))
+              }}
             >
-              {filtered ? 'Không có kết quả khớp bộ lọc.' : 'Chưa có tiện nghi nào.'}
-            </p>
-          ) : (
-            <div
-              role="region"
-              aria-label="Danh sách tiện nghi, cuộn ngang để xem đủ cột"
-              tabIndex={0}
-              className="max-w-full overflow-x-auto rounded-lg border border-stone-300 bg-white"
-            >
-              <table className="w-full min-w-[800px] text-left text-sm">
-                <caption className="sr-only">Danh sách tiện nghi</caption>
-                <thead className="bg-stone-200 text-xs text-stone-700 uppercase">
-                  <tr>
-                    {[
-                      'Tên',
-                      'Mô tả',
-                      'Gắn vào Room Type',
-                      'Số loại phòng',
-                      'Trạng thái',
-                      'Thao tác',
-                    ].map((name, index) => (
-                      <th
-                        scope="col"
-                        key={name}
-                        className={`px-4 py-4 ${index === 3 ? 'text-right' : ''}`}
-                      >
-                        {name}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {amenities.data.items.map((amenity) => (
-                    <tr key={amenity.id} className="border-t border-stone-300 hover:bg-cream-50">
-                      <th scope="row" className="px-4 py-4 font-semibold">
-                        <span className="inline-flex items-center gap-2">
-                          <RoomGallery
-                            images={
-                              amenity.images?.length
-                                ? amenity.images
-                                : amenity.iconUrl
-                                  ? [amenity.iconUrl]
-                                  : []
-                            }
-                            name={amenity.name}
-                          />
-                          {amenity.name}
-                        </span>
-                      </th>
-                      <td className="px-4 py-4">
-                        <span
-                          className="block max-w-64 truncate text-stone-700"
-                          title={amenity.description || undefined}
-                          aria-label={amenity.description || undefined}
-                          tabIndex={amenity.description ? 0 : undefined}
-                        >
-                          {amenity.description || 'Chưa có mô tả'}
-                        </span>
-                      </td>
-                      <td className="max-w-80 px-4 py-4">
-                        <RoomTypeChips roomTypes={amenity.roomTypes} />
-                      </td>
-                      <td className="px-4 py-4 text-right">{amenity.roomTypeCount}</td>
-                      <td className="px-4 py-4">
-                        <Badge tone={amenity.isActive ? 'success' : 'neutral'}>
-                          {amenity.isActive ? 'Đang hoạt động' : 'Ngừng'}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-4">
-                        <Button
-                          variant="secondary"
-                          aria-label={`Sửa tiện nghi ${amenity.name}`}
-                          onClick={() => {
-                            setSuccess(false)
-                            setEditor({ id: amenity.id })
-                          }}
-                        >
-                          Sửa
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <option value="">Tất cả</option>
+              <option value="true">Đang hoạt động</option>
+              <option value="false">Ngừng</option>
+            </NativeSelect>
+          }
+          page={query.page}
+          totalPages={pages}
+          onPageChange={(page) => setQuery((previous) => ({ ...previous, page }))}
+          paginationDisabled={amenities.isFetching}
+          paginationLabel="Phân trang tiện nghi"
+          paginationSummary={<span aria-live="polite">{amenities.data?.total ?? 0} tiện nghi</span>}
+          empty={
+            <div role="status">
+              <EmptyState
+                icon={SearchX}
+                title={
+                  amenities.isError
+                    ? 'Không tải được danh sách tiện nghi.'
+                    : filtered
+                      ? 'Không có kết quả khớp bộ lọc.'
+                      : 'Chưa có tiện nghi nào.'
+                }
+              />
             </div>
-          )}
-          <nav
-            aria-label="Phân trang tiện nghi"
-            className="flex flex-wrap items-center justify-between gap-3"
-          >
-            <p aria-live="polite" className="text-sm text-stone-700">
-              {amenities.data.total} tiện nghi · Trang {query.page}/{pages}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                disabled={query.page <= 1 || amenities.isFetching}
-                onClick={() => setQuery((previous) => ({ ...previous, page: previous.page - 1 }))}
-              >
-                Trang trước
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={query.page >= pages || amenities.isFetching}
-                onClick={() => setQuery((previous) => ({ ...previous, page: previous.page + 1 }))}
-              >
-                Trang sau
-              </Button>
-            </div>
-          </nav>
-        </>
-      )}
-    </section>
+          }
+        />
+      </div>
+    </PageContainer>
   )
 }

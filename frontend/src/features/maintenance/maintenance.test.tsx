@@ -206,6 +206,88 @@ describe('UC35 ReportFaultPage', () => {
     expect(screen.getByLabelText(/Mô tả lỗi/)).toBeEnabled()
     expect(screen.getByLabelText(/Mô tả lỗi/)).toHaveValue('Điều hòa bị rò điện')
   })
+  it('submits a facility-only report without creating a maintenance task', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({
+      data: { reportId: 'facility-report', roomMarkedUnavailable: false, warnings: [] },
+    })
+    renderPage()
+    fireEvent.change(screen.getByLabelText('Đối tượng bị ảnh hưởng'), {
+      target: { value: 'FACILITY' },
+    })
+    fireEvent.change(screen.getByLabelText(/^Vị trí cơ sở/), {
+      target: { value: '  Sảnh tầng 1  ' },
+    })
+    fireEvent.change(screen.getByLabelText(/Mô tả lỗi/), {
+      target: { value: '  Đèn khu vực tiếp đón bị hỏng.  ' },
+    })
+    fireEvent.click(screen.getByLabelText('Cần xử lý/bảo trì'))
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi báo cáo' }))
+    await screen.findByText('Đã ghi nhận báo cáo bảo trì.')
+    expect(post).toHaveBeenCalledWith(
+      '/maintenance/reports',
+      {
+        facilityLocation: 'Sảnh tầng 1',
+        description: 'Đèn khu vực tiếp đón bị hỏng.',
+        requiresAction: false,
+        preventsSafeUse: false,
+      },
+      { headers: { 'Idempotency-Key': expect.any(String) } },
+    )
+    expect(screen.getByText('Không yêu cầu tạo công việc bảo trì.')).toBeInTheDocument()
+    expect(screen.getByText('Báo cáo này chưa đánh dấu phòng không khả dụng.')).toBeInTheDocument()
+  })
+  it('retains selected equipment and its image across empty searches and submits only its ID', async () => {
+    vi.mocked(api.get)
+      .mockResolvedValueOnce({
+        data: {
+          ...targets,
+          equipment: [{ ...targets.equipment[0], imageUrl: '/images/equipment/ac.jpg' }],
+        },
+      })
+      .mockResolvedValue({ data: { rooms: [], equipment: [] } })
+    const post = vi.spyOn(api, 'post').mockResolvedValue({
+      data: {
+        reportId: 'equipment-report',
+        taskId: 'task',
+        roomMarkedUnavailable: false,
+        warnings: [],
+      },
+    })
+    renderPage()
+    await screen.findByRole('option', { name: 'Phòng 102 — tầng 1' })
+    fireEvent.change(screen.getByLabelText('Đối tượng bị ảnh hưởng'), {
+      target: { value: 'EQUIPMENT' },
+    })
+    await screen.findByRole('option', { name: /AC-102 — Điều hòa/ })
+    fireEvent.change(screen.getByLabelText(/Thiết bị bị ảnh hưởng/), {
+      target: { value: 'device1' },
+    })
+    expect(screen.getByRole('img', { name: 'Điều hòa' })).toHaveAttribute(
+      'src',
+      expect.stringContaining('/images/equipment/ac.jpg'),
+    )
+    fireEvent.change(screen.getByLabelText('Tìm phòng hoặc thiết bị'), {
+      target: { value: 'không có kết quả' },
+    })
+    await screen.findByText('Không tìm thấy phòng/thiết bị phù hợp.')
+    expect(screen.getByLabelText(/Thiết bị bị ảnh hưởng/)).toHaveValue('device1')
+    expect(screen.getByRole('img', { name: 'Điều hòa' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/Mô tả lỗi/), {
+      target: { value: 'Điều hòa bị hỏng' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi báo cáo' }))
+    await screen.findByText('Đã ghi nhận báo cáo bảo trì.')
+    expect(post).toHaveBeenCalledWith(
+      '/maintenance/reports',
+      {
+        equipmentId: 'device1',
+        description: 'Điều hòa bị hỏng',
+        requiresAction: true,
+        preventsSafeUse: false,
+      },
+      { headers: { 'Idempotency-Key': expect.any(String) } },
+    )
+  })
   it('handles loading, failed/retried target search and empty results', async () => {
     vi.mocked(api.get)
       .mockRejectedValueOnce({

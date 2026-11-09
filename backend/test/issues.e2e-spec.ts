@@ -2,6 +2,8 @@ import { VersioningType, type INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { Model, Types } from 'mongoose';
+import { randomUUID } from 'node:crypto';
+import { ServiceOrder } from '../src/modules/service-orders/schemas/service-order.schema.js';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import {
@@ -38,7 +40,7 @@ describe('Report issue (e2e)', () => {
     request(app.getHttpServer())
       .post('/api/v1/issues')
       .set(customer)
-      .send(body)
+      .send({ requestId: randomUUID(), ...body })
       .expect((response) => {
         if (response.body.id) createdIssueIds.push(response.body.id);
       });
@@ -82,7 +84,7 @@ describe('Report issue (e2e)', () => {
         checkIn: new Date('2020-01-01'),
         checkOut: new Date('2020-01-02'),
         adultCount: 1,
-        status: BookingStatus.CheckedOut,
+        status: BookingStatus.CheckedIn,
         roomTotal: 100000,
         depositAmount: 100000,
       })),
@@ -92,7 +94,7 @@ describe('Report issue (e2e)', () => {
   beforeEach(async () => {
     await bookings.updateOne(
       { _id: booking },
-      { status: BookingStatus.CheckedOut, isActive: true, customer: owner },
+      { status: BookingStatus.CheckedIn, isActive: true, customer: owner },
     );
     await rooms.updateOne({ _id: room }, { isActive: true });
   });
@@ -126,6 +128,116 @@ describe('Report issue (e2e)', () => {
     expect(response.body.reporter).toBeUndefined();
   });
 
+  it('deduplicates concurrent Mongo inserts and safely replays after eligibility changes', async () => {
+    const input = { ...payload, requestId: randomUUID() };
+    const responses = await Promise.all([
+      post(input).expect(201),
+      post(input).expect(201),
+    ]);
+    expect(responses[0].body).toEqual(responses[1].body);
+    expect(
+      await issues.countDocuments({
+        reporter: owner,
+        requestId: input.requestId,
+      }),
+    ).toBe(1);
+    await post({ ...input, title: 'Different' }).expect(409);
+    for (const change of [
+      { status: BookingStatus.CheckedOut },
+      { isActive: false },
+      { customer: other },
+    ]) {
+      await bookings.updateOne({ _id: booking }, change);
+      const replay = await post(input).expect(201);
+      expect(replay.body).toEqual(responses[0].body);
+      await post(payload).expect(404);
+      await get(`/${replay.body.id}`).expect(200);
+      await get(`/${replay.body.id}`, 'CUSTOMER', other).expect(404);
+    }
+  });
+
+  it('returns eligible context and accepts rejected owned service orders only', async () => {
+    const orders = app.get<Model<ServiceOrder>>(
+      getModelToken(ServiceOrder.name),
+    );
+    const ids = [
+      new Types.ObjectId(),
+      new Types.ObjectId(),
+      new Types.ObjectId(),
+    ];
+    try {
+      await orders.create(
+        ids.map((_id, index) => ({
+          _id,
+          booking: index === 2 ? foreign : booking,
+          customer: index === 1 ? other : owner,
+          service: new Types.ObjectId(),
+          serviceName: 'Laundry',
+          quantity: 1,
+          unitPriceVND: 1000,
+          amount: 1000,
+          requestedTime: new Date(),
+          reviewStatus: 'REJECTED',
+        })),
+      );
+      const context = await get('/report-context').expect(200);
+      expect(context.body.items).toEqual([
+        {
+          id: String(booking),
+          code: `ISS-${booking}`,
+          status: 'CHECKED_IN',
+          checkIn: '2020-01-01T00:00:00.000Z',
+          checkOut: '2020-01-02T00:00:00.000Z',
+          rooms: [{ id: String(room), roomNumber: `ISS-${room}` }],
+          serviceOrders: [
+            {
+              id: String(ids[0]),
+              serviceName: 'Laundry',
+              reviewStatus: 'REJECTED',
+              executionStatus: 'NOT_STARTED',
+            },
+          ],
+        },
+      ]);
+      const response = await post({
+        ...payload,
+        roomId: String(room),
+        serviceOrderId: String(ids[0]),
+      }).expect(201);
+      expect(response.body.serviceOrderId).toBe(String(ids[0]));
+      for (const id of ids.slice(1))
+        await post({ ...payload, serviceOrderId: String(id) }).expect(404);
+      await bookings.updateOne(
+        { _id: booking },
+        { status: BookingStatus.CheckedOut },
+      );
+      expect((await get('/report-context').expect(200)).body).toEqual({
+        items: [],
+      });
+    } finally {
+      await orders.deleteMany({ _id: { $in: ids } });
+    }
+  });
+
+  it('keeps legacy self reports private and staff reports scoped to current ownership', async () => {
+    const response = await post(payload).expect(201);
+    await issues.updateOne(
+      { _id: response.body.id },
+      { $unset: { requestId: 1, requestFingerprint: 1 } },
+    );
+    await bookings.updateOne({ _id: booking }, { customer: other });
+    await get(`/${response.body.id}`).expect(200);
+    await get(`/${response.body.id}`, 'CUSTOMER', other).expect(404);
+    await issues.updateOne(
+      { _id: response.body.id },
+      { sourceTask: new Types.ObjectId() },
+    );
+    await get(`/${response.body.id}`).expect(404);
+    await get(`/${response.body.id}`, 'CUSTOMER', other).expect(200);
+    await bookings.updateOne({ _id: booking }, { isActive: false });
+    await get(`/${response.body.id}`, 'CUSTOMER', other).expect(404);
+  });
+
   it('accepts booking-only context', async () => {
     const response = await post(payload).expect(201);
     expect(response.body.roomId).toBeUndefined();
@@ -144,7 +256,7 @@ describe('Report issue (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/v1/issues')
       .set({ ...customer, 'x-dev-user-id': String(other) })
-      .send({ ...payload, bookingId: String(foreign) })
+      .send({ ...payload, requestId: randomUUID(), bookingId: String(foreign) })
       .expect(201)
       .expect((response) => createdIssueIds.push(response.body.id));
   });
@@ -158,14 +270,13 @@ describe('Report issue (e2e)', () => {
     await post(payload).expect(404);
   });
 
-  it.each([
-    BookingStatus.PendingDeposit,
-    BookingStatus.Confirmed,
-    BookingStatus.CheckedIn,
-    BookingStatus.CheckedOut,
-  ])('allows relevant %s context', async (status) => {
+  it.each(
+    Object.values(BookingStatus).filter(
+      (status) => status !== BookingStatus.CheckedIn,
+    ),
+  )('rejects non-checked-in %s context', async (status) => {
     await bookings.updateOne({ _id: booking }, { status });
-    await post(payload).expect(201);
+    await post(payload).expect(404);
   });
 
   it('rejects unrelated, missing and inactive rooms', async () => {
@@ -205,12 +316,12 @@ describe('Report issue (e2e)', () => {
     );
     expect(empty.body).toEqual({ items: [], total: 0, page: 1, limit: 20 });
     await bookings.updateOne({ _id: booking }, { customer: other });
-    await get(`/${id}`).expect(404);
-    await get(`/${id}`, 'CUSTOMER', other).expect(200);
-    const revoked = await get(`?keyword=${keyword}`).expect(200);
-    expect(revoked.body.total).toBe(0);
+    await get(`/${id}`).expect(200);
+    await get(`/${id}`, 'CUSTOMER', other).expect(404);
+    const retained = await get(`?keyword=${keyword}`).expect(200);
+    expect(retained.body.total).toBe(1);
     await bookings.updateOne({ _id: booking }, { $unset: { customer: 1 } });
-    await get(`/${id}`).expect(404);
+    await get(`/${id}`).expect(200);
     await get(`/${id}`, 'CUSTOMER', other).expect(404);
     for (const role of ['RECEPTIONIST', 'MANAGER']) {
       await get(`/${id}`, role).expect(200);
@@ -225,11 +336,9 @@ describe('Report issue (e2e)', () => {
     const malformed = await get('/bad-id').expect(404);
     expect(malformed.body.message).toEqual(missingDetail.body.message);
     await bookings.updateOne({ _id: booking }, { isActive: false });
-    const inactive = await get(`/${response.body.id}`).expect(404);
-    expect(inactive.body.message).toEqual(missingDetail.body.message);
+    await get(`/${response.body.id}`).expect(200);
     await issues.updateOne({ _id: response.body.id }, { booking: missing });
-    const dangling = await get(`/${response.body.id}`).expect(404);
-    expect(dangling.body.message).toEqual(missingDetail.body.message);
+    await get(`/${response.body.id}`).expect(200);
   });
 
   it.each(['SERVICE_STAFF', 'OPERATIONS_STAFF'])(
@@ -273,6 +382,7 @@ describe('Report issue (e2e)', () => {
       .send(payload)
       .expect(403);
     await post({ ...payload, bookingId: undefined }).expect(400);
-    await post({ ...payload, serviceOrderId: String(room) }).expect(400);
+    await post({ ...payload, serviceOrderId: String(room) }).expect(404);
+    await post({ ...payload, requestId: undefined }).expect(400);
   });
 });

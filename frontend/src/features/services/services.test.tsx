@@ -62,6 +62,7 @@ describe('UC53 ServicesPage', () => {
     vi.spyOn(api, 'get').mockResolvedValue(response())
     renderPage()
     const table = await screen.findByRole('table', { name: 'Danh sách dịch vụ' })
+    await within(table).findByRole('rowheader', { name: 'Giặt ủi' })
     for (const name of ['Tên', 'Mô tả', 'Tính phí', 'Giá', 'Trạng thái'])
       expect(within(table).getByRole('columnheader', { name })).toBeInTheDocument()
     const laundry = within(table).getByRole('rowheader', { name: 'Giặt ủi' }).closest('tr')!
@@ -86,9 +87,9 @@ describe('UC53 ServicesPage', () => {
     expect(screen.getByRole('button', { name: 'Sửa dịch vụ Giặt ủi' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: /Xóa/ })).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: /Danh sách dịch vụ/ })).toHaveClass('overflow-x-auto')
-    expect(table).toHaveClass('min-w-[800px]')
+    expect(table).toHaveClass('w-full', 'text-sm')
     for (const label of ['Tìm theo tên', 'Tính phí', 'Trạng thái'])
-      expect(screen.getByLabelText(label)).toHaveClass('h-11')
+      expect(screen.getByLabelText(label)).toHaveClass('h-9', 'rounded-full')
   })
   it('shows loading', () => {
     vi.spyOn(api, 'get').mockImplementation(() => new Promise(() => {}))

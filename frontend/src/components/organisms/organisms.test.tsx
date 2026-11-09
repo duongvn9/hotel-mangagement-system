@@ -110,6 +110,93 @@ describe('DataTable', () => {
   })
 })
 
+describe('DataTable server mode', () => {
+  it('renders a controlled search box that reports typing and submits on Enter', () => {
+    const onSearchChange = vi.fn()
+    const onSearchSubmit = vi.fn()
+    render(
+      <DataTable
+        rows={make(2)}
+        columns={columns}
+        searchValue="Phòng"
+        onSearchChange={onSearchChange}
+        onSearchSubmit={onSearchSubmit}
+        searchPlaceholder="Tìm phòng"
+        searchAriaLabel="Tìm phòng"
+      />,
+    )
+    const input = screen.getByRole('searchbox', { name: 'Tìm phòng' })
+    expect(input).toHaveValue('Phòng')
+    fireEvent.change(input, { target: { value: 'Phòng 1' } })
+    expect(onSearchChange).toHaveBeenCalledWith('Phòng 1')
+    fireEvent.submit(input.closest('form')!)
+    expect(onSearchSubmit).toHaveBeenCalled()
+  })
+
+  it('renders extra toolbar controls through toolbarStart', () => {
+    render(<DataTable rows={make(1)} columns={columns} toolbarStart={<button>Lọc</button>} />)
+    expect(screen.getByRole('button', { name: 'Lọc' })).toBeInTheDocument()
+  })
+
+  it('uses controlled pagination without slicing rows on the client', () => {
+    const onPageChange = vi.fn()
+    render(
+      <DataTable
+        rows={make(3)}
+        columns={columns}
+        pageSize={2}
+        page={2}
+        totalPages={5}
+        onPageChange={onPageChange}
+      />,
+    )
+    expect(screen.getByText('Trang 2 / 5')).toBeInTheDocument()
+    // All rows render even past the client pageSize: the server owns paging.
+    expect(screen.getByText('Phòng 3')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
+    expect(onPageChange).toHaveBeenCalledWith(3)
+    fireEvent.click(screen.getByRole('button', { name: 'Trang trước' }))
+    expect(onPageChange).toHaveBeenCalledWith(1)
+  })
+
+  it('disables controlled pagination at the boundaries', () => {
+    render(
+      <DataTable
+        rows={make(2)}
+        columns={columns}
+        page={1}
+        totalPages={1}
+        onPageChange={() => {}}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Trang trước' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Trang sau' })).toBeDisabled()
+  })
+})
+
+describe('Pager', () => {
+  it('shows the page position and moves between pages', () => {
+    const onPrev = vi.fn()
+    const onNext = vi.fn()
+    render(<organisms.Pager page={2} totalPages={4} onPrev={onPrev} onNext={onNext} />)
+    expect(screen.getByText('Trang 2 / 4')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Trang trước' }))
+    expect(onPrev).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
+    expect(onNext).toHaveBeenCalled()
+  })
+
+  it('disables the buttons at the first and last page', () => {
+    const { rerender } = render(
+      <organisms.Pager page={1} totalPages={3} onPrev={() => {}} onNext={() => {}} />,
+    )
+    expect(screen.getByRole('button', { name: 'Trang trước' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Trang sau' })).toBeEnabled()
+    rerender(<organisms.Pager page={3} totalPages={3} onPrev={() => {}} onNext={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Trang sau' })).toBeDisabled()
+  })
+})
+
 describe('SearchBar', () => {
   it('reports the chosen dates and guests when searching', () => {
     const onSearch = vi.fn()
@@ -304,6 +391,7 @@ describe('organisms barrel', () => {
       'Sheet',
       'AlertDialog',
       'PageHeader',
+      'Pager',
       'Panel',
       'DataTable',
       'SearchBar',

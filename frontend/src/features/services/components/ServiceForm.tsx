@@ -1,9 +1,23 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { Alert } from '@/components/Alert'
-import { Button } from '@/components/Button'
-import { TextField } from '@/components/TextField'
+import { Button, Input, Label, Textarea, Checkbox } from '@/components/atoms'
+import { Alert, FormField } from '@/components/molecules'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { ImagePicker } from '@/components/ImagePicker'
 import { assetUrl } from '@/lib/asset-url'
@@ -25,54 +39,60 @@ export function ServiceEditor({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const dialog = useRef<HTMLDialogElement>(null)
+  const dialog = useRef<HTMLDivElement>(null)
+  const previous = useRef(
+    document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  )
   const query = useQuery({
     queryKey: ['service', id],
     queryFn: () => getService(id!),
     enabled: id !== null,
     refetchOnWindowFocus: false,
   })
-  useLayoutEffect(() => {
-    const element = dialog.current!
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    element.showModal()
-    return () => {
-      element.close()
-      previous?.focus()
-    }
-  }, [])
+  const busy = () => Boolean(dialog.current?.querySelector('[aria-busy="true"]'))
   return (
-    <dialog
-      ref={dialog}
-      aria-labelledby="service-form-title"
-      className="m-auto max-h-[92dvh] w-[calc(100%_-_2rem)] max-w-2xl overflow-y-auto rounded-2xl border border-stone-300 bg-white p-5 font-body text-pearl-900 shadow-xl backdrop:bg-pearl-900/60 sm:p-8"
-      onCancel={(event) => {
-        event.preventDefault()
-        if (!dialog.current?.querySelector('[aria-busy="true"]')) onClose()
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy()) onClose()
       }}
     >
-      <h2 id="service-form-title" className="mb-6 font-display text-3xl">
-        {id ? 'Sửa dịch vụ' : 'Thêm dịch vụ'}
-      </h2>
-      {id && !query.data && query.isPending ? (
-        <>
-          <p role="status">Đang tải chi tiết…</p>
-          <Button onClick={onClose}>Đóng</Button>
-        </>
-      ) : id && !query.data && query.isError ? (
-        <>
-          <Alert tone="danger">{getErrorMessage(query.error)}</Alert>
-          <Button onClick={() => void query.refetch()}>Thử lại</Button>
-          <Button onClick={onClose}>Đóng</Button>
-        </>
-      ) : (
-        <ServiceForm
-          initial={id ? query.data : undefined}
-          onClose={onClose}
-          onSuccess={onSuccess}
-        />
-      )}
-    </dialog>
+      <DialogContent
+        ref={dialog}
+        aria-describedby={undefined}
+        className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => {
+          if (busy() || document.querySelector('dialog[open]')) event.preventDefault()
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          previous.current?.focus()
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{id ? 'Sửa dịch vụ' : 'Thêm dịch vụ'}</DialogTitle>
+        </DialogHeader>
+        {id && !query.data && query.isPending ? (
+          <>
+            <p role="status">Đang tải chi tiết…</p>
+            <Button onClick={onClose}>Đóng</Button>
+          </>
+        ) : id && !query.data && query.isError ? (
+          <>
+            <Alert tone="danger">{getErrorMessage(query.error)}</Alert>
+            <Button onClick={() => void query.refetch()}>Thử lại</Button>
+            <Button onClick={onClose}>Đóng</Button>
+          </>
+        ) : (
+          <ServiceForm
+            initial={id ? query.data : undefined}
+            onClose={onClose}
+            onSuccess={onSuccess}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 const vnd = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 })
@@ -115,6 +135,7 @@ export function ServiceForm({
   const [general, setGeneral] = useState('')
   const [conflict, setConflict] = useState(false)
   const [reloading, setReloading] = useState(false)
+  const [confirmation, setConfirmation] = useState<'reload' | 'toggle' | 'save' | null>(null)
   const form = useRef<HTMLFormElement>(null)
   const locked = useRef(false)
   const client = useQueryClient()
@@ -183,14 +204,7 @@ export function ServiceForm({
   })
   const busy = mutation.isPending || reloading
   async function reload() {
-    if (
-      !initial ||
-      locked.current ||
-      !window.confirm(
-        'Tải lại sẽ thay nội dung đang nhập bằng dữ liệu mới nhất. Bạn muốn tiếp tục?',
-      )
-    )
-      return
+    if (!initial || locked.current) return
     locked.current = true
     setReloading(true)
     try {
@@ -217,14 +231,17 @@ export function ServiceForm({
       locked.current = false
     }
   }
-  function save(event?: FormEvent, toggle = false) {
+  function save(event?: FormEvent, toggle = false, confirmed = false) {
     event?.preventDefault()
     if (locked.current) return
     setGeneral('')
     setErrors({})
     setConflict(false)
     if (toggle && initial) {
-      if (!window.confirm(initial.isActive ? deactivate : reactivate)) return
+      if (!confirmed) {
+        setConfirmation('toggle')
+        return
+      }
       locked.current = true
       mutation.mutate({ isActive: !initial.isActive })
       return
@@ -241,8 +258,10 @@ export function ServiceForm({
       focusError()
       return
     }
-    if (initial && active !== initial.isActive && !window.confirm(active ? reactivate : deactivate))
+    if (initial && active !== initial.isActive && !confirmed) {
+      setConfirmation('save')
       return
+    }
     const input: ServiceInput = {
       ...(imageUrl || initial?.imageUrl || imageFile ? { imageUrl } : {}),
       name: name.trim(),
@@ -266,38 +285,43 @@ export function ServiceForm({
     mutation.mutate(changes)
   }
   return (
-    <form ref={form} noValidate onSubmit={save} aria-busy={busy} className="space-y-4">
+    <form ref={form} noValidate onSubmit={save} aria-busy={busy} className="space-y-4 py-2">
       {general && <Alert tone="danger">{general}</Alert>}
       {conflict && initial && (
-        <Button type="button" variant="secondary" disabled={busy} onClick={() => void reload()}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => setConfirmation('reload')}
+        >
           Tải lại dữ liệu
         </Button>
       )}
       {reloading && <p role="status">Đang tải lại dữ liệu…</p>}
-      <fieldset disabled={busy} className="min-w-0 space-y-5">
-        <TextField
-          label="Tên dịch vụ"
-          required
-          maxLength={100}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          error={errors.name}
-        />
+      <fieldset disabled={busy} className="min-w-0 space-y-4">
+        <FormField label="Tên dịch vụ" htmlFor={id + '-name'} error={errors.name} required>
+          <Input
+            id={id + '-name'}
+            aria-invalid={errors.name ? true : undefined}
+            aria-describedby={errors.name ? id + '-name-error' : undefined}
+            required
+            maxLength={100}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </FormField>
         <div>
-          <label
-            htmlFor={id + '-description'}
-            className="mb-2 block text-xs font-semibold tracking-wider text-stone-700 uppercase"
-          >
+          <Label htmlFor={id + '-description'} className="mb-1.5 block">
             Mô tả
-          </label>
-          <textarea
+          </Label>
+          <Textarea
             id={id + '-description'}
             rows={3}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             aria-invalid={errors.description ? true : undefined}
             aria-describedby={errors.description ? id + '-description-error' : undefined}
-            className="min-h-11 w-full rounded border border-stone-300 bg-white px-4 py-3 text-sm hover:border-stone-500 focus:border-primary disabled:bg-stone-200"
+            className="resize-y"
           />
           {errors.description && (
             <p id={id + '-description-error'} className="text-xs text-danger">
@@ -306,6 +330,7 @@ export function ServiceForm({
           )}
         </div>
         <ImagePicker
+          appearance="prototype"
           label="Ảnh dịch vụ"
           name={name}
           images={
@@ -341,78 +366,122 @@ export function ServiceForm({
             setImageFile(null)
           }}
         />
-        <TextField
-          label="Đơn vị (tùy chọn)"
-          value={unit}
-          onChange={(event) => setUnit(event.target.value)}
-          error={errors.unit}
-        />
-        <label className="flex min-h-11 items-center gap-3 text-sm">
-          <input
-            type="checkbox"
+        <FormField label="Đơn vị (tùy chọn)" htmlFor={id + '-unit'} error={errors.unit}>
+          <Input
+            id={id + '-unit'}
+            aria-invalid={errors.unit ? true : undefined}
+            aria-describedby={errors.unit ? id + '-unit-error' : undefined}
+            value={unit}
+            onChange={(event) => setUnit(event.target.value)}
+          />
+        </FormField>
+        <Label htmlFor={id + '-billable'} className="flex min-h-11 items-center gap-3 text-sm">
+          <Checkbox
+            id={id + '-billable'}
             checked={billable}
-            onChange={(event) => setBillable(event.target.checked)}
+            onCheckedChange={(checked) => setBillable(checked === true)}
             aria-invalid={errors.billable ? true : undefined}
             aria-describedby={errors.billable ? id + '-billable-error' : undefined}
           />
           Tính phí
-        </label>
+        </Label>
         {errors.billable && (
           <p id={id + '-billable-error'} className="text-xs text-danger">
             {errors.billable}
           </p>
         )}
-        <TextField
+        <FormField
           label="Giá VND"
-          required={billable && active}
-          inputMode="numeric"
-          value={price}
-          onChange={(event) => setPrice(event.target.value)}
-          onBlur={() => {
-            const parsed = parsePrice(price)
-            if (typeof parsed === 'number') setPrice(vnd.format(parsed))
-          }}
+          htmlFor={id + '-price'}
           error={errors.price}
-          {...(errors.price ? {} : { 'aria-describedby': id + '-price-help' })}
-        />
-        <p id={id + '-price-help'} className="text-sm text-stone-700">
+          required={billable && active}
+        >
+          <Input
+            id={id + '-price'}
+            aria-invalid={errors.price ? true : undefined}
+            aria-describedby={errors.price ? id + '-price-error' : id + '-price-help'}
+            required={billable && active}
+            inputMode="numeric"
+            value={price}
+            onChange={(event) => setPrice(event.target.value)}
+            onBlur={() => {
+              const parsed = parsePrice(price)
+              if (typeof parsed === 'number') setPrice(vnd.format(parsed))
+            }}
+          />
+        </FormField>
+        <p id={id + '-price-help'} className="text-sm text-muted-foreground">
           Giá VND nguyên không âm, ví dụ 50.000; 0 là hợp lệ. Muốn lưu mà chưa có giá, đặt trạng
           thái Ngừng.
         </p>
-        <label className="flex min-h-11 items-center gap-3 text-sm">
-          <input
-            type="checkbox"
+        <Label htmlFor={id + '-active'} className="flex min-h-11 items-center gap-3 text-sm">
+          <Checkbox
+            id={id + '-active'}
             checked={active}
-            onChange={(event) => setActive(event.target.checked)}
+            onCheckedChange={(checked) => setActive(checked === true)}
             aria-invalid={errors.isActive ? true : undefined}
             aria-describedby={errors.isActive ? id + '-active-error' : undefined}
           />
           Đang hoạt động
-        </label>
+        </Label>
         {errors.isActive && (
           <p id={id + '-active-error'} className="text-xs text-danger">
             {errors.isActive}
           </p>
         )}
       </fieldset>
-      <div className="flex flex-wrap gap-3 border-t border-stone-300 pt-5">
-        <Button type="submit" loading={mutation.isPending} disabled={reloading}>
-          Lưu dịch vụ
-        </Button>
+      <DialogFooter className="flex-wrap gap-2">
         {initial && (
           <Button
             type="button"
-            variant={initial.isActive ? 'danger' : 'secondary'}
+            variant={initial.isActive ? 'destructive' : 'outline'}
             disabled={busy}
             onClick={() => save(undefined, true)}
           >
             {initial.isActive ? 'Ngừng dịch vụ' : 'Kích hoạt lại dịch vụ'}
           </Button>
         )}
-        <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>
+        <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
           Hủy
         </Button>
-      </div>
+        <Button type="submit" disabled={busy}>
+          {mutation.isPending ? 'Đang xử lý…' : 'Lưu dịch vụ'}
+        </Button>
+      </DialogFooter>
+      <AlertDialog
+        open={confirmation !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmation(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmation === 'reload' ? 'Tải lại dữ liệu?' : 'Xác nhận trạng thái dịch vụ'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmation === 'reload'
+                ? 'Tải lại sẽ thay nội dung đang nhập bằng dữ liệu mới nhất. Bạn muốn tiếp tục?'
+                : (confirmation === 'toggle' ? !initial?.isActive : active)
+                  ? reactivate
+                  : deactivate}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Giữ lại</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const action = confirmation
+                setConfirmation(null)
+                if (action === 'reload') void reload()
+                else save(undefined, action === 'toggle', true)
+              }}
+            >
+              Tiếp tục
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   )
 }

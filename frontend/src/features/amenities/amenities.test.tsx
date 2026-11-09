@@ -30,6 +30,7 @@ describe('UC51 AmenitiesPage', () => {
   it('renders columns, inactive labels, reverse type chips, accessible descriptions and management actions', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(response())
     renderPage()
+    await screen.findByRole('rowheader', { name: 'Wi-Fi' })
     const table = await screen.findByRole('table', { name: 'Danh sách tiện nghi' })
     for (const name of ['Tên', 'Mô tả', 'Gắn vào Room Type', 'Số loại phòng', 'Trạng thái'])
       expect(within(table).getByRole('columnheader', { name })).toBeInTheDocument()
