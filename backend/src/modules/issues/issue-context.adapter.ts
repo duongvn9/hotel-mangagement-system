@@ -23,11 +23,14 @@ export class IssueContextAdapter {
   ) {}
 
   async reportContext(userId: string) {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
     const bookings = await this.bookings
       .find({
         customer: new Types.ObjectId(userId),
         isActive: true,
         status: BookingStatus.CheckedIn,
+        checkOut: { $gte: startOfToday },
       })
       .select({ _id: 1, code: 1, status: 1, checkIn: 1, checkOut: 1, rooms: 1 })
       .sort({ checkIn: -1, _id: -1 })
@@ -88,11 +91,15 @@ export class IssueContextAdapter {
     serviceOrderId?: string,
   ): Promise<IssueContext> {
     const booking = await this.bookings.findById(bookingId).exec();
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
     if (
       !booking ||
       !booking.customer?.equals(userId) ||
       !booking.isActive ||
-      booking.status !== BookingStatus.CheckedIn
+      booking.status !== BookingStatus.CheckedIn ||
+      !booking.checkOut ||
+      booking.checkOut < startOfToday
     )
       throw new NotFoundException('Booking not found');
     const context: IssueContext = { booking: booking._id };
