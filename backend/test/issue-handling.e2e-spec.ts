@@ -2,6 +2,7 @@ import { VersioningType, type INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { Model, Types } from 'mongoose';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import {
@@ -84,6 +85,7 @@ describe('Issue review and assignment Mongo protocol (e2e)', () => {
         category: 'Lighting',
         description: 'No light',
         bookingId: String(bookingId),
+        requestId: randomUUID(),
       })
       .expect(201);
     created.push(response.body.id);
@@ -145,7 +147,7 @@ describe('Issue review and assignment Mongo protocol (e2e)', () => {
       checkIn: new Date('2020-01-01'),
       checkOut: new Date('2020-01-02'),
       adultCount: 1,
-      status: BookingStatus.CheckedOut,
+      status: BookingStatus.CheckedIn,
       roomTotal: 100000,
       depositAmount: 100000,
     });

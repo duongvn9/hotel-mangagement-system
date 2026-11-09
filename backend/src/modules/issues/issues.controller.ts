@@ -34,6 +34,12 @@ export class IssuesController {
     return this.issues.list(query, user);
   }
 
+  @Roles(Role.Customer)
+  @Get('report-context')
+  reportContext(@CurrentUser() user: AuthUser) {
+    return this.issues.reportContext(user);
+  }
+
   @Roles(Role.Customer, Role.Receptionist, Role.Manager)
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {

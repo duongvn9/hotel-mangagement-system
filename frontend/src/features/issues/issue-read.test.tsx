@@ -81,13 +81,16 @@ test.each(views)(
 )
 
 test('anonymous deep link redirects and static report wins over detail', async () => {
-  const get = vi.spyOn(api, 'get')
+  const get = vi.spyOn(api, 'get').mockResolvedValue({ data: { items: [] } })
   const guest = page('/customer/issues/foreign', null)
   expect(await screen.findByText('Đăng nhập ngay')).toBeInTheDocument()
+  expect(get).not.toHaveBeenCalled()
   guest.unmount()
   page('/customer/issues/report?bookingId=context')
-  expect(screen.getByLabelText(/Mã đặt phòng/)).toHaveValue('context')
-  expect(get).not.toHaveBeenCalled()
+  expect(screen.getByRole('heading', { level: 1, name: 'Báo sự cố' })).toBeInTheDocument()
+  expect(await screen.findByText('Chỉ dùng được khi đang lưu trú')).toBeInTheDocument()
+  expect(get).toHaveBeenCalledExactlyOnceWith('/issues/report-context')
+  expect(screen.queryByRole('textbox', { name: /Mã đặt phòng/ })).not.toBeInTheDocument()
 })
 
 test.each([
