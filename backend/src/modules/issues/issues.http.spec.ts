@@ -26,6 +26,7 @@ describe('Report issue HTTP', () => {
   const booking = new Types.ObjectId();
   const room = new Types.ObjectId();
   const resolve = vi.fn();
+  const reportContext = vi.fn();
   const create = vi.fn();
   const find = vi.fn();
   const findOne = vi.fn();
@@ -57,11 +58,18 @@ describe('Report issue HTTP', () => {
       query[method].mockReturnValue(query);
     return query;
   };
+  const scope = (ids: Types.ObjectId[]) => ({
+    $or: [
+      { reporter: owner, sourceTask: { $exists: false } },
+      { booking: { $in: ids }, sourceTask: { $exists: true } },
+    ],
+  });
   const payload = {
     title: '  Broken lamp  ',
     category: ' Lighting ',
     description: ' Lamp does not work ',
     bookingId: String(booking),
+    requestId: 'db5d155a-b672-4fc5-b1a6-764e654a9b68',
   };
 
   beforeAll(async () => {
@@ -74,7 +82,7 @@ describe('Report issue HTTP', () => {
           useValue: { issueTaskHistory: async () => [] },
         },
         { provide: getModelToken(Role.name), useValue: {} },
-        { provide: IssueContextAdapter, useValue: { resolve } },
+        { provide: IssueContextAdapter, useValue: { resolve, reportContext } },
         {
           provide: getModelToken(Issue.name),
           useValue: { create, find, findOne, countDocuments },
@@ -132,7 +140,9 @@ describe('Report issue HTTP', () => {
     resolve.mockResolvedValue({ booking });
     findBookings.mockReturnValue(chain([{ _id: booking }]));
     find.mockReturnValue(chain([readIssue]));
-    findOne.mockReturnValue(chain(readIssue));
+    findOne.mockImplementation((filter: { requestId?: string }) =>
+      chain(filter.requestId ? null : readIssue),
+    );
     countDocuments.mockResolvedValue(1);
     create.mockImplementation(async (value: object) => ({
       _id: new Types.ObjectId(),
@@ -172,9 +182,9 @@ describe('Report issue HTTP', () => {
       customer: owner,
       isActive: true,
     });
-    expect(find).toHaveBeenCalledWith({ booking: { $in: [booking] } });
+    expect(find).toHaveBeenCalledWith(scope([booking]));
     expect(countDocuments).toHaveBeenCalledWith({
-      booking: { $in: [booking] },
+      ...scope([booking]),
     });
   });
 
@@ -231,7 +241,7 @@ describe('Report issue HTTP', () => {
     expect(response.body.guestEmail).toBeUndefined();
     expect(findOne).toHaveBeenCalledWith({
       _id: issueId,
-      booking: { $in: [booking] },
+      ...scope([booking]),
     });
   });
 
@@ -249,7 +259,7 @@ describe('Report issue HTTP', () => {
       '?status=PENDING_REVIEW&priority=NORMAL&category=Lighting&keyword=%5Ba%5D.*&page=2&limit=3',
     ).expect(200);
     expect(find).toHaveBeenCalledWith({
-      booking: { $in: [booking] },
+      ...scope([booking]),
       status: 'PENDING_REVIEW',
       priority: 'NORMAL',
       category: 'Lighting',
@@ -295,7 +305,7 @@ describe('Report issue HTTP', () => {
       page: 10000,
       limit: 100,
     });
-    expect(find).toHaveBeenCalledWith({ booking: { $in: [] } });
+    expect(find).toHaveBeenCalledWith(scope([]));
   });
 
   const post = (body: object, role = 'CUSTOMER') =>
@@ -303,6 +313,32 @@ describe('Report issue HTTP', () => {
       .post('/api/v1/issues')
       .set('Authorization', `Bearer ${role}`)
       .send(body);
+
+  it('routes the customer report context before dynamic detail and restricts roles', async () => {
+    reportContext.mockResolvedValue({ items: [] });
+    const response = await get('/report-context').expect(200);
+    expect(response.body).toEqual({ items: [] });
+    expect(reportContext).toHaveBeenCalledWith(String(owner));
+    expect(findOne).not.toHaveBeenCalled();
+    for (const role of [
+      'MANAGER',
+      'RECEPTIONIST',
+      'SERVICE_STAFF',
+      'OPERATIONS_STAFF',
+    ])
+      await get('/report-context', role).expect(403);
+    await request(app.getHttpServer())
+      .get('/api/v1/issues/report-context')
+      .expect(401);
+  });
+
+  it.each([undefined, null, '', 'not-a-uuid'])(
+    'rejects invalid requestId %s',
+    async (requestId) => {
+      await post({ ...payload, requestId }).expect(400);
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
 
   it('requires authentication', async () => {
     await request(app.getHttpServer())
@@ -325,6 +361,7 @@ describe('Report issue HTTP', () => {
     expect(resolve).toHaveBeenCalledWith(
       String(owner),
       String(booking),
+      undefined,
       undefined,
     );
     expect(create).toHaveBeenCalledWith(
@@ -362,7 +399,6 @@ describe('Report issue HTTP', () => {
     'priority',
     'status',
     'closedAt',
-    'serviceOrderId',
     'taskId',
   ])('rejects extra field %s', async (field) => {
     await post({ ...payload, [field]: String(owner) }).expect(400);

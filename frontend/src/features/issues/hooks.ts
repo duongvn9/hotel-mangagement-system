@@ -1,6 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/features/auth/auth-context'
-import { getIssue, listIssues, normalizeIssueQuery, reportIssue, type IssueQuery } from './api'
+import {
+  getIssue,
+  getIssueReportContext,
+  listIssues,
+  normalizeIssueQuery,
+  reportIssue,
+  type IssueQuery,
+} from './api'
 
 export const issueKeys = {
   scope: (id?: string, role?: string) => ['issues', id, role] as const,
@@ -26,6 +33,16 @@ export function useIssue(id: string) {
     queryKey: issueKeys.detail(me?.id, me?.role, id),
     queryFn: () => getIssue(id),
     enabled: Boolean(me && id),
+    retry: false,
+  })
+}
+
+export function useIssueReportContext() {
+  const { me } = useAuth()
+  return useQuery({
+    queryKey: [...issueKeys.scope(me?.id, me?.role), 'report-context'],
+    queryFn: getIssueReportContext,
+    enabled: Boolean(me?.id && me.role === 'CUSTOMER'),
     retry: false,
   })
 }

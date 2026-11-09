@@ -31,6 +31,7 @@ import {
   CloseIssueDto,
   ReviewIssueDto,
 } from './dto/review-issue.dto.js';
+import { createHash } from 'node:crypto';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 
@@ -156,7 +157,18 @@ export class IssuesService {
       .find({ customer: new Types.ObjectId(user.id), isActive: true })
       .select({ _id: 1 })
       .lean();
-    return { booking: { $in: bookings.map((booking) => booking._id) } };
+    return {
+      $or: [
+        {
+          reporter: new Types.ObjectId(user.id),
+          sourceTask: { $exists: false },
+        },
+        {
+          booking: { $in: bookings.map((booking) => booking._id) },
+          sourceTask: { $exists: true },
+        },
+      ],
+    };
   }
 
   async list(query: ListIssuesQuery, user: AuthUser): Promise<IssuesPage> {
@@ -934,22 +946,80 @@ export class IssuesService {
     return this.findOne(id, user);
   }
 
-  async create(dto: CreateIssueDto, userId: string): Promise<IssueResponse> {
+  async reportContext(user: AuthUser) {
+    this.assertReader(user);
+    if (user.role !== Role.Customer) throw new ForbiddenException();
+    return this.contexts.reportContext(user.id);
+  }
+
+  async create(input: CreateIssueDto, userId: string): Promise<IssueResponse> {
+    if (!/^[a-fA-F0-9]{24}$/.test(userId)) throw new UnauthorizedException();
+    const dto = await this.validateInput(CreateIssueDto, input);
+    const fingerprint =
+      'customer:' +
+      createHash('sha256')
+        .update(
+          JSON.stringify([
+            new Types.ObjectId(dto.bookingId).toHexString(),
+            dto.roomId ? new Types.ObjectId(dto.roomId).toHexString() : null,
+            dto.serviceOrderId
+              ? new Types.ObjectId(dto.serviceOrderId).toHexString()
+              : null,
+            dto.title,
+            dto.category,
+            dto.description,
+          ]),
+        )
+        .digest('hex');
+    const key = {
+      reporter: new Types.ObjectId(userId),
+      requestId: dto.requestId.toLowerCase(),
+    };
+    const existing = async () => {
+      const issue = await this.issues
+        .findOne(key)
+        .select('+requestFingerprint')
+        .lean();
+      if (!issue) return null;
+      if (issue.sourceTask || issue.requestFingerprint !== fingerprint)
+        throw new ConflictException(
+          'requestId already used for a different report',
+        );
+      return this.createResponse(issue);
+    };
+    const retry = await existing();
+    if (retry) return retry;
     const context = await this.contexts.resolve(
       userId,
       dto.bookingId,
       dto.roomId,
+      dto.serviceOrderId,
     );
-    const issue = await this.issues.create({
-      title: dto.title,
-      category: dto.category,
-      description: dto.description,
-      ...context,
-      reporter: new Types.ObjectId(userId),
-      priority: IssuePriority.Normal,
-      status: IssueStatus.PendingReview,
-      reportedAt: new Date(),
-    });
+    try {
+      const issue = await this.issues.create({
+        title: dto.title,
+        category: dto.category,
+        description: dto.description,
+        ...context,
+        ...key,
+        requestFingerprint: fingerprint,
+        priority: IssuePriority.Normal,
+        status: IssueStatus.PendingReview,
+        reportedAt: new Date(),
+      });
+      return this.createResponse(issue);
+    } catch (error) {
+      if ((error as { code?: number }).code === 11000) {
+        const raced = await existing();
+        if (raced) return raced;
+      }
+      throw error;
+    }
+  }
+
+  private createResponse(
+    issue: Issue & { _id: Types.ObjectId },
+  ): IssueResponse {
     return {
       id: issue._id.toString(),
       title: issue.title,
@@ -960,6 +1030,10 @@ export class IssuesService {
       reportedAt: issue.reportedAt,
       bookingId: issue.booking.toString(),
       ...(issue.room ? { roomId: issue.room.toString() } : {}),
+      ...(issue.serviceOrder
+        ? { serviceOrderId: String(issue.serviceOrder) }
+        : {}),
+      ...(issue.service ? { serviceId: String(issue.service) } : {}),
     };
   }
 }

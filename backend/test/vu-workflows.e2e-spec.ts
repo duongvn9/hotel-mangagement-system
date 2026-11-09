@@ -139,6 +139,7 @@ describe('Vu persisted cross-module workflows (real AppModule)', () => {
       title: `QA-${randomUUID()}`,
       category: 'Lighting',
       description: 'Lamp needs attention',
+      requestId: randomUUID(),
       bookingId: String(booking),
       roomId: String(room),
     }).expect(201);

@@ -53,4 +53,11 @@ export class CreateIssueDto {
   @ValidateIf((_object: unknown, value: unknown) => value !== undefined)
   @IsMongoId()
   roomId?: string;
+
+  @ValidateIf((_object: unknown, value: unknown) => value !== undefined)
+  @IsMongoId()
+  serviceOrderId?: string;
+
+  @IsUUID()
+  requestId: string;
 }

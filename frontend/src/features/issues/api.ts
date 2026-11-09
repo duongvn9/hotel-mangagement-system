@@ -7,6 +7,30 @@ export interface IssueInput {
   description: string
   bookingId: string
   roomId?: string
+  serviceOrderId?: string
+}
+
+export interface ReportIssueInput extends IssueInput {
+  requestId: string
+}
+
+export interface IssueReportBooking {
+  id: string
+  code: string
+  status: string
+  checkIn: string
+  checkOut: string
+  rooms: { id: string; roomNumber: string }[]
+  serviceOrders: {
+    id: string
+    serviceName: string
+    reviewStatus: string
+    executionStatus: string
+  }[]
+}
+
+export async function getIssueReportContext(): Promise<{ items: IssueReportBooking[] }> {
+  return (await api.get<{ items: IssueReportBooking[] }>('/issues/report-context')).data
 }
 
 export const issueStatuses = [
@@ -233,19 +257,36 @@ export function validateIssue(input: IssueInput): IssueErrors {
   if (input.roomId?.trim() && !/^[a-f\d]{24}$/i.test(input.roomId.trim())) {
     errors.roomId = 'Mã phòng phải gồm 24 ký tự từ 0–9 và a–f.'
   }
+  if (input.serviceOrderId?.trim() && !/^[a-f\d]{24}$/i.test(input.serviceOrderId.trim())) {
+    errors.serviceOrderId = 'Vui lòng chọn đơn dịch vụ hợp lệ.'
+  }
   return errors
 }
 
-export async function reportIssue(input: IssueInput): Promise<IssueReceipt> {
-  if ('serviceOrderId' in input || Object.keys(validateIssue(input)).length) {
-    throw new Error('Thông tin báo sự cố không hợp lệ.')
-  }
-  const body: IssueInput = {
+export function normalizeIssueInput(input: IssueInput): IssueInput {
+  return {
     title: input.title.trim(),
     category: input.category.trim(),
     description: input.description.trim(),
     bookingId: input.bookingId.trim(),
     ...(input.roomId?.trim() ? { roomId: input.roomId.trim() } : {}),
+    ...(input.serviceOrderId?.trim() ? { serviceOrderId: input.serviceOrderId.trim() } : {}),
   }
-  return (await api.post<IssueReceipt>('/issues', body)).data
+}
+
+export async function reportIssue(input: ReportIssueInput): Promise<IssueReceipt> {
+  if (
+    !/^[a-f\d]{8}-[a-f\d]{4}-[1-8][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(
+      input.requestId ?? '',
+    ) ||
+    Object.keys(validateIssue(input)).length
+  ) {
+    throw new Error('Thông tin báo sự cố không hợp lệ.')
+  }
+  return (
+    await api.post<IssueReceipt>('/issues', {
+      ...normalizeIssueInput(input),
+      requestId: input.requestId,
+    })
+  ).data
 }
