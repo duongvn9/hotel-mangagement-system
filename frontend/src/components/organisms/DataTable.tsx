@@ -60,6 +60,7 @@ interface DataTableProps<T extends { id: string }> {
   paginationDisabled?: boolean
   paginationSummary?: ReactNode
   paginationLabel?: string
+  showPagination?: boolean
 }
 
 const LOADING_ROWS = 4
@@ -89,6 +90,7 @@ export function DataTable<T extends { id: string }>({
   paginationDisabled = false,
   paginationSummary,
   paginationLabel,
+  showPagination = true,
 }: DataTableProps<T>) {
   const [q, setQ] = useState('')
   const [f, setF] = useState<Record<string, string>>({})
@@ -107,7 +109,11 @@ export function DataTable<T extends { id: string }>({
   )
   const clientPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const cur = Math.min(clientPage, clientPages - 1)
-  const view = serverPaged ? rows : filtered.slice(cur * pageSize, cur * pageSize + pageSize)
+  const view = serverPaged
+    ? rows
+    : showPagination
+      ? filtered.slice(cur * pageSize, cur * pageSize + pageSize)
+      : filtered
 
   const displayPage = serverPaged ? page! : cur + 1
   const displayPages = serverPaged ? totalPages! : clientPages
@@ -251,20 +257,22 @@ export function DataTable<T extends { id: string }>({
           </div>
         )}
       </div>
-      <div
-        role={paginationLabel ? 'navigation' : undefined}
-        aria-label={paginationLabel}
-        className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground"
-      >
-        <span>{paginationSummary ?? (serverPaged ? null : `${filtered.length} kết quả`)}</span>
-        <Pager
-          page={displayPage}
-          totalPages={displayPages}
-          onPrev={goPrev}
-          onNext={goNext}
-          disabled={paginationDisabled}
-        />
-      </div>
+      {showPagination && (
+        <div
+          role={paginationLabel ? 'navigation' : undefined}
+          aria-label={paginationLabel}
+          className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground"
+        >
+          <span>{paginationSummary ?? (serverPaged ? null : `${filtered.length} kết quả`)}</span>
+          <Pager
+            page={displayPage}
+            totalPages={displayPages}
+            onPrev={goPrev}
+            onNext={goNext}
+            disabled={paginationDisabled}
+          />
+        </div>
+      )}
     </div>
   )
 }

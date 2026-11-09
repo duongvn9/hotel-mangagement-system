@@ -127,6 +127,20 @@ the API. The prototype does not provide a matching detail screen.
 Evidence, approved differences, and limitations are recorded in
 [`validation/ui/WDP301-191.md`](validation/ui/WDP301-191.md).
 
+### 2.8 WDP301-192 verification
+
+The user approved keeping read-only supervision, existing filters, queues,
+metrics, workload, and detail; using the prototype table and shared Panels for
+additional content. Prototype create/reassign actions are excluded.
+
+- [x] Header, cards, table, tokens, typography, spacing, and pagination compared with the prototype.
+- [x] List and detail checked at 1440, 768, and 375 pixels, including long content, loading, empty, and error states.
+- [x] Keyboard navigation, table focus, filter-preserving return, access, and read-only behavior checked.
+- [x] Required frontend checks and forbidden-pattern scans passed; existing assertions unchanged.
+
+Evidence, approved differences, and limitations are recorded in
+[`validation/ui/WDP301-192.md`](validation/ui/WDP301-192.md).
+
 ## 3. Prototype to app map
 
 Fill the "Jira task" column when you pick up a task. App paths come from `frontend/src/features/*/routes.tsx` and `frontend/src/pages/`.
@@ -161,7 +175,7 @@ Fill the "Jira task" column when you pick up a task. App paths come from `fronte
 | `app.room-types.tsx` | `/manager/room-types` | `features/room-types/pages/RoomTypesPage.tsx` | WDP301-186 |
 | `app.amenities.tsx` | `/manager/amenities` | `features/amenities/pages/AmenitiesPage.tsx` | WDP301-188 |
 | `app.services.tsx` | `/manager/services` | `features/services/pages/ServicesPage.tsx` | WDP301-189 |
-| `app.task-queues.tsx` | `/manager/task-queues` (+ `/:taskId`) | `features/task-supervision/pages/TaskQueuesPage.tsx`, `TaskQueueDetailPage.tsx` | |
+| `app.task-queues.tsx` | `/manager/task-queues` (+ `/:taskId`) | `features/task-supervision/pages/TaskQueuesPage.tsx`, `TaskQueueDetailPage.tsx` | WDP301-192 |
 | `app.tasks.tsx` | `/staff/tasks` (+ `/:id`) | `features/tasks/pages/AssignedTasksPage.tsx`, `AssignedTaskDetailPage.tsx` | |
 | `app.service-orders.tsx` | `/staff/service-orders`, `/staff/service-history` | `features/service-orders/pages/StaffServiceOrdersPage.tsx`, `ServiceHistoryPage.tsx` | |
 | `app.order-service.tsx` | `/customer/service-orders/new` (and the list at `/customer/service-orders`) | `features/service-orders/pages/NewServiceOrderPage.tsx`, `ServiceOrdersPage.tsx` | |
