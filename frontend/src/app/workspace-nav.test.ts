@@ -131,6 +131,7 @@ describe('workspace-nav', () => {
         '/customer/service-orders',
         '/my-feedback',
         '/customer/issues/report',
+        '/customer/issues',
         '/notifications',
         '/profile',
       ])

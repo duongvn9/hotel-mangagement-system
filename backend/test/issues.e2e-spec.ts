@@ -238,6 +238,78 @@ describe('Report issue (e2e)', () => {
     await get(`/${response.body.id}`, 'CUSTOMER', other).expect(404);
   });
 
+  it('keeps authorized room labels after checkout and room deactivation for both origins', async () => {
+    const own = await post({ ...payload, roomId: String(room) }).expect(201);
+    const staff = await post({ ...payload, roomId: String(room) }).expect(201);
+    await issues.updateOne(
+      { _id: staff.body.id },
+      {
+        sourceTask: new Types.ObjectId(),
+        reporter: other,
+        reviewNotes: 'Private review',
+        reviewedBy: other,
+        assignmentAssignee: other,
+        assignmentInstructions: 'Private instructions',
+      },
+    );
+    await bookings.updateOne(
+      { _id: booking },
+      { status: BookingStatus.CheckedOut },
+    );
+    await rooms.updateOne({ _id: room }, { isActive: false });
+    for (const id of [own.body.id, staff.body.id]) {
+      const detail = await get(`/${id}`).expect(200);
+      expect(detail.body.roomNumber).toBe(`ISS-${room}`);
+      expect(detail.body.roomId).toBe(String(room));
+      for (const key of [
+        'reviewNotes',
+        'reviewedBy',
+        'assigneeId',
+        'assignmentInstructions',
+        'resolutionTasks',
+        'reassignmentHistory',
+      ])
+        expect(detail.body).not.toHaveProperty(key);
+      await get(`/${id}`, 'CUSTOMER', other).expect(404);
+    }
+    const list = await get('').expect(200);
+    for (const id of [own.body.id, staff.body.id])
+      expect(
+        list.body.items.find((item: { id: string }) => item.id === id)
+          ?.roomNumber,
+      ).toBe(`ISS-${room}`);
+    const denied = await get('', 'CUSTOMER', other).expect(200);
+    expect(denied.body.items).toEqual([]);
+    await bookings.updateOne({ _id: booking }, { isActive: false });
+    await get(`/${own.body.id}`).expect(200);
+    await get(`/${staff.body.id}`).expect(404);
+    await bookings.updateOne(
+      { _id: booking },
+      { isActive: true, customer: other },
+    );
+    await get(`/${own.body.id}`).expect(200);
+    await get(`/${own.body.id}`, 'CUSTOMER', other).expect(404);
+    await get(`/${staff.body.id}`).expect(404);
+    await get(`/${staff.body.id}`, 'CUSTOMER', other).expect(200);
+  });
+
+  it('returns null room labels for booking-only and missing room references', async () => {
+    const response = await post(payload).expect(201);
+    expect(
+      (await get(`/${response.body.id}`).expect(200)).body.roomNumber,
+    ).toBeNull();
+    await issues.updateOne({ _id: response.body.id }, { room: missing });
+    const detail = await get(`/${response.body.id}`).expect(200);
+    expect(detail.body.roomNumber).toBeNull();
+    expect(detail.body.roomId).toBe(String(missing));
+    const list = await get('').expect(200);
+    expect(
+      list.body.items.find(
+        (item: { id: string }) => item.id === response.body.id,
+      )?.roomNumber,
+    ).toBeNull();
+  });
+
   it('accepts booking-only context', async () => {
     const response = await post(payload).expect(201);
     expect(response.body.roomId).toBeUndefined();
@@ -300,6 +372,7 @@ describe('Report issue (e2e)', () => {
     const detail = await get(`/${id}`).expect(200);
     expect(detail.body).toEqual({
       ...response.body,
+      roomNumber: null,
       linkedTasks: [],
       linkedTasksAvailable: false,
     });

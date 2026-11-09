@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Model, Types } from 'mongoose';
@@ -122,6 +123,103 @@ describe('Customer issue reporting', () => {
       service.create({ ...dto(), requestId: undefined } as never, actor.id),
     ).rejects.toThrow('Invalid input');
     expect(resolve).not.toHaveBeenCalled();
+  });
+});
+
+describe('Authorized issue room display', () => {
+  const owner = new Types.ObjectId();
+  const booking = new Types.ObjectId();
+  const room = new Types.ObjectId();
+  const missing = new Types.ObjectId();
+  const actor = {
+    id: String(owner),
+    email: 'owner@example.test',
+    role: 'CUSTOMER',
+  };
+  const record = {
+    _id: new Types.ObjectId(),
+    booking,
+    room,
+    title: 'Lamp',
+    category: 'Lighting',
+    description: 'Broken',
+    status: 'PENDING_REVIEW',
+    priority: 'NORMAL',
+    reportedAt: new Date(),
+    reviewNotes: 'Internal',
+    reviewedBy: new Types.ObjectId(),
+    assignmentInstructions: 'Private',
+    assignmentAssignee: new Types.ObjectId(),
+    reassignmentHistory: [{ reason: 'Private' }],
+  };
+  const roomNumbers = vi.fn(async () => new Map([[String(room), '101']]));
+  const issues = {
+    find: vi.fn(() =>
+      query([
+        record,
+        { ...record, room: undefined },
+        { ...record, room: missing },
+      ]),
+    ),
+    findOne: vi.fn(() => query(record)),
+    countDocuments: vi.fn(async () => 3),
+  };
+  const bookings = { find: vi.fn(() => query([{ _id: booking }])) };
+  const service = new IssuesService(
+    issues as unknown as Model<Issue>,
+    { roomNumbers } as unknown as IssueContextAdapter,
+    bookings as unknown as Model<Booking>,
+    {} as Model<User>,
+    {} as TasksService,
+  );
+  beforeEach(() => vi.clearAllMocks());
+
+  it('enriches only retrieved list room links in one bulk lookup with null fallbacks', async () => {
+    const result = await service.list(new ListIssuesQuery(), actor);
+    expect(result.items.map((item) => item.roomNumber)).toEqual([
+      '101',
+      null,
+      null,
+    ]);
+    expect(result.items[0].roomId).toBe(String(room));
+    expect(roomNumbers).toHaveBeenCalledExactlyOnceWith([room, missing]);
+    for (const item of result.items) {
+      expect(item).not.toHaveProperty('reviewNotes');
+      expect(item).not.toHaveProperty('reviewedBy');
+      expect(item).not.toHaveProperty('assignmentInstructions');
+      expect(item).not.toHaveProperty('assigneeId');
+      expect(item).not.toHaveProperty('reassignmentHistory');
+    }
+  });
+
+  it('enriches authorized detail without exposing internal history or staff identities', async () => {
+    const result = await service.findOne(String(record._id), actor);
+    expect(result.roomNumber).toBe('101');
+    expect(result.linkedTasks).toEqual([]);
+    expect(result).not.toHaveProperty('resolutionTasks');
+    expect(result).not.toHaveProperty('reassignmentHistory');
+    expect(result).not.toHaveProperty('reviewNotes');
+    expect(result).not.toHaveProperty('reviewedBy');
+    expect(result).not.toHaveProperty('assigneeId');
+    expect(issues.findOne).toHaveBeenCalledWith({
+      _id: record._id,
+      $or: [
+        { reporter: owner, sourceTask: { $exists: false } },
+        { booking: { $in: [booking] }, sourceTask: { $exists: true } },
+      ],
+    });
+    expect(bookings.find).toHaveBeenCalledWith({
+      customer: owner,
+      isActive: true,
+    });
+  });
+
+  it('returns 404 before room lookup when detail is outside either origin scope', async () => {
+    issues.findOne.mockReturnValueOnce(query(null));
+    await expect(
+      service.findOne(String(record._id), actor),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(roomNumbers).not.toHaveBeenCalled();
   });
 });
 

@@ -1,6 +1,6 @@
 import { isAxiosError } from 'axios'
 import { useRef, useState, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { CheckCircle2 } from 'lucide-react'
 import { Button, Input, NativeSelect, Skeleton, Textarea } from '@/components/atoms'
 import { Alert, EmptyState, FormField } from '@/components/molecules'
@@ -171,22 +171,33 @@ function CustomerIssueForm() {
             title="Đã tiếp nhận báo cáo"
             body="Chờ xem xét. Khách sạn sẽ xem xét báo cáo trước khi giao xử lý."
             action={
-              <Button
-                className="rounded-full"
-                onClick={() => {
-                  mutation.reset()
-                  setIntent(undefined)
-                  setIntents(new Map())
-                  setInput({ title: '', category: '', description: '', bookingId: '' })
-                  setChosen(false)
-                  setMode('booking')
-                  setErrors({})
-                  setPrefillCleared(true)
-                  void context.refetch()
-                }}
-              >
-                Báo sự cố khác
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                {typeof mutation.data.id === 'string' &&
+                  /^[a-f\d]{24}$/i.test(mutation.data.id) && (
+                    <Button asChild className="rounded-full">
+                      <Link to={`/customer/issues/${mutation.data.id}`}>Xem báo cáo của tôi</Link>
+                    </Button>
+                  )}
+                <Button asChild variant="outline" className="rounded-full">
+                  <Link to="/customer/issues">Danh sách sự cố</Link>
+                </Button>
+                <Button
+                  className="rounded-full"
+                  onClick={() => {
+                    mutation.reset()
+                    setIntent(undefined)
+                    setIntents(new Map())
+                    setInput({ title: '', category: '', description: '', bookingId: '' })
+                    setChosen(false)
+                    setMode('booking')
+                    setErrors({})
+                    setPrefillCleared(true)
+                    void context.refetch()
+                  }}
+                >
+                  Báo sự cố khác
+                </Button>
+              </div>
             }
           />
           <Panel>
