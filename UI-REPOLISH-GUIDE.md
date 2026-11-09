@@ -141,6 +141,22 @@ additional content. Prototype create/reassign actions are excluded.
 Evidence, approved differences, and limitations are recorded in
 [`validation/ui/WDP301-192.md`](validation/ui/WDP301-192.md).
 
+### 2.9 WDP301-193 verification
+
+The user approved keeping real transaction totals, filters, warnings, the existing
+bar chart, and detailed tables, with prototype cards and Panels. Room-type
+revenue, online ratio, and simulated export are excluded. The shared period
+controls also use the new appearance on the operational report; its behavior was
+checked with the existing tests.
+
+- [x] Header, cards, Panel, tokens, typography, and spacing compared with the prototype.
+- [x] Required widths and long, loading, empty, error, anomaly, and refund states checked.
+- [x] Filtering, validation, data tables, keyboard focus, access, and read-only behavior checked.
+- [x] Required frontend checks and forbidden-pattern scans passed; existing assertions unchanged.
+
+Evidence, approved differences, and limitations are recorded in
+[`validation/ui/WDP301-193.md`](validation/ui/WDP301-193.md).
+
 ## 3. Prototype to app map
 
 Fill the "Jira task" column when you pick up a task. App paths come from `frontend/src/features/*/routes.tsx` and `frontend/src/pages/`.
@@ -167,7 +183,7 @@ Fill the "Jira task" column when you pick up a task. App paths come from `fronte
 | `app.reconciliation.tsx` | `/manager/payments/reconciliation` | `features/booking/pages/ReconciliationPage.tsx` | |
 | `app.reception.tsx` | `/reception/dashboard` | `features/dashboard/pages/ReceptionDashboardPage.tsx` | |
 | `app.dashboard.tsx` | `/manager/dashboard` | `features/dashboard/pages/ManagerDashboardPage.tsx` | WDP301-185 |
-| `app.revenue.tsx` | `/manager/reports/revenue` | `features/reports/pages/RevenueReportPage.tsx` | |
+| `app.revenue.tsx` | `/manager/reports/revenue` | `features/reports/pages/RevenueReportPage.tsx` | WDP301-193 |
 | `app.operations-report.tsx` | `/manager/reports/operational` | `features/reports/pages/OperationalReportPage.tsx` | |
 | `app.accounts.tsx` | `/manager/accounts` | `features/accounts/pages/AccountsPage.tsx` | WDP301-154 |
 | `app.roles.tsx` | `/manager/roles` | `features/roles/pages/RolesPage.tsx` | WDP301-155 |
