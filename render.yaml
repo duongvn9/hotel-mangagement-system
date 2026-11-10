@@ -65,12 +65,14 @@ services:
       - key: VNPAY_IPN_URL
         sync: false
 
-      - key: MAIL_USER
+      # Booking and payment emails. The free plan blocks outbound SMTP, so set
+      # BREVO_API_KEY (HTTPS API); GMAIL_USER is the verified Brevo sender address.
+      # Set NOTIFICATIONS_ENABLED=true in the dashboard once those are filled.
+      - key: GMAIL_USER
         sync: false
-      - key: MAIL_APP_PASSWORD
+      - key: GMAIL_APP_PASSWORD
         sync: false
-      - key: MAIL_FROM
+      - key: BREVO_API_KEY
         sync: false
-
       - key: NOTIFICATIONS_ENABLED
-        value: "false"
+        sync: false

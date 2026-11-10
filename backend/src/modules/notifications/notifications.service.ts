@@ -43,7 +43,7 @@ export function classifyFailure(error: unknown): Failure {
     return {
       category: 'auth',
       code: 'SMTP_AUTH',
-      hint: 'Check GMAIL_USER and Google App Password / 2-Step Verification',
+      hint: 'Check GMAIL_USER and Google App Password / 2-Step Verification, or BREVO_API_KEY',
     };
   if (smtp >= 500 && smtp <= 599)
     return { category: 'permanent', code: `SMTP_${smtp}` };
