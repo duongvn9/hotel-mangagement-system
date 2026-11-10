@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router'
 import { Button, Input, NativeSelect, StatusBadge } from '@/components/atoms'
-import { Alert, FormField } from '@/components/molecules'
+import { Alert, FormField, KeyValue } from '@/components/molecules'
 import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
@@ -136,64 +136,65 @@ export function WalkInBookingPage() {
           title="Đã tạo booking"
           subtitle="Booking đã xác nhận, phòng đã được giữ cho khách."
         />
-        <Panel className="space-y-4 p-6">
-          <Alert tone="success">Booking đã xác nhận, phòng đã được giữ cho khách.</Alert>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-muted-foreground">Mã booking</dt>
-              <dd className="text-2xl font-semibold tracking-wide text-primary tabular-nums">
-                {created.code}
-              </dd>
+        <div className="grid items-start gap-6 lg:grid-cols-[1fr_340px]">
+          <Panel title="Booking">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Mã booking</p>
+                <p className="text-2xl font-semibold tracking-wide text-primary tabular-nums">
+                  {created.code}
+                </p>
+              </div>
+              <StatusBadge status={created.status} />
             </div>
-            <div>
-              <dt className="text-muted-foreground">Trạng thái</dt>
-              <dd>
-                <StatusBadge status={created.status} />
-              </dd>
+            <div className="grid gap-x-8 sm:grid-cols-2">
+              <KeyValue k="Nhận phòng" v={formatDate(created.checkIn)} />
+              <KeyValue k="Trả phòng" v={formatDate(created.checkOut)} />
+              <KeyValue
+                k="Số khách"
+                v={`${created.adultCount} người lớn · ${created.childCount} trẻ em`}
+              />
             </div>
-            <div>
-              <dt className="text-muted-foreground">Lưu trú</dt>
-              <dd className="font-semibold text-foreground">
-                {formatDate(created.checkIn)} – {formatDate(created.checkOut)}
-              </dd>
+          </Panel>
+
+          <Panel title="Thanh toán">
+            <div className="divide-y">
+              <KeyValue
+                k="Tiền phòng"
+                v={<span className="tabular-nums">{money.format(created.roomTotal)}</span>}
+              />
+              <KeyValue
+                k="Tiền cọc"
+                v={<span className="tabular-nums">{money.format(created.depositAmount)}</span>}
+              />
             </div>
-            <div>
-              <dt className="text-muted-foreground">Tiền phòng</dt>
-              <dd className="font-semibold tabular-nums text-foreground">
-                {money.format(created.roomTotal)}
-              </dd>
+            <div className="mt-4 space-y-3">
+              {deposit.isPending && (
+                <p className="text-sm text-muted-foreground">Đang ghi nhận tiền cọc…</p>
+              )}
+              {deposit.isSuccess && depositMethod && (
+                <Alert tone="success">
+                  Đã thu cọc {money.format(created.depositAmount)} bằng{' '}
+                  {DESK_DEPOSIT_LABEL[depositMethod]}.
+                </Alert>
+              )}
+              {deposit.isError && depositMethod && (
+                <Alert tone="danger">
+                  <p className="mb-3">
+                    Đã tạo booking nhưng chưa thu được cọc: {getErrorMessage(deposit.error)}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void takeDeposit(created.id, depositMethod)}
+                  >
+                    Thu cọc lại
+                  </Button>
+                </Alert>
+              )}
             </div>
-            <div>
-              <dt className="text-muted-foreground">Tiền cọc</dt>
-              <dd className="font-semibold tabular-nums text-foreground">
-                {money.format(created.depositAmount)}
-              </dd>
-            </div>
-          </dl>
-          {deposit.isPending && (
-            <p className="text-sm text-muted-foreground">Đang ghi nhận tiền cọc…</p>
-          )}
-          {deposit.isSuccess && depositMethod && (
-            <Alert tone="success">
-              Đã thu cọc {money.format(created.depositAmount)} bằng{' '}
-              {DESK_DEPOSIT_LABEL[depositMethod]}.
-            </Alert>
-          )}
-          {deposit.isError && depositMethod && (
-            <Alert tone="danger">
-              <p className="mb-2">
-                Đã tạo booking nhưng chưa thu được cọc: {getErrorMessage(deposit.error)}
-              </p>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => void takeDeposit(created.id, depositMethod)}
-              >
-                Thu cọc lại
-              </Button>
-            </Alert>
-          )}
-        </Panel>
+          </Panel>
+        </div>
         <Button onClick={startOver} className="rounded-full">
           Tạo booking khác
         </Button>
