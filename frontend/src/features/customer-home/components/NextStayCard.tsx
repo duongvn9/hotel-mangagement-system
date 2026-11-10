@@ -68,7 +68,9 @@ export function NextStayCard({ booking }: { booking: MyBookingItem }) {
           </Button>
           {booking.status === 'CHECKED_IN' && (
             <Button asChild variant="outline" className="w-full justify-center rounded-full px-3">
-              <Link to="/customer/service-orders/new">Đặt dịch vụ</Link>
+              <Link to={`/customer/service-orders?bookingId=${encodeURIComponent(booking.id)}`}>
+                Đặt dịch vụ
+              </Link>
             </Button>
           )}
         </div>

@@ -19,7 +19,7 @@ import { useCustomerOverview } from '../hooks'
 import { givenName, greetingFor } from '../overview'
 
 const SHORTCUTS: { to: string; label: string; icon: LucideIcon }[] = [
-  { to: '/customer/service-orders/new', label: 'Đặt dịch vụ phòng', icon: ConciergeBell },
+  { to: '/customer/service-orders', label: 'Đặt dịch vụ phòng', icon: ConciergeBell },
   { to: '/my-feedback', label: 'Gửi đánh giá', icon: MessageSquareHeart },
   { to: '/my-bookings', label: 'Lịch sử đặt phòng', icon: CalendarDays },
 ]
