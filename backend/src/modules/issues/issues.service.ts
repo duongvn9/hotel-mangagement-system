@@ -77,7 +77,20 @@ export interface IssuesPage {
   limit: number;
 }
 
+export interface CustomerIssueHistoryEvent {
+  type:
+    | 'REPORTED'
+    | 'REVIEWED'
+    | 'ASSIGNED'
+    | 'TASK_COMPLETED'
+    | 'CONTINUED'
+    | 'REASSIGNED'
+    | 'CLOSED';
+  at: string;
+}
+
 export interface IssueDetail extends IssueRead {
+  customerHistory?: CustomerIssueHistoryEvent[];
   linkedTasks: {
     id: string;
     title: string;
@@ -300,8 +313,73 @@ export class IssuesService {
             pendingReassignment: issue.pendingReassignment,
             reassignmentHistory: issue.reassignmentHistory ?? [],
           }
-        : {}),
+        : { customerHistory: await this.customerHistory(issue) }),
     };
+  }
+
+  private async customerHistory(
+    issue: Issue & { _id: Types.ObjectId },
+  ): Promise<CustomerIssueHistoryEvent[]> {
+    const events: CustomerIssueHistoryEvent[] = [];
+    const validDate = (value: unknown): value is Date | string =>
+      (value instanceof Date || typeof value === 'string') &&
+      Number.isFinite(new Date(value).getTime());
+    const add = (
+      type: CustomerIssueHistoryEvent['type'],
+      value: Date | string | undefined,
+    ) => {
+      if (validDate(value))
+        events.push({ type, at: new Date(value).toISOString() });
+    };
+    add('REPORTED', issue.reportedAt);
+    add('REVIEWED', issue.reviewedAt);
+    const reassignments = (
+      Array.isArray(issue.reassignmentHistory) ? issue.reassignmentHistory : []
+    ).filter(
+      (entry) =>
+        entry !== null &&
+        typeof entry === 'object' &&
+        !Array.isArray(entry) &&
+        typeof entry.taskId === 'string' &&
+        /^[a-fA-F0-9]{24}$/.test(entry.taskId) &&
+        typeof entry.targetTaskId === 'string' &&
+        /^[a-fA-F0-9]{24}$/.test(entry.targetTaskId) &&
+        validDate(entry.completedAt),
+    );
+    const finalizedTasks = new Set(
+      reassignments.flatMap((entry) => [entry.taskId, entry.targetTaskId]),
+    );
+    if (issue.linkedTask) finalizedTasks.add(String(issue.linkedTask));
+    const replacementTasks = new Set(
+      reassignments.map((entry) => entry.targetTaskId),
+    );
+    const history = issue.linkedTask
+      ? await this.tasks.issueTaskHistory(String(issue._id))
+      : [];
+    for (const task of history) {
+      if (!finalizedTasks.has(String(task._id))) continue;
+      if (!replacementTasks.has(String(task._id)))
+        add('ASSIGNED', task.assignedAt);
+      for (const continuation of Array.isArray(task.continuationHistory)
+        ? task.continuationHistory
+        : [])
+        if (
+          continuation !== null &&
+          typeof continuation === 'object' &&
+          !Array.isArray(continuation)
+        )
+          add('CONTINUED', continuation.at);
+      if (task.status === TaskStatus.Completed)
+        add('TASK_COMPLETED', task.completedAt);
+    }
+    if (
+      !replacementTasks.has(String(issue.linkedTask)) &&
+      !events.some((event) => event.type === 'ASSIGNED')
+    )
+      add('ASSIGNED', issue.assignedAt);
+    for (const entry of reassignments) add('REASSIGNED', entry.completedAt);
+    add('CLOSED', issue.closedAt);
+    return events.sort((left, right) => left.at.localeCompare(right.at));
   }
 
   private readResponse(

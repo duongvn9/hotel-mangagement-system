@@ -134,6 +134,61 @@ describe('Receptionist service-order access', () => {
     )
   })
 })
+describe('receptionist room context', () => {
+  it.each([
+    ['single', ['101']],
+    ['multiple', ['202', '101', '303']],
+    ['empty', []],
+    ['missing', undefined],
+    ['long', Array.from({ length: 100 }, (_, index) => `Tầng-dài-${index + 1}`)],
+  ] as const)('renders all rooms in server order: %s', async (_name, numbers) => {
+    const booking = { ...receipt.booking!, roomNumbers: numbers ? [...numbers] : undefined }
+    current = { ...receipt, booking }
+    page('/staff/service-orders')
+    const item = (await screen.findByRole('link', { name: 'Giặt ủi' })).closest('li')!
+    expect(
+      within(item).getByText(`Phòng: ${numbers?.length ? numbers.join(', ') : '—'}`),
+    ).toBeInTheDocument()
+    expect(item).toHaveClass('break-words')
+    expect(within(item).getByText('Đặt phòng: BK001')).toBeInTheDocument()
+    expect(api.patch).not.toHaveBeenCalled()
+  })
+
+  it('keeps missing bookings explicit without inventing a room', async () => {
+    current = { ...receipt, booking: null }
+    page('/staff/service-orders')
+    await screen.findByRole('link', { name: 'Giặt ủi' })
+    expect(screen.getByText('Phòng: —')).toBeInTheDocument()
+    expect(screen.getByText('Đặt phòng: Không còn thông tin đặt phòng')).toBeInTheDocument()
+  })
+
+  it('preserves server item ordering without client sorting by room', async () => {
+    const items = [
+      {
+        ...receipt,
+        id: 'z',
+        service: { ...receipt.service, name: 'Đơn trước' },
+        booking: { ...receipt.booking!, roomNumbers: ['909'] },
+      },
+      {
+        ...receipt,
+        id: 'a',
+        service: { ...receipt.service, name: 'Đơn sau' },
+        booking: { ...receipt.booking!, roomNumbers: ['101'] },
+      },
+    ]
+    vi.mocked(api.get).mockResolvedValue({ data: { items, page: 1, limit: 20, total: 2 } })
+    page('/staff/service-orders')
+    await screen.findByRole('link', { name: 'Đơn trước' })
+    const rows = screen.getAllByRole('listitem')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toHaveTextContent('Đơn trước')
+    expect(rows[0]).toHaveTextContent('Phòng: 909')
+    expect(rows[1]).toHaveTextContent('Đơn sau')
+    expect(rows[1]).toHaveTextContent('Phòng: 101')
+  })
+})
+
 describe('staff list and detail', () => {
   it('uses workspace list presentation without losing customer, billing or detail navigation', async () => {
     const name = 'Dịch vụ dài '.repeat(40).trim()

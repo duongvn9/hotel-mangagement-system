@@ -396,6 +396,32 @@ describe('Issue resolution reassignment recovery', () => {
     expect(tasks.cancelIssueTask).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])(
+    'rejects forged same-assignee Reassign without any state changes (uppercase: %s)',
+    async (uppercase) => {
+      const beforeIssue = structuredClone(issue);
+      const beforeTasks = structuredClone([...records.entries()]);
+      await expect(
+        service.reassign(
+          id,
+          {
+            ...input,
+            assigneeId: uppercase ? oldStaff.toUpperCase() : oldStaff,
+          },
+          actor,
+        ),
+      ).rejects.toThrow('different assignee');
+      expect(issue).toEqual(beforeIssue);
+      expect([...records.entries()]).toEqual(beforeTasks);
+      expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(model.updateOne).not.toHaveBeenCalled();
+      expect(users.findOne).not.toHaveBeenCalled();
+      expect(tasks.cancelIssueTask).not.toHaveBeenCalled();
+      expect(tasks.create).not.toHaveBeenCalled();
+      expect(tasks.fenceUnusedIssueTarget).not.toHaveBeenCalled();
+    },
+  );
+
   it('refuses uppercase original assignee during inactive-target recovery', async () => {
     failCreate = true;
     await expect(service.reassign(id, input, actor)).rejects.toThrow();

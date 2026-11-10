@@ -115,7 +115,11 @@ export async function reassignIssue(id: string, input: ReassignIssueInput): Prom
   return (await api.post<IssueDetail>(`/issues/${encodeURIComponent(id)}/reassign`, input)).data
 }
 
+export type CustomerHistoryType =
+  'REPORTED' | 'REVIEWED' | 'ASSIGNED' | 'CONTINUED' | 'REASSIGNED' | 'TASK_COMPLETED' | 'CLOSED'
+
 export interface IssueDetail extends IssueRead {
+  customerHistory?: { type: CustomerHistoryType; at: string }[]
   resolutionTasks?: (LinkedIssueTask & { workResult?: string })[]
   pendingReassignment?: ReassignmentIntent
   reassignmentHistory?: (ReassignmentIntent & { completedAt: string })[]

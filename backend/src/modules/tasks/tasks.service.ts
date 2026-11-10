@@ -114,7 +114,60 @@ export class TasksService {
       .select(this.assignedProjection)
       .lean();
     if (!task) throw new NotFoundException('Task not found');
-    return this.assignedResponse(task);
+    return {
+      ...this.assignedResponse(task),
+      sourceSummary: await this.serviceOrderSummary(task),
+    };
+  }
+
+  private async serviceOrderSummary(task: Task & { _id: Types.ObjectId }) {
+    if (
+      task.sourceType !== TaskSourceType.ServiceOrder ||
+      task.taskType !== SERVICE_ORDER_EXECUTION_TASK_TYPE
+    )
+      return null;
+    const order = await this.connection
+      .collection(TASK_SOURCE_COLLECTIONS[TaskSourceType.ServiceOrder])
+      .findOne(
+        { _id: task.sourceId, linkedTask: task._id, reviewStatus: 'ACCEPTED' },
+        { projection: { serviceName: 1, booking: 1 } },
+      );
+    if (!order) return null;
+    const parts: string[] = [];
+    if (typeof order.serviceName === 'string' && order.serviceName.trim())
+      parts.push(order.serviceName);
+    if (!order.booking || !Types.ObjectId.isValid(String(order.booking)))
+      return parts.join(' · ') || null;
+    const booking = await this.connection
+      .collection('bookings')
+      .findOne(
+        { _id: new Types.ObjectId(String(order.booking)) },
+        { projection: { code: 1, rooms: 1 } },
+      );
+    if (booking) {
+      if (typeof booking.code === 'string' && booking.code.trim())
+        parts.push(booking.code);
+      const roomIds = Array.isArray(booking.rooms)
+        ? booking.rooms
+            .filter((id: unknown) => Types.ObjectId.isValid(String(id)))
+            .map((id: unknown) => new Types.ObjectId(String(id)))
+        : [];
+      if (roomIds.length) {
+        const rooms = await this.connection
+          .collection('rooms')
+          .find({ _id: { $in: roomIds } }, { projection: { roomNumber: 1 } })
+          .toArray();
+        const byId = new Map(
+          rooms.map((room) => [String(room._id), room.roomNumber]),
+        );
+        const numbers = roomIds.flatMap((id: Types.ObjectId) => {
+          const number = byId.get(String(id));
+          return typeof number === 'string' && number.trim() ? [number] : [];
+        });
+        if (numbers.length) parts.push(numbers.join(', '));
+      }
+    }
+    return parts.join(' · ') || null;
   }
 
   private assignedActorId(id: string): Types.ObjectId {

@@ -223,6 +223,304 @@ describe('Authorized issue room display', () => {
   });
 });
 
+describe('Sanitized customer issue history', () => {
+  const id = new Types.ObjectId();
+  const taskId = new Types.ObjectId();
+  const oldTaskId = new Types.ObjectId();
+  const actor = {
+    id: String(new Types.ObjectId()),
+    email: 'owner@example.test',
+    role: 'CUSTOMER',
+  };
+  const at = (day: number) =>
+    new Date(`2026-11-${String(day).padStart(2, '0')}T10:00:00.000Z`);
+  let record: any;
+  let history: any[];
+  const issues = { findOne: vi.fn(() => query(record)) };
+  const tasks = { issueTaskHistory: vi.fn(async () => history) };
+  const roomNumbers = vi.fn(async () => new Map());
+  const service = new IssuesService(
+    issues as unknown as Model<Issue>,
+    { roomNumbers } as unknown as IssueContextAdapter,
+    { find: () => query([]) } as unknown as Model<Booking>,
+    {} as Model<User>,
+    tasks as unknown as TasksService,
+  );
+  beforeEach(() => {
+    vi.clearAllMocks();
+    record = {
+      _id: id,
+      booking: new Types.ObjectId(),
+      title: 'Lamp',
+      description: 'Broken',
+      category: 'Lighting',
+      priority: 'NORMAL',
+      status: 'CLOSED',
+      reportedAt: at(1),
+      reviewedAt: at(2),
+      assignedAt: at(5),
+      closedAt: at(7),
+      linkedTask: taskId,
+      reviewNotes: 'private review',
+      closureConclusion: 'private conclusion',
+      assignmentInstructions: 'private instructions',
+      reviewedBy: new Types.ObjectId(),
+      pendingReassignment: {
+        requestedAt: at(8).toISOString(),
+        reason: 'private pending',
+      },
+      reassignmentHistory: [
+        {
+          taskId: String(oldTaskId),
+          targetTaskId: String(taskId),
+          completedAt: at(5).toISOString(),
+          requestedAt: at(4).toISOString(),
+          actorId: actor.id,
+          requestId: 'private audit',
+          reason: 'private reason',
+        },
+      ],
+    };
+    history = [
+      {
+        _id: taskId,
+        assignedAt: at(5),
+        completedAt: at(6),
+        status: 'COMPLETED',
+        workResult: 'private result',
+      },
+      {
+        _id: oldTaskId,
+        assignedAt: at(3),
+        status: 'CANCELLED',
+        continuationHistory: [
+          {
+            at: at(4),
+            actorId: actor.id,
+            instructions: 'private continuation',
+          },
+        ],
+      },
+    ];
+  });
+
+  it('returns only chronological event types and persisted timestamps, never internal history', async () => {
+    const result = await service.findOne(String(id), actor);
+    expect(result).toHaveProperty('customerHistory', [
+      { type: 'REPORTED', at: at(1).toISOString() },
+      { type: 'REVIEWED', at: at(2).toISOString() },
+      { type: 'ASSIGNED', at: at(3).toISOString() },
+      { type: 'CONTINUED', at: at(4).toISOString() },
+      { type: 'REASSIGNED', at: at(5).toISOString() },
+      { type: 'TASK_COMPLETED', at: at(6).toISOString() },
+      { type: 'CLOSED', at: at(7).toISOString() },
+    ]);
+    expect(JSON.stringify(result)).not.toContain('private');
+    expect(result.linkedTasks).toEqual([]);
+    expect(result.linkedTasksAvailable).toBe(false);
+    for (const field of [
+      'resolutionTasks',
+      'pendingReassignment',
+      'reassignmentHistory',
+      'reviewedBy',
+    ])
+      expect(result).not.toHaveProperty(field);
+  });
+
+  it('does not infer events from status, requests, deadlines, blockers or unfinished replacement tasks', async () => {
+    record = {
+      ...record,
+      reviewedAt: undefined,
+      assignedAt: undefined,
+      closedAt: undefined,
+      reassignmentHistory: [],
+    };
+    history = [
+      {
+        _id: new Types.ObjectId(),
+        assignedAt: at(3),
+        completedAt: at(6),
+        continuationHistory: [{ at: at(4) }],
+      },
+    ];
+    expect(await service.findOne(String(id), actor)).toHaveProperty(
+      'customerHistory',
+      [{ type: 'REPORTED', at: at(1).toISOString() }],
+    );
+  });
+
+  it('retains persisted assignment without task history and omits missing or invalid event times', async () => {
+    history = [
+      {
+        _id: taskId,
+        status: 'COMPLETED',
+        completedAt: new Date(NaN),
+        continuationHistory: [{}, { at: 'not a date' }],
+      },
+    ];
+    record.reassignmentHistory = [{ completedAt: 'not a date' }];
+    record.closedAt = undefined;
+    expect(await service.findOne(String(id), actor)).toHaveProperty(
+      'customerHistory',
+      [
+        { type: 'REPORTED', at: at(1).toISOString() },
+        { type: 'REVIEWED', at: at(2).toISOString() },
+        { type: 'ASSIGNED', at: at(5).toISOString() },
+      ],
+    );
+  });
+
+  it.each([null, 'invalid', 42, true, []])(
+    'ignores malformed reassignment members %j while preserving safe events',
+    async (entry) => {
+      record.reassignmentHistory.unshift(entry);
+      const result = await service.findOne(String(id), actor);
+      expect(result.customerHistory).toEqual([
+        { type: 'REPORTED', at: at(1).toISOString() },
+        { type: 'REVIEWED', at: at(2).toISOString() },
+        { type: 'ASSIGNED', at: at(3).toISOString() },
+        { type: 'CONTINUED', at: at(4).toISOString() },
+        { type: 'REASSIGNED', at: at(5).toISOString() },
+        { type: 'TASK_COMPLETED', at: at(6).toISOString() },
+        { type: 'CLOSED', at: at(7).toISOString() },
+      ]);
+      expect(JSON.stringify(result)).not.toContain('private');
+    },
+  );
+
+  it.each([null, 'invalid', 42, true, []])(
+    'ignores malformed continuation members %j while preserving safe events',
+    async (entry) => {
+      history[1].continuationHistory.unshift(entry);
+      const result = await service.findOne(String(id), actor);
+      expect(result.customerHistory).toEqual([
+        { type: 'REPORTED', at: at(1).toISOString() },
+        { type: 'REVIEWED', at: at(2).toISOString() },
+        { type: 'ASSIGNED', at: at(3).toISOString() },
+        { type: 'CONTINUED', at: at(4).toISOString() },
+        { type: 'REASSIGNED', at: at(5).toISOString() },
+        { type: 'TASK_COMPLETED', at: at(6).toISOString() },
+        { type: 'CLOSED', at: at(7).toISOString() },
+      ]);
+      expect(JSON.stringify(result)).not.toContain('private');
+    },
+  );
+
+  it.each(['invalid', 42, {}])(
+    'ignores wrong-shaped reassignment histories %j without suppressing assignment',
+    async (value) => {
+      record.reassignmentHistory = value;
+      const result = await service.findOne(String(id), actor);
+      expect(result.customerHistory).toEqual([
+        { type: 'REPORTED', at: at(1).toISOString() },
+        { type: 'REVIEWED', at: at(2).toISOString() },
+        { type: 'ASSIGNED', at: at(5).toISOString() },
+        { type: 'TASK_COMPLETED', at: at(6).toISOString() },
+        { type: 'CLOSED', at: at(7).toISOString() },
+      ]);
+    },
+  );
+
+  it.each(['invalid', 42, {}])(
+    'ignores wrong-shaped continuation histories %j',
+    async (value) => {
+      history[1].continuationHistory = value;
+      const result = await service.findOne(String(id), actor);
+      expect(result.customerHistory).toEqual([
+        { type: 'REPORTED', at: at(1).toISOString() },
+        { type: 'REVIEWED', at: at(2).toISOString() },
+        { type: 'ASSIGNED', at: at(3).toISOString() },
+        { type: 'REASSIGNED', at: at(5).toISOString() },
+        { type: 'TASK_COMPLETED', at: at(6).toISOString() },
+        { type: 'CLOSED', at: at(7).toISOString() },
+      ]);
+    },
+  );
+
+  it.each([null, undefined, 'invalid', new Date(NaN)])(
+    'does not finalize replacement linkage for invalid completedAt %j',
+    async (completedAt) => {
+      record.reassignmentHistory[0].completedAt = completedAt;
+      history[0].continuationHistory = [{ at: null }, { at: 'invalid' }];
+      const result = await service.findOne(String(id), actor);
+      expect(result.customerHistory).toEqual([
+        { type: 'REPORTED', at: at(1).toISOString() },
+        { type: 'REVIEWED', at: at(2).toISOString() },
+        { type: 'ASSIGNED', at: at(5).toISOString() },
+        { type: 'TASK_COMPLETED', at: at(6).toISOString() },
+        { type: 'CLOSED', at: at(7).toISOString() },
+      ]);
+    },
+  );
+
+  it.each(['taskId', 'targetTaskId'])(
+    'does not emit reassignment or suppress assignment with missing %s',
+    async (field) => {
+      delete record.reassignmentHistory[0][field];
+      const result = await service.findOne(String(id), actor);
+      expect(result.customerHistory).toEqual([
+        { type: 'REPORTED', at: at(1).toISOString() },
+        { type: 'REVIEWED', at: at(2).toISOString() },
+        { type: 'ASSIGNED', at: at(5).toISOString() },
+        { type: 'TASK_COMPLETED', at: at(6).toISOString() },
+        { type: 'CLOSED', at: at(7).toISOString() },
+      ]);
+    },
+  );
+
+  it('projects a no-action conclusion without inventing task or closure events', async () => {
+    record = {
+      ...record,
+      status: 'CONCLUDED',
+      linkedTask: undefined,
+      assignedAt: undefined,
+      closedAt: undefined,
+      reassignmentHistory: [],
+      concludedAt: at(2),
+    };
+    expect(await service.findOne(String(id), actor)).toHaveProperty(
+      'customerHistory',
+      [
+        { type: 'REPORTED', at: at(1).toISOString() },
+        { type: 'REVIEWED', at: at(2).toISOString() },
+      ],
+    );
+    expect(tasks.issueTaskHistory).not.toHaveBeenCalled();
+  });
+
+  it('keeps the same sanitized history for staff-origin historical issues without changing ownership scope', async () => {
+    record.sourceTask = new Types.ObjectId();
+    const result = await service.findOne(String(id), actor);
+    expect(result.customerHistory).toHaveLength(7);
+    expect(issues.findOne).toHaveBeenCalledWith({
+      _id: id,
+      $or: [
+        {
+          reporter: new Types.ObjectId(actor.id),
+          sourceTask: { $exists: false },
+        },
+        { booking: { $in: [] }, sourceTask: { $exists: true } },
+      ],
+    });
+  });
+
+  it('does not mutate persisted issue or task records while projecting history', async () => {
+    const beforeIssue = structuredClone(record);
+    const beforeTasks = structuredClone(history);
+    await service.findOne(String(id), actor);
+    expect(record).toEqual(beforeIssue);
+    expect(history).toEqual(beforeTasks);
+  });
+
+  it('denies foreign detail before querying internal task history', async () => {
+    issues.findOne.mockReturnValueOnce(query(null));
+    await expect(service.findOne(String(id), actor)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(tasks.issueTaskHistory).not.toHaveBeenCalled();
+  });
+});
+
 describe('Issue read authorization', () => {
   const owner = new Types.ObjectId();
   const booking = new Types.ObjectId();

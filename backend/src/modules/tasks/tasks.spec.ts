@@ -55,6 +55,138 @@ function setup(role = 'SERVICE_STAFF', active = true, sourceExists = true) {
   return { tasks, users, roles, connection, findOne, service };
 }
 
+describe('service order task detail context', () => {
+  const fixture = () => {
+    const task = {
+      _id: new Types.ObjectId(),
+      assignedTo: new Types.ObjectId(ID),
+      assignedAt: new Date('2026-10-01T10:00:00Z'),
+      sourceId: new Types.ObjectId(),
+      sourceType: TaskSourceType.ServiceOrder,
+      taskType: SERVICE_ORDER_EXECUTION_TASK_TYPE,
+      title: 'Laundry',
+      priority: 'NORMAL',
+      status: TaskStatus.Assigned,
+    };
+    const bookingId = new Types.ObjectId();
+    const roomIds = [
+      new Types.ObjectId(),
+      new Types.ObjectId(),
+      new Types.ObjectId(),
+    ];
+    const order = {
+      _id: task.sourceId,
+      linkedTask: task._id,
+      reviewStatus: 'ACCEPTED',
+      booking: bookingId,
+      serviceName: 'Laundry',
+      amount: 900000,
+      billedInvoiceId: ID,
+    };
+    const source = vi.fn(async () => order as object | null);
+    const booking = vi.fn(
+      async () =>
+        ({ _id: bookingId, code: 'BK001', rooms: roomIds, isActive: false }) as
+          object | null,
+    );
+    const rooms = vi.fn(() => ({
+      toArray: async () => [
+        { _id: roomIds[1], roomNumber: '202', isActive: false },
+        { _id: roomIds[0], roomNumber: '201' },
+      ],
+    }));
+    const connection = {
+      collection: vi.fn((name: string) =>
+        name === 'serviceorders'
+          ? { findOne: source }
+          : name === 'bookings'
+            ? { findOne: booking }
+            : { find: rooms },
+      ),
+    };
+    const tasks = {
+      findOne: vi.fn(() => ({
+        select: () => ({ lean: async () => task as object | null }),
+      })),
+    };
+    const service = new TasksService(
+      tasks as never,
+      {} as never,
+      {} as never,
+      connection as never,
+    );
+    return { task, order, source, booking, rooms, tasks, connection, service };
+  };
+
+  it('resolves only safe canonical service order booking and multiroom context after assignee authorization', async () => {
+    const f = fixture();
+    const result = await f.service.findAssigned(ID, String(f.task._id));
+    expect(result.sourceSummary).toBe('Laundry · BK001 · 201, 202');
+    expect(JSON.stringify(result)).not.toMatch(/900000|billedInvoiceId|amount/);
+    expect(f.tasks.findOne).toHaveBeenCalledWith({
+      _id: f.task._id,
+      assignedTo: new Types.ObjectId(ID),
+    });
+    expect(f.source).toHaveBeenCalledWith(
+      {
+        _id: f.task.sourceId,
+        linkedTask: f.task._id,
+        reviewStatus: 'ACCEPTED',
+      },
+      { projection: { serviceName: 1, booking: 1 } },
+    );
+    expect(f.booking).toHaveBeenCalledWith(
+      { _id: f.order.booking },
+      { projection: { code: 1, rooms: 1 } },
+    );
+    expect(f.rooms).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not read sources for another assignee or an invalid task id', async () => {
+    const f = fixture();
+    f.tasks.findOne.mockReturnValueOnce({
+      select: () => ({ lean: async () => null }),
+    });
+    await expect(
+      f.service.findAssigned(ID, String(f.task._id)),
+    ).rejects.toThrow(NotFoundException);
+    await expect(f.service.findAssigned(ID, 'invalid')).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(f.connection.collection).not.toHaveBeenCalled();
+  });
+
+  it.each([TaskSourceType.Issue, TaskSourceType.Maintenance])(
+    'keeps %s fallback without source access',
+    async (sourceType) => {
+      const f = fixture();
+      f.task.sourceType = sourceType;
+      expect(
+        (await f.service.findAssigned(ID, String(f.task._id))).sourceSummary,
+      ).toBeNull();
+      expect(f.connection.collection).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps null for missing or noncanonical service orders', async () => {
+    const f = fixture();
+    f.source.mockResolvedValue(null);
+    expect(
+      (await f.service.findAssigned(ID, String(f.task._id))).sourceSummary,
+    ).toBeNull();
+    expect(f.booking).not.toHaveBeenCalled();
+  });
+
+  it('retains service context if booking is missing', async () => {
+    const f = fixture();
+    f.booking.mockResolvedValue(null);
+    expect(
+      (await f.service.findAssigned(ID, String(f.task._id))).sourceSummary,
+    ).toBe('Laundry');
+    expect(f.rooms).not.toHaveBeenCalled();
+  });
+});
+
 describe('H8 task contract', () => {
   for (const from of [...Object.values(TaskStatus), 'PENDING', undefined]) {
     for (const to of [...Object.values(TaskStatus), 'PENDING', undefined]) {

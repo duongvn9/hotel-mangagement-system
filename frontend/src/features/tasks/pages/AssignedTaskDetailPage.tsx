@@ -159,9 +159,9 @@ export function AssignedTaskDetailPage() {
                 </div>
               ))}
             </dl>
-            <p className="text-sm text-muted-foreground">
-              Thông tin nguồn hiện không khả dụng. Công việc vẫn có thể được xem; mã nguồn chỉ dùng
-              để đối chiếu.
+            <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
+              {task.sourceSummary?.trim() ||
+                'Thông tin nguồn hiện không khả dụng. Công việc vẫn có thể được xem; mã nguồn chỉ dùng để đối chiếu.'}
             </p>
             <ResolutionHistory task={task} />
             <TaskProgress key={task.id} task={task} fetching={isFetching} />

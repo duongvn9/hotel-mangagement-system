@@ -195,6 +195,25 @@ it.each([403, 404])('hides detail on API %s without source links or retry', asyn
   expect(screen.getAllByRole('link')).toHaveLength(1)
 })
 
+it('renders the authorized source summary in the existing source area', async () => {
+  const sourceSummary = 'Giặt ủi · BK-001 · 101'
+  get.mockResolvedValue({ data: { ...task, sourceSummary, status: 'COMPLETED' } })
+  renderTasks('/staff/tasks/task-1')
+  const summary = await screen.findByText(sourceSummary)
+  expect(summary).toHaveClass('break-words')
+  expect(screen.queryByText(/Thông tin nguồn hiện không khả dụng/)).not.toBeInTheDocument()
+  expect(screen.getAllByRole('link')).toHaveLength(1)
+  expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  expect(get).toHaveBeenCalledExactlyOnceWith('/tasks/task-1')
+})
+
+it.each([null, '', '   ', undefined])('keeps the source fallback for %s', async (sourceSummary) => {
+  get.mockResolvedValue({ data: { ...task, sourceSummary, status: 'COMPLETED' } })
+  renderTasks('/staff/tasks/task-1')
+  expect(await screen.findByText(/Thông tin nguồn hiện không khả dụng/)).toBeInTheDocument()
+  expect(screen.getByText(task.sourceId)).toBeInTheDocument()
+})
+
 it('renders detail and trace-only missing source without mutations', async () => {
   get.mockResolvedValue({ data: { ...task, status: 'COMPLETED', workResult: 'Đã kiểm tra' } })
   renderTasks('/staff/tasks/task-1')
