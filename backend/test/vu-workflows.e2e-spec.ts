@@ -241,8 +241,9 @@ describe('Vu persisted cross-module workflows (real AppModule)', () => {
       guestName: 'Private guest',
       guestEmail: 'private@vu-qa.test',
       guestPhone: '0900000000',
-      checkIn: new Date('2026-10-20T07:00:00Z'),
-      checkOut: new Date('2026-10-22T07:00:00Z'),
+      // Issue reporting needs a stay that has not checked out yet.
+      checkIn: new Date(Date.now() - 86_400_000),
+      checkOut: new Date(Date.now() + 86_400_000),
       adultCount: 1,
       childCount: 0,
       status: BookingStatus.CheckedIn,

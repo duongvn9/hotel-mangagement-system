@@ -144,8 +144,9 @@ describe('Issue review and assignment Mongo protocol (e2e)', () => {
       guestName: 'Issue Customer',
       guestEmail: 'customer@example.test',
       guestPhone: '0900000000',
-      checkIn: new Date('2020-01-01'),
-      checkOut: new Date('2020-01-02'),
+      // Issue reporting needs a stay that has not checked out yet.
+      checkIn: new Date(Date.now() - 86_400_000),
+      checkOut: new Date(Date.now() + 86_400_000),
       adultCount: 1,
       status: BookingStatus.CheckedIn,
       roomTotal: 100000,
