@@ -36,11 +36,12 @@ const list = (): SameDayList => ({
 })
 
 /** Hóa đơn: tổng 2.000.000, đã cọc 600.000; `paid` = đã thu nốt phần còn lại. */
-const invoice = (paid: boolean): BookingCharges => ({
+const invoice = (paid: boolean, confirmed = true): BookingCharges => ({
   bookingId: 'd1',
   code: 'DPI',
   status: 'CHECKED_IN',
   invoiceStatus: paid ? 'PAID' : 'PARTIALLY_PAID',
+  ...(confirmed ? { feesConfirmedAt: '2099-01-10T00:00:00.000Z' } : {}),
   totals: {
     roomTotal: 2_000_000,
     serviceTotal: 0,
@@ -77,12 +78,17 @@ function mockGet(initial: BookingCharges) {
   }
 }
 
-const departure = () => within(screen.getByRole('listitem', { name: 'DPI' }))
+const departure = () => within(screen.getByRole('dialog'))
 
 async function openPanel() {
   renderPage()
+  fireEvent.click(await screen.findByRole('tab', { name: 'Trả phòng' }))
   await screen.findByRole('heading', { name: 'Khách đi (1)' })
-  fireEvent.click(departure().getByRole('button', { name: 'Phụ phí' }))
+  fireEvent.click(
+    within(screen.getByRole('listitem', { name: 'DPI' })).getByRole('button', {
+      name: 'Trả phòng',
+    }),
+  )
   await departure().findByText(/Tổng cộng/)
 }
 
@@ -128,6 +134,69 @@ describe('Pay and check out from the same-day departures list', () => {
     expect(departure().queryByRole('button', { name: 'Thu tiền mặt' })).not.toBeInTheDocument()
   })
 
+  it('offers card as another way to settle at the desk', async () => {
+    mockGet(invoice(false))
+    await openPanel()
+    expect(departure().getByRole('button', { name: 'Thu thẻ' })).toBeInTheDocument()
+  })
+
+  it('confirms a card payment through the card endpoint and refreshes the invoice', async () => {
+    const state = mockGet(invoice(false))
+    const post = vi.spyOn(api, 'post').mockImplementation(async () => {
+      state.set(invoice(true))
+      return { data: {} }
+    })
+    await openPanel()
+
+    fireEvent.click(departure().getByRole('button', { name: 'Thu thẻ' }))
+    expect(departure().getByText(/Xác nhận đã thu thẻ 1\.400\.000/)).toBeInTheDocument()
+    fireEvent.click(departure().getByRole('button', { name: 'Xác nhận đã thu thẻ' }))
+
+    expect(await departure().findByText('Đã thanh toán đủ')).toBeInTheDocument()
+    expect(post).toHaveBeenCalledWith('/bookings/d1/payments/card', {
+      requestId: expect.stringMatching(/^[A-Za-z0-9_-]{8,64}$/),
+    })
+  })
+
+  it('asks the guest to confirm the fees before any payment can be taken', async () => {
+    mockGet(invoice(false, false))
+    await openPanel()
+
+    expect(await departure().findByRole('button', { name: 'Khách đã xác nhận phí' })).toBeEnabled()
+    for (const name of ['Thu tiền mặt', 'Thu thẻ', 'Thanh toán VNPay']) {
+      expect(departure().getByRole('button', { name })).toBeDisabled()
+    }
+  })
+
+  it('records the confirmation and then allows payment', async () => {
+    const state = mockGet(invoice(false, false))
+    const post = vi.spyOn(api, 'post').mockImplementation(async () => {
+      state.set(invoice(false, true))
+      return { data: {} }
+    })
+    await openPanel()
+
+    fireEvent.click(await departure().findByRole('button', { name: 'Khách đã xác nhận phí' }))
+
+    expect(await departure().findByText('Khách đã xác nhận các khoản phí')).toBeInTheDocument()
+    expect(post).toHaveBeenCalledWith('/bookings/d1/charges/confirm')
+    expect(departure().getByRole('button', { name: 'Thu tiền mặt' })).toBeEnabled()
+    expect(
+      departure().queryByRole('button', { name: 'Khách đã xác nhận phí' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not ask for confirmation once the invoice is already paid', async () => {
+    mockGet(invoice(true, false))
+    await openPanel()
+    await departure().findByText('Đã thanh toán đủ')
+
+    expect(
+      departure().queryByRole('button', { name: 'Khách đã xác nhận phí' }),
+    ).not.toBeInTheDocument()
+    expect(departure().getByRole('button', { name: 'Check Out' })).toBeEnabled()
+  })
+
   it('can back out of the cash confirmation', async () => {
     mockGet(invoice(false))
     const post = vi.spyOn(api, 'post')
@@ -156,6 +225,57 @@ describe('Pay and check out from the same-day departures list', () => {
     state.set(invoice(true))
     fireEvent.click(departure().getByRole('button', { name: 'Tải lại' }))
     expect(await departure().findByText('Đã thanh toán đủ')).toBeInTheDocument()
+  })
+
+  it('offers to cancel a VNPay payment that is still pending, also after a reload', async () => {
+    const state = mockGet({ ...invoice(false), vnpayPending: true })
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: invoice(false) })
+    await openPanel()
+
+    expect(await departure().findByText(/đang chờ thanh toán VNPay/i)).toBeInTheDocument()
+    state.set(invoice(false))
+    fireEvent.click(departure().getByRole('button', { name: 'Hủy thanh toán VNPay' }))
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/bookings/d1/payments/vnpay/cancel'))
+    await waitFor(() =>
+      expect(departure().queryByRole('button', { name: 'Hủy thanh toán VNPay' })).toBeNull(),
+    )
+    expect(departure().queryByText(/đang chờ thanh toán VNPay/i)).not.toBeInTheDocument()
+    expect(departure().getByRole('button', { name: 'Thu tiền mặt' })).toBeEnabled()
+  })
+
+  it('does not offer the cancel button when no VNPay payment is pending', async () => {
+    mockGet(invoice(false))
+    await openPanel()
+    expect(departure().getByRole('button', { name: 'Thu tiền mặt' })).toBeInTheDocument()
+    expect(
+      departure().queryByRole('button', { name: 'Hủy thanh toán VNPay' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('offers the cancel button right after opening the VNPay page', async () => {
+    mockGet(invoice(false))
+    vi.spyOn(api, 'post').mockResolvedValue({
+      data: { transactionRef: 'TXN-1', paymentUrl: 'https://vnpay.test/pay', amount: 1_400_000 },
+    })
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    await openPanel()
+
+    fireEvent.click(departure().getByRole('button', { name: 'Thanh toán VNPay' }))
+
+    expect(
+      await departure().findByRole('button', { name: 'Hủy thanh toán VNPay' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows the server error when the cancel fails and keeps the button', async () => {
+    mockGet({ ...invoice(false), vnpayPending: true })
+    vi.spyOn(api, 'post').mockRejectedValue(failure('Boom'))
+    await openPanel()
+    fireEvent.click(await departure().findByRole('button', { name: 'Hủy thanh toán VNPay' }))
+
+    expect(await departure().findByRole('alert')).toHaveTextContent('Boom')
+    expect(departure().getByRole('button', { name: 'Hủy thanh toán VNPay' })).toBeInTheDocument()
   })
 
   it('shows the server error when VNPay cannot be started', async () => {

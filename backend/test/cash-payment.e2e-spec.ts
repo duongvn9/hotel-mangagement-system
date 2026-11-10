@@ -46,6 +46,7 @@ describe('Record cash payment at the desk (e2e)', () => {
       adultCount: 2,
       childCount: 0,
       status: options.status ?? BookingStatus.CheckedIn,
+      checkoutFeesConfirmedAt: new Date(),
       roomTotal: 2000000,
       depositAmount: 600000,
       rateSnapshot: [{ room: roomId, ratePerNight: 1000000 }],
@@ -185,11 +186,44 @@ describe('Record cash payment at the desk (e2e)', () => {
       .set(RECEPTIONIST)
       .send({ requestId: 'charge-12345678', amount: 100000, reason: 'Minibar' })
       .expect(201);
+    // Khoản phí mới thu hồi xác nhận của khách: phải xác nhận lại mới thu được tiền.
+    await pay(booking.id).expect(409);
+    await http()
+      .post(`/api/v1/bookings/${booking.id}/charges/confirm`)
+      .set(RECEPTIONIST)
+      .expect(201);
     const { body } = await pay(booking.id, { amount: 1 }).expect(400); // client không được gửi số tiền
     expect(body.message).toBeDefined();
     await pay(booking.id).expect(201);
     const [saved] = await finalPayments(booking.id);
     expect(saved?.amount).toBe(1500000);
+  });
+
+  it('waits for the guest to confirm the fees before taking cash', async () => {
+    const { booking } = await prepare();
+    await bookings.updateOne(
+      { _id: booking._id },
+      { $unset: { checkoutFeesConfirmedAt: 1 } },
+    );
+
+    const refused = await pay(booking.id).expect(409);
+    expect(refused.body.message).toMatch(/confirmed the fees/);
+    expect(await finalPayments(booking.id)).toHaveLength(0);
+
+    const confirmed = await http()
+      .post(`/api/v1/bookings/${booking.id}/charges/confirm`)
+      .set(RECEPTIONIST)
+      .expect(201);
+    expect(confirmed.body.feesConfirmedAt).toEqual(expect.any(String));
+    await pay(booking.id).expect(201);
+  });
+
+  it('only confirms the fees of a guest who is checked in', async () => {
+    const { booking } = await prepare({ status: BookingStatus.Confirmed });
+    await http()
+      .post(`/api/v1/bookings/${booking.id}/charges/confirm`)
+      .set(RECEPTIONIST)
+      .expect(409);
   });
 
   it('does not record the same cash payment twice', async () => {
@@ -228,6 +262,83 @@ describe('Record cash payment at the desk (e2e)', () => {
     });
     const { body } = await pay(booking.id).expect(409);
     expect(body.message).toMatch(/pending/i);
+  });
+
+  describe('cancelling a pending VNPay payment', () => {
+    const pendingVnpay = async (
+      booking: { _id: unknown },
+      invoice: { _id?: unknown } | null,
+    ) =>
+      payments.create({
+        booking: booking._id,
+        invoice: invoice?._id,
+        transactionRef: `PEND-${tag}-${++counter}`,
+        method: 'VNPAY',
+        purpose: 'FINAL',
+        status: 'PENDING',
+        amount: 1400000,
+      });
+    const cancel = (
+      id: unknown,
+      headers: Record<string, string> = RECEPTIONIST,
+    ) =>
+      http()
+        .post(`/api/v1/bookings/${String(id)}/payments/vnpay/cancel`)
+        .set(headers);
+    const charges = async (id: unknown) =>
+      (
+        await http()
+          .get(`/api/v1/bookings/${String(id)}/charges`)
+          .set(RECEPTIONIST)
+          .expect(200)
+      ).body;
+
+    it('reports a pending VNPay payment on the charges, and nothing otherwise', async () => {
+      const { booking, invoice } = await prepare();
+      expect((await charges(booking.id)).vnpayPending).toBeUndefined();
+
+      await pendingVnpay(booking, invoice);
+
+      expect((await charges(booking.id)).vnpayPending).toBe(true);
+    });
+
+    it('cancels it as superseded and frees the desk to take cash', async () => {
+      const { booking, invoice } = await prepare();
+      const pending = await pendingVnpay(booking, invoice);
+
+      const { body } = await cancel(booking.id).expect(201);
+
+      expect(body.bookingId).toBe(String(booking.id));
+      expect(body.vnpayPending).toBeUndefined();
+      const saved = await payments.findById(pending._id).lean();
+      expect(saved?.status).toBe('CANCELLED');
+      expect(saved?.supersededAt).toBeInstanceOf(Date);
+      expect((await charges(booking.id)).vnpayPending).toBeUndefined();
+      await pay(booking.id).expect(201);
+    });
+
+    it('does nothing when no VNPay payment is pending', async () => {
+      const { booking } = await prepare();
+      const { body } = await cancel(booking.id).expect(201);
+      expect(body.bookingId).toBe(String(booking.id));
+    });
+
+    it('leaves a settled payment alone', async () => {
+      const { booking } = await prepare();
+      await pay(booking.id).expect(201);
+      await cancel(booking.id).expect(201);
+      expect(await finalPayments(booking.id)).toHaveLength(1);
+    });
+
+    it('is only for staff and needs a valid booking', async () => {
+      const { booking } = await prepare();
+      await cancel(booking.id, {
+        'x-dev-role': 'CUSTOMER',
+        'x-dev-user-id': String(new Types.ObjectId()),
+      }).expect(403);
+      await cancel('not-an-id').expect(400);
+      await cancel(new Types.ObjectId()).expect(404);
+    });
   });
 
   it('refuses when nothing is left to pay', async () => {

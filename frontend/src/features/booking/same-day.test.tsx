@@ -52,50 +52,98 @@ describe('FrontDeskPage', () => {
     expect(screen.getByText('Không có quyền truy cập')).toBeInTheDocument()
   })
 
-  it('lists arrivals and departures with summary chips and statuses', async () => {
+  it('lists arrivals and departures with statuses', async () => {
     const get = vi.spyOn(api, 'get').mockResolvedValue({ data: list() })
     renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Khách đến (3)' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Khách đi (2)' })).toBeInTheDocument()
     expect(get).toHaveBeenCalledWith('/front-desk/same-day', { params: { date: todayISO() } })
-
-    const arrivalChips = within(screen.getByLabelText('Tổng hợp khách đến'))
-    expect(arrivalChips.getByText('Chưa cọc: 1')).toBeInTheDocument()
-    expect(arrivalChips.getByText('Sẵn sàng: 1')).toBeInTheDocument()
-    expect(arrivalChips.getByText('Đã nhận phòng: 1')).toBeInTheDocument()
-    const departureChips = within(screen.getByLabelText('Tổng hợp khách đi'))
-    expect(departureChips.getByText('Chờ trả phòng: 1')).toBeInTheDocument()
-    expect(departureChips.getByText('Đã trả phòng: 1')).toBeInTheDocument()
 
     const pending = within(screen.getByRole('listitem', { name: 'ARP' }))
     expect(pending.getByText(/Khách ARP/)).toBeInTheDocument()
     expect(pending.getByText(/101 · Deluxe/)).toBeInTheDocument()
     expect(pending.getByText('Chờ đặt cọc')).toBeInTheDocument()
-    expect(pending.getByText('Chưa đặt cọc')).toBeInTheDocument()
+
     expect(
       within(screen.getByRole('listitem', { name: 'ARC' })).getByText('Đã xác nhận'),
     ).toBeInTheDocument()
-    expect(
-      within(screen.getByRole('listitem', { name: 'ARC' })).queryByText('Chưa đặt cọc'),
-    ).not.toBeInTheDocument()
+
+    // Chuyển sang tab Trả phòng để kiểm tra danh sách khách đi
+    fireEvent.click(screen.getByRole('tab', { name: 'Trả phòng' }))
+    expect(await screen.findByRole('heading', { name: 'Khách đi (2)' })).toBeInTheDocument()
     expect(
       within(screen.getByRole('listitem', { name: 'DPO' })).getByText('Đã trả phòng'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /ARC/ })).toHaveAttribute('href', '/booking/a2')
+  })
+
+  it('filters bookings by search query', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: list() })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Khách đến (3)' })
+
+    fireEvent.change(screen.getByPlaceholderText('Mã đặt phòng, tên khách hoặc số phòng'), {
+      target: { value: 'ARC' },
+    })
+
+    expect(screen.getByRole('listitem', { name: 'ARC' })).toBeInTheDocument()
+    expect(screen.queryByRole('listitem', { name: 'ARP' })).not.toBeInTheDocument()
   })
 
   it('reloads for another day', async () => {
+    // Ô ngày là DateField (popover + lịch); pin đồng hồ để lịch mở đúng tháng.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-10T12:00:00Z') })
     const get = vi.spyOn(api, 'get').mockResolvedValue({ data: list() })
     renderPage()
     await screen.findByRole('heading', { name: 'Khách đến (3)' })
 
-    fireEvent.change(screen.getByLabelText(/^Ngày/), { target: { value: '2099-01-10' } })
+    fireEvent.click(screen.getByLabelText(/^Ngày/))
+    fireEvent.click(screen.getByText('20'))
     await waitFor(() =>
       expect(get).toHaveBeenLastCalledWith('/front-desk/same-day', {
-        params: { date: '2099-01-10' },
+        params: { date: '2026-11-20' },
       }),
     )
+    vi.useRealTimers()
+  })
+
+  it('opens the staff booking page inside the dashboard from every "Chi tiết" link', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: list() })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Khách đến (3)' })
+
+    const hrefs = () =>
+      screen.getAllByRole('link', { name: 'Chi tiết' }).map((link) => link.getAttribute('href'))
+    expect(hrefs()).toHaveLength(3)
+    for (const href of hrefs()) expect(href).toMatch(/^\/reception\/bookings\/[A-Z]+$/)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Trả phòng' }))
+    await screen.findByRole('heading', { name: 'Khách đi (2)' })
+    expect(hrefs()).toHaveLength(2)
+    for (const href of hrefs()) expect(href).toMatch(/^\/reception\/bookings\/[A-Z]+$/)
+  })
+
+  it('offers a walk-in booking, prefilled with the guest, for an arrival that has not paid the deposit', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: list() })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Khách đến (3)' })
+
+    const pending = within(screen.getByRole('listitem', { name: 'ARP' }))
+    const link = pending.getByRole('link', { name: 'Đặt phòng tại quầy' })
+    const url = new URL(link.getAttribute('href') ?? '', 'http://localhost')
+    expect(url.pathname).toBe('/reception/booking/new')
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      guestName: 'Khách ARP',
+      guestEmail: 'arp@example.test',
+      guestPhone: '0900000001',
+    })
+
+    for (const code of ['ARC', 'ARI']) {
+      expect(
+        within(screen.getByRole('listitem', { name: code })).queryByRole('link', {
+          name: 'Đặt phòng tại quầy',
+        }),
+      ).not.toBeInTheDocument()
+    }
   })
 
   it('shows empty lists and an error state', async () => {
@@ -112,7 +160,8 @@ describe('FrontDeskPage', () => {
     })
     const empty = renderPage()
     expect(await screen.findByText('Không có khách đến.')).toBeInTheDocument()
-    expect(screen.getByText('Không có khách đi.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Trả phòng' }))
+    expect(await screen.findByText('Không có khách đi.')).toBeInTheDocument()
     empty.unmount()
 
     vi.spyOn(api, 'get').mockRejectedValue({

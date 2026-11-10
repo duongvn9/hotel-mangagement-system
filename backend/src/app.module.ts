@@ -18,6 +18,8 @@ import { RolesModule } from './modules/roles/roles.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { BookingsModule } from './modules/bookings/bookings.module.js';
 import { GuestsModule } from './modules/guests/guests.module.js';
+import { BookingSummaryModule } from './modules/booking-summary/booking-summary.module.js';
+import { CheckoutInspectionModule } from './modules/invoices/checkout-inspection.module.js';
 import { InvoicesModule } from './modules/invoices/invoices.module.js';
 import { PaymentsModule } from './modules/payments/payments.module.js';
 import { PaymentsApiModule } from './modules/payments/payments-api.module.js';
@@ -59,6 +61,8 @@ import { DashboardModule } from './modules/dashboard/dashboard.module.js';
     BookingsModule,
     GuestsModule,
     InvoicesModule,
+    CheckoutInspectionModule,
+    BookingSummaryModule,
     PaymentsModule,
     PaymentsApiModule,
     TasksModule,

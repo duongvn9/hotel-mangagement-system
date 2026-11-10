@@ -50,6 +50,8 @@ export interface VerifiedVnpayResult {
 export type VnpayIpnPlan =
   | { action: 'duplicate'; result: VerifiedVnpayResult }
   | { action: 'review'; result: VerifiedVnpayResult }
+  /** Callback của link đã bị thay bằng link mới (khách bấm thanh toán lại). */
+  | { action: 'superseded'; result: VerifiedVnpayResult }
   | {
       action: 'compare-and-set';
       expectedStatus: PaymentStatus.Pending;
@@ -60,6 +62,11 @@ export abstract class VnpaySettlementPort {
   abstract commitAtomically(
     expected: ExpectedVnpayPayment,
     plan: Extract<VnpayIpnPlan, { action: 'compare-and-set' }>,
+  ): Promise<'committed' | 'duplicate' | 'conflict'>;
+
+  /** Tiền về qua link đã bị thay: chỉ ghi nhận để đối soát, không confirm, không vào hoá đơn. */
+  abstract recordSupersededSuccess(
+    result: VerifiedVnpayResult,
   ): Promise<'committed' | 'duplicate' | 'conflict'>;
 }
 
@@ -222,6 +229,9 @@ export class VnpayService {
   prepareIpn(rawQuery: string, expected: ExpectedVnpayPayment): VnpayIpnPlan {
     const result = this.verifyReturn(rawQuery, expected);
     const payment = expected.payment;
+    if (payment.status === PaymentStatus.Cancelled && payment.supersededAt) {
+      return { action: 'superseded', result };
+    }
     if (payment.status !== PaymentStatus.Pending) {
       if (
         payment.status !== result.status ||

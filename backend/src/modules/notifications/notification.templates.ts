@@ -132,6 +132,32 @@ export function renderNotification(
       );
       break;
     }
+    case 'CHECK_IN_CONFIRMATION': {
+      const data = input.data;
+      subject = `Đã nhận phòng booking ${code}`;
+      lines.push(
+        `Bạn đã nhận phòng thành công cho booking ${code}.`,
+        `Nhận phòng: ${date(data.checkIn)}`,
+        `Trả phòng: ${date(data.checkOut)}`,
+        field(data.roomsSummary),
+      );
+      break;
+    }
+    case 'CHECK_OUT_RECEIPT': {
+      const data = input.data;
+      subject = `Hóa đơn trả phòng booking ${code}`;
+      lines.push(
+        `Cảm ơn bạn đã lưu trú. Booking ${code} đã trả phòng.`,
+        `Ngày trả phòng: ${date(data.checkedOutAt)}`,
+        `Tiền phòng: ${money(data.roomTotal)}`,
+        `Dịch vụ: ${money(data.serviceTotal)}`,
+        `Phụ phí: ${money(data.additionalTotal)}`,
+        `Tổng cộng: ${money(data.totalAmount)}`,
+        `Đã đặt cọc: ${money(data.depositPaid)}`,
+        `Đã thanh toán khi trả phòng: ${money(data.finalPaid)}`,
+      );
+      break;
+    }
     default:
       throw new Error('unknown_template');
   }

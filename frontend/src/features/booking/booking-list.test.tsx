@@ -135,7 +135,12 @@ describe('BookingListPage', () => {
   })
 
   it('shows an empty state and an error state', async () => {
-    vi.spyOn(api, 'get').mockResolvedValueOnce({ data: page({ items: [], total: 0 }) })
+    // Trang này còn gọi /bookings/attention (cảnh báo lễ tân); định tuyến mock theo URL.
+    vi.spyOn(api, 'get').mockImplementation(async (url) =>
+      url === '/bookings/attention'
+        ? { data: { overdueCheckOut: 0, overdueCheckIn: 0, dueCheckOut: 0, dueCheckIn: 0 } }
+        : { data: page({ items: [], total: 0 }) },
+    )
     const empty = renderPage()
     expect(await screen.findByText('Không có booking nào phù hợp.')).toBeInTheDocument()
     empty.unmount()
@@ -146,5 +151,33 @@ describe('BookingListPage', () => {
     })
     renderPage()
     expect(await screen.findByRole('alert')).toBeInTheDocument()
+  })
+
+  it('marks bookings needing attention with a badge and sorts them first', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-10T12:00:00Z') })
+    vi.spyOn(api, 'get').mockImplementation(async (url) =>
+      url === '/bookings/attention'
+        ? { data: { overdueCheckOut: 0, overdueCheckIn: 0, dueCheckOut: 0, dueCheckIn: 0 } }
+        : {
+            data: page({
+              items: [
+                { ...page().items[1], id: 'bn', code: 'BK-NORMAL', status: 'CONFIRMED' },
+                {
+                  ...page().items[0],
+                  id: 'bo',
+                  code: 'BK-OVERDUE',
+                  status: 'CHECKED_IN',
+                  checkIn: '2026-11-05T05:00:00.000Z',
+                  checkOut: '2026-11-08T05:00:00.000Z',
+                },
+              ],
+            }),
+          },
+    )
+    renderPage()
+    expect(await screen.findByText('Quá hạn trả phòng')).toBeInTheDocument()
+    const codes = screen.getAllByText(/^BK-(OVERDUE|NORMAL)$/).map((el) => el.textContent)
+    expect(codes).toEqual(['BK-OVERDUE', 'BK-NORMAL'])
+    vi.useRealTimers()
   })
 })

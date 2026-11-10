@@ -70,7 +70,11 @@ function mode(value: string) {
 }
 beforeEach(() => {
   vi.restoreAllMocks()
+  vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-10T00:00:00Z') })
   vi.spyOn(api, 'get').mockResolvedValue({ data: { items: [booking] } })
+})
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 test.each([
@@ -136,6 +140,7 @@ test('context query is identity scoped and disabled for non-customers', async ()
     isDevMode: false,
     login: vi.fn(),
     loginAsDev: vi.fn(),
+    loginWithGoogle: vi.fn(),
     register: vi.fn(),
     logout: vi.fn(),
     refresh: vi.fn(),
@@ -194,6 +199,14 @@ test('eager context shows readable booking dates status and rooms, with no manua
   expect(form.closest('section')).toHaveClass('card-soft')
   expect(screen.getByLabelText(/Tiêu đề/)).toHaveAttribute('maxlength', '200')
   expect(screen.getByLabelText(/Mô tả/)).toHaveAttribute('maxlength', '5000')
+})
+test('excludes checked-in bookings whose checkout date has passed', async () => {
+  vi.mocked(api.get).mockResolvedValue({
+    data: { items: [{ ...booking, checkOut: '2026-11-05T00:00:00Z' }] },
+  })
+  renderPage()
+  expect(await screen.findByText('Chỉ dùng được khi đang lưu trú')).toBeInTheDocument()
+  expect(screen.queryByRole('combobox', { name: /Đặt phòng/ })).not.toBeInTheDocument()
 })
 test('multiple bookings require explicit selection and reset dependent selectors on booking and mode changes', async () => {
   vi.mocked(api.get).mockResolvedValue({

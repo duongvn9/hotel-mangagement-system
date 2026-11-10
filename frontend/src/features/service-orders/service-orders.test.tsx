@@ -163,7 +163,7 @@ describe('Customer service-order access', () => {
 })
 describe('public rejection reasons', () => {
   it.each(
-    ['/customer/service-orders', '/customer/service-orders/order-1'].flatMap((path) =>
+    ['/customer/service-orders/history', '/customer/service-orders/order-1'].flatMap((path) =>
       [
         {
           reviewStatus: 'REJECTED',
@@ -196,7 +196,7 @@ describe('public rejection reasons', () => {
       }
       vi.mocked(api.get).mockResolvedValue({
         data:
-          path === '/customer/service-orders'
+          path === '/customer/service-orders/history'
             ? { items: [order], total: 1, page: 1, limit: 20 }
             : order,
       })
@@ -218,7 +218,7 @@ describe('public rejection reasons', () => {
 
 describe('customer service-order list workspace', () => {
   it('uses atomic filters and history panels while retaining detail and create navigation', async () => {
-    renderPage('/customer/service-orders')
+    renderPage('/customer/service-orders/history')
     const link = await screen.findByRole('link', { name: 'Giặt ủi' })
     expect(screen.getByRole('heading', { level: 1, name: 'Dịch vụ của tôi' })).toHaveClass(
       'text-2xl',
@@ -246,7 +246,7 @@ describe('customer service-order list workspace', () => {
         limit: 20,
       },
     }))
-    renderPage('/customer/service-orders')
+    renderPage('/customer/service-orders/history')
     await screen.findByRole('link', { name: 'Giặt ủi' })
     fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
     await screen.findByText('Trang 2 · 41 yêu cầu')
@@ -273,7 +273,7 @@ describe('customer service-order list workspace', () => {
   })
   it('keeps loading, recoverable errors and empty feedback', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('network'))
-    renderPage('/customer/service-orders')
+    renderPage('/customer/service-orders/history')
     expect(screen.getByRole('status')).toHaveTextContent('Đang tải yêu cầu dịch vụ…')
     await screen.findByRole('alert')
     vi.mocked(api.get).mockResolvedValue({ data: { items: [], total: 0, page: 1, limit: 20 } })
@@ -290,7 +290,7 @@ describe('customer service-order list workspace', () => {
         limit: 20,
       },
     })
-    renderPage('/customer/service-orders')
+    renderPage('/customer/service-orders/history')
     expect((await screen.findByRole('link', { name })).closest('li')).toHaveClass('break-words')
     expect(screen.getByText(/2 kg/)).toHaveTextContent('52.000')
     expect(screen.getByText(/Tạo lúc:/)).toBeInTheDocument()
@@ -326,7 +326,7 @@ describe('customer service-order detail workspace', () => {
     expect(screen.getByText(/chưa ghi thu phí/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
       'href',
-      '/customer/service-orders',
+      '/customer/service-orders/history',
     )
     expect(screen.getByRole('link', { name: 'Yêu cầu dịch vụ' })).toHaveAttribute(
       'href',
@@ -379,7 +379,7 @@ describe('service-order form', () => {
     expect(screen.getByRole('button', { name: 'Gửi yêu cầu' })).toHaveClass('rounded-full')
     expect(screen.getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
       'href',
-      '/customer/service-orders',
+      '/customer/service-orders/history',
     )
     expect(screen.queryByText('Lịch sử đặt dịch vụ')).not.toBeInTheDocument()
     expect(api.get).not.toHaveBeenCalledWith('/service-orders/me', expect.anything())
@@ -408,7 +408,7 @@ describe('service-order form', () => {
     expect(screen.getByRole('button', { name: 'Tạo yêu cầu mới' })).toBeEnabled()
     expect(screen.getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
       'href',
-      '/customer/service-orders',
+      '/customer/service-orders/history',
     )
   })
   it('loads only Customer choice endpoints, estimates locally, submits a whitelist, and shows server receipt', async () => {
@@ -533,7 +533,7 @@ describe('service-order form', () => {
 })
 describe('list and detail', () => {
   it('uses my list, literal keyword and exact enum filters', async () => {
-    renderPage('/customer/service-orders')
+    renderPage('/customer/service-orders/history')
     await screen.findByRole('link', { name: 'Giặt ủi' })
     fireEvent.change(screen.getByLabelText('Từ khóa'), { target: { value: '.*[abc]' } })
     fireEvent.change(screen.getByLabelText('Trạng thái duyệt'), {
@@ -559,7 +559,7 @@ describe('list and detail', () => {
   it.each(['ACCEPTED', 'REJECTED'] as const)(
     'filters customer reviews by %s',
     async (reviewStatus) => {
-      renderPage('/customer/service-orders')
+      renderPage('/customer/service-orders/history')
       await screen.findByRole('link', { name: 'Giặt ủi' })
       fireEvent.change(screen.getByLabelText('Trạng thái duyệt'), {
         target: { value: reviewStatus },
@@ -588,13 +588,13 @@ describe('list and detail', () => {
           limit: 20,
         },
       })
-      renderPage('/customer/service-orders')
+      renderPage('/customer/service-orders/history')
       expect(await screen.findByText(`Trạng thái yêu cầu: ${label}`)).toBeInTheDocument()
     },
   )
   it('renders empty list', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { items: [], total: 0, page: 1, limit: 20 } })
-    renderPage('/customer/service-orders')
+    renderPage('/customer/service-orders/history')
     expect(await screen.findByText('Không có yêu cầu dịch vụ phù hợp.')).toBeInTheDocument()
   })
   it('renders loading and then the owned detail without staff actions', async () => {

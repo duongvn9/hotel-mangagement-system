@@ -157,6 +157,19 @@ checked with the existing tests.
 Evidence, approved differences, and limitations are recorded in
 [`validation/ui/WDP301-193.md`](validation/ui/WDP301-193.md).
 
+### 2.10 WDP301-194 verification
+
+The user approved retaining real report data, filters, warnings, the existing
+chart, detailed tables, and the distinction between period and snapshot data.
+Prototype metrics and charts unsupported by the API are excluded.
+
+- [x] Header, Panels, tokens, typography, and spacing compared with the prototype, subject to the approved differences.
+- [x] Widths 1440, 768, and 375 and long, loading, empty, missing-source, and error states checked.
+- [x] The table's scroll region accepts keyboard focus; browser requests were read-only.
+
+Evidence and limitations are recorded in
+[`validation/ui/WDP301-194.md`](validation/ui/WDP301-194.md).
+
 ## 3. Prototype to app map
 
 Fill the "Jira task" column when you pick up a task. App paths come from `frontend/src/features/*/routes.tsx` and `frontend/src/pages/`.
@@ -184,7 +197,7 @@ Fill the "Jira task" column when you pick up a task. App paths come from `fronte
 | `app.reception.tsx` | `/reception/dashboard` | `features/dashboard/pages/ReceptionDashboardPage.tsx` | |
 | `app.dashboard.tsx` | `/manager/dashboard` | `features/dashboard/pages/ManagerDashboardPage.tsx` | WDP301-185 |
 | `app.revenue.tsx` | `/manager/reports/revenue` | `features/reports/pages/RevenueReportPage.tsx` | WDP301-193 |
-| `app.operations-report.tsx` | `/manager/reports/operational` | `features/reports/pages/OperationalReportPage.tsx` | |
+| `app.operations-report.tsx` | `/manager/reports/operational` | `features/reports/pages/OperationalReportPage.tsx` | WDP301-194 |
 | `app.accounts.tsx` | `/manager/accounts` | `features/accounts/pages/AccountsPage.tsx` | WDP301-154 |
 | `app.roles.tsx` | `/manager/roles` | `features/roles/pages/RolesPage.tsx` | WDP301-155 |
 | `app.rooms.tsx` | `/manager/rooms` | `features/rooms/pages/RoomsPage.tsx` | WDP301-187 |

@@ -26,6 +26,13 @@ type Intent = {
   uncertain: boolean
 }
 
+/** Đơn hết hạn lưu trú (đã qua ngày trả phòng) không còn báo sự cố được. */
+function checkoutPassed(checkOut: string) {
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  return new Date(checkOut) < startOfToday
+}
+
 function bookingLabel(booking: IssueReportBooking) {
   return `${booking.code} · ${new Date(booking.checkIn).toLocaleDateString('vi-VN')} – ${new Date(booking.checkOut).toLocaleDateString('vi-VN')} · ${booking.status === 'CHECKED_IN' ? 'Đang lưu trú' : booking.status} · ${booking.rooms.map((room) => room.roomNumber).join(', ')}`
 }
@@ -70,7 +77,9 @@ function CustomerIssueForm() {
   const [intent, setIntent] = useState<Intent>()
   const [intents, setIntents] = useState(() => new Map<string, Intent>())
   const submitting = useRef(false)
-  const bookings = (context.data?.items ?? []).filter((item) => item.status === 'CHECKED_IN')
+  const bookings = (context.data?.items ?? []).filter(
+    (item) => item.status === 'CHECKED_IN' && !checkoutPassed(item.checkOut),
+  )
   const bookingId = chosen ? input.bookingId : bookings.length === 1 ? bookings[0].id : ''
   const booking = bookings.find((item) => item.id === bookingId && item.status === 'CHECKED_IN')
   const payload = normalizeIssueInput({

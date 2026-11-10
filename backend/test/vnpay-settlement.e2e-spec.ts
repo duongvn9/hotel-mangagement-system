@@ -332,4 +332,75 @@ describe('VNPay settlement persistence (e2e)', () => {
     );
     expect(await settlement.commitAtomically(snapshot, plan)).toBe('conflict');
   });
+  describe('retrying a deposit while a VNPay link is pending', () => {
+    const retry = (txnRef: string) =>
+      app
+        .get(PaymentsService)
+        .initiateDeposit(
+          String(bookingId),
+          { code: `VNP-${txnRef}` },
+          { ipAddress: '127.0.0.1' },
+        );
+
+    it('supersedes the pending payment and issues a new link', async () => {
+      const txnRef = `RETRY${Date.now()}`;
+      await seed(txnRef);
+
+      const next = await retry(txnRef);
+
+      expect(next.transactionRef).not.toBe(txnRef);
+      expect(next.paymentUrl).toContain(`vnp_TxnRef=${next.transactionRef}`);
+      const old = await payments.findOne({ transactionRef: txnRef });
+      expect(old?.status).toBe(PaymentStatus.Cancelled);
+      expect(old?.supersededAt).toBeInstanceOf(Date);
+      expect(
+        (await payments.findOne({ transactionRef: next.transactionRef }))
+          ?.status,
+      ).toBe(PaymentStatus.Pending);
+    });
+
+    it('acknowledges a late success on the old link and queues it for reconciliation', async () => {
+      const txnRef = `LATE${Date.now()}`;
+      await seed(txnRef);
+      await retry(txnRef);
+      const paymentService = app.get(PaymentsService);
+      const raw = callback(txnRef, 300000);
+
+      expect((await paymentService.processIpn(raw)).RspCode).toBe('00');
+      expect((await paymentService.processIpn(raw)).RspCode).toBe('02');
+
+      const old = await payments.findOne({ transactionRef: txnRef });
+      expect(old).toMatchObject({
+        status: PaymentStatus.Cancelled,
+        providerTransactionRef: '990001',
+        needsReconciliation: true,
+      });
+      expect(old?.paidAt).toBeInstanceOf(Date);
+      // Không cộng vào hoá đơn, không xác nhận booking: link mới mới là khoản cọc hợp lệ.
+      expect((await bookings.findById(bookingId))?.status).toBe(
+        'PENDING_DEPOSIT',
+      );
+      expect((await invoices.findById(invoiceId))?.balanceDue).toBe(1000000);
+      const queue = await paymentService.listReconciliation();
+      expect(queue.items.map((item) => item.transactionRef)).toContain(txnRef);
+    });
+
+    it('acknowledges a cancelled or failed callback on the old link without changes', async () => {
+      const txnRef = `ABANDON${Date.now()}`;
+      await seed(txnRef);
+      await retry(txnRef);
+      const raw = callback(txnRef, 300000, {
+        vnp_ResponseCode: '24',
+        vnp_TransactionStatus: '02',
+        vnp_TransactionNo: '990003',
+      });
+
+      expect((await app.get(PaymentsService).processIpn(raw)).RspCode).toBe(
+        '02',
+      );
+      const old = await payments.findOne({ transactionRef: txnRef });
+      expect(old?.providerTransactionRef).toBeUndefined();
+      expect(old?.needsReconciliation).toBe(false);
+    });
+  });
 });

@@ -44,7 +44,7 @@ describe('UC56 revenue reporting core', () => {
   );
   it.each([
     { from: '2026-10-01' },
-    { from: '2026-10-01', to: '2026-10-03', method: 'CARD' },
+    { from: '2026-10-01', to: '2026-10-03', method: 'CHEQUE' },
     { from: '2026-10-01', to: '2026-10-03', purpose: 'REFUND' },
     { from: '2026-10-01', to: '2026-10-03', granularity: 'year' },
     { from: '2026-10-01', to: '2026-10-03', other: 'x' },
@@ -93,8 +93,9 @@ describe('UC56 revenue reporting core', () => {
     expect(first.series.map((row) => row.successAmount)).toEqual([
       0, 1234567890123, 0,
     ]);
+    // VNPAY, CASH, CARD: the report lists every payment method, including desk card payments.
     expect(first.byMethod.map((row) => row.successAmount)).toEqual([
-      0, 1234567890123,
+      0, 1234567890123, 0,
     ]);
     expect(first.byPurpose.map((row) => row.successAmount)).toEqual([
       0, 1234567890123,

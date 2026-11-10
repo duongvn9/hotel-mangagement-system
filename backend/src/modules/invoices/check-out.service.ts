@@ -9,11 +9,13 @@ import { Model, Types } from 'mongoose';
 import type { InvoiceDocument } from './schemas/invoice.schema.js';
 import { withBookingFinancialOperation } from '../bookings/booking-financial-operation.js';
 import { RoomStatus } from '../../common/constants/room-status.enum.js';
+import { checkOutReceiptEmail } from '../bookings/booking-email.js';
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema.js';
 import {
   PaymentStatus,
   PaymentTransaction,
 } from '../payments/schemas/payment-transaction.schema.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { Room } from '../rooms/schemas/room.schema.js';
 import { checkOutStatusError, unpaidBalanceMessage } from './check-out.core.js';
 import type { CheckOutResult } from './dto/check-out.dto.js';
@@ -28,6 +30,7 @@ export class CheckOutService {
     @InjectModel(PaymentTransaction.name)
     private readonly payments: Model<PaymentTransaction>,
     private readonly invoices: InvoicesService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -106,7 +109,11 @@ export class CheckOutService {
       );
     }
 
-    return this.finishCheckOut(booking, now, before, true);
+    const result = await this.finishCheckOut(booking, now, before, true);
+    // Email hóa đơn là best-effort: gửi lỗi không làm hỏng việc trả phòng.
+    const email = checkOutReceiptEmail(booking, before, now);
+    if (email) void this.notifications.send(email).catch(() => undefined);
+    return result;
   }
 
   private async finishCheckOut(

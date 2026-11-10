@@ -78,6 +78,13 @@ function mockGet(checkInOptions?: CheckInOptions) {
 
 const arrival = () => within(screen.getByRole('listitem', { name: 'ARC' }))
 
+/** Bấm "Xác nhận nhận phòng" trong hộp thoại kiểm tra thông tin khách. */
+async function confirmCheckIn() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận nhận phòng' }))
+  // Hộp thoại ẩn phần còn lại của trang cho tới khi đóng.
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+}
+
 describe('Check In from the same-day list', () => {
   it('shows the Check In button only for confirmed arrivals', async () => {
     mockGet()
@@ -92,6 +99,61 @@ describe('Check In from the same-day list', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('asks the receptionist to confirm the guest details before checking in', async () => {
+    mockGet()
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { id: 'a2' } })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Khách đến (3)' })
+
+    fireEvent.click(arrival().getByRole('button', { name: 'Check In' }))
+
+    const dialog = within(await screen.findByRole('dialog', { name: /Xác nhận nhận phòng/ }))
+    expect(dialog.getByText('Khách ARC')).toBeInTheDocument()
+    expect(dialog.getByText('0900000001')).toBeInTheDocument()
+    expect(dialog.getByText('arc@example.test')).toBeInTheDocument()
+    expect(dialog.getByText('102 · Deluxe')).toBeInTheDocument()
+    expect(dialog.getByText('2 người lớn · 1 trẻ em')).toBeInTheDocument()
+    expect(dialog.getByText('Nhận phòng')).toBeInTheDocument()
+    expect(dialog.getByText('Trả phòng')).toBeInTheDocument()
+    // Chưa nhận phòng cho tới khi lễ tân xác nhận.
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('does not check in when the receptionist cancels the confirmation', async () => {
+    mockGet()
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { id: 'a2' } })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Khách đến (3)' })
+
+    fireEvent.click(arrival().getByRole('button', { name: 'Check In' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Hủy' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('shows a missing phone or e-mail as a dash so the desk can ask for it', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/front-desk/same-day') {
+        const data = list()
+        data.arrivals[1] = {
+          ...data.arrivals[1],
+          guestPhone: '',
+          guestEmail: '',
+        } as BookingListItem
+        return { data }
+      }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Khách đến (3)' })
+
+    fireEvent.click(arrival().getByRole('button', { name: 'Check In' }))
+
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getAllByText('—')).toHaveLength(2)
+  })
+
   it('checks the guest in and reloads the list', async () => {
     const get = mockGet()
     const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { id: 'a2' } })
@@ -100,6 +162,7 @@ describe('Check In from the same-day list', () => {
     const before = get.mock.calls.length
 
     fireEvent.click(arrival().getByRole('button', { name: 'Check In' }))
+    await confirmCheckIn()
     await waitFor(() => expect(post).toHaveBeenCalledWith('/bookings/a2/check-in', {}))
     await waitFor(() => expect(get.mock.calls.length).toBeGreaterThan(before))
   })
@@ -119,6 +182,7 @@ describe('Check In from the same-day list', () => {
     await screen.findByRole('heading', { name: 'Khách đến (3)' })
 
     fireEvent.click(arrival().getByRole('button', { name: 'Check In' }))
+    await confirmCheckIn()
     expect(await arrival().findByText(/Phòng 102 đang dọn/)).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('Rooms not ready: 102 (CLEANING)')
 
@@ -144,6 +208,7 @@ describe('Check In from the same-day list', () => {
     await screen.findByRole('heading', { name: 'Khách đến (3)' })
 
     fireEvent.click(arrival().getByRole('button', { name: 'Check In' }))
+    await confirmCheckIn()
     expect(await arrival().findByText(/Không có phòng thay thế phù hợp/)).toBeInTheDocument()
     expect(arrival().getByRole('button', { name: 'Đổi phòng và Check In' })).toBeDisabled()
   })
@@ -170,6 +235,7 @@ describe('Check In from the same-day list', () => {
     await screen.findByRole('heading', { name: 'Khách đến (3)' })
 
     fireEvent.click(arrival().getByRole('button', { name: 'Check In' }))
+    await confirmCheckIn()
     expect(await screen.findByRole('alert')).toHaveTextContent('Too early to check in')
     expect(
       arrival().queryByRole('button', { name: 'Đổi phòng và Check In' }),

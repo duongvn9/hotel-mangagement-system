@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router'
-import { roleHome } from '@/app/navigation'
+import { postLoginPath } from '@/app/navigation'
 import { AssetImage } from '@/components/AssetImage'
 import { Button, Input } from '@/components/atoms'
 import { FormField } from '@/components/molecules'
@@ -10,10 +10,11 @@ import { getErrorMessage } from '@/lib/api-client'
 import { env } from '@/lib/env'
 import { getDevAccounts, type DevAccount } from '../api'
 import { useAuth } from '../auth-context'
+import { GoogleSignInButton } from '../components/GoogleSignInButton'
 
 /** UC02 Login. */
 export function LoginPage() {
-  const { me, isDevMode, login, loginAsDev } = useAuth()
+  const { me, isDevMode, login, loginAsDev, loginWithGoogle } = useAuth()
   const from = (useLocation().state as { from?: string } | null)?.from
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -22,7 +23,7 @@ export function LoginPage() {
   const [signedIn, setSignedIn] = useState(false)
 
   // Về trang đang xem dở; nếu không có thì nhân viên vào trang làm việc của vai trò, khách về trang chủ.
-  const destination = from && from !== '/' ? from : me ? roleHome(me.role) : '/'
+  const destination = me ? postLoginPath(me, from) : from && from !== '/' ? from : '/'
 
   if (me || signedIn) return <Navigate to={destination} replace />
 
@@ -97,6 +98,12 @@ export function LoginPage() {
             </Button>
           </div>
         </form>
+      )}
+
+      {!isDevMode && (
+        <div className="mt-4">
+          <GoogleSignInButton pending={pending} onClick={() => void run(loginWithGoogle)} />
+        </div>
       )}
 
       <div className="mt-6 space-y-2 text-sm text-muted-foreground">

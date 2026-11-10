@@ -35,6 +35,7 @@ export const TASK_SOURCE_COLLECTIONS: Readonly<Record<TaskSourceType, string>> =
     [TaskSourceType.ServiceOrder]: 'serviceorders',
     [TaskSourceType.Issue]: 'issues',
     [TaskSourceType.Maintenance]: 'maintenances',
+    [TaskSourceType.CheckoutInspection]: 'bookings',
   });
 
 @Injectable()
@@ -672,6 +673,14 @@ export class TasksService {
     }
   }
 
+  /** Task mới nhất của một nguồn việc (ví dụ lần kiểm tra phòng của một booking). */
+  async latestForSource(sourceType: TaskSourceType, sourceId: string) {
+    return this.tasks
+      .findOne({ sourceType, sourceId: new Types.ObjectId(sourceId) })
+      .sort({ assignedAt: -1, _id: -1 })
+      .lean();
+  }
+
   private workIndex?: Promise<unknown>;
 
   private ensureWorkIndex() {
@@ -715,7 +724,9 @@ export class TasksService {
           ? [StaffRole.OperationsStaff]
           : source === TaskSourceType.Issue
             ? [StaffRole.ServiceStaff, StaffRole.OperationsStaff]
-            : [];
+            : source === TaskSourceType.CheckoutInspection
+              ? [StaffRole.ServiceStaff]
+              : [];
     if (
       assignee.isActive !== true ||
       !allowed.some((role) => role === assignee.role)

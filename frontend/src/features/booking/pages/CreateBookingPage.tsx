@@ -328,7 +328,7 @@ export function CreateBookingPage() {
               )}
               <div className="flex items-center justify-between gap-4 pt-3">
                 <span className="font-semibold text-foreground">Cọc cần trả</span>
-                <span className="font-display text-xl font-bold text-primary tabular-nums">
+                <span className="text-xl font-bold text-primary tabular-nums">
                   {vnd(held.depositAmount)}
                 </span>
               </div>
