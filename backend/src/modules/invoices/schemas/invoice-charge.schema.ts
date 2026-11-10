@@ -8,6 +8,13 @@ export enum InvoiceChargeType {
   Tax = 'TAX',
 }
 
+/** Phân loại phụ phí do lễ tân ghi lúc trả phòng (không bắt buộc). */
+export enum ChargeCategory {
+  Damage = 'DAMAGE',
+  LateCheckout = 'LATE_CHECKOUT',
+  Other = 'OTHER',
+}
+
 @Schema({ _id: false })
 export class InvoiceCharge {
   @Prop({ type: String, required: true, enum: InvoiceChargeType })
@@ -18,6 +25,9 @@ export class InvoiceCharge {
 
   @Prop({ required: true, trim: true })
   reason: string;
+
+  @Prop({ type: String, enum: ChargeCategory })
+  category?: ChargeCategory;
 
   @Prop({ trim: true, minlength: 1 })
   sourceId?: string;

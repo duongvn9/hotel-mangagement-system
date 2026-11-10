@@ -8,8 +8,14 @@ import { validate } from 'class-validator';
 import { Types } from 'mongoose';
 import { BookingStatus } from '../bookings/schemas/booking.schema.js';
 import { CheckoutChargesService } from './checkout-charges.service.js';
-import { AddCheckoutServiceDto } from './dto/checkout-charge.dto.js';
-import { InvoiceChargeType } from './schemas/invoice-charge.schema.js';
+import {
+  AddCheckoutChargeDto,
+  AddCheckoutServiceDto,
+} from './dto/checkout-charge.dto.js';
+import {
+  ChargeCategory,
+  InvoiceChargeType,
+} from './schemas/invoice-charge.schema.js';
 
 const bookingId = new Types.ObjectId().toHexString();
 const serviceId = new Types.ObjectId().toHexString();
@@ -18,6 +24,7 @@ function setup(
   options: {
     status?: BookingStatus;
     service?: Record<string, unknown> | null;
+    charges?: unknown[];
   } = {},
 ) {
   const booking = {
@@ -54,7 +61,7 @@ function setup(
     depositPaid: 0,
     finalPaid: 0,
     balanceDue: 150_000,
-    charges: [],
+    charges: options.charges ?? [],
   };
   const invoices = { addCharge: vi.fn(async () => invoice) };
   const sut = new CheckoutChargesService(
@@ -161,5 +168,72 @@ describe('AddCheckoutServiceDto', () => {
       ...override,
     });
     expect(errors.length).toBeGreaterThan(0);
+  });
+});
+
+describe('CheckoutChargesService.add with a category', () => {
+  const body = {
+    amount: 30_000,
+    reason: 'Vỡ ly',
+    requestId: 'req-12345678',
+  };
+
+  it('passes the category through to the invoice and returns it', async () => {
+    const { sut, invoices } = setup({
+      charges: [
+        {
+          type: InvoiceChargeType.Additional,
+          amount: 30_000,
+          reason: 'Vỡ ly',
+          category: ChargeCategory.Damage,
+          sourceId: 'checkout:req-12345678',
+        },
+      ],
+    });
+
+    const result = await sut.add(bookingId, {
+      ...body,
+      category: ChargeCategory.Damage,
+    });
+
+    expect(invoices.addCharge).toHaveBeenCalledWith({
+      bookingId,
+      type: InvoiceChargeType.Additional,
+      amount: 30_000,
+      reason: 'Vỡ ly',
+      category: ChargeCategory.Damage,
+      sourceId: 'checkout:req-12345678',
+    });
+    expect(result.charges[0].category).toBe(ChargeCategory.Damage);
+  });
+
+  it('still works without a category', async () => {
+    const { sut, invoices } = setup();
+
+    await sut.add(bookingId, body);
+
+    expect(invoices.addCharge).toHaveBeenCalledWith(
+      expect.not.objectContaining({ category: expect.anything() }),
+    );
+  });
+});
+
+describe('AddCheckoutChargeDto category', () => {
+  const check = (input: object) =>
+    validate(plainToInstance(AddCheckoutChargeDto, input));
+  const base = { amount: 1000, reason: 'x', requestId: 'req-12345678' };
+
+  it.each(['DAMAGE', 'LATE_CHECKOUT', 'OTHER'])(
+    'accepts %s',
+    async (category) => {
+      expect(await check({ ...base, category })).toHaveLength(0);
+    },
+  );
+
+  it('accepts a missing category and rejects an unknown one', async () => {
+    expect(await check(base)).toHaveLength(0);
+    expect(
+      (await check({ ...base, category: 'MINIBAR' })).length,
+    ).toBeGreaterThan(0);
   });
 });

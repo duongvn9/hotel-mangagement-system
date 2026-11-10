@@ -25,6 +25,7 @@ import {
   type InvoiceDocument,
 } from './schemas/invoice.schema.js';
 import {
+  ChargeCategory,
   InvoiceChargeType,
   type InvoiceCharge,
 } from './schemas/invoice-charge.schema.js';
@@ -39,6 +40,7 @@ export interface AddInvoiceCharge {
   type: InvoiceChargeType;
   amount: number;
   reason: string;
+  category?: ChargeCategory;
   sourceId?: string;
 }
 
@@ -93,6 +95,7 @@ export class InvoicesService {
       type: input.type,
       amount: input.amount,
       reason: input.reason?.trim(),
+      ...(input.category === undefined ? {} : { category: input.category }),
       approved: true,
       ...(input.sourceId === undefined
         ? {}
@@ -133,7 +136,8 @@ export class InvoicesService {
           if (
             previous.type !== charge.type ||
             previous.amount !== charge.amount ||
-            previous.reason !== charge.reason
+            previous.reason !== charge.reason ||
+            previous.category !== charge.category
           ) {
             throw new ConflictException(
               'Charge source already has different content',

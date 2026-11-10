@@ -1,7 +1,10 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
+import { ChargeCategory } from '../schemas/invoice-charge.schema.js';
 import {
+  IsEnum,
   IsInt,
+  IsOptional,
   IsMongoId,
   IsString,
   Length,
@@ -32,6 +35,14 @@ export class AddCheckoutChargeDto {
   @IsString()
   @Length(1, 200)
   reason: string;
+
+  @ApiPropertyOptional({
+    enum: ChargeCategory,
+    description: 'Phân loại phụ phí: hư hỏng, trả phòng muộn hoặc khác',
+  })
+  @IsOptional()
+  @IsEnum(ChargeCategory)
+  category?: ChargeCategory;
 
   @ApiProperty({
     description:
@@ -73,6 +84,7 @@ export class AddCheckoutServiceDto {
 
 export class ChargeLine {
   type: string;
+  category?: string;
   amount: number;
   reason: string;
   sourceId?: string;

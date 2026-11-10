@@ -24,6 +24,7 @@ export function toBookingChargesResponse(
     },
     charges: invoice.charges.map((charge) => ({
       type: charge.type,
+      ...(charge.category ? { category: charge.category } : {}),
       amount: charge.amount,
       reason: charge.reason,
       ...(charge.sourceId ? { sourceId: charge.sourceId } : {}),

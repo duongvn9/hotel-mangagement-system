@@ -54,6 +54,7 @@ export class CheckoutChargesService {
       type: InvoiceChargeType.Additional,
       amount: dto.amount,
       reason: dto.reason,
+      ...(dto.category ? { category: dto.category } : {}),
       sourceId: `checkout:${dto.requestId}`,
     });
     return toBookingChargesResponse(booking, invoice);

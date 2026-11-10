@@ -14,7 +14,10 @@ import {
   PersistedInvoiceChargesAdapter,
   UnavailableInvoicePricingAdapter,
 } from './invoice-adapters.js';
-import { InvoiceChargeType } from './schemas/invoice-charge.schema.js';
+import {
+  ChargeCategory,
+  InvoiceChargeType,
+} from './schemas/invoice-charge.schema.js';
 
 const InvoiceModel = model('H7UnitInvoice', InvoiceSchema);
 const BookingModel = model('H7UnitBooking', BookingSchema);
@@ -182,6 +185,23 @@ describe('InvoicesService', () => {
     expect(invoice.charges[0].approved).toBe(true);
     await expect(
       s.service.addCharge({ ...charge, amount: 20000 }),
+    ).rejects.toThrow('different content');
+  });
+  it('keeps the charge category and treats another category as different content', async () => {
+    const s = setup();
+    const charge = {
+      bookingId: s.id,
+      type: InvoiceChargeType.Additional,
+      amount: 30000,
+      reason: 'Vỡ ly',
+      category: ChargeCategory.Damage,
+      sourceId: 'checkout:req-12345678',
+    };
+    await s.service.addCharge(charge);
+    const invoice = await s.service.recalculate(s.id);
+    expect(invoice.charges[0].category).toBe(ChargeCategory.Damage);
+    await expect(
+      s.service.addCharge({ ...charge, category: ChargeCategory.Other }),
     ).rejects.toThrow('different content');
   });
   it('includes additional charges discounts and taxes without invented percentages', async () => {
