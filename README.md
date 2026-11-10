@@ -242,6 +242,10 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and on pu
 
 ## 7. Production deployment
 
+Two supported setups: everything on one server with Docker Compose (7.1), or the frontend on Vercel and the backend on Render (7.2).
+
+### 7.1 Docker Compose on one server
+
 ```bash
 cp .env.example .env          # set MONGO_ROOT_PASSWORD, CORS_ORIGINS and the Firebase / VNPay / Gmail secrets
 docker compose -f docker-compose.prod.yml up -d --build    # or: make prod
@@ -252,6 +256,30 @@ docker compose -f docker-compose.prod.yml up -d --build    # or: make prod
 - Images run as a non-root user, have health checks, and cap logs at 10 MB × 3 files.
 - Swagger is off in production by default (`SWAGGER_ENABLED=false`).
 - For HTTPS, put a TLS-terminating reverse proxy (Caddy, Traefik, Nginx Proxy Manager, Cloudflare Tunnel, …) in front of `WEB_PORT`.
+
+### 7.2 Vercel (frontend) + Render (backend) + MongoDB Atlas
+
+The backend needs a long-running process: it sweeps expired booking holds every minute, keeps an in-memory email queue, and writes uploaded images to disk before S3. Do not deploy it as Vercel serverless functions.
+
+Vercel proxies `/api/*` to Render (`frontend/vercel.json`), so the browser sees one origin and `VITE_API_BASE_URL` stays `/api/v1`.
+
+1. **MongoDB Atlas.** Create a cluster and a database user. Under Network Access allow `0.0.0.0/0` (Render has no fixed outbound IP on the free and starter plans). Copy the `mongodb+srv://…` connection string.
+2. **Render.** Dashboard > New > Blueprint > this repository. `render.yaml` creates the `hms-backend` web service from `backend/Dockerfile`. Fill in the variables it asks for:
+   - `MONGODB_URI`: the Atlas connection string.
+   - `CORS_ORIGINS`: the Vercel URL, for example `https://hms.vercel.app` (comma-separate several).
+   - `FIREBASE_*`, `S3_*`, `MAIL_*`: same values as in `backend/.env.example`.
+   - `VNPAY_RETURN_URL`: `https://<vercel-domain>/payment/vnpay-return`.
+   - `VNPAY_IPN_URL`: `https://<render-domain>/api/v1/payments/vnpay/ipn`.
+   - Check that `https://<render-domain>/api/v1/health/ready` reports MongoDB as up.
+3. **Vercel.** Import the repository and set **Root Directory** to `frontend` (keep "Include files outside the root directory" on; the build imports `design-system/`). Add the `VITE_APP_NAME`, `VITE_FIREBASE_*` and `VITE_ASSET_BASE_URL` environment variables, then deploy.
+4. **Backend URL.** If Render gave the service a different URL than `https://hms-backend.onrender.com`, update the `/api/:path*` rewrite in `frontend/vercel.json` and redeploy (Vercel rewrites cannot read environment variables).
+5. **Firebase.** Firebase Console > Authentication > Settings > Authorized domains: add the Vercel domain.
+6. **Seed data (optional).** Run `npm run seed` locally in `backend/` with `MONGODB_URI` pointing at Atlas.
+
+Notes:
+
+- The Render free plan sleeps after 15 minutes without traffic. The first request then takes about a minute, and the hold sweep does not run while the service sleeps. Use a paid instance for demos and grading.
+- Leaving `VITE_FIREBASE_*` empty switches the login screen to the dev account picker. The backend ignores the dev headers in production, so sign-in simply fails; always set them on Vercel.
 
 ---
 

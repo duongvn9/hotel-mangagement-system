@@ -82,7 +82,14 @@ describe('Report issue HTTP', () => {
           useValue: { issueTaskHistory: async () => [] },
         },
         { provide: getModelToken(Role.name), useValue: {} },
-        { provide: IssueContextAdapter, useValue: { resolve, reportContext } },
+        {
+          provide: IssueContextAdapter,
+          useValue: {
+            resolve,
+            reportContext,
+            roomNumbers: vi.fn(async () => new Map([[String(room), '101']])),
+          },
+        },
         {
           provide: getModelToken(Issue.name),
           useValue: { create, find, findOne, countDocuments },
@@ -172,6 +179,7 @@ describe('Report issue HTTP', () => {
           reportedAt: '2026-10-01T00:00:00.000Z',
           bookingId: String(booking),
           roomId: String(room),
+          roomNumber: '101',
         },
       ],
       total: 1,

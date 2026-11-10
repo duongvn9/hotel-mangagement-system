@@ -70,7 +70,65 @@ function mode(value: string) {
 }
 beforeEach(() => {
   vi.restoreAllMocks()
+  vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-10T00:00:00Z') })
   vi.spyOn(api, 'get').mockResolvedValue({ data: { items: [booking] } })
+})
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+test.each([
+  '0123456789abcdef01234567',
+  'ABCDEF0123456789ABCDEF01',
+  undefined,
+  null,
+  '',
+  'issue1',
+  '../report',
+  'a'.repeat(25),
+  123,
+])('receipt safely links the actual returned ID %s without resubmitting', async (id) => {
+  const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { ...receipt, id } })
+  const result = renderPage()
+  await ready()
+  fill()
+  send()
+  await screen.findByText('Đã tiếp nhận báo cáo')
+  const valid = typeof id === 'string' && /^[a-f\d]{24}$/i.test(id)
+  const link = screen.queryByRole('link', { name: 'Xem báo cáo của tôi' })
+  if (valid) expect(link).toHaveAttribute('href', `/customer/issues/${id}`)
+  else expect(link).not.toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Danh sách sự cố' })).toHaveAttribute(
+    'href',
+    '/customer/issues',
+  )
+  expect(post).toHaveBeenCalledTimes(1)
+  expect(result.router.state.location.pathname).toBe('/customer/issues/report')
+  fireEvent.click(screen.getByRole('button', { name: 'Báo sự cố khác' }))
+  expect(await screen.findByLabelText(/Tiêu đề/)).toHaveValue('')
+  expect(screen.queryByRole('link', { name: 'Xem báo cáo của tôi' })).not.toBeInTheDocument()
+  expect(post).toHaveBeenCalledTimes(1)
+})
+
+test.each([
+  ['Xem báo cáo của tôi', `/customer/issues/${receipt.id}`],
+  ['Danh sách sự cố', '/customer/issues'],
+])('receipt navigation %s follows a read link without another submission', async (label, path) => {
+  const post = vi.spyOn(api, 'post').mockResolvedValue({ data: receipt })
+  const result = renderPage()
+  await ready()
+  fill()
+  send()
+  await screen.findByText('Đã tiếp nhận báo cáo')
+  vi.mocked(api.get).mockImplementation(async (url) => ({
+    data:
+      url === '/issues'
+        ? { items: [], total: 0, page: 1, limit: 20 }
+        : { ...receipt, linkedTasks: [], linkedTasksAvailable: false },
+  }))
+  fireEvent.click(screen.getByRole('link', { name: label }))
+  await waitFor(() => expect(result.router.state.location.pathname).toBe(path))
+  expect(post).toHaveBeenCalledTimes(1)
 })
 
 test('context query is identity scoped and disabled for non-customers', async () => {
@@ -82,6 +140,7 @@ test('context query is identity scoped and disabled for non-customers', async ()
     isDevMode: false,
     login: vi.fn(),
     loginAsDev: vi.fn(),
+    loginWithGoogle: vi.fn(),
     register: vi.fn(),
     logout: vi.fn(),
     refresh: vi.fn(),
@@ -140,6 +199,14 @@ test('eager context shows readable booking dates status and rooms, with no manua
   expect(form.closest('section')).toHaveClass('card-soft')
   expect(screen.getByLabelText(/Tiêu đề/)).toHaveAttribute('maxlength', '200')
   expect(screen.getByLabelText(/Mô tả/)).toHaveAttribute('maxlength', '5000')
+})
+test('excludes checked-in bookings whose checkout date has passed', async () => {
+  vi.mocked(api.get).mockResolvedValue({
+    data: { items: [{ ...booking, checkOut: '2026-11-05T00:00:00Z' }] },
+  })
+  renderPage()
+  expect(await screen.findByText('Chỉ dùng được khi đang lưu trú')).toBeInTheDocument()
+  expect(screen.queryByRole('combobox', { name: /Đặt phòng/ })).not.toBeInTheDocument()
 })
 test('multiple bookings require explicit selection and reset dependent selectors on booking and mode changes', async () => {
   vi.mocked(api.get).mockResolvedValue({

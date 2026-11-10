@@ -6,6 +6,11 @@ const MESSAGES: Record<string, string> = {
   'auth/network-request-failed': 'Không kết nối được máy chủ xác thực',
   'auth/email-already-in-use': 'Email đã được sử dụng',
   'auth/weak-password': 'Mật khẩu phải có ít nhất 6 ký tự',
+  'auth/popup-closed-by-user': 'Bạn đã đóng cửa sổ đăng nhập Google',
+  'auth/cancelled-popup-request': 'Bạn đã đóng cửa sổ đăng nhập Google',
+  'auth/popup-blocked':
+    'Trình duyệt đã chặn cửa sổ đăng nhập Google, hãy cho phép popup rồi thử lại',
+  'auth/unauthorized-domain': 'Tên miền này chưa được phép đăng nhập bằng Google',
 }
 
 /** Đổi lỗi Firebase Auth (có `code`) sang câu tiếng Việt. */

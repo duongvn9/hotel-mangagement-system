@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { Inbox } from 'lucide-react'
 import * as molecules from '.'
 import { normalizeRange } from './date-range'
+import { DateField } from './DateField'
 import { DateRangeField } from './DateRangeField'
 import { EmptyState } from './EmptyState'
 import { FormField } from './FormField'
@@ -92,6 +93,15 @@ describe('Stars', () => {
     expect(screen.getByRole('img', { name: '2 trên 5 sao' })).toBeInTheDocument()
     expect(screen.queryByRole('button')).toBeNull()
     expect(document.querySelectorAll('svg.fill-primary')).toHaveLength(2)
+  })
+})
+
+describe('DateField', () => {
+  it('shows the selected date and a placeholder when empty', () => {
+    const { rerender } = render(<DateField value="2026-11-10" onChange={() => {}} />)
+    expect(screen.getByRole('button')).toHaveTextContent('10/11/2026')
+    rerender(<DateField value="" onChange={() => {}} />)
+    expect(screen.getByRole('button')).toHaveTextContent('Chọn ngày')
   })
 })
 

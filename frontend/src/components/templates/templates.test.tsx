@@ -1,7 +1,67 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { BedDouble, LayoutDashboard } from 'lucide-react'
 import { Link, MemoryRouter } from 'react-router'
+import { shellGroupsFor } from '@/app/workspace-nav'
 import * as templates from '.'
+
+it.each([
+  ['/customer/issues/report', 'Báo sự cố'],
+  ['/customer/issues', 'Danh sách sự cố'],
+  ['/customer/issues/cccccccccccccccccccccccc', 'Danh sách sự cố'],
+])(
+  'customer sidebar and mobile drawer select only the correct issue entry at %s',
+  (path, label) => {
+    renderWorkspace(path, {
+      groups: shellGroupsFor({
+        id: 'customer',
+        role: 'CUSTOMER',
+        permissions: [],
+        email: 'customer@test.local',
+        fullName: 'Khách',
+      }),
+    })
+    for (const name of ['Báo sự cố', 'Danh sách sự cố']) {
+      const link = screen.getByRole('link', { name })
+      expect(link).toHaveAttribute(
+        'href',
+        name === 'Báo sự cố' ? '/customer/issues/report' : '/customer/issues',
+      )
+      if (name === label) expect(link).toHaveAttribute('aria-current', 'page')
+      else expect(link).not.toHaveAttribute('aria-current')
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Mở menu' }))
+    expect(screen.getAllByRole('link', { current: 'page' })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('link', { name: label }))
+    expect(screen.getByRole('button', { name: 'Mở menu' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+  },
+)
+
+it('prefers the most specific configured destination without matching look-alike paths', () => {
+  const paths = ['/staff/rooms', '/staff/rooms/new']
+  expect(isNavActive('/staff/rooms/new', '/staff/rooms', paths)).toBe(false)
+  expect(isNavActive('/staff/rooms/123', '/staff/rooms', paths)).toBe(true)
+  expect(isNavActive('/staff/rooms-extra', '/staff/rooms', paths)).toBe(false)
+})
+
+it.each(['RECEPTIONIST', 'MANAGER', 'SERVICE_STAFF', 'OPERATIONS_STAFF'])(
+  'does not add customer issue links for %s',
+  (role) => {
+    expect(
+      shellGroupsFor({
+        id: role,
+        role,
+        permissions: [],
+        email: 'staff@test.local',
+        fullName: 'Nhân viên',
+      })
+        .flatMap((group) => group.items)
+        .some((item) => item.to.startsWith('/customer/issues')),
+    ).toBe(false)
+  },
+)
 import { AuthLayout } from './AuthLayout'
 import { SiteLayout } from './SiteLayout'
 import { isNavActive } from './nav'

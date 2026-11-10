@@ -9,6 +9,7 @@ import { useIssues } from '../hooks'
 import { IssueBadges, IssueError } from '../IssuePresentation'
 import {
   issueDate,
+  issueRoomLabel,
   issueViews,
   statusLabels,
   priorityLabels,
@@ -131,6 +132,11 @@ export function IssueListPage({ role }: { role: IssueRole }) {
                     </Link>
                   </Button>
                   <IssueBadges issue={issue} />
+                  {role === 'CUSTOMER' && (
+                    <p className="break-words text-sm text-muted-foreground">
+                      {issueRoomLabel(issue)}
+                    </p>
+                  )}
                   <p className="break-words text-sm text-muted-foreground">
                     Nhóm sự cố: {issue.category}
                   </p>

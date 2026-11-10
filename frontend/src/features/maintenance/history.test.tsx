@@ -188,6 +188,26 @@ describe('UC36 maintenance history', () => {
     expect(screen.getByText('Đối tượng không còn tồn tại')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Công việc bảo trì' })).not.toBeInTheDocument()
   })
+  it('retains facility-only records without a task in the list and detail', async () => {
+    const facility: HistoryDetail = {
+      ...detail,
+      status: 'NO_ACTION',
+      requiresAction: false,
+      preventsSafeUse: false,
+      target: { room: null, equipment: null, facilityLocation: 'Sảnh tầng một' },
+      task: null,
+    }
+    vi.mocked(api.get).mockImplementation(async (url) =>
+      url === '/maintenance/history/record1' ? { data: facility } : page([facility]),
+    )
+    renderPage()
+    expect(await screen.findByText('Sảnh tầng một')).toBeInTheDocument()
+    expect(screen.getByText('Chỉ ghi nhận', { selector: 'span' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: /Xem bản ghi/ }))
+    expect(await screen.findByText('Sảnh tầng một')).toBeInTheDocument()
+    expect(screen.getAllByText('Không')).toHaveLength(2)
+    expect(screen.queryByRole('heading', { name: 'Công việc bảo trì' })).not.toBeInTheDocument()
+  })
   it('shows a scoped 404 with a list link', async () => {
     vi.mocked(api.get).mockRejectedValue(
       Object.assign(new Error('Missing history fixture'), {

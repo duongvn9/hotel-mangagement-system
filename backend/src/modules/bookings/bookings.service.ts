@@ -42,6 +42,10 @@ import {
   type StayInterval,
 } from './availability.core.js';
 import {
+  bookingAttentionQueries,
+  type BookingAttentionCounts,
+} from './booking-attention.core.js';
+import {
   HoldBookingDto,
   SubmitBookingDetailsDto,
 } from './dto/hold-booking.dto.js';
@@ -327,6 +331,19 @@ export class BookingsService {
       page: query.page,
       limit: query.limit,
     };
+  }
+
+  /** Số đơn lễ tân cần chú ý (quá hạn và sắp tới hạn) theo ngày làm việc hiện tại. */
+  async attention(): Promise<BookingAttentionCounts> {
+    const queries = bookingAttentionQueries(this.clock.now());
+    const [overdueCheckOut, overdueCheckIn, dueCheckOut, dueCheckIn] =
+      await Promise.all([
+        this.bookings.countDocuments(queries.overdueCheckOut),
+        this.bookings.countDocuments(queries.overdueCheckIn),
+        this.bookings.countDocuments(queries.dueCheckOut),
+        this.bookings.countDocuments(queries.dueCheckIn),
+      ]);
+    return { overdueCheckOut, overdueCheckIn, dueCheckOut, dueCheckIn };
   }
 
   /** Danh sách booking của chính Customer đang đăng nhập (mới nhất trước). */

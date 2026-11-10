@@ -28,6 +28,12 @@ export const issueViews = {
 
 export type IssueRole = keyof typeof issueViews
 
+export function issueRoomLabel(issue: { roomId?: string; roomNumber?: string | null }) {
+  if (!issue.roomId) return 'Không gắn với phòng'
+  const number = issue.roomNumber?.trim()
+  return number ? `Phòng ${number}` : 'Không có thông tin phòng'
+}
+
 export function issueDate(value: string) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? 'Không có thời gian hợp lệ' : date.toLocaleString('vi-VN')

@@ -8,6 +8,7 @@ import { useAuth } from '@/features/auth/auth-context'
 import type { BookingListItem } from '@/features/booking/api'
 import { useSameDayList } from '@/features/booking/hooks'
 import { todayISO } from '@/features/booking/utils'
+import { BookingAttentionAlert } from '@/features/booking/components/BookingAttentionAlert'
 import { useReceptionDashboard } from '../hooks'
 
 function getGreeting(fullName?: string) {
@@ -110,6 +111,8 @@ export function ReceptionDashboardPage() {
           </div>
         }
       />
+
+      <BookingAttentionAlert />
 
       {dashboard.isError && (
         <Alert tone="danger">

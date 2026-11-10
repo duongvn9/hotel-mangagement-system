@@ -54,6 +54,7 @@ export interface IssueReceipt extends IssueInput {
 }
 
 export interface IssueRead extends IssueReceipt {
+  roomNumber?: string | null
   handlingCategory?: HandlingCategory
   needsStaffAction?: boolean
   reviewedAt?: string

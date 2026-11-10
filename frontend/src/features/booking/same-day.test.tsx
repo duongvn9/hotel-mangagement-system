@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { bookingRoutes } from './routes'
@@ -87,6 +87,23 @@ describe('FrontDeskPage', () => {
 
     expect(screen.getByRole('listitem', { name: 'ARC' })).toBeInTheDocument()
     expect(screen.queryByRole('listitem', { name: 'ARP' })).not.toBeInTheDocument()
+  })
+
+  it('reloads for another day', async () => {
+    // Ô ngày là DateField (popover + lịch); pin đồng hồ để lịch mở đúng tháng.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-10T12:00:00Z') })
+    const get = vi.spyOn(api, 'get').mockResolvedValue({ data: list() })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Khách đến (3)' })
+
+    fireEvent.click(screen.getByLabelText(/^Ngày/))
+    fireEvent.click(screen.getByText('20'))
+    await waitFor(() =>
+      expect(get).toHaveBeenLastCalledWith('/front-desk/same-day', {
+        params: { date: '2026-11-20' },
+      }),
+    )
+    vi.useRealTimers()
   })
 
   it('shows empty lists and an error state', async () => {

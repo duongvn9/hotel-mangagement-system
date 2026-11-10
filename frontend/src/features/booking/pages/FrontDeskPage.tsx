@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { LogIn, Search } from 'lucide-react'
 import { Button, Input, NativeSelect, StatusBadge } from '@/components/atoms'
-import { Alert, EmptyState, FormField } from '@/components/molecules'
+import { Alert, DateField, EmptyState, FormField } from '@/components/molecules'
 import { PageContainer, PageHeader } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
@@ -23,7 +23,8 @@ function formatShortDate(iso: string): string {
 export function FrontDeskPage() {
   const [tab, setTab] = useState<'in' | 'out'>('in')
   const [q, setQ] = useState('')
-  const list = useSameDayList(todayISO())
+  const [date, setDate] = useState(todayISO())
+  const list = useSameDayList(date)
   const data = list.data
 
   const arrivals = data?.arrivals ?? []
@@ -77,14 +78,20 @@ export function FrontDeskPage() {
           </button>
         </div>
 
-        <div className="relative sm:ml-auto sm:w-80">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="rounded-full pl-9"
-            placeholder="Mã đặt phòng, tên khách hoặc số phòng"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
+        <div className="flex flex-col gap-3 sm:ml-auto sm:flex-row sm:items-center">
+          <label htmlFor="frontdesk-date" className="sr-only">
+            Ngày
+          </label>
+          <DateField id="frontdesk-date" value={date} onChange={setDate} />
+          <div className="relative sm:w-80">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="rounded-full pl-9"
+              placeholder="Mã đặt phòng, tên khách hoặc số phòng"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 

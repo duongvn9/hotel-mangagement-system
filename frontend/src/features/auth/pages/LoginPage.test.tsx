@@ -48,6 +48,31 @@ describe('LoginPage', () => {
     await waitFor(() => expect(loginAsDev).toHaveBeenCalledWith(account))
   })
 
+  it('đăng nhập bằng Google rồi vào trang của vai trò', async () => {
+    const loginWithGoogle = vi.fn().mockResolvedValue(undefined)
+    renderWithAuth(routes, { path: '/login', auth: { loginWithGoogle } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục với Google' }))
+
+    await screen.findByText('trang chủ')
+    expect(loginWithGoogle).toHaveBeenCalledOnce()
+  })
+
+  it('đăng nhập Google thất bại thì hiện lỗi', async () => {
+    const loginWithGoogle = vi.fn().mockRejectedValue(new Error('Tài khoản đã bị khoá'))
+    renderWithAuth(routes, { path: '/login', auth: { loginWithGoogle } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục với Google' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Tài khoản đã bị khoá')
+  })
+
+  it('chế độ dev không có nút Google', () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: [] })
+    renderWithAuth(routes, { path: '/login', auth: { isDevMode: true } })
+    expect(screen.queryByRole('button', { name: 'Tiếp tục với Google' })).not.toBeInTheDocument()
+  })
+
   describe('đã có phiên đăng nhập', () => {
     const signedIn = (role: string) =>
       renderWithAuth(routes, {

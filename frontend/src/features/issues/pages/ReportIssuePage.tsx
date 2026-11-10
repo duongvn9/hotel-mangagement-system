@@ -1,6 +1,6 @@
 import { isAxiosError } from 'axios'
 import { useRef, useState, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { CheckCircle2 } from 'lucide-react'
 import { Button, Input, NativeSelect, Skeleton, Textarea } from '@/components/atoms'
 import { Alert, EmptyState, FormField } from '@/components/molecules'
@@ -24,6 +24,13 @@ type Intent = {
   payload: ReportIssueInput
   booking: IssueReportBooking
   uncertain: boolean
+}
+
+/** Đơn hết hạn lưu trú (đã qua ngày trả phòng) không còn báo sự cố được. */
+function checkoutPassed(checkOut: string) {
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  return new Date(checkOut) < startOfToday
 }
 
 function bookingLabel(booking: IssueReportBooking) {
@@ -70,7 +77,9 @@ function CustomerIssueForm() {
   const [intent, setIntent] = useState<Intent>()
   const [intents, setIntents] = useState(() => new Map<string, Intent>())
   const submitting = useRef(false)
-  const bookings = (context.data?.items ?? []).filter((item) => item.status === 'CHECKED_IN')
+  const bookings = (context.data?.items ?? []).filter(
+    (item) => item.status === 'CHECKED_IN' && !checkoutPassed(item.checkOut),
+  )
   const bookingId = chosen ? input.bookingId : bookings.length === 1 ? bookings[0].id : ''
   const booking = bookings.find((item) => item.id === bookingId && item.status === 'CHECKED_IN')
   const payload = normalizeIssueInput({
@@ -171,22 +180,33 @@ function CustomerIssueForm() {
             title="Đã tiếp nhận báo cáo"
             body="Chờ xem xét. Khách sạn sẽ xem xét báo cáo trước khi giao xử lý."
             action={
-              <Button
-                className="rounded-full"
-                onClick={() => {
-                  mutation.reset()
-                  setIntent(undefined)
-                  setIntents(new Map())
-                  setInput({ title: '', category: '', description: '', bookingId: '' })
-                  setChosen(false)
-                  setMode('booking')
-                  setErrors({})
-                  setPrefillCleared(true)
-                  void context.refetch()
-                }}
-              >
-                Báo sự cố khác
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                {typeof mutation.data.id === 'string' &&
+                  /^[a-f\d]{24}$/i.test(mutation.data.id) && (
+                    <Button asChild className="rounded-full">
+                      <Link to={`/customer/issues/${mutation.data.id}`}>Xem báo cáo của tôi</Link>
+                    </Button>
+                  )}
+                <Button asChild variant="outline" className="rounded-full">
+                  <Link to="/customer/issues">Danh sách sự cố</Link>
+                </Button>
+                <Button
+                  className="rounded-full"
+                  onClick={() => {
+                    mutation.reset()
+                    setIntent(undefined)
+                    setIntents(new Map())
+                    setInput({ title: '', category: '', description: '', bookingId: '' })
+                    setChosen(false)
+                    setMode('booking')
+                    setErrors({})
+                    setPrefillCleared(true)
+                    void context.refetch()
+                  }}
+                >
+                  Báo sự cố khác
+                </Button>
+              </div>
             }
           />
           <Panel>

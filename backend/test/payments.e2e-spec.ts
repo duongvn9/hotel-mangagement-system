@@ -167,18 +167,22 @@ describe('Payments VNPay endpoints (e2e)', () => {
       .expect(403);
   });
 
-  it('rejects a second pending deposit for the same booking', async () => {
+  it('replaces the pending deposit link when the customer pays again', async () => {
     await seedBooking();
-    await http()
+    const first = await http()
       .post('/api/v1/payments/deposit')
       .set(CUSTOMER)
       .send({ bookingId: String(bookingId) })
       .expect(201);
-    await http()
+    const second = await http()
       .post('/api/v1/payments/deposit')
       .set(CUSTOMER)
       .send({ bookingId: String(bookingId) })
-      .expect(409);
+      .expect(201);
+    expect(second.body.transactionRef).not.toBe(first.body.transactionRef);
+    expect(
+      await payments.countDocuments({ booking: bookingId, status: 'PENDING' }),
+    ).toBe(1);
   });
 
   it('settles a deposit through IPN and is idempotent on replay', async () => {
