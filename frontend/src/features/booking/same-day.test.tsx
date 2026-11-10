@@ -106,6 +106,22 @@ describe('FrontDeskPage', () => {
     vi.useRealTimers()
   })
 
+  it('opens the staff booking page inside the dashboard from every "Chi tiết" link', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: list() })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Khách đến (3)' })
+
+    const hrefs = () =>
+      screen.getAllByRole('link', { name: 'Chi tiết' }).map((link) => link.getAttribute('href'))
+    expect(hrefs()).toHaveLength(3)
+    for (const href of hrefs()) expect(href).toMatch(/^\/reception\/bookings\/[A-Z]+$/)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Trả phòng' }))
+    await screen.findByRole('heading', { name: 'Khách đi (2)' })
+    expect(hrefs()).toHaveLength(2)
+    for (const href of hrefs()) expect(href).toMatch(/^\/reception\/bookings\/[A-Z]+$/)
+  })
+
   it('shows empty lists and an error state', async () => {
     vi.spyOn(api, 'get').mockResolvedValueOnce({
       data: {

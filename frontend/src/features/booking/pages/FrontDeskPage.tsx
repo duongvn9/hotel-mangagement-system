@@ -169,14 +169,16 @@ function BookingCard({ booking, tab }: { booking: BookingListItem; tab: 'in' | '
               booking={booking}
               detailLink={
                 <Button asChild variant="outline" className="rounded-full">
-                  <Link to={`/booking/${booking.id}`}>Chi tiết</Link>
+                  <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}`}>
+                    Chi tiết
+                  </Link>
                 </Button>
               }
             />
           ) : (
             <div className="flex gap-2">
               <Button asChild variant="outline" className="w-full rounded-full">
-                <Link to={`/booking/${booking.id}`}>Chi tiết</Link>
+                <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}`}>Chi tiết</Link>
               </Button>
             </div>
           )
@@ -185,14 +187,14 @@ function BookingCard({ booking, tab }: { booking: BookingListItem; tab: 'in' | '
             booking={booking}
             detailLink={
               <Button asChild variant="outline" className="rounded-full">
-                <Link to={`/booking/${booking.id}`}>Chi tiết</Link>
+                <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}`}>Chi tiết</Link>
               </Button>
             }
           />
         ) : (
           <div className="flex gap-2">
             <Button asChild variant="outline" className="w-full rounded-full">
-              <Link to={`/booking/${booking.id}`}>Chi tiết</Link>
+              <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}`}>Chi tiết</Link>
             </Button>
           </div>
         )}
