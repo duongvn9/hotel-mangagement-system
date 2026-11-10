@@ -15,10 +15,27 @@ import {
 import { useAuth } from '@/features/auth/auth-context'
 import { getErrorMessage } from '@/lib/api-client'
 import { fdate, fshort, vnd } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import type { InitiatePaymentInput } from '../api'
 import { useBooking, useCancelBooking, useInitiateDeposit, useInitiateFinal } from '../hooks'
 import { nightsBetween } from '../utils'
 import { formatRemaining, useHoldCountdown } from './useHoldCountdown'
+
+/** Nhãn tiếng Việt và tông màu cho trạng thái hoá đơn. */
+const INVOICE_STATUS: Record<string, { label: string; tone: string }> = {
+  PAID: { label: 'Đã thanh toán đủ', tone: 'text-success' },
+  PARTIALLY_PAID: { label: 'Thanh toán một phần', tone: 'text-warning' },
+  UNPAID: { label: 'Chưa thanh toán', tone: 'text-muted-foreground' },
+}
+
+/** Dịch lỗi "không còn khoản phải trả" của server sang tiếng Việt cho khách. */
+function finalPaymentError(error: unknown): string {
+  const message = getErrorMessage(error)
+  if (/no positive amount is payable/i.test(message)) {
+    return 'Đơn này đã thanh toán đủ, không còn khoản phải trả.'
+  }
+  return message
+}
 
 /**
  * UC09/UC12/UC20/UC21 — chi tiết & thao tác với một booking. Trạng thái và hạn giữ phòng
@@ -196,12 +213,58 @@ export function BookingDetailPage() {
               <p className="text-xs uppercase tracking-wider text-muted-foreground">Tiền phòng</p>
               <p className="mt-1 font-semibold tabular-nums">{vnd(booking.roomTotal)}</p>
             </div>
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Tiền cọc</p>
-              <p className="mt-1 font-semibold tabular-nums text-primary">
-                {vnd(booking.depositAmount)}
-              </p>
-            </div>
+            {holding && (
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Tiền cọc</p>
+                <p className="mt-1 font-semibold tabular-nums text-primary">
+                  {vnd(booking.depositAmount)}
+                </p>
+              </div>
+            )}
+            {(booking.serviceTotal ?? 0) > 0 && (
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Dịch vụ</p>
+                <p className="mt-1 font-semibold tabular-nums">{vnd(booking.serviceTotal ?? 0)}</p>
+              </div>
+            )}
+            {!holding && booking.paidAmount != null && (
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Đã thanh toán
+                </p>
+                <p className="mt-1 font-semibold tabular-nums text-success">
+                  {vnd(booking.paidAmount)}
+                </p>
+              </div>
+            )}
+            {!holding && booking.balanceDue != null && (
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Còn lại</p>
+                <p
+                  className={cn(
+                    'mt-1 font-semibold tabular-nums',
+                    booking.balanceDue > 0 ? 'text-warning' : 'text-success',
+                  )}
+                >
+                  {vnd(booking.balanceDue)}
+                </p>
+              </div>
+            )}
+            {!holding && booking.invoiceStatus && (
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Trạng thái hoá đơn
+                </p>
+                <p
+                  className={cn(
+                    'mt-1 font-semibold',
+                    INVOICE_STATUS[booking.invoiceStatus]?.tone ?? 'text-muted-foreground',
+                  )}
+                >
+                  {INVOICE_STATUS[booking.invoiceStatus]?.label ?? booking.invoiceStatus}
+                </p>
+              </div>
+            )}
             {booking.holdExpiresAt && holding && (
               <div className="sm:col-span-2">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground">
@@ -211,6 +274,15 @@ export function BookingDetailPage() {
               </div>
             )}
           </div>
+
+          {!holding &&
+            booking.balanceDue != null &&
+            booking.balanceDue <= 0 &&
+            (booking.paidAmount ?? 0) > 0 && (
+              <div className="rounded-xl border border-success/20 bg-success/10 p-4 text-sm text-success">
+                Đơn này đã thanh toán đủ. Cảm ơn bạn!
+              </div>
+            )}
 
           {deposit.isError && (
             <div
@@ -225,7 +297,7 @@ export function BookingDetailPage() {
               role="alert"
               className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive"
             >
-              {getErrorMessage(final.error)}
+              {finalPaymentError(final.error)}
             </div>
           )}
           {cancel.isError && (
@@ -246,20 +318,26 @@ export function BookingDetailPage() {
                   aria-busy={deposit.isPending}
                   onClick={() => void pay('deposit')}
                 >
-                  {deposit.isPending ? 'Đang chuyển sang cổng VNPay…' : 'Đặt cọc qua VNPay'}
+                  {deposit.isPending
+                    ? 'Đang chuyển sang cổng VNPay…'
+                    : `Đặt cọc qua VNPay (${vnd(booking.depositAmount)})`}
                 </Button>
               )}
-              {(status === 'CONFIRMED' || status === 'CHECKED_OUT') && (
-                <Button
-                  variant="outline"
-                  className="rounded-full px-6"
-                  disabled={final.isPending}
-                  aria-busy={final.isPending}
-                  onClick={() => void pay('final')}
-                >
-                  {final.isPending ? 'Đang chuyển sang cổng VNPay…' : 'Thanh toán phần còn lại'}
-                </Button>
-              )}
+              {(status === 'CONFIRMED' || status === 'CHECKED_IN') &&
+                booking.balanceDue != null &&
+                booking.balanceDue > 0 && (
+                  <Button
+                    variant="outline"
+                    className="rounded-full px-6"
+                    disabled={final.isPending}
+                    aria-busy={final.isPending}
+                    onClick={() => void pay('final')}
+                  >
+                    {final.isPending
+                      ? 'Đang chuyển sang cổng VNPay…'
+                      : `Thanh toán phần còn lại (${vnd(booking.balanceDue)})`}
+                  </Button>
+                )}
               {status !== 'CHECKED_IN' && status !== 'CHECKED_OUT' && status !== 'ROOM_HELD' && (
                 <Button
                   variant="ghost"

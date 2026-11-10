@@ -4,12 +4,20 @@ import { EmptyState, KeyValue } from '@/components/molecules'
 import { Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { fdate, vnd } from '@/lib/format'
-import type { BookingListItem } from '../api'
-import { useBookingList } from '../hooks'
+import { cn } from '@/lib/utils'
+import type { BookingListItem, InvoiceTotals } from '../api'
+import { useBookingCharges, useBookingList } from '../hooks'
 import { nightsBetween } from '../utils'
 
 /** Trạng thái còn sửa được (UC11): trước khi nhận phòng và chưa huỷ. */
 const EDITABLE_STATUSES = ['PENDING_DEPOSIT', 'CONFIRMED']
+
+/** Nhãn tiếng Việt và tông màu cho trạng thái hoá đơn. */
+const INVOICE_STATUS: Record<string, { label: string; tone: string }> = {
+  PAID: { label: 'Đã thanh toán đủ', tone: 'text-success' },
+  PARTIALLY_PAID: { label: 'Thanh toán một phần', tone: 'text-warning' },
+  UNPAID: { label: 'Chưa thanh toán', tone: 'text-muted-foreground' },
+}
 
 /**
  * UC09 — View Booking Detail (bản cho Lễ tân/Quản lý). Xem toàn bộ thông tin một booking tại quầy:
@@ -130,15 +138,7 @@ function ReceptionBookingDetail({ booking }: { booking: BookingListItem }) {
       </div>
 
       <div className="space-y-6">
-        <Panel title="Hoá đơn">
-          <div className="divide-y">
-            <KeyValue
-              k="Tiền phòng"
-              v={<span className="tabular-nums">{vnd(booking.roomTotal)}</span>}
-            />
-            <KeyValue k="Ngày tạo" v={fdate(booking.createdAt)} />
-          </div>
-        </Panel>
+        <InvoicePanel booking={booking} />
 
         {editable ? (
           <Button asChild className="w-full rounded-full">
@@ -152,6 +152,80 @@ function ReceptionBookingDetail({ booking }: { booking: BookingListItem }) {
           </p>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Hoá đơn đầy đủ của booking (H7): tiền phòng, dịch vụ, phụ phí, đã cọc/đã trả và số còn
+ * phải thu. Đọc từ GET /bookings/:id/charges (lễ tân/quản lý).
+ */
+function InvoicePanel({ booking }: { booking: BookingListItem }) {
+  const charges = useBookingCharges(booking.id)
+
+  return (
+    <Panel title="Hoá đơn">
+      {charges.isPending && <p className="text-sm text-muted-foreground">Đang tải hoá đơn…</p>}
+      {charges.isError && (
+        <p role="alert" className="text-sm text-danger">
+          {getErrorMessage(charges.error, 'Không đọc được hoá đơn.')}
+        </p>
+      )}
+      {charges.data && (
+        <>
+          <InvoiceBreakdown totals={charges.data.totals} status={charges.data.invoiceStatus} />
+          <div className="mt-2 border-t border-border pt-2">
+            <KeyValue k="Ngày tạo" v={fdate(booking.createdAt)} />
+          </div>
+        </>
+      )}
+    </Panel>
+  )
+}
+
+/** Bảng chi tiết các khoản của một hoá đơn; ẩn các dòng bằng 0 để gọn. */
+function InvoiceBreakdown({ totals, status }: { totals: InvoiceTotals; status: string }) {
+  const money = (amount: number) => <span className="tabular-nums">{vnd(amount)}</span>
+  const invoiceStatus = INVOICE_STATUS[status]
+  return (
+    <div className="divide-y">
+      <KeyValue k="Tiền phòng" v={money(totals.roomTotal)} />
+      {totals.serviceTotal > 0 && <KeyValue k="Dịch vụ" v={money(totals.serviceTotal)} />}
+      {totals.additionalTotal > 0 && <KeyValue k="Phụ phí" v={money(totals.additionalTotal)} />}
+      {totals.discountTotal > 0 && (
+        <KeyValue
+          k="Giảm giá"
+          v={<span className="tabular-nums text-success">− {vnd(totals.discountTotal)}</span>}
+        />
+      )}
+      {totals.taxTotal > 0 && <KeyValue k="Thuế" v={money(totals.taxTotal)} />}
+      <KeyValue
+        k="Tổng cộng"
+        v={<span className="font-semibold tabular-nums">{vnd(totals.totalAmount)}</span>}
+      />
+      <KeyValue k="Đã cọc" v={money(totals.depositPaid)} />
+      {totals.finalPaid > 0 && <KeyValue k="Đã thanh toán thêm" v={money(totals.finalPaid)} />}
+      <KeyValue
+        k="Còn phải trả"
+        v={
+          <span
+            className={cn(
+              'font-semibold tabular-nums',
+              totals.balanceDue > 0 ? 'text-warning' : 'text-success',
+            )}
+          >
+            {vnd(totals.balanceDue)}
+          </span>
+        }
+      />
+      <KeyValue
+        k="Trạng thái hoá đơn"
+        v={
+          <span className={cn('font-medium', invoiceStatus?.tone ?? 'text-muted-foreground')}>
+            {invoiceStatus?.label ?? status}
+          </span>
+        }
+      />
     </div>
   )
 }

@@ -19,7 +19,11 @@ import { UpdateBookingDto } from './dto/create-booking.dto.js';
 import { validate } from 'class-validator';
 
 const now = new Date('2026-10-28T00:00:00Z');
-const setup = (live = true, paymentPending = false) => {
+const setup = (
+  live = true,
+  paymentPending = false,
+  invoice: unknown = null,
+) => {
   const booking = {
     _id: new Types.ObjectId(),
     code: 'BKTEST',
@@ -29,15 +33,27 @@ const setup = (live = true, paymentPending = false) => {
     childCount: 1,
     source: BookingSource.Online,
     rooms: [new Types.ObjectId()],
+    roomTotal: 1_000_000,
+    depositAmount: 100_000,
     checkIn: new Date('2094-01-10T00:00:00Z'),
     checkOut: new Date('2094-01-12T00:00:00Z'),
     save: vi.fn(),
   };
   const hold = { expiresAt: new Date(now.getTime() + 60000) };
   const bookings = { findById: vi.fn().mockResolvedValue(booking) };
-  const holds = { findOne: vi.fn().mockResolvedValue(live ? hold : null) };
+  // findOne dùng được cả hai cách: `await findOne()` (update) và `findOne().sort()` (getBooking).
+  const heldValue = live ? hold : null;
+  const holdQuery = Object.assign(Promise.resolve(heldValue), {
+    sort: vi.fn().mockResolvedValue(heldValue),
+  });
+  const holds = { findOne: vi.fn().mockReturnValue(holdQuery) };
   const payments = {
     exists: vi.fn().mockResolvedValue(paymentPending ? {} : null),
+  };
+  const invoices = {
+    findOne: vi.fn().mockReturnValue({
+      lean: vi.fn().mockResolvedValue(invoice),
+    }),
   };
   const service = new BookingsService(
     bookings as unknown as Model<Booking>,
@@ -45,8 +61,10 @@ const setup = (live = true, paymentPending = false) => {
     {} as Model<Room>,
     { now: () => now } as AvailabilityClock,
     payments as unknown as Model<PaymentTransaction>,
+    invoices as never,
+    {} as never,
   );
-  return { service, booking, bookings, holds, payments, hold };
+  return { service, booking, bookings, holds, payments, invoices, hold };
 };
 
 describe('booking merge integration', () => {
@@ -122,5 +140,37 @@ describe('booking merge integration', () => {
       expiresAt: { $gt: now },
     });
     expect(hold.expiresAt.getTime()).toBe(deadline);
+  });
+
+  it('reports an unpaid summary when the booking has no invoice yet', async () => {
+    const { service, booking } = setup(true, false, null);
+    const result = await service.getBooking(String(booking._id), {
+      code: 'BKTEST',
+    });
+    expect(result).toMatchObject({
+      serviceTotal: 0,
+      paidAmount: 0,
+      balanceDue: booking.roomTotal,
+      invoiceStatus: 'UNPAID',
+    });
+  });
+
+  it('summarises services, amount paid and balance from the invoice', async () => {
+    const { service, booking } = setup(true, false, {
+      serviceTotal: 200_000,
+      depositPaid: 100_000,
+      finalPaid: 300_000,
+      balanceDue: 800_000,
+      status: 'PARTIALLY_PAID',
+    });
+    const result = await service.getBooking(String(booking._id), {
+      code: 'BKTEST',
+    });
+    expect(result).toMatchObject({
+      serviceTotal: 200_000,
+      paidAmount: 400_000,
+      balanceDue: 800_000,
+      invoiceStatus: 'PARTIALLY_PAID',
+    });
   });
 });
