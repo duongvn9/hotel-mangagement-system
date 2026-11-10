@@ -88,6 +88,11 @@ export function OrderReceipt({
           {order.service.name}
         </h2>
         <OrderBusinessState order={order} />
+        {order.reviewStatus === 'REJECTED' && (
+          <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
+            Lý do từ chối: {order.reviewReason?.trim() || 'Không có lý do từ chối.'}
+          </p>
+        )}
         <dl className="grid gap-4 sm:grid-cols-2">
           {[
             ['Mã yêu cầu', order.id],

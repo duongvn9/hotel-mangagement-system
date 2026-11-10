@@ -85,6 +85,7 @@ export interface ServiceOrder extends OrderInput {
   amount: number
   requestedTime: string
   reviewStatus: (typeof reviewStatuses)[number]
+  reviewReason?: string
   executionStatus: (typeof executionStatuses)[number]
   createdAt: string
 }

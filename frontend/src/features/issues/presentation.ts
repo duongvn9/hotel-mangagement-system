@@ -1,3 +1,15 @@
+import type { CustomerHistoryType } from './api'
+
+export const customerHistoryLabels: Record<CustomerHistoryType, string> = {
+  REPORTED: 'Đã báo sự cố',
+  REVIEWED: 'Đã xem xét',
+  ASSIGNED: 'Đã phân công',
+  CONTINUED: 'Tiếp tục xử lý',
+  REASSIGNED: 'Đã phân công lại',
+  TASK_COMPLETED: 'Đã hoàn thành công việc',
+  CLOSED: 'Đã đóng sự cố',
+}
+
 export const statusLabels = {
   PENDING_REVIEW: 'Chờ xem xét',
   REVIEWED: 'Đã xem xét',

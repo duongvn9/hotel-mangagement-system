@@ -161,6 +161,61 @@ describe('Customer service-order access', () => {
     },
   )
 })
+describe('public rejection reasons', () => {
+  it.each(
+    ['/customer/service-orders', '/customer/service-orders/order-1'].flatMap((path) =>
+      [
+        {
+          reviewStatus: 'REJECTED',
+          reviewReason: 'Không còn suất phục vụ',
+          expected: 'Không còn suất phục vụ',
+        },
+        { reviewStatus: 'REJECTED', reviewReason: undefined, expected: 'Không có lý do từ chối.' },
+        { reviewStatus: 'REJECTED', reviewReason: '   ', expected: 'Không có lý do từ chối.' },
+        {
+          reviewStatus: 'REJECTED',
+          reviewReason: 'Lý do dài '.repeat(250).trim(),
+          expected: 'Lý do dài '.repeat(250).trim(),
+        },
+        ...['PENDING_REVIEW', 'ACCEPTING', 'ACCEPTED'].map((reviewStatus) => ({
+          reviewStatus,
+          reviewReason: 'Hidden reason',
+          expected: null,
+        })),
+      ].map((test) => ({ path, ...test })),
+    ),
+  )(
+    'renders only public REJECTED reason at $path: $reviewStatus / $expected',
+    async ({ path, reviewStatus, reviewReason, expected }) => {
+      const order = {
+        ...receipt,
+        reviewStatus,
+        reviewReason,
+        review: { reason: 'private audit reason', reviewedBy: 'private reviewer' },
+        acceptanceRecovery: { reason: 'private recovery reason' },
+      }
+      vi.mocked(api.get).mockResolvedValue({
+        data:
+          path === '/customer/service-orders'
+            ? { items: [order], total: 1, page: 1, limit: 20 }
+            : order,
+      })
+      renderPage(path)
+      await screen.findByRole('heading', { name: 'Giặt ủi' })
+      if (expected) {
+        const reason = screen.getByText(`Lý do từ chối: ${expected}`)
+        expect(reason).toHaveClass('break-words', 'whitespace-pre-wrap')
+        expect(reason.previousElementSibling).toHaveTextContent('Trạng thái yêu cầu: Đã từ chối')
+      } else {
+        expect(screen.queryByText(/Lý do từ chối:/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Hidden reason/)).not.toBeInTheDocument()
+      }
+      expect(screen.queryByText(/private/)).not.toBeInTheDocument()
+      expect(api.post).not.toHaveBeenCalled()
+    },
+  )
+})
+
 describe('customer service-order list workspace', () => {
   it('uses atomic filters and history panels while retaining detail and create navigation', async () => {
     renderPage('/customer/service-orders')

@@ -8,6 +8,7 @@ import {
   issueRoomLabel,
   issueViews,
   handlingLabels,
+  customerHistoryLabels,
   type IssueRole,
 } from '../presentation'
 import { IssueHandling } from '../IssueHandling'
@@ -19,6 +20,19 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
   const result = useIssue(id)
   const issue = result.isSuccess ? result.data : undefined
   const view = issueViews[role]
+  const customerHistory =
+    role === 'CUSTOMER' && Array.isArray(issue?.customerHistory)
+      ? issue.customerHistory
+          .filter(
+            (event) =>
+              event &&
+              Object.hasOwn(customerHistoryLabels, event.type) &&
+              typeof event.at === 'string' &&
+              event.at.trim() !== '' &&
+              Number.isFinite(new Date(event.at).getTime()),
+          )
+          .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+      : []
 
   return (
     <PageContainer className="space-y-6">
@@ -151,6 +165,29 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
                 ? 'Thông tin nguồn đặt phòng chỉ hiển thị mã tham chiếu trong phạm vi truy cập này.'
                 : 'Chỉ hiển thị mã tham chiếu; thông tin nguồn đặt phòng và phòng chưa được cung cấp trong phạm vi truy cập này.'}
             </p>
+            {role === 'CUSTOMER' && (
+              <section className="space-y-3" aria-labelledby="customer-history-heading">
+                <h3 id="customer-history-heading" className="text-sm font-semibold">
+                  Lịch sử xử lý
+                </h3>
+                {customerHistory.length ? (
+                  <ol aria-labelledby="customer-history-heading" className="space-y-3 text-sm">
+                    {customerHistory.map((event, index) => (
+                      <li key={`${event.type}-${event.at}-${index}`} className="break-words">
+                        <p className="font-medium">{customerHistoryLabels[event.type]}</p>
+                        <time dateTime={event.at} className="text-muted-foreground">
+                          {issueDate(event.at)}
+                        </time>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Chưa có lịch sử xử lý được cung cấp.
+                  </p>
+                )}
+              </section>
+            )}
             {role !== 'CUSTOMER' && issue.reviewNotes && (
               <div>
                 <h3 className="font-semibold">Ghi chú xem xét</h3>

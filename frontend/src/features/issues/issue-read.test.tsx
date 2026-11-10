@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
@@ -60,6 +60,115 @@ test.each([
   expect(screen.queryByText('Mã phòng tham chiếu')).not.toBeInTheDocument()
   expect(get.mock.calls.map(([url]) => url)).toEqual(['/issues', `/issues/${detail.id}`])
 })
+
+test('customer handling history is chronological, localized, read-only and excludes private fields', async () => {
+  const types = [
+    'REPORTED',
+    'REVIEWED',
+    'ASSIGNED',
+    'CONTINUED',
+    'REASSIGNED',
+    'TASK_COMPLETED',
+    'CLOSED',
+  ]
+  const labels = [
+    'Đã báo sự cố',
+    'Đã xem xét',
+    'Đã phân công',
+    'Tiếp tục xử lý',
+    'Đã phân công lại',
+    'Đã hoàn thành công việc',
+    'Đã đóng sự cố',
+  ]
+  const events = types.map((type, index) => ({
+    type,
+    at: `2026-10-${24 + index}T10:00:00Z`,
+    actorId: 'PRIVATE ACTOR',
+    instructions: 'PRIVATE INSTRUCTIONS',
+    reason: 'PRIVATE REASON',
+    workResult: 'PRIVATE RESULT',
+  }))
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: {
+      ...detail,
+      roomNumber: '101',
+      status: 'CLOSED',
+      customerHistory: [...events].reverse(),
+      reviewNotes: 'PRIVATE NOTES',
+      closureConclusion: 'PRIVATE CONCLUSION',
+      reassignmentHistory: [{ reason: 'PRIVATE REASSIGNMENT' }],
+      linkedTasksAvailable: true,
+      linkedTasks: [{ id: 'PRIVATE TASK', title: 'PRIVATE TASK TITLE' }],
+    },
+  })
+  page(`/customer/issues/${detail.id}`)
+  const history = await screen.findByRole('list', { name: 'Lịch sử xử lý' })
+  const items = within(history).getAllByRole('listitem')
+  expect(items).toHaveLength(7)
+  items.forEach((item, index) => {
+    expect(item).toHaveTextContent(labels[index])
+    expect(item.querySelector('time')).toHaveAttribute('dateTime', events[index].at)
+  })
+  expect(screen.getByText('Phòng 101')).toBeInTheDocument()
+  expect(screen.queryByText(/PRIVATE/)).not.toBeInTheDocument()
+  expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+})
+
+test.each([
+  undefined,
+  [],
+  [
+    { type: 'REPORTED', at: 'invalid' },
+    { type: 'CLOSED', at: '' },
+    { type: 'ASSIGNED', at: null },
+    { type: 'PRIVATE EVENT', at: '2026-10-24T10:00:00Z' },
+  ],
+])(
+  'customer history uses an honest fallback for unavailable events %j',
+  async (customerHistory) => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: { ...detail, customerHistory } })
+    page(`/customer/issues/${detail.id}`)
+    expect(await screen.findByText('Chưa có lịch sử xử lý được cung cấp.')).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Lịch sử xử lý' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Invalid Date|PRIVATE EVENT/)).not.toBeInTheDocument()
+  },
+)
+
+test('partial customer history renders only supplied valid public events without inference', async () => {
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: {
+      ...detail,
+      status: 'CLOSED',
+      customerHistory: [
+        { type: 'REPORTED', at: detail.reportedAt },
+        { type: 'REVIEWED', at: 'invalid' },
+        { type: 'CLOSED' },
+      ],
+    },
+  })
+  page(`/customer/issues/${detail.id}`)
+  const history = await screen.findByRole('list', { name: 'Lịch sử xử lý' })
+  expect(within(history).getAllByRole('listitem')).toHaveLength(1)
+  expect(history).toHaveTextContent('Đã báo sự cố')
+  expect(history).not.toHaveTextContent('Đã đóng sự cố')
+})
+
+test.each(views.slice(1))(
+  'keeps %s staff history separate from customer events',
+  async (role, path) => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: {
+        ...detail,
+        customerHistory: [{ type: 'REPORTED', at: detail.reportedAt }],
+        reviewNotes: 'Ghi chú nội bộ',
+      },
+    })
+    page(`${path}/${detail.id}`, role)
+    expect(await screen.findByText('Ghi chú nội bộ')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Lịch sử xử lý' })).not.toBeInTheDocument()
+  },
+)
 
 test.each(views)('%s sees exact role title, list and detail', async (role, path, title) => {
   vi.spyOn(api, 'get').mockImplementation(async (url) => ({

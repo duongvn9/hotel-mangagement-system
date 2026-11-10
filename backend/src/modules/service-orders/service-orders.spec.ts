@@ -127,6 +127,192 @@ const assignmentFixture = (status = 'ASSIGNED') => {
   };
 };
 
+describe('service orders read fixes', () => {
+  const fixture = () => {
+    const bookingId = new Types.ObjectId(dto.bookingId);
+    const roomIds = [
+      new Types.ObjectId(),
+      new Types.ObjectId(),
+      new Types.ObjectId(),
+    ];
+    const row = {
+      _id: new Types.ObjectId(),
+      booking: bookingId,
+      customer: new Types.ObjectId(user.id),
+      service: new Types.ObjectId(dto.serviceId),
+      serviceName: 'Laundry',
+      reviewStatus: 'REJECTED',
+      reviewReason: 'Unavailable today',
+      executionStatus: 'NOT_STARTED',
+      reviewedBy: new Types.ObjectId(),
+      billedInvoiceId: new Types.ObjectId(),
+      acceptanceRecovery: undefined as
+        { rejectionReason: string; reason: string } | undefined,
+    };
+    const query = (value: unknown) => {
+      const chain = {
+        select: vi.fn(() => chain),
+        sort: () => chain,
+        skip: () => chain,
+        limit: () => chain,
+        exec: async () => value,
+      };
+      return chain;
+    };
+    const orders = {
+      findOne: vi.fn(() => query(row)),
+      find: vi.fn(() => query([row])),
+      countDocuments: () => query(1),
+    };
+    const booking = {
+      _id: bookingId,
+      code: 'BK001',
+      rooms: roomIds,
+      isActive: false,
+    };
+    const roomFind = vi.fn(() => ({
+      toArray: async () => [
+        { _id: roomIds[1], roomNumber: '202', isActive: false },
+        { _id: roomIds[0], roomNumber: '201', isActive: true },
+      ],
+    }));
+    const bookings = {
+      findOne: vi.fn(() => query(booking)),
+      findById: vi.fn(() => query(booking)),
+      find: vi.fn(() => query([booking])),
+      db: { collection: vi.fn(() => ({ find: roomFind })) },
+    };
+    const users = {
+      findById: vi.fn(() => query({ fullName: 'Customer' })),
+      find: vi.fn(() => query([{ _id: row.customer, fullName: 'Customer' }])),
+    };
+    const invoices = { addCharge: vi.fn(), getOrCreateForBooking: vi.fn() };
+    const tasks = { create: vi.fn() };
+    const service = new ServiceOrdersService(
+      orders as never,
+      bookings as never,
+      {} as never,
+      invoices as never,
+      users as never,
+      tasks as never,
+      {} as never,
+    );
+    return { service, row, orders, bookings, users, roomFind, invoices, tasks };
+  };
+
+  it('returns only the rejection reason to the authorized owner without billing or tasks', async () => {
+    const f = fixture();
+    const result = await f.service.findOne(String(f.row._id), user);
+    expect(result).toHaveProperty('reviewReason', 'Unavailable today');
+    expect(f.orders.findOne.mock.results[0].value.select).toHaveBeenCalledWith(
+      expect.stringContaining('+reviewReason'),
+    );
+    for (const key of [
+      'reviewedBy',
+      'review',
+      'acceptanceRecovery',
+      'invoiceId',
+      'billedInvoiceId',
+      'task',
+    ])
+      expect(result).not.toHaveProperty(key);
+    expect(f.invoices.addCharge).not.toHaveBeenCalled();
+    expect(f.tasks.create).not.toHaveBeenCalled();
+    expect(f.orders.findOne).toHaveBeenCalledWith({
+      _id: f.row._id,
+      customer: f.row.customer,
+    });
+    expect(f.bookings.findOne).toHaveBeenCalledWith({
+      _id: f.row.booking,
+      customer: f.row.customer,
+    });
+  });
+
+  it('includes rejection reasons in the owner list and uses only the public recovery rejection reason', async () => {
+    const f = fixture();
+    f.row.acceptanceRecovery = {
+      rejectionReason: 'Service cannot be provided',
+      reason: 'Internal reconciliation',
+    };
+    const result = await f.service.list({ page: 1, limit: 20 }, user);
+    expect(result.items[0]).toHaveProperty(
+      'reviewReason',
+      'Service cannot be provided',
+    );
+    expect(result.items[0]).not.toHaveProperty('acceptanceRecovery');
+  });
+
+  it.each(['PENDING_REVIEW', 'ACCEPTING', 'ACCEPTED'])(
+    'omits reviewReason for %s',
+    async (status) => {
+      const f = fixture();
+      f.row.reviewStatus = status;
+      expect(
+        await f.service.findOne(String(f.row._id), user),
+      ).not.toHaveProperty('reviewReason');
+    },
+  );
+
+  it('denies other customers, noncustomers and missing owned bookings', async () => {
+    const f = fixture();
+    f.orders.findOne.mockImplementationOnce(
+      () =>
+        ({
+          ...f.orders.findOne.mock.results[0]?.value,
+          select: () => ({ exec: async () => null }),
+          exec: async () => null,
+        }) as never,
+    );
+    await expect(
+      f.service.findOne(String(f.row._id), {
+        ...user,
+        id: String(new Types.ObjectId()),
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      f.service.findOne(String(f.row._id), { ...user, role: 'SERVICE_STAFF' }),
+    ).rejects.toMatchObject({ status: 403 });
+    f.bookings.findOne.mockReturnValueOnce({ exec: async () => null } as never);
+    await expect(
+      f.service.findOne(String(f.row._id), user),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('batches receptionist booking, customer and room context including inactive and missing rooms', async () => {
+    const f = fixture();
+    const missingBookingRow = {
+      ...f.row,
+      _id: new Types.ObjectId(),
+      booking: new Types.ObjectId(),
+    };
+    f.orders.find.mockImplementation(() => {
+      const chain = {
+        select: () => chain,
+        sort: () => chain,
+        skip: () => chain,
+        limit: () => chain,
+        exec: async () => [f.row, f.row, missingBookingRow],
+      };
+      return chain as never;
+    });
+    const result = await f.service.requests(
+      { page: 1, limit: 20 },
+      { ...user, role: 'RECEPTIONIST' },
+    );
+    expect(result.items.map((item) => item.booking)).toEqual([
+      expect.objectContaining({ code: 'BK001', roomNumbers: ['201', '202'] }),
+      expect.objectContaining({ roomNumbers: ['201', '202'] }),
+      null,
+    ]);
+    expect(f.bookings.find).toHaveBeenCalledTimes(1);
+    expect(f.users.find).toHaveBeenCalledTimes(1);
+    expect(f.roomFind).toHaveBeenCalledTimes(1);
+    expect(f.bookings.findById).not.toHaveBeenCalled();
+    expect(f.users.findById).not.toHaveBeenCalled();
+    expect(f.roomFind.mock.calls[0][0]).not.toHaveProperty('isActive');
+  });
+});
+
 describe('service orders contract', () => {
   it.each(['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'])(
     'replays the same finalized assignment at %s without writes or regression',
