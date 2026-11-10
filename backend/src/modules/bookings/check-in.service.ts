@@ -9,6 +9,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { BookingStatus } from '../../common/constants/booking-status.enum.js';
 import { RoomStatus } from '../../common/constants/room-status.enum.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { Room } from '../rooms/schemas/room.schema.js';
 import { AvailabilityClock } from './availability.adapters.js';
 import { AvailabilityService } from './availability.service.js';
@@ -26,6 +27,7 @@ import type {
   CheckInOptionsResponse,
   CheckInResult,
 } from './dto/check-in.dto.js';
+import { checkInConfirmationEmail } from './booking-email.js';
 import { businessDay } from './room-status-board.core.js';
 import { Booking } from './schemas/booking.schema.js';
 
@@ -47,6 +49,7 @@ export class CheckInService {
     @InjectModel(Room.name) private readonly rooms: Model<Room>,
     private readonly availability: AvailabilityService,
     @Inject(AvailabilityClock) private readonly clock: AvailabilityClock,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -138,6 +141,12 @@ export class CheckInService {
     }
 
     const byId = new Map(finalRooms.map((room) => [String(room._id), room]));
+    // Email xác nhận là best-effort: gửi lỗi không làm hỏng việc nhận phòng.
+    const email = checkInConfirmationEmail(
+      booking,
+      finalIds.map((id) => byId.get(id)?.roomNumber ?? ''),
+    );
+    if (email) void this.notifications.send(email).catch(() => undefined);
     return {
       id: String(booking._id),
       code: booking.code,

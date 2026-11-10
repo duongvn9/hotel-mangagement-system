@@ -2,6 +2,7 @@ import { Module, type DynamicModule, type Type } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Invoice, InvoiceSchema } from './schemas/invoice.schema.js';
 import { BookingsModule } from '../bookings/bookings.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import { PaymentsModule } from '../payments/payments.module.js';
 import { RoomsModule } from '../rooms/rooms.module.js';
 import { ServicesModule } from '../services/services.module.js';
@@ -21,6 +22,7 @@ import { RoomTypePricingAdapter } from './room-type-pricing.adapter.js';
 @Module({
   imports: [
     BookingsModule,
+    NotificationsModule,
     PaymentsModule,
     RoomsModule,
     ServicesModule,
