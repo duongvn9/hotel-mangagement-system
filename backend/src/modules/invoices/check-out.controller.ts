@@ -7,6 +7,7 @@ import {
 } from '@nestjs/swagger';
 import { Role } from '../../common/constants/role.enum.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
+import { PaymentMethod } from '../payments/schemas/payment-transaction.schema.js';
 import { CashPaymentService } from './cash-payment.service.js';
 import { RecordCashPaymentDto } from './dto/cash-payment.dto.js';
 import { BookingChargesResponse } from './dto/checkout-charge.dto.js';
@@ -34,6 +35,20 @@ export class CheckOutController {
   })
   recordCash(@Param('id') id: string, @Body() dto: RecordCashPaymentDto) {
     return this.cash.record(id, dto);
+  }
+
+  @Post(':id/payments/card')
+  @ApiOperation({
+    summary:
+      'UC18 — Confirm the final payment was taken by card at the desk (Receptionist/Manager)',
+  })
+  @ApiCreatedResponse({ type: BookingChargesResponse })
+  @ApiConflictResponse({
+    description:
+      'Guest is not checked in, nothing is due, or a final payment is settled or pending',
+  })
+  recordCard(@Param('id') id: string, @Body() dto: RecordCashPaymentDto) {
+    return this.cash.record(id, dto, PaymentMethod.Card);
   }
 
   @Post(':id/check-out')

@@ -17,6 +17,7 @@ export enum PaymentPurpose {
 export enum PaymentMethod {
   Vnpay = 'VNPAY',
   Cash = 'CASH',
+  Card = 'CARD',
 }
 
 export type PaymentTransactionDocument = HydratedDocument<PaymentTransaction>;

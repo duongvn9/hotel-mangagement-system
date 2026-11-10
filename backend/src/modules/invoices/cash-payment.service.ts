@@ -28,18 +28,21 @@ export class CashPaymentService {
     private readonly invoices: InvoicesService,
   ) {}
 
+  /** Thu thanh toán cuối tại quầy bằng tiền mặt (mặc định) hoặc thẻ; số tiền luôn là số còn nợ. */
   async record(
     bookingId: string,
     dto: RecordCashPaymentDto,
+    method: PaymentMethod.Cash | PaymentMethod.Card = PaymentMethod.Cash,
   ): Promise<BookingChargesResponse> {
     return withBookingFinancialOperation(this.bookings, bookingId, () =>
-      this.recordLocked(bookingId, dto),
+      this.recordLocked(bookingId, dto, method),
     );
   }
 
   private async recordLocked(
     bookingId: string,
     dto: RecordCashPaymentDto,
+    method: PaymentMethod.Cash | PaymentMethod.Card,
   ): Promise<BookingChargesResponse> {
     if (!/^[a-f\d]{24}$/i.test(bookingId)) {
       throw new BadRequestException('Invalid booking ID');
@@ -48,12 +51,12 @@ export class CashPaymentService {
     if (!booking || !booking.isActive) {
       throw new NotFoundException('Booking not found');
     }
-    const transactionRef = `CASH-${dto.requestId}`;
+    const transactionRef = `${method}-${dto.requestId}`;
     const replay = await this.payments.findOne({ transactionRef });
-    if (replay) return this.replayed(booking, replay);
+    if (replay) return this.replayed(booking, replay, method);
     if (booking.status !== BookingStatus.CheckedIn) {
       throw new ConflictException(
-        'Cash can only be taken for a guest who is checked in',
+        `${method === PaymentMethod.Cash ? 'Cash' : 'Card payment'} can only be taken for a guest who is checked in`,
       );
     }
 
@@ -79,7 +82,7 @@ export class CashPaymentService {
         booking: booking._id,
         invoice: invoice._id,
         transactionRef,
-        method: PaymentMethod.Cash,
+        method,
         purpose: PaymentPurpose.Final,
         status: PaymentStatus.Success,
         amount: invoice.balanceDue,
@@ -88,7 +91,7 @@ export class CashPaymentService {
     } catch (error) {
       if ((error as { code?: number }).code !== 11000) throw error;
       const winner = await this.payments.findOne({ transactionRef });
-      if (winner) return this.replayed(booking, winner);
+      if (winner) return this.replayed(booking, winner, method);
       throw error;
     }
 
@@ -102,10 +105,11 @@ export class CashPaymentService {
   private async replayed(
     booking: { _id: Types.ObjectId; code: string; status: string },
     payment: PaymentTransaction & { _id: Types.ObjectId },
+    method: PaymentMethod,
   ): Promise<BookingChargesResponse> {
     if (
       !payment.booking.equals(booking._id) ||
-      payment.method !== PaymentMethod.Cash ||
+      payment.method !== method ||
       payment.purpose !== PaymentPurpose.Final ||
       payment.status !== PaymentStatus.Success
     ) {
