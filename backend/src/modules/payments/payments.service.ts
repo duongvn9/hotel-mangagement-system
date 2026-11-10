@@ -170,16 +170,19 @@ export class PaymentsService {
     ) {
       throw new ConflictException('This payment has already been settled');
     }
-    if (
-      await this.payments.exists({
+    // Khách rời trang VNPay rồi bấm thanh toán lại: thay link cũ thay vì chặn. Link cũ không
+    // huỷ được phía VNPay, nên nếu vẫn được trả thì IPN đưa khoản đó vào hàng đợi đối soát.
+    await this.payments.updateMany(
+      {
         booking: booking._id,
         purpose,
         status: PaymentStatus.Pending,
         isActive: true,
-      })
-    ) {
-      throw new ConflictException('A pending payment already exists');
-    }
+      },
+      {
+        $set: { status: PaymentStatus.Cancelled, supersededAt: new Date() },
+      },
+    );
 
     await this.payments.collection.createIndex(
       { booking: 1, purpose: 1 },
@@ -262,6 +265,17 @@ export class PaymentsService {
       }
       if (plan.action === 'review') {
         return { RspCode: '99', Message: 'Unknown error' };
+      }
+      if (plan.action === 'superseded') {
+        const outcome =
+          plan.result.status === PaymentStatus.Success
+            ? await this.settlement.recordSupersededSuccess(plan.result)
+            : 'duplicate';
+        return outcome === 'committed'
+          ? { RspCode: '00', Message: 'Confirm Success' }
+          : outcome === 'duplicate'
+            ? { RspCode: '02', Message: 'Order already confirmed' }
+            : { RspCode: '99', Message: 'Unknown error' };
       }
       const outcome = await this.settlement.commitAtomically(expected, plan);
       return outcome === 'committed'
