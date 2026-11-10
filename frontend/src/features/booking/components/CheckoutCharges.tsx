@@ -14,6 +14,7 @@ import { getErrorMessage } from '@/lib/api-client'
 import type { BookingListItem } from '../api'
 import { useAddCharge, useBookingCharges } from '../hooks'
 import { money, newRequestId } from '../utils'
+import { AddServiceForm } from './AddServiceForm'
 import { SettleAndCheckOut } from './SettleAndCheckOut'
 
 /** Mức phụ phí tối đa một khoản (VND), khớp giới hạn của server. */
@@ -92,6 +93,7 @@ export function CheckoutCharges({
                   <h4 className="mb-3 text-sm font-semibold text-foreground">Tổng hợp hóa đơn</h4>
                   <div className="space-y-1 text-sm text-muted-foreground">
                     <p>Tiền phòng: {money.format(charges.data.totals.roomTotal)}</p>
+                    <p>Dịch vụ: {money.format(charges.data.totals.serviceTotal)}</p>
                     <p>Phụ phí: {money.format(charges.data.totals.additionalTotal)}</p>
                     <p>Tổng cộng: {money.format(charges.data.totals.totalAmount)}</p>
                     <p>Đã cọc: {money.format(charges.data.totals.depositPaid)}</p>
@@ -124,6 +126,8 @@ export function CheckoutCharges({
                       ))}
                     </ul>
                   )}
+
+                  {booking.status === 'CHECKED_IN' && <AddServiceForm bookingId={booking.id} />}
 
                   {booking.status === 'CHECKED_IN' && (
                     <form onSubmit={submit} className="space-y-3 border-t border-border pt-3">

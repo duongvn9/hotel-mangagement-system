@@ -11,6 +11,7 @@ import {
   getServiceCatalog,
   holdBooking,
   initiateDeposit,
+  addCheckoutServiceCharge,
   getBookingCharges,
   getCheckInOptions,
   getRoomStatusBoard,
@@ -26,6 +27,7 @@ import {
   updateBooking,
   verifyVnpayReturn,
   type AddChargeInput,
+  type AddServiceChargeInput,
   type BookingListParams,
   type GuestListParams,
   type RoomReplacement,
@@ -193,6 +195,15 @@ export function useAddCharge(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: AddChargeInput) => addCheckoutCharge(id, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', id] }),
+  })
+}
+
+/** Thêm dịch vụ/sản phẩm cho khách đang ở rồi làm mới hóa đơn của booking. */
+export function useAddServiceCharge(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: AddServiceChargeInput) => addCheckoutServiceCharge(id, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', id] }),
   })
 }

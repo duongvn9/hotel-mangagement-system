@@ -318,6 +318,22 @@ export async function addCheckoutCharge(
   return (await api.post<BookingCharges>(`/bookings/${id}/charges`, input)).data
 }
 
+export interface AddServiceChargeInput {
+  serviceId: string
+  /** Số lượng nguyên từ 1 đến 99. */
+  quantity: number
+  /** Mã chống trùng cho một lần ghi; gửi lại cùng mã thì không ghi thêm khoản mới. */
+  requestId: string
+}
+
+/** Lễ tân thêm dịch vụ/sản phẩm từ danh mục cho khách đang ở (booking CHECKED_IN). */
+export async function addCheckoutServiceCharge(
+  id: string,
+  input: AddServiceChargeInput,
+): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${id}/charges/services`, input)).data
+}
+
 /** UC18 — Lễ tân xác nhận đã thu tiền mặt thanh toán cuối; số tiền do server tính từ hóa đơn. */
 export async function recordCashPayment(id: string, requestId: string): Promise<BookingCharges> {
   return (await api.post<BookingCharges>(`/bookings/${id}/payments/cash`, { requestId })).data

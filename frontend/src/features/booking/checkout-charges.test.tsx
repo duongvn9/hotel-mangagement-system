@@ -57,6 +57,13 @@ const charges = (items: { reason: string; amount: number }[] = []): BookingCharg
   }
 }
 
+const catalog = [
+  { id: 'svc-laundry', name: 'Giặt ủi', unit: 'kg', billable: true, unitPriceVND: 50_000 },
+  { id: 'svc-water', name: 'Nước suối', unit: 'chai', billable: true, unitPriceVND: 20_000 },
+  { id: 'svc-wifi', name: 'Wifi', unit: '', billable: false, unitPriceVND: 0 },
+  { id: 'svc-spa', name: 'Spa chưa có giá', unit: '', billable: true, unitPriceVND: null },
+]
+
 function renderPage() {
   return renderWithAuth(bookingRoutes, {
     path: '/reception/front-desk',
@@ -69,6 +76,7 @@ function mockGet(initial: BookingCharges) {
   const get = vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
     if (url === '/front-desk/same-day') return { data: list() }
     if (url === '/bookings/d1/charges') return { data: current }
+    if (url === '/bookings/service-catalog') return { data: { items: catalog } }
     throw new Error(`unexpected GET ${url}`)
   })
   return {
@@ -238,5 +246,118 @@ describe('Additional charges from the same-day list', () => {
     })
     await openPanel()
     expect(await departure().findByRole('alert')).toBeInTheDocument()
+  })
+})
+
+describe('Adding a catalog service from the same-day list', () => {
+  const chooseService = (id: string, quantity?: string) => {
+    fireEvent.change(departure().getByLabelText(/Dịch vụ \/ sản phẩm/), { target: { value: id } })
+    if (quantity !== undefined) {
+      fireEvent.change(departure().getByLabelText(/Số lượng/), { target: { value: quantity } })
+    }
+  }
+
+  it('shows the service total in the invoice summary', async () => {
+    const withService = charges()
+    withService.totals.serviceTotal = 150_000
+    mockGet(withService)
+    await openPanel()
+    expect(await departure().findByText(/Dịch vụ: 150\.000/)).toBeInTheDocument()
+  })
+
+  it('offers only active services that have a price, with the unit price', async () => {
+    mockGet(charges())
+    await openPanel()
+    await departure().findByText('Chưa có phụ phí.')
+
+    const picker = await departure().findByLabelText(/Dịch vụ \/ sản phẩm/)
+    await waitFor(() => expect(within(picker).getAllByRole('option').length).toBeGreaterThan(1))
+    const names = within(picker)
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(names.some((name) => name?.includes('Giặt ủi') && name.includes('50.000'))).toBe(true)
+    expect(names.some((name) => name?.includes('Nước suối'))).toBe(true)
+    expect(names.some((name) => name?.includes('Wifi'))).toBe(false)
+    expect(names.some((name) => name?.includes('Spa chưa có giá'))).toBe(false)
+  })
+
+  it('records the chosen service and quantity, refreshes the list and resets the form', async () => {
+    const state = mockGet(charges())
+    const post = vi.spyOn(api, 'post').mockImplementation(async () => {
+      state.set(charges([{ reason: 'Giặt ủi x3 (kg)', amount: 150_000 }]))
+      return { data: {} }
+    })
+    await openPanel()
+    await departure().findByText('Chưa có phụ phí.')
+    await waitFor(() =>
+      expect(
+        within(departure().getByLabelText(/Dịch vụ \/ sản phẩm/)).getAllByRole('option').length,
+      ).toBeGreaterThan(1),
+    )
+
+    chooseService('svc-laundry', '3')
+    fireEvent.click(departure().getByRole('button', { name: 'Thêm dịch vụ' }))
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/bookings/d1/charges/services', {
+        serviceId: 'svc-laundry',
+        quantity: 3,
+        requestId: expect.stringMatching(/^[A-Za-z0-9_-]{8,64}$/),
+      }),
+    )
+    expect(await departure().findByText('Giặt ủi x3 (kg)')).toBeInTheDocument()
+    expect(departure().getByLabelText(/Dịch vụ \/ sản phẩm/)).toHaveValue('')
+    expect(departure().getByLabelText(/Số lượng/)).toHaveValue(1)
+  })
+
+  it('needs a service and a whole quantity between 1 and 99', async () => {
+    mockGet(charges())
+    const post = vi.spyOn(api, 'post')
+    await openPanel()
+    await departure().findByText('Chưa có phụ phí.')
+    await waitFor(() =>
+      expect(
+        within(departure().getByLabelText(/Dịch vụ \/ sản phẩm/)).getAllByRole('option').length,
+      ).toBeGreaterThan(1),
+    )
+    const add = departure().getByRole('button', { name: 'Thêm dịch vụ' })
+
+    expect(add).toBeDisabled()
+    chooseService('svc-water', '0')
+    expect(add).toBeDisabled()
+    chooseService('svc-water', '100')
+    expect(add).toBeDisabled()
+    chooseService('svc-water', '1.5')
+    expect(add).toBeDisabled()
+    chooseService('svc-water', '2')
+    expect(add).toBeEnabled()
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('retries with the same request id after a failure', async () => {
+    mockGet(charges())
+    const post = vi
+      .spyOn(api, 'post')
+      .mockRejectedValueOnce({
+        isAxiosError: true,
+        response: { status: 500, data: { message: 'Boom' } },
+      })
+      .mockResolvedValue({ data: {} })
+    await openPanel()
+    await departure().findByText('Chưa có phụ phí.')
+    await waitFor(() =>
+      expect(
+        within(departure().getByLabelText(/Dịch vụ \/ sản phẩm/)).getAllByRole('option').length,
+      ).toBeGreaterThan(1),
+    )
+
+    chooseService('svc-water', '2')
+    fireEvent.click(departure().getByRole('button', { name: 'Thêm dịch vụ' }))
+    expect(await departure().findByRole('alert')).toBeInTheDocument()
+    fireEvent.click(departure().getByRole('button', { name: 'Thêm dịch vụ' }))
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2))
+
+    const ids = post.mock.calls.map((call) => (call[1] as { requestId: string }).requestId)
+    expect(ids[1]).toBe(ids[0])
   })
 })
