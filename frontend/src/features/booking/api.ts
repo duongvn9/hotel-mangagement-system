@@ -282,6 +282,7 @@ export interface InvoiceTotals {
 
 export interface BookingCharge {
   type: string
+  category?: ChargeCategory
   amount: number
   reason: string
   sourceId?: string
@@ -297,10 +298,20 @@ export interface BookingCharges {
   charges: BookingCharge[]
 }
 
+/** Phân loại phụ phí lúc trả phòng; không chọn thì không gửi. */
+export type ChargeCategory = 'DAMAGE' | 'LATE_CHECKOUT' | 'OTHER'
+
+export const CHARGE_CATEGORY_LABEL: Record<ChargeCategory, string> = {
+  DAMAGE: 'Hư hỏng',
+  LATE_CHECKOUT: 'Trả phòng muộn',
+  OTHER: 'Khác',
+}
+
 export interface AddChargeInput {
   /** Số tiền (VND, số nguyên dương). */
   amount: number
   reason: string
+  category?: ChargeCategory
   /** Mã chống trùng cho một lần ghi; gửi lại cùng mã thì không ghi thêm khoản mới. */
   requestId: string
 }

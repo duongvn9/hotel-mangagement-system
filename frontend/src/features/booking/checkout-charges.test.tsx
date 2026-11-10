@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { bookingRoutes } from './routes'
-import type { BookingCharges, BookingListItem, SameDayList } from './api'
+import type { BookingCharges, BookingListItem, ChargeCategory, SameDayList } from './api'
 import { newRequestId, todayISO } from './utils'
 
 const receptionist = { ...ME, id: 'u2', email: 'reception@hms.local', role: 'RECEPTIONIST' }
@@ -35,7 +35,9 @@ const list = (): SameDayList => ({
   departures: [row('d1', 'DPI', 'CHECKED_IN', '201'), row('d2', 'DPO', 'CHECKED_OUT', '202')],
 })
 
-const charges = (items: { reason: string; amount: number }[] = []): BookingCharges => {
+const charges = (
+  items: { reason: string; amount: number; category?: ChargeCategory }[] = [],
+): BookingCharges => {
   const additional = items.reduce((sum, item) => sum + item.amount, 0)
   return {
     bookingId: 'd1',
@@ -359,5 +361,63 @@ describe('Adding a catalog service from the same-day list', () => {
 
     const ids = post.mock.calls.map((call) => (call[1] as { requestId: string }).requestId)
     expect(ids[1]).toBe(ids[0])
+  })
+})
+
+describe('Classifying additional charges and late check-out', () => {
+  it('sends the chosen category with the charge, and omits it when none is chosen', async () => {
+    mockGet(charges())
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: {} })
+    await openPanel()
+    await departure().findByText('Chưa có phụ phí.')
+
+    fill('30000', 'Vỡ ly')
+    fireEvent.change(departure().getByLabelText('Loại phụ phí'), { target: { value: 'DAMAGE' } })
+    fireEvent.click(departure().getByRole('button', { name: 'Thêm phụ phí' }))
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/bookings/d1/charges', {
+        amount: 30000,
+        reason: 'Vỡ ly',
+        category: 'DAMAGE',
+        requestId: expect.any(String),
+      }),
+    )
+    await waitFor(() => expect(departure().getByLabelText('Loại phụ phí')).toHaveValue(''))
+  })
+
+  it('labels the category next to a recorded charge', async () => {
+    mockGet(
+      charges([
+        { reason: 'Vỡ ly', amount: 30_000, category: 'DAMAGE' },
+        { reason: 'Ở thêm 2 giờ', amount: 100_000, category: 'LATE_CHECKOUT' },
+      ]),
+    )
+    await openPanel()
+
+    const recorded = within(await departure().findByRole('list', { name: 'Phụ phí đã ghi' }))
+    expect(recorded.getByText('Hư hỏng')).toBeInTheDocument()
+    expect(recorded.getByText('Trả phòng muộn')).toBeInTheDocument()
+  })
+
+  it('reminds the receptionist to check for a late check-out once the planned time has passed', async () => {
+    const late = list()
+    late.departures[0] = { ...late.departures[0], checkOut: '2020-01-01T05:00:00.000Z' }
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/front-desk/same-day') return { data: late }
+      if (url === '/bookings/d1/charges') return { data: charges() }
+      if (url === '/bookings/service-catalog') return { data: { items: catalog } }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    await openPanel()
+
+    expect(await departure().findByText(/quá giờ trả phòng/i)).toBeInTheDocument()
+  })
+
+  it('does not remind before the planned check-out time', async () => {
+    mockGet(charges())
+    await openPanel()
+    await departure().findByText('Chưa có phụ phí.')
+
+    expect(departure().queryByText(/quá giờ trả phòng/i)).not.toBeInTheDocument()
   })
 })

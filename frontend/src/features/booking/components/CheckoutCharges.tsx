@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { LogOut } from 'lucide-react'
-import { Button, Input } from '@/components/atoms'
+import { Button, Input, NativeSelect } from '@/components/atoms'
 import { Alert, FormField } from '@/components/molecules'
 import {
   Dialog,
@@ -11,9 +11,9 @@ import {
   DialogTitle,
 } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
-import type { BookingListItem } from '../api'
+import { CHARGE_CATEGORY_LABEL, type BookingListItem, type ChargeCategory } from '../api'
 import { useAddCharge, useBookingCharges } from '../hooks'
-import { money, newRequestId } from '../utils'
+import { isPastCheckOut, money, newRequestId } from '../utils'
 import { AddServiceForm } from './AddServiceForm'
 import { SettleAndCheckOut } from './SettleAndCheckOut'
 
@@ -31,6 +31,7 @@ export function CheckoutCharges({
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
+  const [category, setCategory] = useState<ChargeCategory | ''>('')
   // Giữ nguyên mã khi lưu lỗi để bấm lại không ghi trùng; chỉ đổi mã sau khi ghi thành công.
   const [requestId, setRequestId] = useState(newRequestId)
   const charges = useBookingCharges(open ? booking.id : null)
@@ -48,9 +49,15 @@ export function CheckoutCharges({
     event.preventDefault()
     if (!valid) return
     try {
-      await add.mutateAsync({ amount: value, reason: reason.trim(), requestId })
+      await add.mutateAsync({
+        amount: value,
+        reason: reason.trim(),
+        ...(category ? { category } : {}),
+        requestId,
+      })
       setAmount('')
       setReason('')
+      setCategory('')
       setRequestId(newRequestId())
     } catch {
       // Lỗi hiển thị qua add.error; giữ nội dung và mã để lễ tân thử lại.
@@ -112,13 +119,25 @@ export function CheckoutCharges({
 
                 <div className="space-y-3 rounded-xl border border-border bg-surface p-4">
                   <h4 className="text-sm font-semibold text-foreground">Phụ phí</h4>
+                  {booking.status === 'CHECKED_IN' && isPastCheckOut(booking.checkOut) && (
+                    <p className="text-sm text-warning">
+                      Đã quá giờ trả phòng dự kiến, kiểm tra và ghi phí trả phòng muộn nếu có.
+                    </p>
+                  )}
                   {charges.data.charges.length === 0 ? (
                     <p className="text-sm text-muted-foreground">Chưa có phụ phí.</p>
                   ) : (
                     <ul aria-label="Phụ phí đã ghi" className="divide-y divide-border text-sm">
                       {charges.data.charges.map((charge, index) => (
                         <li key={charge.sourceId ?? index} className="flex justify-between py-1.5">
-                          <span className="text-foreground">{charge.reason}</span>
+                          <span className="text-foreground">
+                            {charge.reason}
+                            {charge.category && (
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                {CHARGE_CATEGORY_LABEL[charge.category]}
+                              </span>
+                            )}
+                          </span>
                           <span className="font-semibold tabular-nums text-foreground">
                             {money.format(charge.amount)}
                           </span>
@@ -157,6 +176,22 @@ export function CheckoutCharges({
                           />
                         </FormField>
                       </div>
+                      <FormField label="Loại phụ phí" htmlFor={`charge-category-${booking.id}`}>
+                        <NativeSelect
+                          id={`charge-category-${booking.id}`}
+                          value={category}
+                          onChange={(event) =>
+                            setCategory(event.target.value as ChargeCategory | '')
+                          }
+                        >
+                          <option value="">Không phân loại</option>
+                          <option value="DAMAGE">{CHARGE_CATEGORY_LABEL.DAMAGE}</option>
+                          <option value="LATE_CHECKOUT">
+                            {CHARGE_CATEGORY_LABEL.LATE_CHECKOUT}
+                          </option>
+                          <option value="OTHER">{CHARGE_CATEGORY_LABEL.OTHER}</option>
+                        </NativeSelect>
+                      </FormField>
                       <div className="flex justify-end">
                         <Button
                           type="submit"
