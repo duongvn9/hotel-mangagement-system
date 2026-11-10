@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /** Một dòng booking trong "Đặt phòng của tôi" (Customer đăng nhập). */
 export class MyBookingItem {
@@ -39,4 +39,18 @@ export class MyBookingItem {
 
   @ApiProperty({ description: 'Thời điểm tạo booking (ISO)' })
   createdAt: string;
+
+  @ApiPropertyOptional({ description: 'Tên loại phòng của phòng đầu tiên' })
+  roomTypeName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Ảnh đầu tiên của loại phòng (đường dẫn)',
+  })
+  roomTypeImage?: string;
+
+  @ApiPropertyOptional({ description: 'Số phòng của phòng đầu tiên' })
+  roomNumber?: string;
+
+  @ApiPropertyOptional({ description: 'Tầng của phòng đầu tiên' })
+  roomFloor?: number;
 }

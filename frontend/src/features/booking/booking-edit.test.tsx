@@ -41,6 +41,39 @@ function mockGet(items: BookingListItem[]) {
   return vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
     if (url === '/bookings') return { data: listPage(items) }
     if (url === '/availability') return { data: available }
+    // Sau khi lưu, trang chi tiết đọc /bookings/:id/summary.
+    if (items[0] && url === `/bookings/${items[0].id}/summary`) {
+      const [first] = items
+      return {
+        data: {
+          bookingId: first.id,
+          code: first.code,
+          status: first.status,
+          source: first.source,
+          checkIn: first.checkIn,
+          checkOut: first.checkOut,
+          adultCount: first.adultCount,
+          childCount: first.childCount,
+          createdAt: first.createdAt,
+          depositAmount: 0,
+          guest: { name: first.guestName },
+          rooms: [],
+          invoice: {
+            roomTotal: first.roomTotal,
+            serviceTotal: 0,
+            additionalTotal: 0,
+            discountTotal: 0,
+            taxTotal: 0,
+            totalAmount: first.roomTotal,
+            depositPaid: 0,
+            finalPaid: 0,
+            balanceDue: first.roomTotal,
+          },
+          payments: [],
+          serviceOrders: [],
+        },
+      }
+    }
     throw new Error(`unexpected GET ${url}`)
   })
 }
@@ -99,9 +132,7 @@ describe('EditBookingPage', () => {
       }),
     )
     // Lưu xong chuyển sang trang chi tiết booking của lễ tân.
-    expect(
-      await screen.findByRole('heading', { name: 'Chi tiết booking BKEDIT1' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'BKEDIT1' })).toBeInTheDocument()
   })
 
   it('needs at least one room', async () => {

@@ -1,8 +1,8 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { api } from '@/lib/api-client'
-import { renderWithAuth } from '@/features/auth/test-utils'
+import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { bookingRoutes } from './routes'
-import type { AvailableRoom, Booking } from './api'
+import type { AvailableRoom, Booking, BookingSummary } from './api'
 import {
   getStoredBooking,
   listStoredBookings,
@@ -28,6 +28,36 @@ const booking: Booking = {
   source: 'ONLINE',
   holdExpiresAt: '2099-01-10T00:00:00.000Z',
 }
+
+/** Chi tiết mà trang booking đọc từ /bookings/:id/summary, dựng từ một booking mẫu. */
+const summaryFor = (value: Booking, overrides: Partial<BookingSummary> = {}): BookingSummary => ({
+  bookingId: value.id,
+  code: value.code,
+  status: value.status,
+  source: value.source,
+  checkIn: value.checkIn,
+  checkOut: value.checkOut,
+  adultCount: value.adultCount,
+  childCount: value.childCount,
+  createdAt: '2099-01-01T00:00:00.000Z',
+  depositAmount: value.depositAmount,
+  guest: { name: 'Khách Test', email: 'k@example.test', phone: '0900000001' },
+  rooms: [{ roomNumber: '101', roomTypeName: 'Deluxe' }],
+  invoice: {
+    roomTotal: value.roomTotal,
+    serviceTotal: 0,
+    additionalTotal: 0,
+    discountTotal: 0,
+    taxTotal: 0,
+    totalAmount: value.roomTotal,
+    depositPaid: 0,
+    finalPaid: 0,
+    balanceDue: value.roomTotal,
+  },
+  payments: [],
+  serviceOrders: [],
+  ...overrides,
+})
 
 describe('booking utils', () => {
   it('counts nights between two business dates', () => {
@@ -213,6 +243,52 @@ describe('MyBookingsPage', () => {
     expect(screen.getByText('Chờ đặt cọc')).toBeInTheDocument()
   })
 
+  it('shows each booking as a card with the room photo, room type, code, total and amount paid', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: [
+        myItem({
+          id: 'b1',
+          code: 'BK2401',
+          status: 'CHECKED_IN',
+          checkIn: '2099-03-10',
+          checkOut: '2099-03-11',
+          adultCount: 1,
+          roomTotal: 1_250_000,
+          paidAmount: 375_000,
+          roomTypeName: 'Phòng Đôi Hướng Vườn',
+          roomTypeImage: '/images/seeds/room-types/standard-01.jpg',
+          roomNumber: '101',
+        }),
+      ],
+    })
+    renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
+
+    const card = (await screen.findByText('Phòng Đôi Hướng Vườn')).closest('a') as HTMLElement
+    expect(card).toHaveAttribute('href', '/my-bookings/b1')
+    expect(within(card).getByText('Đã nhận phòng')).toBeInTheDocument()
+    expect(within(card).getByText('BK2401')).toBeInTheDocument()
+    expect(card).toHaveTextContent('BK2401 · Phòng 101 · 1 khách')
+    expect(within(card).getByText(/→/)).toHaveTextContent('→')
+    expect(within(card).getByText('1.250.000 ₫')).toBeInTheDocument()
+    expect(within(card).getByText('Đã trả 375.000 ₫')).toBeInTheDocument()
+    expect(card.querySelector('img')).toHaveAttribute(
+      'src',
+      expect.stringContaining('standard-01.jpg'),
+    )
+  })
+
+  it('still shows a card for a booking without room details or payments', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: [myItem({ id: 'b9', code: 'BK-PLAIN', roomCount: 2, adultCount: 2, childCount: 1 })],
+    })
+    renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
+
+    const card = (await screen.findByText('BK-PLAIN')).closest('a') as HTMLElement
+    expect(card).toHaveTextContent('BK-PLAIN · 2 phòng · 3 khách')
+    expect(within(card).getByText('Đã trả 0 ₫')).toBeInTheDocument()
+    expect(within(card).getByText('Đặt phòng')).toBeInTheDocument()
+  })
+
   it('sorts bookings by check-in date, newest first by default', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({
       data: [
@@ -284,10 +360,11 @@ describe('MyBookingsPage', () => {
       ),
     })
     renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
-    await screen.findAllByText('Tiền cọc')
-    expect(screen.getAllByText('Tiền cọc')).toHaveLength(8)
+    // Mỗi card có một dòng "Đã trả …".
+    await screen.findAllByText(/^Đã trả \d/)
+    expect(screen.getAllByText(/^Đã trả \d/)).toHaveLength(8)
     fireEvent.click(screen.getByLabelText('Trang sau'))
-    expect(screen.getAllByText('Tiền cọc')).toHaveLength(2)
+    expect(screen.getAllByText(/^Đã trả \d/)).toHaveLength(2)
   })
 })
 
@@ -435,6 +512,7 @@ describe('BookingDetailPage (server-authoritative)', () => {
   it('reads authoritative booking state and starts a VNPay deposit', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
       if (url === '/bookings/b1') return { data: booking }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(booking) }
       throw new Error(`unexpected GET ${url}`)
     })
     const post = vi.spyOn(api, 'post').mockResolvedValue({
@@ -455,53 +533,115 @@ describe('BookingDetailPage (server-authoritative)', () => {
     )
   })
 
-  it('shows a paid-in-full state and hides the final payment button', async () => {
-    vi.spyOn(api, 'get').mockResolvedValue({
-      data: {
-        ...booking,
-        status: 'CONFIRMED',
-        paidAmount: 2_000_000,
-        balanceDue: 0,
-        invoiceStatus: 'PAID',
-      },
+  it.each(['RECEPTIONIST', 'MANAGER'])(
+    'sends %s to the staff booking page inside the dashboard',
+    async (role) => {
+      vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+        if (url === '/bookings/b1') return { data: booking }
+        if (url === '/bookings/b1/summary') return { data: summaryFor(booking) }
+        if (url === '/bookings') return { data: { items: [], total: 0, page: 1, limit: 20 } }
+        throw new Error(`unexpected GET ${url}`)
+      })
+
+      const { router } = renderWithAuth(bookingRoutes, {
+        path: '/booking/b1',
+        auth: { me: { ...ME, role }, status: 'authenticated' },
+      })
+
+      await waitFor(() => expect(router.state.location.pathname).toBe('/reception/bookings/BK123'))
+    },
+  )
+
+  it('sends a signed-in customer to the booking page inside the dashboard', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: booking }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(booking) }
+      throw new Error(`unexpected GET ${url}`)
     })
 
-    renderWithAuth(bookingRoutes, { path: '/booking/b1' })
+    const { router } = renderWithAuth(bookingRoutes, {
+      path: '/booking/b1',
+      auth: { me: { ...ME, role: 'CUSTOMER' }, status: 'authenticated' },
+    })
 
-    expect(await screen.findByText(/Đơn này đã thanh toán đủ/)).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: /Thanh toán phần còn lại/ }),
-    ).not.toBeInTheDocument()
+    await waitFor(() => expect(router.state.location.pathname).toBe('/my-bookings/b1'))
+    expect(await screen.findByRole('heading', { level: 1, name: 'BK123' })).toBeInTheDocument()
   })
 
-  it('shows the final payment button when a balance is still due', async () => {
-    vi.spyOn(api, 'get').mockResolvedValue({
-      data: {
-        ...booking,
-        status: 'CONFIRMED',
-        paidAmount: 600_000,
-        balanceDue: 1_400_000,
-        invoiceStatus: 'PARTIALLY_PAID',
-      },
+  it('shows the booking in the prototype layout with the customer’s actions in the header', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: booking }
+      if (url === '/bookings/b1/summary')
+        return {
+          data: summaryFor(booking, {
+            payments: [
+              {
+                id: 'p1',
+                method: 'VNPAY',
+                purpose: 'DEPOSIT',
+                status: 'PENDING',
+                amount: 600_000,
+                date: '2099-01-01T03:00:00.000Z',
+              },
+            ],
+          }),
+        }
+      throw new Error(`unexpected GET ${url}`)
     })
-    const post = vi.spyOn(api, 'post').mockResolvedValue({
-      data: { transactionRef: 'TXN9', paymentUrl: 'https://vnpay.test/pay', amount: 1_400_000 },
+
+    renderWithAuth(bookingRoutes, {
+      path: '/my-bookings/b1',
+      auth: { me: { ...ME, role: 'CUSTOMER' }, status: 'authenticated' },
+    })
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'BK123' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Đặt phòng/ })).toHaveAttribute('href', '/my-bookings')
+    for (const title of ['Lưu trú', 'Thanh toán', 'Yêu cầu dịch vụ', 'Hoá đơn', 'Khách']) {
+      expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
+    }
+    expect(screen.getByText(/Đặt cọc · VNPay/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Đặt cọc qua VNPay/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Huỷ booking' })).toBeInTheDocument()
+  })
+
+  it('does not ask the customer to retype a code and sends none to the summary', async () => {
+    const get = vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: booking }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(booking) }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    renderWithAuth(bookingRoutes, {
+      path: '/my-bookings/b1',
+      auth: { me: { ...ME, role: 'CUSTOMER' }, status: 'authenticated' },
+    })
+
+    await screen.findByRole('heading', { level: 1, name: 'BK123' })
+    expect(get).toHaveBeenCalledWith('/bookings/b1/summary', { params: {} })
+    expect(screen.queryByLabelText('Mã booking (vé)')).not.toBeInTheDocument()
+  })
+
+  it('shows a guest the summary with their booking code and a link to the lookup', async () => {
+    const get = vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: booking }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(booking) }
+      throw new Error(`unexpected GET ${url}`)
     })
 
     renderWithAuth(bookingRoutes, { path: '/booking/b1' })
 
-    fireEvent.click(await screen.findByRole('button', { name: /Thanh toán phần còn lại/ }))
-    await waitFor(() =>
-      expect(post).toHaveBeenCalledWith(
-        '/payments/final',
-        expect.objectContaining({ bookingId: 'b1' }),
-      ),
+    expect(await screen.findByRole('heading', { level: 1, name: 'BK123' })).toBeInTheDocument()
+    expect(get).toHaveBeenCalledWith('/bookings/b1/summary', { params: { code: 'BK123' } })
+    expect(screen.getByRole('link', { name: /Tra cứu đặt phòng/ })).toHaveAttribute(
+      'href',
+      '/booking/lookup',
     )
   })
 
   it('sends the booking code for a guest who opened the page without ?code', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
       if (url === '/bookings/b1') return { data: booking }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(booking) }
       throw new Error(`unexpected GET ${url}`)
     })
     const post = vi.spyOn(api, 'post').mockResolvedValue({
@@ -520,20 +660,81 @@ describe('BookingDetailPage (server-authoritative)', () => {
     await waitFor(() => expect(post).toHaveBeenCalledWith('/bookings/b1/cancel', { code: 'BK123' }))
   })
 
+  it('shows a paid-in-full state and hides the final payment button', async () => {
+    const paid = {
+      ...booking,
+      status: 'CONFIRMED',
+      paidAmount: 2_000_000,
+      balanceDue: 0,
+      invoiceStatus: 'PAID',
+    }
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: paid }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(paid) }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    renderWithAuth(bookingRoutes, { path: '/booking/b1' })
+
+    expect(await screen.findByText(/Đơn này đã thanh toán đủ/)).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Thanh toán phần còn lại/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the final payment button when a balance is still due', async () => {
+    const owing = {
+      ...booking,
+      status: 'CONFIRMED',
+      paidAmount: 600_000,
+      balanceDue: 1_400_000,
+      invoiceStatus: 'PARTIALLY_PAID',
+    }
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: owing }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(owing) }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    const post = vi.spyOn(api, 'post').mockResolvedValue({
+      data: { transactionRef: 'TXN9', paymentUrl: 'https://vnpay.test/pay', amount: 1_400_000 },
+    })
+
+    renderWithAuth(bookingRoutes, { path: '/booking/b1' })
+
+    fireEvent.click(await screen.findByRole('button', { name: /Thanh toán phần còn lại/ }))
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        '/payments/final',
+        expect.objectContaining({ bookingId: 'b1' }),
+      ),
+    )
+  })
+
   it('shows the expired state and hides the deposit action', async () => {
-    vi.spyOn(api, 'get').mockResolvedValue({
-      data: { ...booking, id: 'b2', code: 'BK999', status: 'EXPIRED', holdExpiresAt: undefined },
+    const expired = {
+      ...booking,
+      id: 'b2',
+      code: 'BK999',
+      status: 'EXPIRED',
+      holdExpiresAt: undefined,
+    }
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b2') return { data: expired }
+      if (url === '/bookings/b2/summary') return { data: summaryFor(expired) }
+      throw new Error(`unexpected GET ${url}`)
     })
 
     renderWithAuth(bookingRoutes, { path: '/booking/b2' })
 
     expect(await screen.findByText('Hết hạn')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Đặt cọc qua VNPay' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Đặt cọc qua VNPay/ })).not.toBeInTheDocument()
   })
 
   it('shows cancellation confirmation dialog and executes cancellation', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
       if (url === '/bookings/b1') return { data: { ...booking, status: 'CONFIRMED' } }
+      if (url === '/bookings/b1/summary')
+        return { data: summaryFor(booking, { status: 'CONFIRMED' }) }
       throw new Error(`unexpected GET ${url}`)
     })
     const post = vi.spyOn(api, 'post').mockResolvedValue({ data: {} })

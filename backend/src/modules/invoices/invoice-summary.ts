@@ -10,6 +10,7 @@ export function toBookingChargesResponse(
     checkoutFeesConfirmedAt?: Date | null;
   },
   invoice: InvoiceDocument,
+  options: { vnpayPending?: boolean } = {},
 ): BookingChargesResponse {
   return {
     bookingId: String(booking._id),
@@ -19,6 +20,7 @@ export function toBookingChargesResponse(
     ...(booking.checkoutFeesConfirmedAt
       ? { feesConfirmedAt: booking.checkoutFeesConfirmedAt.toISOString() }
       : {}),
+    ...(options.vnpayPending ? { vnpayPending: true as const } : {}),
     totals: {
       roomTotal: invoice.roomTotal,
       serviceTotal: invoice.serviceTotal,

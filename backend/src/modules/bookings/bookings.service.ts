@@ -100,6 +100,13 @@ type PopulatedRoom = {
   } | null;
 };
 
+/** Phòng đã populate (loại phòng, ảnh) cho danh sách "Đặt phòng của tôi"; thiếu khi phòng đã bị xoá. */
+interface MyBookingRoom {
+  roomNumber?: string;
+  floor?: number;
+  roomType?: { name?: string; images?: string[] };
+}
+
 @Injectable()
 export class BookingsService {
   constructor(
@@ -267,6 +274,7 @@ export class BookingsService {
       childCount: booking.childCount,
       source: booking.source,
       roomTotal: booking.roomTotal,
+      depositAmount: booking.depositAmount,
     };
   }
 
@@ -346,6 +354,14 @@ export class BookingsService {
       .select(
         'code status checkIn checkOut adultCount childCount rooms roomTotal depositAmount createdAt',
       )
+      // Phòng đầu tiên cho thẻ "Đặt phòng của tôi" và "Kỳ nghỉ tiếp theo": loại phòng, ảnh, số phòng, tầng.
+      // retainNullValues: phòng đã bị xoá vẫn được đếm trong roomCount.
+      .populate<{ rooms: (MyBookingRoom | null)[] }>({
+        path: 'rooms',
+        select: 'roomNumber floor roomType',
+        options: { retainNullValues: true },
+        populate: { path: 'roomType', select: 'name images' },
+      })
       .lean()
       .exec();
     // Một truy vấn gộp cho cả danh sách, không truy vấn riêng từng booking.
@@ -364,22 +380,31 @@ export class BookingsService {
     const paidByBooking = new Map(
       paid.map((entry) => [String(entry._id), entry.total]),
     );
-    return rows.map((booking) => ({
-      id: String(booking._id),
-      code: booking.code,
-      status: booking.status,
-      checkIn: booking.checkIn.toISOString(),
-      checkOut: booking.checkOut.toISOString(),
-      adultCount: booking.adultCount,
-      childCount: booking.childCount,
-      roomCount: booking.rooms.length,
-      roomTotal: booking.roomTotal,
-      depositAmount: booking.depositAmount,
-      paidAmount: paidByBooking.get(String(booking._id)) ?? 0,
-      createdAt: (
-        (booking as { createdAt?: Date }).createdAt ?? booking.checkIn
-      ).toISOString(),
-    }));
+    return rows.map((booking) => {
+      const room = booking.rooms[0];
+      return {
+        id: String(booking._id),
+        code: booking.code,
+        status: booking.status,
+        checkIn: booking.checkIn.toISOString(),
+        checkOut: booking.checkOut.toISOString(),
+        adultCount: booking.adultCount,
+        childCount: booking.childCount,
+        roomCount: booking.rooms.length,
+        roomTotal: booking.roomTotal,
+        depositAmount: booking.depositAmount,
+        paidAmount: paidByBooking.get(String(booking._id)) ?? 0,
+        createdAt: (
+          (booking as { createdAt?: Date }).createdAt ?? booking.checkIn
+        ).toISOString(),
+        ...(room?.roomType?.name ? { roomTypeName: room.roomType.name } : {}),
+        ...(room?.roomType?.images?.[0]
+          ? { roomTypeImage: room.roomType.images[0] }
+          : {}),
+        ...(room?.roomNumber ? { roomNumber: room.roomNumber } : {}),
+        ...(room?.floor !== undefined ? { roomFloor: room.floor } : {}),
+      };
+    });
   }
 
   /**

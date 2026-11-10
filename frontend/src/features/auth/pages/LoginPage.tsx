@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router'
-import { roleHome } from '@/app/navigation'
+import { postLoginPath } from '@/app/navigation'
 import { AssetImage } from '@/components/AssetImage'
 import { Button, Input } from '@/components/atoms'
 import { FormField } from '@/components/molecules'
@@ -23,7 +23,7 @@ export function LoginPage() {
   const [signedIn, setSignedIn] = useState(false)
 
   // Về trang đang xem dở; nếu không có thì nhân viên vào trang làm việc của vai trò, khách về trang chủ.
-  const destination = from && from !== '/' ? from : me ? roleHome(me.role) : '/'
+  const destination = me ? postLoginPath(me, from) : from && from !== '/' ? from : '/'
 
   if (me || signedIn) return <Navigate to={destination} replace />
 

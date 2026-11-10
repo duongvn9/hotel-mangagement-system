@@ -1,13 +1,27 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router'
-import { Button, Input, StatusBadge } from '@/components/atoms'
-import { Alert, FormField } from '@/components/molecules'
+import { Link, useSearchParams } from 'react-router'
+import { Button, Input, NativeSelect, StatusBadge } from '@/components/atoms'
+import { Alert, FormField, KeyValue } from '@/components/molecules'
 import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
-import type { CreateWalkInBookingInput, WalkInBooking } from '../api'
-import { useAvailability, useCreateWalkInBooking } from '../hooks'
-import { formatDate, money, nightsBetween, todayISO } from '../utils'
+import {
+  DESK_DEPOSIT_LABEL,
+  type CreateWalkInBookingInput,
+  type DeskDepositMethod,
+  type WalkInBooking,
+} from '../api'
+import {
+  useAvailability,
+  useCreateWalkInBooking,
+  useInitiateDeposit,
+  useRecordDeskDeposit,
+} from '../hooks'
+import { rememberPaymentRef } from '../storage'
+import { formatDate, money, newRequestId, nightsBetween, todayISO } from '../utils'
+
+/** Cách khách đóng cọc tại quầy: tiền mặt hoặc thẻ ghi ngay, hoặc VNPay mở trang thanh toán. */
+type WalkInDepositMethod = DeskDepositMethod | 'VNPAY'
 
 /** UC08 — Create Booking for Guest. Lễ tân chọn phòng trống rồi đặt hộ khách vãng lai, vào thẳng CONFIRMED. */
 export function WalkInBookingPage() {
@@ -28,6 +42,9 @@ export function WalkInBookingPage() {
   const [guestEmail, setGuestEmail] = useState(params.get('guestEmail') ?? '')
   const [guestPhone, setGuestPhone] = useState(params.get('guestPhone') ?? '')
   const [created, setCreated] = useState<WalkInBooking | null>(null)
+  const [depositMethod, setDepositMethod] = useState<WalkInDepositMethod | ''>('')
+  // Giữ nguyên mã khi thu cọc lỗi để bấm lại không ghi trùng.
+  const [depositRequestId, setDepositRequestId] = useState(newRequestId)
 
   const availability = useAvailability(
     criteria
@@ -39,6 +56,8 @@ export function WalkInBookingPage() {
       : null,
   )
   const create = useCreateWalkInBooking()
+  const deposit = useRecordDeskDeposit()
+  const vnpay = useInitiateDeposit()
   const nights = criteria ? nightsBetween(criteria.checkIn, criteria.checkOut) : 0
 
   // Đánh số phòng theo thứ tự trong từng loại (kết quả tìm phòng không trả số phòng).
@@ -81,19 +100,38 @@ export function WalkInBookingPage() {
 
   async function submitBooking(event: FormEvent) {
     event.preventDefault()
-    if (!criteria || selected.length === 0) return
+    if (!criteria || selected.length === 0 || !depositMethod) return
     try {
-      setCreated(
-        await create.mutateAsync({
-          rooms: selected,
-          ...criteria,
-          guestName: guestName.trim(),
-          guestEmail: guestEmail.trim(),
-          guestPhone: guestPhone.trim(),
-        }),
-      )
+      const booking = await create.mutateAsync({
+        rooms: selected,
+        ...criteria,
+        guestName: guestName.trim(),
+        guestEmail: guestEmail.trim(),
+        guestPhone: guestPhone.trim(),
+      })
+      setCreated(booking)
+      await takeDeposit(booking.id, depositMethod)
     } catch {
       // Lỗi hiển thị qua create.isError bên dưới.
+    }
+  }
+
+  /**
+   * Thu cọc cho booking vừa tạo. Tiền mặt/thẻ ghi ngay khoản khách vừa đóng (lỗi giữ booking và cho
+   * thu lại bằng cùng mã); VNPay mở trang thanh toán, cọc được ghi nhận khi VNPay xác nhận.
+   */
+  async function takeDeposit(id: string, method: WalkInDepositMethod) {
+    try {
+      if (method === 'VNPAY') {
+        const result = await vnpay.mutateAsync({ bookingId: id })
+        // Nhớ giao dịch thuộc booking nào để trang kết quả VNPay cập nhật đúng.
+        rememberPaymentRef(result.transactionRef, id)
+        window.open(result.paymentUrl, '_blank', 'noopener')
+      } else {
+        await deposit.mutateAsync({ id, method, requestId: depositRequestId })
+      }
+    } catch {
+      // Lỗi hiển thị qua deposit.isError / vnpay.isError ở trang kết quả.
     }
   }
 
@@ -104,7 +142,11 @@ export function WalkInBookingPage() {
     setGuestName('')
     setGuestEmail('')
     setGuestPhone('')
+    setDepositMethod('')
+    setDepositRequestId(newRequestId())
     create.reset()
+    deposit.reset()
+    vnpay.reset()
   }
 
   if (created) {
@@ -115,35 +157,114 @@ export function WalkInBookingPage() {
           title="Đã tạo booking"
           subtitle="Booking đã xác nhận, phòng đã được giữ cho khách."
         />
-        <Panel className="space-y-4 p-6">
-          <Alert tone="success">Booking đã xác nhận, phòng đã được giữ cho khách.</Alert>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-muted-foreground">Mã booking</dt>
-              <dd className="text-2xl font-semibold tracking-wide text-primary tabular-nums">
-                {created.code}
-              </dd>
+        <div className="grid items-start gap-6 lg:grid-cols-[1fr_340px]">
+          <Panel title="Booking">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Mã booking</p>
+                <p className="text-2xl font-semibold tracking-wide text-primary tabular-nums">
+                  {created.code}
+                </p>
+              </div>
+              <StatusBadge status={created.status} />
             </div>
-            <div>
-              <dt className="text-muted-foreground">Trạng thái</dt>
-              <dd>
-                <StatusBadge status={created.status} />
-              </dd>
+            <div className="grid gap-x-8 sm:grid-cols-2">
+              <KeyValue k="Nhận phòng" v={formatDate(created.checkIn)} />
+              <KeyValue k="Trả phòng" v={formatDate(created.checkOut)} />
+              <KeyValue
+                k="Số khách"
+                v={`${created.adultCount} người lớn · ${created.childCount} trẻ em`}
+              />
             </div>
-            <div>
-              <dt className="text-muted-foreground">Lưu trú</dt>
-              <dd className="font-semibold text-foreground">
-                {formatDate(created.checkIn)} – {formatDate(created.checkOut)}
-              </dd>
+          </Panel>
+
+          <Panel title="Thanh toán">
+            <div className="divide-y">
+              <KeyValue
+                k="Tiền phòng"
+                v={<span className="tabular-nums">{money.format(created.roomTotal)}</span>}
+              />
+              <KeyValue
+                k="Tiền cọc"
+                v={<span className="tabular-nums">{money.format(created.depositAmount)}</span>}
+              />
             </div>
-            <div>
-              <dt className="text-muted-foreground">Tiền phòng</dt>
-              <dd className="font-semibold tabular-nums text-foreground">
-                {money.format(created.roomTotal)}
-              </dd>
+            <div className="mt-4 space-y-3">
+              {depositMethod === 'VNPAY' ? (
+                <>
+                  {vnpay.isPending && (
+                    <p className="text-sm text-muted-foreground">Đang mở cổng VNPay…</p>
+                  )}
+                  {vnpay.isSuccess && (
+                    <Alert tone="info">
+                      <p className="mb-3">
+                        Đã mở trang VNPay để khách thanh toán cọc. Cọc được ghi nhận khi VNPay xác
+                        nhận; xem trạng thái ở trang chi tiết booking.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button asChild variant="secondary" size="sm" className="rounded-full">
+                          <Link to={`/reception/bookings/${encodeURIComponent(created.code)}`}>
+                            Xem booking
+                          </Link>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full"
+                          disabled={vnpay.isPending}
+                          onClick={() => void takeDeposit(created.id, 'VNPAY')}
+                        >
+                          Mở lại trang VNPay
+                        </Button>
+                      </div>
+                    </Alert>
+                  )}
+                  {vnpay.isError && (
+                    <Alert tone="danger">
+                      <p className="mb-3">
+                        Đã tạo booking nhưng chưa mở được VNPay: {getErrorMessage(vnpay.error)}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => void takeDeposit(created.id, 'VNPAY')}
+                      >
+                        Mở lại trang VNPay
+                      </Button>
+                    </Alert>
+                  )}
+                </>
+              ) : (
+                <>
+                  {deposit.isPending && (
+                    <p className="text-sm text-muted-foreground">Đang ghi nhận tiền cọc…</p>
+                  )}
+                  {deposit.isSuccess && depositMethod && (
+                    <Alert tone="success">
+                      Đã thu cọc {money.format(created.depositAmount)} bằng{' '}
+                      {DESK_DEPOSIT_LABEL[depositMethod]}.
+                    </Alert>
+                  )}
+                  {deposit.isError && depositMethod && (
+                    <Alert tone="danger">
+                      <p className="mb-3">
+                        Đã tạo booking nhưng chưa thu được cọc: {getErrorMessage(deposit.error)}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => void takeDeposit(created.id, depositMethod)}
+                      >
+                        Thu cọc lại
+                      </Button>
+                    </Alert>
+                  )}
+                </>
+              )}
             </div>
-          </dl>
-        </Panel>
+          </Panel>
+        </div>
         <Button onClick={startOver} className="rounded-full">
           Tạo booking khác
         </Button>
@@ -156,7 +277,7 @@ export function WalkInBookingPage() {
       <PageHeader
         eyebrow="Lễ tân"
         title="Tạo booking cho khách vãng lai"
-        subtitle="Booking tại quầy được xác nhận ngay, không cần đặt cọc online."
+        subtitle="Booking tại quầy được xác nhận ngay; khách đóng cọc bằng tiền mặt, thẻ hoặc VNPay."
       />
 
       <form
@@ -300,6 +421,28 @@ export function WalkInBookingPage() {
               </div>
             </Panel>
 
+            <Panel title="Thu cọc">
+              <FormField label="Hình thức thu cọc" htmlFor="walkin-deposit-method" required>
+                <NativeSelect
+                  id="walkin-deposit-method"
+                  required
+                  value={depositMethod}
+                  onChange={(event) =>
+                    setDepositMethod(event.target.value as WalkInDepositMethod | '')
+                  }
+                >
+                  <option value="">Chọn hình thức</option>
+                  <option value="CASH">Tiền mặt</option>
+                  <option value="CARD">Thẻ</option>
+                  <option value="VNPAY">VNPay</option>
+                </NativeSelect>
+              </FormField>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Tiền mặt và thẻ được ghi nhận ngay; VNPay mở trang thanh toán cho khách. Số tiền cọc
+                do hệ thống tính khi tạo booking.
+              </p>
+            </Panel>
+
             {create.isError && <Alert tone="danger">{getErrorMessage(create.error)}</Alert>}
           </div>
 
@@ -323,7 +466,7 @@ export function WalkInBookingPage() {
             <Button
               type="submit"
               className="w-full rounded-full"
-              disabled={selected.length === 0 || create.isPending}
+              disabled={selected.length === 0 || !depositMethod || create.isPending}
             >
               Tạo booking
             </Button>

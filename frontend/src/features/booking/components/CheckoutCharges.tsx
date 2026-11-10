@@ -114,6 +114,7 @@ export function CheckoutCharges({
                     booking={booking}
                     totals={charges.data.totals}
                     feesConfirmedAt={charges.data.feesConfirmedAt}
+                    vnpayPending={charges.data.vnpayPending === true}
                     onReload={() => void charges.refetch()}
                     reloading={charges.isFetching}
                   />

@@ -67,9 +67,12 @@ function setup(
     addCharge: vi.fn(async () => invoice),
     getOrCreateForBooking: vi.fn(async () => invoice),
   };
+  // list() asks whether a VNPay payment is still pending; none is in these tests.
+  const payments = { exists: vi.fn(async () => null) };
   const sut = new CheckoutChargesService(
     bookings as never,
     services as never,
+    payments as never,
     invoices as never,
   );
   return { sut, invoices, services, bookings, booking };
