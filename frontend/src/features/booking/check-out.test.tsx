@@ -36,11 +36,12 @@ const list = (): SameDayList => ({
 })
 
 /** Hóa đơn: tổng 2.000.000, đã cọc 600.000; `paid` = đã thu nốt phần còn lại. */
-const invoice = (paid: boolean): BookingCharges => ({
+const invoice = (paid: boolean, confirmed = true): BookingCharges => ({
   bookingId: 'd1',
   code: 'DPI',
   status: 'CHECKED_IN',
   invoiceStatus: paid ? 'PAID' : 'PARTIALLY_PAID',
+  ...(confirmed ? { feesConfirmedAt: '2099-01-10T00:00:00.000Z' } : {}),
   totals: {
     roomTotal: 2_000_000,
     serviceTotal: 0,
@@ -77,12 +78,17 @@ function mockGet(initial: BookingCharges) {
   }
 }
 
-const departure = () => within(screen.getByRole('listitem', { name: 'DPI' }))
+const departure = () => within(screen.getByRole('dialog'))
 
 async function openPanel() {
   renderPage()
+  fireEvent.click(await screen.findByRole('tab', { name: 'Trả phòng' }))
   await screen.findByRole('heading', { name: 'Khách đi (1)' })
-  fireEvent.click(departure().getByRole('button', { name: 'Phụ phí' }))
+  fireEvent.click(
+    within(screen.getByRole('listitem', { name: 'DPI' })).getByRole('button', {
+      name: 'Trả phòng',
+    }),
+  )
   await departure().findByText(/Tổng cộng/)
 }
 
@@ -126,6 +132,69 @@ describe('Pay and check out from the same-day departures list', () => {
     expect(post.mock.calls[1]).toEqual(post.mock.calls[0])
     expect(departure().getByRole('button', { name: 'Check Out' })).toBeEnabled()
     expect(departure().queryByRole('button', { name: 'Thu tiền mặt' })).not.toBeInTheDocument()
+  })
+
+  it('offers card as another way to settle at the desk', async () => {
+    mockGet(invoice(false))
+    await openPanel()
+    expect(departure().getByRole('button', { name: 'Thu thẻ' })).toBeInTheDocument()
+  })
+
+  it('confirms a card payment through the card endpoint and refreshes the invoice', async () => {
+    const state = mockGet(invoice(false))
+    const post = vi.spyOn(api, 'post').mockImplementation(async () => {
+      state.set(invoice(true))
+      return { data: {} }
+    })
+    await openPanel()
+
+    fireEvent.click(departure().getByRole('button', { name: 'Thu thẻ' }))
+    expect(departure().getByText(/Xác nhận đã thu thẻ 1\.400\.000/)).toBeInTheDocument()
+    fireEvent.click(departure().getByRole('button', { name: 'Xác nhận đã thu thẻ' }))
+
+    expect(await departure().findByText('Đã thanh toán đủ')).toBeInTheDocument()
+    expect(post).toHaveBeenCalledWith('/bookings/d1/payments/card', {
+      requestId: expect.stringMatching(/^[A-Za-z0-9_-]{8,64}$/),
+    })
+  })
+
+  it('asks the guest to confirm the fees before any payment can be taken', async () => {
+    mockGet(invoice(false, false))
+    await openPanel()
+
+    expect(await departure().findByRole('button', { name: 'Khách đã xác nhận phí' })).toBeEnabled()
+    for (const name of ['Thu tiền mặt', 'Thu thẻ', 'Thanh toán VNPay']) {
+      expect(departure().getByRole('button', { name })).toBeDisabled()
+    }
+  })
+
+  it('records the confirmation and then allows payment', async () => {
+    const state = mockGet(invoice(false, false))
+    const post = vi.spyOn(api, 'post').mockImplementation(async () => {
+      state.set(invoice(false, true))
+      return { data: {} }
+    })
+    await openPanel()
+
+    fireEvent.click(await departure().findByRole('button', { name: 'Khách đã xác nhận phí' }))
+
+    expect(await departure().findByText('Khách đã xác nhận các khoản phí')).toBeInTheDocument()
+    expect(post).toHaveBeenCalledWith('/bookings/d1/charges/confirm')
+    expect(departure().getByRole('button', { name: 'Thu tiền mặt' })).toBeEnabled()
+    expect(
+      departure().queryByRole('button', { name: 'Khách đã xác nhận phí' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not ask for confirmation once the invoice is already paid', async () => {
+    mockGet(invoice(true, false))
+    await openPanel()
+    await departure().findByText('Đã thanh toán đủ')
+
+    expect(
+      departure().queryByRole('button', { name: 'Khách đã xác nhận phí' }),
+    ).not.toBeInTheDocument()
+    expect(departure().getByRole('button', { name: 'Check Out' })).toBeEnabled()
   })
 
   it('can back out of the cash confirmation', async () => {

@@ -25,6 +25,7 @@ import {
   type InvoiceDocument,
 } from './schemas/invoice.schema.js';
 import {
+  ChargeCategory,
   InvoiceChargeType,
   type InvoiceCharge,
 } from './schemas/invoice-charge.schema.js';
@@ -39,6 +40,7 @@ export interface AddInvoiceCharge {
   type: InvoiceChargeType;
   amount: number;
   reason: string;
+  category?: ChargeCategory;
   sourceId?: string;
 }
 
@@ -93,6 +95,7 @@ export class InvoicesService {
       type: input.type,
       amount: input.amount,
       reason: input.reason?.trim(),
+      ...(input.category === undefined ? {} : { category: input.category }),
       approved: true,
       ...(input.sourceId === undefined
         ? {}
@@ -124,6 +127,7 @@ export class InvoicesService {
       if (!invoice) throw new NotFoundException('Invoice not found');
       this.active(invoice);
       const booking = await this.booking(bookingId);
+      let added = false;
       if (charge) {
         await this.chargeSource.getApprovedCharges(invoice);
         const previous = charge.sourceId
@@ -133,7 +137,8 @@ export class InvoicesService {
           if (
             previous.type !== charge.type ||
             previous.amount !== charge.amount ||
-            previous.reason !== charge.reason
+            previous.reason !== charge.reason ||
+            previous.category !== charge.category
           ) {
             throw new ConflictException(
               'Charge source already has different content',
@@ -149,12 +154,21 @@ export class InvoicesService {
               'Charges cannot be added to a closed booking',
             );
           invoice.charges.push(charge);
+          added = true;
         }
       }
       await this.calculate(invoice, booking);
       invoice.markModified('balanceDue');
       try {
-        return await invoice.save();
+        const saved = await invoice.save();
+        // Khoản phí mới làm các khoản khách đã đồng ý không còn đầy đủ: cần xác nhận lại.
+        if (added) {
+          await this.bookings.updateOne(
+            { _id: booking._id },
+            { $unset: { checkoutFeesConfirmedAt: 1 } },
+          );
+        }
+        return saved;
       } catch (error) {
         if ((error as Error).name !== 'VersionError') throw error;
       }

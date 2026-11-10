@@ -37,6 +37,19 @@ describe('H9 conditional configuration', () => {
       );
     },
   );
+  it('does not require the Gmail App Password when Brevo sends the mail', () => {
+    const input = {
+      ...base,
+      NOTIFICATIONS_ENABLED: 'true',
+      GMAIL_USER: 'sender@example.com',
+      BREVO_API_KEY: 'xkeysib-test',
+    };
+    expect(envValidationSchema.validate(input).error).toBeUndefined();
+    expect(notificationConfiguration(input).brevoApiKey).toBe('xkeysib-test');
+    expect(
+      envValidationSchema.validate({ ...input, GMAIL_USER: '' }).error?.message,
+    ).toContain('GMAIL_USER');
+  });
   it('accepts spaced App Password and normalizes both Joi and configuration output', () => {
     const input = {
       ...base,

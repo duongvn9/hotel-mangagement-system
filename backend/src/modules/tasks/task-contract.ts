@@ -11,6 +11,7 @@ export enum TaskSourceType {
   ServiceOrder = 'SERVICE_ORDER',
   Issue = 'ISSUE',
   Maintenance = 'MAINTENANCE',
+  CheckoutInspection = 'CHECKOUT_INSPECTION',
 }
 
 export function canTransitionTaskStatus(from: unknown, to: unknown): boolean {

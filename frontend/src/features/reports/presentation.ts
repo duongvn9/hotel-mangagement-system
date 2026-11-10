@@ -1,4 +1,4 @@
-export const METHOD_LABELS = { VNPAY: 'VNPay', CASH: 'Tiền mặt' }
+export const METHOD_LABELS = { VNPAY: 'VNPay', CASH: 'Tiền mặt', CARD: 'Thẻ' }
 export const PURPOSE_LABELS = { DEPOSIT: 'Cọc', FINAL: 'Thanh toán cuối' }
 export const PAYMENT_STATUS_LABELS = {
   PENDING: 'Đang chờ',

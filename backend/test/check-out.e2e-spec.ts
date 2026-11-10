@@ -52,6 +52,7 @@ describe('Check out guest (e2e)', () => {
       adultCount: 2,
       childCount: 0,
       status: options.status ?? BookingStatus.CheckedIn,
+      checkoutFeesConfirmedAt: new Date(),
       roomTotal: 1000000 * roomIds.length,
       depositAmount: 300000,
       rateSnapshot: roomIds.map((room) => ({ room, ratePerNight: 1000000 })),

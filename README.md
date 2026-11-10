@@ -210,7 +210,7 @@ The example files document every variable. The main groups:
 | Database | `MONGODB_URI` (backend), `MONGO_ROOT_USERNAME`, `MONGO_ROOT_PASSWORD`, `MONGO_DB` (Compose) |
 | Auth | `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` |
 | Payment | `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`, `VNPAY_PAYMENT_URL`, `VNPAY_RETURN_URL`, `VNPAY_IPN_URL` |
-| Email | `MAIL_*`, and `NOTIFICATIONS_*` / `GMAIL_*` for the notification service (disabled by default) |
+| Email | `MAIL_*`, and `NOTIFICATIONS_*` / `GMAIL_*` / `BREVO_API_KEY` for the notification service (disabled by default) |
 | Images | `S3_*`, `HMS_ASSET_DIR` (backend); `VITE_ASSET_BASE_URL` (frontend) |
 | Frontend | `VITE_APP_NAME`, `VITE_API_BASE_URL`, `VITE_PROXY_TARGET`, `VITE_FIREBASE_*` |
 | Ports and images | `WEB_PORT`, `FRONTEND_PORT`, `BACKEND_PORT`, `MONGO_PORT`, `IMAGE_TAG` |
@@ -267,7 +267,8 @@ Vercel proxies `/api/*` to Render (`frontend/vercel.json`), so the browser sees 
 2. **Render.** Dashboard > New > Blueprint > this repository. `render.yaml` creates the `hms-backend` web service from `backend/Dockerfile`. Fill in the variables it asks for:
    - `MONGODB_URI`: the Atlas connection string.
    - `CORS_ORIGINS`: the Vercel URL, for example `https://hms.vercel.app` (comma-separate several).
-   - `FIREBASE_*`, `S3_*`, `MAIL_*`: same values as in `backend/.env.example`.
+   - `FIREBASE_*`, `S3_*`: same values as in `backend/.env.example`.
+   - Email: the free plan blocks outbound SMTP, so Gmail SMTP times out. Create a free [Brevo](https://www.brevo.com) account, verify the sender address, and set `BREVO_API_KEY` plus `GMAIL_USER` (that sender address). Then set `NOTIFICATIONS_ENABLED=true`, or booking emails are skipped.
    - `VNPAY_RETURN_URL`: `https://<vercel-domain>/payment/vnpay-return`.
    - `VNPAY_IPN_URL`: `https://<render-domain>/api/v1/payments/vnpay/ipn`.
    - Check that `https://<render-domain>/api/v1/health/ready` reports MongoDB as up.

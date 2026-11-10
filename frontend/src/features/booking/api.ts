@@ -302,6 +302,7 @@ export interface InvoiceTotals {
 
 export interface BookingCharge {
   type: string
+  category?: ChargeCategory
   amount: number
   reason: string
   sourceId?: string
@@ -313,14 +314,26 @@ export interface BookingCharges {
   status: string
   /** Trạng thái hóa đơn: UNPAID, PARTIALLY_PAID hoặc PAID. */
   invoiceStatus: string
+  /** Lúc khách xác nhận các khoản phí; không có nghĩa là chưa xác nhận. */
+  feesConfirmedAt?: string
   totals: InvoiceTotals
   charges: BookingCharge[]
+}
+
+/** Phân loại phụ phí lúc trả phòng; không chọn thì không gửi. */
+export type ChargeCategory = 'DAMAGE' | 'LATE_CHECKOUT' | 'OTHER'
+
+export const CHARGE_CATEGORY_LABEL: Record<ChargeCategory, string> = {
+  DAMAGE: 'Hư hỏng',
+  LATE_CHECKOUT: 'Trả phòng muộn',
+  OTHER: 'Khác',
 }
 
 export interface AddChargeInput {
   /** Số tiền (VND, số nguyên dương). */
   amount: number
   reason: string
+  category?: ChargeCategory
   /** Mã chống trùng cho một lần ghi; gửi lại cùng mã thì không ghi thêm khoản mới. */
   requestId: string
 }
@@ -338,9 +351,80 @@ export async function addCheckoutCharge(
   return (await api.post<BookingCharges>(`/bookings/${id}/charges`, input)).data
 }
 
+export interface AddServiceChargeInput {
+  serviceId: string
+  /** Số lượng nguyên từ 1 đến 99. */
+  quantity: number
+  /** Mã chống trùng cho một lần ghi; gửi lại cùng mã thì không ghi thêm khoản mới. */
+  requestId: string
+}
+
+/** Lễ tân thêm dịch vụ/sản phẩm từ danh mục cho khách đang ở (booking CHECKED_IN). */
+export async function addCheckoutServiceCharge(
+  id: string,
+  input: AddServiceChargeInput,
+): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${id}/charges/services`, input)).data
+}
+
+/** Lần nhờ nhân viên dịch vụ kiểm tra phòng khi trả phòng (task CHECKOUT_INSPECTION). */
+export interface CheckoutInspectionView {
+  taskId: string
+  /** Trạng thái task: ASSIGNED, IN_PROGRESS, COMPLETED hoặc CANCELLED. */
+  status: 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
+  assigneeName: string
+  requestedAt: string
+  completedAt?: string
+  /** Kết quả nhân viên dịch vụ ghi khi hoàn thành. */
+  workResult?: string
+}
+
+export interface Inspector {
+  id: string
+  fullName: string
+}
+
+export interface RequestInspectionInput {
+  assigneeId: string
+  note?: string
+}
+
+/** Lần kiểm tra gần nhất của booking, hoặc null nếu chưa từng yêu cầu. */
+export async function getCheckoutInspection(id: string): Promise<CheckoutInspectionView | null> {
+  return (
+    await api.get<{ inspection: CheckoutInspectionView | null }>(
+      `/bookings/${id}/checkout-inspection`,
+    )
+  ).data.inspection
+}
+
+/** Nhân viên dịch vụ đang hoạt động để chọn người kiểm tra. */
+export async function listInspectors(): Promise<Inspector[]> {
+  return (await api.get<{ items: Inspector[] }>('/front-desk/inspectors')).data.items
+}
+
+export async function requestCheckoutInspection(
+  id: string,
+  input: RequestInspectionInput,
+): Promise<CheckoutInspectionView> {
+  return (await api.post<CheckoutInspectionView>(`/bookings/${id}/checkout-inspection`, input)).data
+}
+
+/** Lễ tân ghi nhận khách đã xem và đồng ý các khoản phí lúc trả phòng. */
+export async function confirmCheckoutFees(id: string): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${id}/charges/confirm`)).data
+}
+
+/** Cách thu thanh toán cuối tại quầy. */
+export type DeskPaymentMethod = 'cash' | 'card'
+
 /** UC18 — Lễ tân xác nhận đã thu tiền mặt thanh toán cuối; số tiền do server tính từ hóa đơn. */
-export async function recordCashPayment(id: string, requestId: string): Promise<BookingCharges> {
-  return (await api.post<BookingCharges>(`/bookings/${id}/payments/cash`, { requestId })).data
+export async function recordCashPayment(
+  id: string,
+  requestId: string,
+  method: DeskPaymentMethod = 'cash',
+): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${id}/payments/${method}`, { requestId })).data
 }
 
 export interface CheckOutResult {

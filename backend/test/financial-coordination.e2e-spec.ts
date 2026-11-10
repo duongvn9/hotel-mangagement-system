@@ -103,6 +103,7 @@ describe('financial coordination on standalone MongoDB', () => {
       roomTotal: 100000,
       depositAmount: 0,
       status: 'CHECKED_IN',
+      checkoutFeesConfirmedAt: new Date(),
       rateSnapshot: [{ room, ratePerNight: 100000 }],
     });
     id = String(booking._id);
@@ -117,6 +118,12 @@ describe('financial coordination on standalone MongoDB', () => {
   afterAll(async () => {
     await app.close();
   });
+  // Khoản phí mới thu hồi xác nhận của khách, nên cần xác nhận lại trước khi thu tiền.
+  const confirm = () =>
+    bookings.updateOne(
+      { _id: id },
+      { $set: { checkoutFeesConfirmedAt: new Date() } },
+    );
   const charge = (amount = 20000) =>
     billing.addCharge({
       bookingId: id,
@@ -142,6 +149,7 @@ describe('financial coordination on standalone MongoDB', () => {
     const requestId = randomUUID();
     await cash.record(id, { requestId });
     await charge();
+    await confirm();
     await cash.record(id, { requestId: randomUUID() });
     await cash.record(id, { requestId });
     const rows = await payments
@@ -243,6 +251,7 @@ describe('financial coordination on standalone MongoDB', () => {
     await accept;
     expect(await close).toContain('still due');
     expect((await bookings.findById(id))!.status).toBe('CHECKED_IN');
+    await confirm();
     await cash.record(id, { requestId: randomUUID() });
     await checkout.checkOut(id);
   });
@@ -316,6 +325,7 @@ describe('financial coordination on standalone MongoDB', () => {
     );
     await expect(checkout.checkOut(id)).rejects.toThrow('billing is pending');
     await reviews.review(String(row._id), { decision: 'ACCEPT' }, staff);
+    await confirm();
     await cash.record(id, { requestId: randomUUID() });
     await checkout.checkOut(id);
     await orders.updateOne(
