@@ -76,6 +76,11 @@ export class CashPaymentService {
     if (invoice.balanceDue <= 0) {
       throw new ConflictException('Nothing left to pay on this invoice');
     }
+    if (!booking.checkoutFeesConfirmedAt) {
+      throw new ConflictException(
+        'The guest has not confirmed the fees yet; record the confirmation first',
+      );
+    }
 
     try {
       await this.payments.create({

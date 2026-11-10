@@ -204,6 +204,28 @@ describe('InvoicesService', () => {
       s.service.addCharge({ ...charge, category: ChargeCategory.Other }),
     ).rejects.toThrow('different content');
   });
+  it('withdraws the guest fee confirmation when a new charge is added, but not on a replay', async () => {
+    const s = setup();
+    const charge = {
+      bookingId: s.id,
+      type: InvoiceChargeType.Service,
+      amount: 10000,
+      reason: 'Laundry',
+      sourceId: 'service-order:9',
+    };
+    const withdrawals = () =>
+      s.bookings.updateOne.mock.calls.filter(
+        (call) =>
+          JSON.stringify(call[1] ?? {}) ===
+          JSON.stringify({ $unset: { checkoutFeesConfirmedAt: 1 } }),
+      ).length;
+
+    await s.service.addCharge(charge);
+    expect(withdrawals()).toBe(1);
+
+    await s.service.addCharge(charge);
+    expect(withdrawals()).toBe(1);
+  });
   it('includes additional charges discounts and taxes without invented percentages', async () => {
     const s = setup();
     for (const [type, amount] of [

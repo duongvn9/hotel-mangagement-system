@@ -57,7 +57,6 @@ export class CheckoutChargesService {
       ...(dto.category ? { category: dto.category } : {}),
       sourceId: `checkout:${dto.requestId}`,
     });
-    await this.withdrawFeeConfirmation(booking);
     return toBookingChargesResponse(booking, invoice);
   }
 
@@ -103,13 +102,12 @@ export class CheckoutChargesService {
       reason: `${service.name} x${dto.quantity}${unit}`,
       sourceId: `frontdesk-service:${dto.requestId}`,
     });
-    await this.withdrawFeeConfirmation(booking);
     return toBookingChargesResponse(booking, invoice);
   }
 
   /**
    * Khách đang ở quầy đã xem và đồng ý các khoản phí: ghi lại thời điểm để lễ tân mới lập hóa đơn
-   * cuối. Ghi thêm khoản phí mới sẽ thu hồi xác nhận này.
+   * cuối. Mọi khoản phí mới (InvoicesService.addCharge) sẽ thu hồi xác nhận này.
    */
   async confirmFees(bookingId: string): Promise<BookingChargesResponse> {
     return withBookingFinancialOperation(this.bookings, bookingId, async () => {
@@ -135,15 +133,6 @@ export class CheckoutChargesService {
         invoice,
       );
     });
-  }
-
-  /** Thêm khoản phí mới làm các khoản khách đã đồng ý không còn đầy đủ. */
-  private async withdrawFeeConfirmation(booking: { _id: unknown }) {
-    await this.bookings.updateOne(
-      { _id: booking._id },
-      { $unset: { checkoutFeesConfirmedAt: 1 } },
-    );
-    Object.assign(booking, { checkoutFeesConfirmedAt: undefined });
   }
 
   /** Các khoản phí và tổng hợp hóa đơn hiện tại của booking. */

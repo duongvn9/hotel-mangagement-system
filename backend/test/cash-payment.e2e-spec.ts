@@ -46,6 +46,7 @@ describe('Record cash payment at the desk (e2e)', () => {
       adultCount: 2,
       childCount: 0,
       status: options.status ?? BookingStatus.CheckedIn,
+      checkoutFeesConfirmedAt: new Date(),
       roomTotal: 2000000,
       depositAmount: 600000,
       rateSnapshot: [{ room: roomId, ratePerNight: 1000000 }],
@@ -185,11 +186,44 @@ describe('Record cash payment at the desk (e2e)', () => {
       .set(RECEPTIONIST)
       .send({ requestId: 'charge-12345678', amount: 100000, reason: 'Minibar' })
       .expect(201);
+    // Khoản phí mới thu hồi xác nhận của khách: phải xác nhận lại mới thu được tiền.
+    await pay(booking.id).expect(409);
+    await http()
+      .post(`/api/v1/bookings/${booking.id}/charges/confirm`)
+      .set(RECEPTIONIST)
+      .expect(201);
     const { body } = await pay(booking.id, { amount: 1 }).expect(400); // client không được gửi số tiền
     expect(body.message).toBeDefined();
     await pay(booking.id).expect(201);
     const [saved] = await finalPayments(booking.id);
     expect(saved?.amount).toBe(1500000);
+  });
+
+  it('waits for the guest to confirm the fees before taking cash', async () => {
+    const { booking } = await prepare();
+    await bookings.updateOne(
+      { _id: booking._id },
+      { $unset: { checkoutFeesConfirmedAt: 1 } },
+    );
+
+    const refused = await pay(booking.id).expect(409);
+    expect(refused.body.message).toMatch(/confirmed the fees/);
+    expect(await finalPayments(booking.id)).toHaveLength(0);
+
+    const confirmed = await http()
+      .post(`/api/v1/bookings/${booking.id}/charges/confirm`)
+      .set(RECEPTIONIST)
+      .expect(201);
+    expect(confirmed.body.feesConfirmedAt).toEqual(expect.any(String));
+    await pay(booking.id).expect(201);
+  });
+
+  it('only confirms the fees of a guest who is checked in', async () => {
+    const { booking } = await prepare({ status: BookingStatus.Confirmed });
+    await http()
+      .post(`/api/v1/bookings/${booking.id}/charges/confirm`)
+      .set(RECEPTIONIST)
+      .expect(409);
   });
 
   it('does not record the same cash payment twice', async () => {

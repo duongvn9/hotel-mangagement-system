@@ -11,12 +11,16 @@ import { CashPaymentService } from './cash-payment.service.js';
 const bookingId = new Types.ObjectId();
 const invoiceId = new Types.ObjectId();
 
-function setup(existing?: Record<string, unknown>) {
+function setup(
+  existing?: Record<string, unknown>,
+  confirmed: Date | null = new Date('2026-11-10T04:00:00Z'),
+) {
   const booking = {
     _id: bookingId,
     code: 'GE-123',
     status: BookingStatus.CheckedIn,
     isActive: true,
+    checkoutFeesConfirmedAt: confirmed ?? undefined,
   };
   const bookings = {
     findById: vi.fn(async () => booking),
@@ -97,5 +101,35 @@ describe('CashPaymentService desk payments', () => {
     await expect(
       sut.record(bookingId.toHexString(), dto, PaymentMethod.Card),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+describe('CashPaymentService fee confirmation gate', () => {
+  it.each([PaymentMethod.Cash, PaymentMethod.Card] as const)(
+    'refuses %s while the guest has not confirmed the fees',
+    async (method) => {
+      const { sut, payments } = setup(undefined, null);
+
+      await expect(
+        sut.record(bookingId.toHexString(), dto, method),
+      ).rejects.toThrow('confirmed the fees');
+      expect(payments.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not block a replay of a payment that was already taken', async () => {
+    const { sut } = setup(
+      {
+        booking: bookingId,
+        method: PaymentMethod.Cash,
+        purpose: PaymentPurpose.Final,
+        status: PaymentStatus.Success,
+      },
+      null,
+    );
+
+    await expect(
+      sut.record(bookingId.toHexString(), dto),
+    ).resolves.toBeDefined();
   });
 });

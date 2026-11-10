@@ -200,32 +200,6 @@ describe('Guest confirmation of the check-out fees', () => {
     });
   });
 
-  it('withdraws the confirmation when a new charge is added', async () => {
-    const { sut, bookings } = setup();
-
-    await sut.add(bookingId, body);
-
-    expect(bookings.updateOne).toHaveBeenCalledWith(
-      { _id: expect.anything() },
-      { $unset: { checkoutFeesConfirmedAt: 1 } },
-    );
-  });
-
-  it('withdraws the confirmation when a service is added', async () => {
-    const { sut, bookings } = setup();
-
-    await sut.addService(bookingId, {
-      serviceId,
-      quantity: 1,
-      requestId: 'req-12345678',
-    });
-
-    expect(bookings.updateOne).toHaveBeenCalledWith(
-      { _id: expect.anything() },
-      { $unset: { checkoutFeesConfirmedAt: 1 } },
-    );
-  });
-
   it('shows the confirmation time in the charge list', async () => {
     const confirmedAt = new Date('2026-11-10T05:00:00Z');
     const { sut, booking } = setup();
