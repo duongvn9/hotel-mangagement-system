@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { bookingRoutes } from './routes'
-import type { AvailableRoom, Booking } from './api'
+import type { AvailableRoom, Booking, BookingSummary } from './api'
 import {
   getStoredBooking,
   listStoredBookings,
@@ -28,6 +28,36 @@ const booking: Booking = {
   source: 'ONLINE',
   holdExpiresAt: '2099-01-10T00:00:00.000Z',
 }
+
+/** Chi tiết mà trang booking đọc từ /bookings/:id/summary, dựng từ một booking mẫu. */
+const summaryFor = (value: Booking, overrides: Partial<BookingSummary> = {}): BookingSummary => ({
+  bookingId: value.id,
+  code: value.code,
+  status: value.status,
+  source: value.source,
+  checkIn: value.checkIn,
+  checkOut: value.checkOut,
+  adultCount: value.adultCount,
+  childCount: value.childCount,
+  createdAt: '2099-01-01T00:00:00.000Z',
+  depositAmount: value.depositAmount,
+  guest: { name: 'Khách Test', email: 'k@example.test', phone: '0900000001' },
+  rooms: [{ roomNumber: '101', roomTypeName: 'Deluxe' }],
+  invoice: {
+    roomTotal: value.roomTotal,
+    serviceTotal: 0,
+    additionalTotal: 0,
+    discountTotal: 0,
+    taxTotal: 0,
+    totalAmount: value.roomTotal,
+    depositPaid: 0,
+    finalPaid: 0,
+    balanceDue: value.roomTotal,
+  },
+  payments: [],
+  serviceOrders: [],
+  ...overrides,
+})
 
 describe('booking utils', () => {
   it('counts nights between two business dates', () => {
@@ -435,6 +465,7 @@ describe('BookingDetailPage (server-authoritative)', () => {
   it('reads authoritative booking state and starts a VNPay deposit', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
       if (url === '/bookings/b1') return { data: booking }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(booking) }
       throw new Error(`unexpected GET ${url}`)
     })
     const post = vi.spyOn(api, 'post').mockResolvedValue({
@@ -460,6 +491,7 @@ describe('BookingDetailPage (server-authoritative)', () => {
     async (role) => {
       vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
         if (url === '/bookings/b1') return { data: booking }
+        if (url === '/bookings/b1/summary') return { data: summaryFor(booking) }
         if (url === '/bookings') return { data: { items: [], total: 0, page: 1, limit: 20 } }
         throw new Error(`unexpected GET ${url}`)
       })
@@ -473,9 +505,10 @@ describe('BookingDetailPage (server-authoritative)', () => {
     },
   )
 
-  it('keeps a signed-in customer on the guest booking page', async () => {
+  it('sends a signed-in customer to the booking page inside the dashboard', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
       if (url === '/bookings/b1') return { data: booking }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(booking) }
       throw new Error(`unexpected GET ${url}`)
     })
 
@@ -484,13 +517,84 @@ describe('BookingDetailPage (server-authoritative)', () => {
       auth: { me: { ...ME, role: 'CUSTOMER' }, status: 'authenticated' },
     })
 
-    expect(await screen.findByText('BK123')).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe('/booking/b1')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/my-bookings/b1'))
+    expect(await screen.findByRole('heading', { level: 1, name: 'BK123' })).toBeInTheDocument()
+  })
+
+  it('shows the booking in the prototype layout with the customer’s actions in the header', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: booking }
+      if (url === '/bookings/b1/summary')
+        return {
+          data: summaryFor(booking, {
+            payments: [
+              {
+                id: 'p1',
+                method: 'VNPAY',
+                purpose: 'DEPOSIT',
+                status: 'PENDING',
+                amount: 600_000,
+                date: '2099-01-01T03:00:00.000Z',
+              },
+            ],
+          }),
+        }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    renderWithAuth(bookingRoutes, {
+      path: '/my-bookings/b1',
+      auth: { me: { ...ME, role: 'CUSTOMER' }, status: 'authenticated' },
+    })
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'BK123' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Đặt phòng/ })).toHaveAttribute('href', '/my-bookings')
+    for (const title of ['Lưu trú', 'Thanh toán', 'Yêu cầu dịch vụ', 'Hoá đơn', 'Khách']) {
+      expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
+    }
+    expect(screen.getByText(/Đặt cọc · VNPay/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Đặt cọc qua VNPay' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Huỷ booking' })).toBeInTheDocument()
+  })
+
+  it('does not ask the customer to retype a code and sends none to the summary', async () => {
+    const get = vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: booking }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(booking) }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    renderWithAuth(bookingRoutes, {
+      path: '/my-bookings/b1',
+      auth: { me: { ...ME, role: 'CUSTOMER' }, status: 'authenticated' },
+    })
+
+    await screen.findByRole('heading', { level: 1, name: 'BK123' })
+    expect(get).toHaveBeenCalledWith('/bookings/b1/summary', { params: {} })
+    expect(screen.queryByLabelText('Mã booking (vé)')).not.toBeInTheDocument()
+  })
+
+  it('shows a guest the summary with their booking code and a link to the lookup', async () => {
+    const get = vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: booking }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(booking) }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    renderWithAuth(bookingRoutes, { path: '/booking/b1' })
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'BK123' })).toBeInTheDocument()
+    expect(get).toHaveBeenCalledWith('/bookings/b1/summary', { params: { code: 'BK123' } })
+    expect(screen.getByRole('link', { name: /Tra cứu đặt phòng/ })).toHaveAttribute(
+      'href',
+      '/booking/lookup',
+    )
   })
 
   it('sends the booking code for a guest who opened the page without ?code', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
       if (url === '/bookings/b1') return { data: booking }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(booking) }
       throw new Error(`unexpected GET ${url}`)
     })
     const post = vi.spyOn(api, 'post').mockResolvedValue({
@@ -510,8 +614,17 @@ describe('BookingDetailPage (server-authoritative)', () => {
   })
 
   it('shows the expired state and hides the deposit action', async () => {
-    vi.spyOn(api, 'get').mockResolvedValue({
-      data: { ...booking, id: 'b2', code: 'BK999', status: 'EXPIRED', holdExpiresAt: undefined },
+    const expired = {
+      ...booking,
+      id: 'b2',
+      code: 'BK999',
+      status: 'EXPIRED',
+      holdExpiresAt: undefined,
+    }
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b2') return { data: expired }
+      if (url === '/bookings/b2/summary') return { data: summaryFor(expired) }
+      throw new Error(`unexpected GET ${url}`)
     })
 
     renderWithAuth(bookingRoutes, { path: '/booking/b2' })
@@ -523,6 +636,8 @@ describe('BookingDetailPage (server-authoritative)', () => {
   it('shows cancellation confirmation dialog and executes cancellation', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
       if (url === '/bookings/b1') return { data: { ...booking, status: 'CONFIRMED' } }
+      if (url === '/bookings/b1/summary')
+        return { data: summaryFor(booking, { status: 'CONFIRMED' }) }
       throw new Error(`unexpected GET ${url}`)
     })
     const post = vi.spyOn(api, 'post').mockResolvedValue({ data: {} })

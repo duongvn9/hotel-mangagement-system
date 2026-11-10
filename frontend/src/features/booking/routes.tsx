@@ -38,6 +38,14 @@ export const bookingRoutes: RouteObject[] = [
     ),
   },
   {
+    path: 'my-bookings/:id',
+    element: (
+      <RequireAuth roles={[Role.Customer]}>
+        <BookingDetailPage />
+      </RequireAuth>
+    ),
+  },
+  {
     path: 'reception/front-desk',
     element: (
       <RequireAuth roles={[Role.Receptionist, Role.Manager]}>

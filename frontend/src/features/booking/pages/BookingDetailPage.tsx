@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Link, Navigate, useParams, useSearchParams } from 'react-router'
-import { Button, Input, StatusBadge } from '@/components/atoms'
-import { FormField } from '@/components/molecules'
+import { CreditCard, XCircle } from 'lucide-react'
+import { Navigate, useLocation, useParams, useSearchParams } from 'react-router'
+import { Button, Input } from '@/components/atoms'
+import { Alert, FormField } from '@/components/molecules'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,14 +12,23 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  PageContainer,
+  PageHeader,
 } from '@/components/organisms'
 import { Role } from '@/features/auth/api'
 import { useAuth } from '@/features/auth/auth-context'
 import { getErrorMessage } from '@/lib/api-client'
-import { fdate, fshort, vnd } from '@/lib/format'
+import { fshort } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import type { InitiatePaymentInput } from '../api'
-import { useBooking, useCancelBooking, useInitiateDeposit, useInitiateFinal } from '../hooks'
-import { nightsBetween } from '../utils'
+import { BookingDetailLayout } from '../components/BookingDetailLayout'
+import {
+  useBooking,
+  useBookingSummary,
+  useCancelBooking,
+  useInitiateDeposit,
+  useInitiateFinal,
+} from '../hooks'
 import { formatRemaining, useHoldCountdown } from './useHoldCountdown'
 
 /**
@@ -29,6 +39,8 @@ export function BookingDetailPage() {
   const { id = '' } = useParams()
   const [params] = useSearchParams()
   const { me } = useAuth()
+  // /my-bookings/:id nằm trong khung dashboard của khách; /booking/:id là trang công khai.
+  const inDashboard = useLocation().pathname.startsWith('/my-bookings/')
 
   const [typedCode, setTypedCode] = useState(params.get('code') ?? '')
   const [confirmCancel, setConfirmCancel] = useState(false)
@@ -55,6 +67,9 @@ export function BookingDetailPage() {
   // Khách vừa đặt xong đọc được booking qua phiên giữ phòng nên URL chưa có ?code.
   const guestCode = code || booking?.code
 
+  // Số liệu chi tiết chỉ đọc sau khi đã có quyền đọc booking; khách vãng lai gửi mã booking.
+  const summary = useBookingSummary(booking ? id : '', me ? {} : { code: guestCode })
+
   function payload(): InitiatePaymentInput {
     return { bookingId: id, ...(me ? {} : { code: guestCode }) }
   }
@@ -73,7 +88,7 @@ export function BookingDetailPage() {
     try {
       await cancel.mutateAsync({ id, ...(me ? {} : { code: guestCode }) })
       setConfirmCancel(false)
-      await query.refetch()
+      await Promise.all([query.refetch(), summary.refetch()])
     } catch {
       // Lỗi hiển thị qua cancel.isError.
     }
@@ -83,53 +98,139 @@ export function BookingDetailPage() {
   if (me && (me.role === Role.Receptionist || me.role === Role.Manager) && booking?.code) {
     return <Navigate to={`/reception/bookings/${encodeURIComponent(booking.code)}`} replace />
   }
+  // Khách đăng nhập xem booking trong khung dashboard của khách; khách vãng lai vẫn ở trang công khai.
+  if (me?.role === Role.Customer && !inDashboard) {
+    return <Navigate to={`/my-bookings/${encodeURIComponent(id)}`} replace />
+  }
+
+  const errors = [deposit, final, cancel].filter((mutation) => mutation.isError)
+  const alertClass = 'rounded-xl border p-4 text-sm'
+
+  const notices = (
+    <div className="space-y-3">
+      {holding && !holdExpired && remaining !== null && (
+        <div className={cn(alertClass, 'border-primary/20 bg-primary/10 text-foreground')}>
+          Phòng đang được giữ. Vui lòng đặt cọc trong <strong>{formatRemaining(remaining)}</strong>,
+          nếu không phòng sẽ được mở lại.
+        </div>
+      )}
+      {holding && holdExpired && (
+        <div
+          role="alert"
+          className={cn(alertClass, 'border-destructive/20 bg-destructive/10 text-destructive')}
+        >
+          Đã quá thời gian giữ phòng. Trạng thái sẽ sớm chuyển sang hết hạn; vui lòng tìm phòng lại
+          nếu bạn vẫn muốn đặt.
+        </div>
+      )}
+      {expired && (
+        <div
+          role="alert"
+          className={cn(alertClass, 'border-destructive/20 bg-destructive/10 text-destructive')}
+        >
+          Đơn đã hết hạn giữ phòng và phòng đã được mở lại. Vui lòng tìm phòng để đặt lại.
+        </div>
+      )}
+      {cancelled && (
+        <div
+          role="alert"
+          className={cn(alertClass, 'border-success/20 bg-success/10 text-success')}
+        >
+          Booking đã được huỷ và phòng đã được mở lại.
+        </div>
+      )}
+      {booking?.holdExpiresAt && holding && (
+        <p className="text-xs text-muted-foreground">
+          Giữ phòng đến {fshort(booking.holdExpiresAt)}
+        </p>
+      )}
+      {errors.map((mutation, index) => (
+        <div
+          key={index}
+          role="alert"
+          className={cn(alertClass, 'border-destructive/20 bg-destructive/10 text-destructive')}
+        >
+          {getErrorMessage(mutation.error)}
+        </div>
+      ))}
+    </div>
+  )
+
+  const actions =
+    !cancelled && !expired ? (
+      <>
+        {status === 'PENDING_DEPOSIT' && (
+          <Button
+            className="rounded-full"
+            disabled={holdExpired || deposit.isPending}
+            aria-busy={deposit.isPending}
+            onClick={() => void pay('deposit')}
+          >
+            <CreditCard className="size-4" />
+            {deposit.isPending ? 'Đang chuyển sang cổng VNPay…' : 'Đặt cọc qua VNPay'}
+          </Button>
+        )}
+        {(status === 'CONFIRMED' || status === 'CHECKED_OUT') && (
+          <Button
+            variant="outline"
+            className="rounded-full"
+            disabled={final.isPending}
+            aria-busy={final.isPending}
+            onClick={() => void pay('final')}
+          >
+            <CreditCard className="size-4" />
+            {final.isPending ? 'Đang chuyển sang cổng VNPay…' : 'Thanh toán phần còn lại'}
+          </Button>
+        )}
+        {status !== 'CHECKED_IN' && status !== 'CHECKED_OUT' && status !== 'ROOM_HELD' && (
+          <Button
+            variant="ghost"
+            className="rounded-full text-destructive hover:bg-destructive/10"
+            onClick={() => setConfirmCancel(true)}
+          >
+            <XCircle className="size-4" />
+            Huỷ booking
+          </Button>
+        )}
+      </>
+    ) : undefined
 
   return (
-    <div className="mx-auto max-w-5xl px-5 py-10 lg:px-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold tracking-widest text-primary uppercase">Đặt phòng</p>
-          <h1 className="font-display text-4xl font-semibold">Chi tiết đặt phòng</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            {booking && (
-              <span className="text-sm text-muted-foreground">
-                Mã booking <span className="font-semibold text-foreground">{booking.code}</span>
-              </span>
-            )}
-            {status && <StatusBadge status={status} />}
-          </div>
-        </div>
-        <Link
-          to="/my-bookings"
-          className="text-sm text-muted-foreground transition hover:text-foreground"
-        >
-          ← Danh sách đặt phòng của tôi
-        </Link>
-      </div>
+    <PageContainer className="space-y-6">
+      {summary.data ? (
+        <BookingDetailLayout
+          summary={summary.data}
+          backTo={me ? '/my-bookings' : '/booking/lookup'}
+          backLabel={me ? 'Đặt phòng' : 'Tra cứu đặt phòng'}
+          actions={actions}
+          notices={notices}
+        />
+      ) : (
+        <PageHeader eyebrow="Đặt phòng" title="Chi tiết đặt phòng" />
+      )}
 
-      {query.isPending && !needsCode && (
+      {(query.isPending || (booking && summary.isPending)) && !needsCode && (
         <div role="status" className="py-12">
           <p className="text-muted-foreground">Đang tải thông tin đặt phòng…</p>
         </div>
       )}
 
       {query.isError && !needsCode && (
-        <div
-          role="alert"
-          className="mt-6 rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
-        >
+        <Alert tone="danger">
           {getErrorMessage(query.error, 'Không đọc được thông tin đặt phòng.')}
-        </div>
+        </Alert>
+      )}
+      {summary.isError && (
+        <Alert tone="danger">
+          {getErrorMessage(summary.error, 'Không đọc được chi tiết đặt phòng.')}
+        </Alert>
       )}
 
       {needsCode && (
-        <div className="mt-8 max-w-md space-y-4">
-          <div
-            role="alert"
-            className="rounded-xl border border-primary/20 bg-primary/10 p-4 text-sm text-foreground"
-          >
+        <div className="max-w-md space-y-4">
+          <Alert tone="info">
             Nhập mã booking (vé) đã nhận để xem và thao tác với đơn này trên thiết bị hiện tại.
-          </div>
+          </Alert>
           <FormField label="Mã booking (vé)" htmlFor="typedCode">
             <Input
               id="typedCode"
@@ -138,145 +239,6 @@ export function BookingDetailPage() {
               onChange={(event) => setTypedCode(event.target.value)}
             />
           </FormField>
-        </div>
-      )}
-
-      {booking && (
-        <div className="mt-8 space-y-6">
-          {holding && !holdExpired && remaining !== null && (
-            <div className="rounded-xl border border-primary/20 bg-primary/10 p-4 text-sm text-foreground">
-              Phòng đang được giữ. Vui lòng đặt cọc trong{' '}
-              <strong>{formatRemaining(remaining)}</strong>, nếu không phòng sẽ được mở lại.
-            </div>
-          )}
-          {holding && holdExpired && (
-            <div
-              role="alert"
-              className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive"
-            >
-              Đã quá thời gian giữ phòng. Trạng thái sẽ sớm chuyển sang hết hạn; vui lòng tìm phòng
-              lại nếu bạn vẫn muốn đặt.
-            </div>
-          )}
-          {expired && (
-            <div
-              role="alert"
-              className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive"
-            >
-              Đơn đã hết hạn giữ phòng và phòng đã được mở lại. Vui lòng tìm phòng để đặt lại.
-            </div>
-          )}
-          {cancelled && (
-            <div
-              role="alert"
-              className="rounded-xl border border-success/20 bg-success/10 p-4 text-success"
-            >
-              Booking đã được huỷ và phòng đã được mở lại.
-            </div>
-          )}
-
-          <div className="card-soft grid gap-6 p-6 sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Nhận phòng</p>
-              <p className="mt-1 font-semibold">{fdate(booking.checkIn)}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Trả phòng</p>
-              <p className="mt-1 font-semibold">{fdate(booking.checkOut)}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Phòng · Đêm</p>
-              <p className="mt-1 font-semibold">
-                {booking.rooms.length} phòng · {nightsBetween(booking.checkIn, booking.checkOut)}{' '}
-                đêm
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Số khách</p>
-              <p className="mt-1 font-semibold">
-                {booking.adultCount} người lớn
-                {booking.childCount > 0 ? `, ${booking.childCount} trẻ em` : ''}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Tiền phòng</p>
-              <p className="mt-1 font-semibold tabular-nums">{vnd(booking.roomTotal)}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Tiền cọc</p>
-              <p className="mt-1 font-semibold tabular-nums text-primary">
-                {vnd(booking.depositAmount)}
-              </p>
-            </div>
-            {booking.holdExpiresAt && holding && (
-              <div className="sm:col-span-2">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Giữ phòng đến
-                </p>
-                <p className="mt-1 font-semibold">{fshort(booking.holdExpiresAt)}</p>
-              </div>
-            )}
-          </div>
-
-          {deposit.isError && (
-            <div
-              role="alert"
-              className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive"
-            >
-              {getErrorMessage(deposit.error)}
-            </div>
-          )}
-          {final.isError && (
-            <div
-              role="alert"
-              className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive"
-            >
-              {getErrorMessage(final.error)}
-            </div>
-          )}
-          {cancel.isError && (
-            <div
-              role="alert"
-              className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive"
-            >
-              {getErrorMessage(cancel.error)}
-            </div>
-          )}
-
-          {!cancelled && !expired && (
-            <div className="flex flex-wrap gap-3 pt-2">
-              {status === 'PENDING_DEPOSIT' && (
-                <Button
-                  className="rounded-full px-6"
-                  disabled={holdExpired || deposit.isPending}
-                  aria-busy={deposit.isPending}
-                  onClick={() => void pay('deposit')}
-                >
-                  {deposit.isPending ? 'Đang chuyển sang cổng VNPay…' : 'Đặt cọc qua VNPay'}
-                </Button>
-              )}
-              {(status === 'CONFIRMED' || status === 'CHECKED_OUT') && (
-                <Button
-                  variant="outline"
-                  className="rounded-full px-6"
-                  disabled={final.isPending}
-                  aria-busy={final.isPending}
-                  onClick={() => void pay('final')}
-                >
-                  {final.isPending ? 'Đang chuyển sang cổng VNPay…' : 'Thanh toán phần còn lại'}
-                </Button>
-              )}
-              {status !== 'CHECKED_IN' && status !== 'CHECKED_OUT' && status !== 'ROOM_HELD' && (
-                <Button
-                  variant="ghost"
-                  className="rounded-full text-destructive hover:bg-destructive/10"
-                  onClick={() => setConfirmCancel(true)}
-                >
-                  Huỷ booking
-                </Button>
-              )}
-            </div>
-          )}
         </div>
       )}
 
@@ -300,6 +262,6 @@ export function BookingDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageContainer>
   )
 }
