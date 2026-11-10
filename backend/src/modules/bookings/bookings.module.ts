@@ -77,6 +77,7 @@ import { RoomStatusBoardService } from './room-status-board.service.js';
     AvailabilityClock,
     FrontDeskService,
     RoomStatusBoardService,
+    BookingsService,
   ],
 })
 export class BookingsModule implements NestModule {
