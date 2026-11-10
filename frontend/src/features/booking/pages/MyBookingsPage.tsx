@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
+import { AssetImage } from '@/components/AssetImage'
 import { Button, Input, NativeSelect, StatusBadge } from '@/components/atoms'
 import { EmptyState, FormField } from '@/components/molecules'
 import { PageContainer, PageHeader, Pager } from '@/components/organisms'
@@ -172,25 +173,39 @@ export function MyBookingsPage() {
           {pageItems.map((booking) => (
             <Link
               key={booking.id}
-              to={`/booking/${booking.id}`}
-              className="card-soft flex flex-col gap-4 p-5 transition hover:shadow-lift sm:flex-row sm:items-center sm:justify-between"
+              to={`/my-bookings/${booking.id}`}
+              className="card-soft flex flex-col gap-4 overflow-hidden p-3 transition hover:shadow-lift sm:flex-row sm:items-center"
             >
-              <div className="space-y-1">
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold tracking-wide text-foreground">
-                    {booking.code}
+              <AssetImage
+                path={booking.roomTypeImage}
+                name={booking.roomTypeName ?? 'Phòng'}
+                decorative
+                className="h-28 w-full rounded-xl object-cover sm:w-44"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold break-words">
+                    {booking.roomTypeName ?? 'Đặt phòng'}
                   </span>
                   <StatusBadge status={booking.status} />
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  {fdate(booking.checkIn)} → {fdate(booking.checkOut)} · {booking.roomCount} phòng ·{' '}
+                <p className="mt-1 text-sm text-muted-foreground">
+                  <span>{booking.code}</span>
+                  {' · '}
+                  {booking.roomNumber
+                    ? `Phòng ${booking.roomNumber}`
+                    : `${booking.roomCount} phòng`}
+                  {' · '}
                   {booking.adultCount + booking.childCount} khách
                 </p>
+                <p className="mt-1 text-sm">
+                  {fdate(booking.checkIn)} → {fdate(booking.checkOut)}
+                </p>
               </div>
-              <div className="sm:text-right">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">Tiền cọc</p>
-                <p className="font-semibold text-primary tabular-nums">
-                  {vnd(booking.depositAmount)}
+              <div className="px-3 sm:text-right">
+                <p className="font-semibold tabular-nums">{vnd(booking.roomTotal)}</p>
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  Đã trả {vnd(booking.paidAmount ?? 0)}
                 </p>
               </div>
             </Link>

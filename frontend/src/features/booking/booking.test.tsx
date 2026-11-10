@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { bookingRoutes } from './routes'
@@ -243,6 +243,52 @@ describe('MyBookingsPage', () => {
     expect(screen.getByText('Chờ đặt cọc')).toBeInTheDocument()
   })
 
+  it('shows each booking as a card with the room photo, room type, code, total and amount paid', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: [
+        myItem({
+          id: 'b1',
+          code: 'BK2401',
+          status: 'CHECKED_IN',
+          checkIn: '2099-03-10',
+          checkOut: '2099-03-11',
+          adultCount: 1,
+          roomTotal: 1_250_000,
+          paidAmount: 375_000,
+          roomTypeName: 'Phòng Đôi Hướng Vườn',
+          roomTypeImage: '/images/seeds/room-types/standard-01.jpg',
+          roomNumber: '101',
+        }),
+      ],
+    })
+    renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
+
+    const card = (await screen.findByText('Phòng Đôi Hướng Vườn')).closest('a') as HTMLElement
+    expect(card).toHaveAttribute('href', '/my-bookings/b1')
+    expect(within(card).getByText('Đã nhận phòng')).toBeInTheDocument()
+    expect(within(card).getByText('BK2401')).toBeInTheDocument()
+    expect(card).toHaveTextContent('BK2401 · Phòng 101 · 1 khách')
+    expect(within(card).getByText(/→/)).toHaveTextContent('→')
+    expect(within(card).getByText('1.250.000 ₫')).toBeInTheDocument()
+    expect(within(card).getByText('Đã trả 375.000 ₫')).toBeInTheDocument()
+    expect(card.querySelector('img')).toHaveAttribute(
+      'src',
+      expect.stringContaining('standard-01.jpg'),
+    )
+  })
+
+  it('still shows a card for a booking without room details or payments', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: [myItem({ id: 'b9', code: 'BK-PLAIN', roomCount: 2, adultCount: 2, childCount: 1 })],
+    })
+    renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
+
+    const card = (await screen.findByText('BK-PLAIN')).closest('a') as HTMLElement
+    expect(card).toHaveTextContent('BK-PLAIN · 2 phòng · 3 khách')
+    expect(within(card).getByText('Đã trả 0 ₫')).toBeInTheDocument()
+    expect(within(card).getByText('Đặt phòng')).toBeInTheDocument()
+  })
+
   it('sorts bookings by check-in date, newest first by default', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({
       data: [
@@ -314,10 +360,11 @@ describe('MyBookingsPage', () => {
       ),
     })
     renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
-    await screen.findAllByText('Tiền cọc')
-    expect(screen.getAllByText('Tiền cọc')).toHaveLength(8)
+    // Mỗi card có một dòng "Đã trả …".
+    await screen.findAllByText(/^Đã trả \d/)
+    expect(screen.getAllByText(/^Đã trả \d/)).toHaveLength(8)
     fireEvent.click(screen.getByLabelText('Trang sau'))
-    expect(screen.getAllByText('Tiền cọc')).toHaveLength(2)
+    expect(screen.getAllByText(/^Đã trả \d/)).toHaveLength(2)
   })
 })
 

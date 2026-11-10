@@ -109,7 +109,7 @@ describe('CustomerHomePage', () => {
     expect(screen.getByText('Đã xác nhận')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Xem đặt phòng/ })).toHaveAttribute(
       'href',
-      '/booking/b1',
+      '/my-bookings/b1',
     )
     expect(screen.queryByRole('link', { name: 'Đặt dịch vụ' })).not.toBeInTheDocument()
   })
