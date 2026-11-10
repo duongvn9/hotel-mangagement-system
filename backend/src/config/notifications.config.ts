@@ -16,9 +16,15 @@ export const notificationConfigFields = {
     .replace(/\s/g, '')
     .when('NOTIFICATIONS_ENABLED', {
       is: true,
-      then: Joi.required(),
+      // Brevo sends over HTTPS with its own key; GMAIL_USER stays the sender address.
+      then: Joi.when('BREVO_API_KEY', {
+        is: Joi.string().min(1).required(),
+        then: Joi.allow('').optional(),
+        otherwise: Joi.required(),
+      }),
       otherwise: Joi.allow('').optional(),
     }),
+  BREVO_API_KEY: Joi.string().allow('').optional(),
   NOTIFICATIONS_FROM_NAME: Joi.string()
     .pattern(/^[^\r\n\u0000]+$/)
     .max(200)
@@ -50,6 +56,7 @@ export const notificationConfiguration = (env: NodeJS.ProcessEnv) => ({
   enabled: env.NOTIFICATIONS_ENABLED?.toLowerCase() === 'true',
   user: env.GMAIL_USER ?? '',
   appPassword: (env.GMAIL_APP_PASSWORD ?? '').replace(/\s/g, ''),
+  brevoApiKey: env.BREVO_API_KEY ?? '',
   fromName: env.NOTIFICATIONS_FROM_NAME ?? 'Grand Emily Hotel',
   maxAttempts: Number(env.NOTIFICATIONS_MAX_ATTEMPTS ?? 3),
   retryBaseDelayMs: Number(env.NOTIFICATIONS_RETRY_BASE_DELAY_MS ?? 1000),
