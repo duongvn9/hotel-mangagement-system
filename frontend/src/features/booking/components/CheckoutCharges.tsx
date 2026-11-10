@@ -15,6 +15,7 @@ import { CHARGE_CATEGORY_LABEL, type BookingListItem, type ChargeCategory } from
 import { useAddCharge, useBookingCharges } from '../hooks'
 import { isPastCheckOut, money, newRequestId } from '../utils'
 import { AddServiceForm } from './AddServiceForm'
+import { CheckoutInspection } from './CheckoutInspection'
 import { SettleAndCheckOut } from './SettleAndCheckOut'
 
 /** Mức phụ phí tối đa một khoản (VND), khớp giới hạn của server. */
@@ -117,6 +118,8 @@ export function CheckoutCharges({
                     reloading={charges.isFetching}
                   />
                 </div>
+
+                {booking.status === 'CHECKED_IN' && <CheckoutInspection bookingId={booking.id} />}
 
                 <div className="space-y-3 rounded-xl border border-border bg-surface p-4">
                   <h4 className="text-sm font-semibold text-foreground">Phụ phí</h4>

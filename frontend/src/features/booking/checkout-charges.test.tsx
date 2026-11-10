@@ -79,6 +79,8 @@ function mockGet(initial: BookingCharges) {
     if (url === '/front-desk/same-day') return { data: list() }
     if (url === '/bookings/d1/charges') return { data: current }
     if (url === '/bookings/service-catalog') return { data: { items: catalog } }
+    if (url === '/bookings/d1/checkout-inspection') return { data: { inspection: null } }
+    if (url === '/front-desk/inspectors') return { data: { items: [] } }
     throw new Error(`unexpected GET ${url}`)
   })
   return {
@@ -419,5 +421,17 @@ describe('Classifying additional charges and late check-out', () => {
     await departure().findByText('Chưa có phụ phí.')
 
     expect(departure().queryByText(/quá giờ trả phòng/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('Room inspection inside the check-out dialog', () => {
+  it('offers the inspection request above the charges for a checked-in guest', async () => {
+    mockGet(charges())
+    await openPanel()
+
+    expect(await departure().findByRole('heading', { name: 'Kiểm tra phòng' })).toBeInTheDocument()
+    expect(
+      await departure().findByRole('button', { name: 'Yêu cầu kiểm tra phòng' }),
+    ).toBeInTheDocument()
   })
 })

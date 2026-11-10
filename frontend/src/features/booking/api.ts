@@ -347,6 +347,49 @@ export async function addCheckoutServiceCharge(
   return (await api.post<BookingCharges>(`/bookings/${id}/charges/services`, input)).data
 }
 
+/** Lần nhờ nhân viên dịch vụ kiểm tra phòng khi trả phòng (task CHECKOUT_INSPECTION). */
+export interface CheckoutInspectionView {
+  taskId: string
+  /** Trạng thái task: ASSIGNED, IN_PROGRESS, COMPLETED hoặc CANCELLED. */
+  status: 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
+  assigneeName: string
+  requestedAt: string
+  completedAt?: string
+  /** Kết quả nhân viên dịch vụ ghi khi hoàn thành. */
+  workResult?: string
+}
+
+export interface Inspector {
+  id: string
+  fullName: string
+}
+
+export interface RequestInspectionInput {
+  assigneeId: string
+  note?: string
+}
+
+/** Lần kiểm tra gần nhất của booking, hoặc null nếu chưa từng yêu cầu. */
+export async function getCheckoutInspection(id: string): Promise<CheckoutInspectionView | null> {
+  return (
+    await api.get<{ inspection: CheckoutInspectionView | null }>(
+      `/bookings/${id}/checkout-inspection`,
+    )
+  ).data.inspection
+}
+
+/** Nhân viên dịch vụ đang hoạt động để chọn người kiểm tra. */
+export async function listInspectors(): Promise<Inspector[]> {
+  return (await api.get<{ items: Inspector[] }>('/front-desk/inspectors')).data.items
+}
+
+export async function requestCheckoutInspection(
+  id: string,
+  input: RequestInspectionInput,
+): Promise<CheckoutInspectionView> {
+  return (await api.post<CheckoutInspectionView>(`/bookings/${id}/checkout-inspection`, input)).data
+}
+
 /** Lễ tân ghi nhận khách đã xem và đồng ý các khoản phí lúc trả phòng. */
 export async function confirmCheckoutFees(id: string): Promise<BookingCharges> {
   return (await api.post<BookingCharges>(`/bookings/${id}/charges/confirm`)).data

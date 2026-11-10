@@ -14,6 +14,9 @@ import {
   addCheckoutServiceCharge,
   confirmCheckoutFees,
   getBookingCharges,
+  getCheckoutInspection,
+  listInspectors,
+  requestCheckoutInspection,
   getCheckInOptions,
   getRoomStatusBoard,
   getSameDayList,
@@ -32,6 +35,7 @@ import {
   type BookingListParams,
   type DeskPaymentMethod,
   type GuestListParams,
+  type RequestInspectionInput,
   type RoomReplacement,
   type RoomStatusBoardParams,
   type SearchAvailabilityParams,
@@ -198,6 +202,31 @@ export function useAddCharge(id: string) {
   return useMutation({
     mutationFn: (input: AddChargeInput) => addCheckoutCharge(id, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', id] }),
+  })
+}
+
+/** Lần kiểm tra phòng gần nhất của booking khi trả phòng. */
+export function useCheckoutInspection(id: string) {
+  return useQuery({
+    queryKey: ['checkout-inspection', id],
+    queryFn: () => getCheckoutInspection(id),
+  })
+}
+
+export function useInspectors(enabled: boolean) {
+  return useQuery({
+    queryKey: ['inspectors'],
+    queryFn: listInspectors,
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+export function useRequestInspection(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: RequestInspectionInput) => requestCheckoutInspection(id, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['checkout-inspection', id] }),
   })
 }
 
