@@ -31,6 +31,7 @@ function setup(
     findOne: vi.fn(async () => existing ?? null),
     exists: vi.fn(async () => null),
     create: vi.fn(async () => ({})),
+    updateMany: vi.fn(async () => ({ modifiedCount: 1 })),
   };
   const invoice = {
     _id: invoiceId,
@@ -101,6 +102,29 @@ describe('CashPaymentService desk payments', () => {
     await expect(
       sut.record(bookingId.toHexString(), dto, PaymentMethod.Card),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('cancels a pending VNPay final payment with supersededAt so desk payment can proceed', async () => {
+    const { sut, payments } = setup();
+
+    const response = await sut.cancelPendingVnpay(bookingId.toHexString());
+
+    expect(payments.updateMany).toHaveBeenCalledWith(
+      {
+        booking: bookingId,
+        purpose: PaymentPurpose.Final,
+        method: PaymentMethod.Vnpay,
+        status: PaymentStatus.Pending,
+        isActive: true,
+      },
+      {
+        $set: {
+          status: PaymentStatus.Cancelled,
+          supersededAt: expect.any(Date),
+        },
+      },
+    );
+    expect(response.bookingId).toBe(bookingId.toHexString());
   });
 });
 

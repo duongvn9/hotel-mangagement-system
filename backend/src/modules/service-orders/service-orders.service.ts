@@ -1279,15 +1279,25 @@ export class ServiceOrdersService implements OnModuleInit {
         isActive: true,
         status: { $in: ORDERABLE_BOOKING_STATUSES },
       })
-      .select('_id code checkIn checkOut')
+      .select('_id code status rooms checkIn checkOut')
       .sort({ checkIn: -1, _id: 1 })
+      // Số phòng đầu tiên cho màn "Dịch vụ phòng"; phòng đã xoá chỉ làm thiếu số phòng.
+      .populate<{ rooms: ({ roomNumber?: string } | null)[] }>({
+        path: 'rooms',
+        select: 'roomNumber',
+        options: { retainNullValues: true },
+      })
       .exec();
     return {
       items: rows.map((row) => ({
         id: String(row._id),
         code: row.code,
+        status: row.status,
         checkIn: row.checkIn,
         checkOut: row.checkOut,
+        ...(row.rooms[0]?.roomNumber
+          ? { roomNumber: row.rooms[0].roomNumber }
+          : {}),
       })),
     };
   }

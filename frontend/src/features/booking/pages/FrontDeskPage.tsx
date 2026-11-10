@@ -7,6 +7,7 @@ import { PageContainer, PageHeader } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import type { BookingListItem } from '../api'
+import { CheckInConfirmDialog } from '../components/CheckInConfirmDialog'
 import { CheckoutCharges } from '../components/CheckoutCharges'
 import { useCheckIn, useCheckInOptions, useSameDayList } from '../hooks'
 import { money, todayISO } from '../utils'
@@ -169,14 +170,33 @@ function BookingCard({ booking, tab }: { booking: BookingListItem; tab: 'in' | '
               booking={booking}
               detailLink={
                 <Button asChild variant="outline" className="rounded-full">
-                  <Link to={`/booking/${booking.id}`}>Chi tiết</Link>
+                  <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}`}>
+                    Chi tiết
+                  </Link>
                 </Button>
               }
             />
           ) : (
             <div className="flex gap-2">
-              <Button asChild variant="outline" className="w-full rounded-full">
-                <Link to={`/booking/${booking.id}`}>Chi tiết</Link>
+              {booking.status === 'PENDING_DEPOSIT' && (
+                <Button asChild className="flex-1 rounded-full">
+                  <Link
+                    to={`/reception/booking/new?${new URLSearchParams({
+                      guestName: booking.guestName ?? '',
+                      guestEmail: booking.guestEmail ?? '',
+                      guestPhone: booking.guestPhone ?? '',
+                    }).toString()}`}
+                  >
+                    Đặt phòng tại quầy
+                  </Link>
+                </Button>
+              )}
+              <Button
+                asChild
+                variant="outline"
+                className={cn('rounded-full', booking.status !== 'PENDING_DEPOSIT' && 'w-full')}
+              >
+                <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}`}>Chi tiết</Link>
               </Button>
             </div>
           )
@@ -185,14 +205,14 @@ function BookingCard({ booking, tab }: { booking: BookingListItem; tab: 'in' | '
             booking={booking}
             detailLink={
               <Button asChild variant="outline" className="rounded-full">
-                <Link to={`/booking/${booking.id}`}>Chi tiết</Link>
+                <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}`}>Chi tiết</Link>
               </Button>
             }
           />
         ) : (
           <div className="flex gap-2">
             <Button asChild variant="outline" className="w-full rounded-full">
-              <Link to={`/booking/${booking.id}`}>Chi tiết</Link>
+              <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}`}>Chi tiết</Link>
             </Button>
           </div>
         )}
@@ -217,6 +237,7 @@ function CheckInAction({
 }) {
   const checkIn = useCheckIn()
   const [panelOpen, setPanelOpen] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [selection, setSelection] = useState<Record<string, string>>({})
   const options = useCheckInOptions(panelOpen ? booking.id : null)
   const blocked = options.data?.rooms.filter((room) => !room.ready) ?? []
@@ -309,7 +330,10 @@ function CheckInAction({
             disabled={checkIn.isPending}
             className="flex-1 rounded-full"
             aria-label="Check In"
-            onClick={() => run()}
+            onClick={() => {
+              checkIn.reset()
+              setConfirmOpen(true)
+            }}
           >
             <LogIn className="mr-1.5 size-4" />
             Nhận phòng
@@ -320,6 +344,18 @@ function CheckInAction({
       {panelOpen && blocked.length > 0 && detailLink && (
         <div className="flex gap-2">{detailLink}</div>
       )}
+
+      <CheckInConfirmDialog
+        booking={booking}
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        pending={checkIn.isPending}
+        onConfirm={async () => {
+          // Lỗi (vd phòng chưa sẵn sàng) hiện ở thẻ khách, không giữ hộp thoại mở.
+          await run()
+          setConfirmOpen(false)
+        }}
+      />
     </div>
   )
 }

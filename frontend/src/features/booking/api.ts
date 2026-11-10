@@ -180,6 +180,55 @@ export async function getBooking(id: string, params: { code?: string } = {}): Pr
   return (await api.get<Booking>(`/bookings/${id}`, { params })).data
 }
 
+/** Một khoản thanh toán của booking, đọc từ server. */
+export interface SummaryPayment {
+  id: string
+  method: 'VNPAY' | 'CASH' | 'CARD'
+  purpose: 'DEPOSIT' | 'FINAL'
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED'
+  amount: number
+  /** Lúc thu tiền nếu đã thu, ngược lại lúc tạo giao dịch. */
+  date: string
+}
+
+/** Một yêu cầu dịch vụ trong kỳ lưu trú. */
+export interface SummaryServiceOrder {
+  id: string
+  serviceName: string
+  quantity: number
+  amount: number
+  status: 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED'
+  requestedTime: string
+}
+
+/** Chi tiết một booking cho màn chi tiết (khách và nhân viên). */
+export interface BookingSummary {
+  bookingId: string
+  code: string
+  status: string
+  source: BookingSource
+  checkIn: string
+  checkOut: string
+  adultCount: number
+  childCount: number
+  createdAt: string
+  /** Tiền cọc cần đóng (VND); số đã đóng nằm trong invoice.depositPaid. */
+  depositAmount: number
+  guest: { name?: string; email?: string; phone?: string }
+  rooms: { roomNumber?: string; roomTypeName?: string }[]
+  invoice: InvoiceTotals
+  payments: SummaryPayment[]
+  serviceOrders: SummaryServiceOrder[]
+}
+
+/** Khách xem bằng quyền sở hữu hoặc mã booking (?code); nhân viên xem mọi booking. */
+export async function getBookingSummary(
+  id: string,
+  params: { code?: string } = {},
+): Promise<BookingSummary> {
+  return (await api.get<BookingSummary>(`/bookings/${id}/summary`, { params })).data
+}
+
 /** Một dòng "Đặt phòng của tôi" (Customer đăng nhập, đọc từ server). */
 export interface MyBookingItem {
   id: string
@@ -219,6 +268,30 @@ export interface WalkInBooking {
   source: BookingSource
   /** Tiền phòng server tính (VND). */
   roomTotal: number
+  /** Tiền cọc server tính (VND), thu tại quầy sau khi tạo booking. */
+  depositAmount: number
+}
+
+/** Cách khách đóng cọc tại quầy. */
+export type DeskDepositMethod = 'CASH' | 'CARD'
+
+export const DESK_DEPOSIT_LABEL: Record<DeskDepositMethod, string> = {
+  CASH: 'tiền mặt',
+  CARD: 'thẻ',
+}
+
+export interface RecordDeskDepositInput {
+  method: DeskDepositMethod
+  /** Mã chống trùng; gửi lại cùng mã thì không ghi thêm khoản cọc. */
+  requestId: string
+}
+
+/** Lễ tân ghi nhận khách đã đóng cọc của booking tại quầy; số tiền do server tính. */
+export async function recordDeskDeposit(
+  id: string,
+  input: RecordDeskDepositInput,
+): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${id}/payments/deposit`, input)).data
 }
 
 /** UC08 — Lễ tân/Quản lý tạo booking cho khách vãng lai tại quầy. */
@@ -316,6 +389,8 @@ export interface BookingCharges {
   invoiceStatus: string
   /** Lúc khách xác nhận các khoản phí; không có nghĩa là chưa xác nhận. */
   feesConfirmedAt?: string
+  /** Có giao dịch VNPay thanh toán cuối đang chờ; không có nghĩa là không có. */
+  vnpayPending?: true
   totals: InvoiceTotals
   charges: BookingCharge[]
 }
@@ -632,6 +707,11 @@ export async function initiateDeposit(input: InitiatePaymentInput): Promise<Paym
 /** UC21 — Khởi tạo thanh toán phần còn lại qua VNPay. */
 export async function initiateFinal(input: InitiatePaymentInput): Promise<PaymentInitiation> {
   return (await api.post<PaymentInitiation>('/payments/final', input)).data
+}
+
+/** Lễ tân huỷ giao dịch VNPay thanh toán cuối đang chờ để thu bằng tiền mặt hoặc thẻ. */
+export async function cancelPendingVnpay(bookingId: string): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${bookingId}/payments/vnpay/cancel`)).data
 }
 
 export type PaymentResultStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED'

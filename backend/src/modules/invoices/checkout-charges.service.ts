@@ -14,6 +14,12 @@ import type {
   AddCheckoutServiceDto,
   BookingChargesResponse,
 } from './dto/checkout-charge.dto.js';
+import {
+  PaymentMethod,
+  PaymentPurpose,
+  PaymentStatus,
+  PaymentTransaction,
+} from '../payments/schemas/payment-transaction.schema.js';
 import { toBookingChargesResponse } from './invoice-summary.js';
 import { InvoicesService } from './invoices.service.js';
 import { InvoiceChargeType } from './schemas/invoice-charge.schema.js';
@@ -23,6 +29,8 @@ export class CheckoutChargesService {
   constructor(
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
     @InjectModel(Service.name) private readonly services: Model<Service>,
+    @InjectModel(PaymentTransaction.name)
+    private readonly payments: Model<PaymentTransaction>,
     private readonly invoices: InvoicesService,
   ) {}
 
@@ -139,7 +147,16 @@ export class CheckoutChargesService {
   async list(bookingId: string): Promise<BookingChargesResponse> {
     const booking = await this.booking(bookingId);
     const invoice = await this.invoices.getOrCreateForBooking(bookingId);
-    return toBookingChargesResponse(booking, invoice);
+    const vnpayPending = Boolean(
+      await this.payments.exists({
+        booking: booking._id,
+        purpose: PaymentPurpose.Final,
+        method: PaymentMethod.Vnpay,
+        status: PaymentStatus.Pending,
+        isActive: true,
+      }),
+    );
+    return toBookingChargesResponse(booking, invoice, { vnpayPending });
   }
 
   private async booking(bookingId: string) {

@@ -10,6 +10,8 @@ import {
   BookingStatus,
 } from '../src/modules/bookings/schemas/booking.schema.js';
 import { Service } from '../src/modules/services/schemas/service.schema.js';
+import { Room } from '../src/modules/rooms/schemas/room.schema.js';
+import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
 import { ServiceOrder } from '../src/modules/service-orders/schemas/service-order.schema.js';
 import { ServiceOrdersService } from '../src/modules/service-orders/service-orders.service.js';
 import { InvoicesService } from '../src/modules/invoices/invoices.service.js';
@@ -291,6 +293,48 @@ describe('UC22/23 customer service orders', () => {
       (await orders.findById(id).select('+acceptanceRecovery').orFail())
         .acceptanceRecovery,
     ).toBeUndefined();
+  });
+
+  it('adds the booking status and first room number to the order contexts', async () => {
+    const rooms = app.get<Model<Room>>(getModelToken(Room.name));
+    const roomTypes = app.get<Model<RoomType>>(getModelToken(RoomType.name));
+    const typeId = new Types.ObjectId();
+    const roomId = new Types.ObjectId();
+    await roomTypes.create({
+      _id: typeId,
+      name: `Contexts ${typeId}`,
+      adultCapacity: 2,
+      childCapacity: 1,
+      basePrice: 1000000,
+    });
+    await rooms.create({
+      _id: roomId,
+      roomNumber: 'CTX-101',
+      floor: 1,
+      roomType: typeId,
+    });
+    try {
+      await bookings.updateOne({ _id: bookingId }, { rooms: [roomId] });
+
+      const { body: found } = await get('/order-contexts').expect(200);
+      expect(found.items).toEqual([
+        expect.objectContaining({
+          id: bookingId,
+          status: 'CHECKED_IN',
+          roomNumber: 'CTX-101',
+        }),
+      ]);
+
+      // Phòng không còn tồn tại: vẫn liệt kê booking, chỉ thiếu số phòng.
+      await rooms.deleteOne({ _id: roomId });
+      const { body: missing } = await get('/order-contexts').expect(200);
+      expect(missing.items).toHaveLength(1);
+      expect(missing.items[0].roomNumber).toBeUndefined();
+      expect(missing.items[0].status).toBe('CHECKED_IN');
+    } finally {
+      await rooms.deleteOne({ _id: roomId });
+      await roomTypes.deleteOne({ _id: typeId });
+    }
   });
 
   it('Issue ① lets a guest order from CONFIRMED but still accepts only in-house', async () => {
@@ -1551,7 +1595,7 @@ describe('UC22/23 customer service orders', () => {
     const contexts = await get('/order-contexts').expect(200);
     expect(contexts.body.items).toHaveLength(1);
     expect(Object.keys(contexts.body.items[0]).sort()).toEqual(
-      ['id', 'code', 'checkIn', 'checkOut'].sort(),
+      ['id', 'code', 'status', 'checkIn', 'checkOut'].sort(),
     );
     const catalog = await get('/catalog').expect(200);
     expect(catalog.body.items).toEqual([

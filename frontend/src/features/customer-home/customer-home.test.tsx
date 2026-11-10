@@ -109,7 +109,7 @@ describe('CustomerHomePage', () => {
     expect(screen.getByText('Đã xác nhận')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Xem đặt phòng/ })).toHaveAttribute(
       'href',
-      '/booking/b1',
+      '/my-bookings/b1',
     )
     expect(screen.queryByRole('link', { name: 'Đặt dịch vụ' })).not.toBeInTheDocument()
   })
@@ -119,7 +119,7 @@ describe('CustomerHomePage', () => {
     renderHome()
     expect(await screen.findByRole('link', { name: 'Đặt dịch vụ' })).toHaveAttribute(
       'href',
-      '/customer/service-orders/new',
+      '/customer/service-orders?bookingId=b1',
     )
   })
 
@@ -161,7 +161,7 @@ describe('CustomerHomePage', () => {
     renderHome()
     expect(await screen.findByRole('link', { name: 'Đặt dịch vụ phòng' })).toHaveAttribute(
       'href',
-      '/customer/service-orders/new',
+      '/customer/service-orders',
     )
     expect(screen.getByRole('link', { name: 'Gửi đánh giá' })).toHaveAttribute(
       'href',

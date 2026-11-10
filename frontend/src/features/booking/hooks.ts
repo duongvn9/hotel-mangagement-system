@@ -14,7 +14,10 @@ import {
   initiateDeposit,
   addCheckoutServiceCharge,
   confirmCheckoutFees,
+  cancelPendingVnpay,
   getBookingCharges,
+  getBookingSummary,
+  recordDeskDeposit,
   getCheckoutInspection,
   listInspectors,
   requestCheckoutInspection,
@@ -36,6 +39,7 @@ import {
   type BookingListParams,
   type DeskPaymentMethod,
   type GuestListParams,
+  type RecordDeskDepositInput,
   type RequestInspectionInput,
   type RoomReplacement,
   type RoomStatusBoardParams,
@@ -154,6 +158,21 @@ export function useCreateWalkInBooking() {
   })
 }
 
+/** Thu cọc của booking đặt tại quầy rồi làm mới hóa đơn và danh sách. */
+export function useRecordDeskDeposit() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...input }: RecordDeskDepositInput & { id: string }) =>
+      recordDeskDeposit(id, input),
+    onSuccess: (_data, { id }) =>
+      Promise.all(
+        [['booking-charges', id], ['bookings'], ['same-day']].map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey }),
+        ),
+      ),
+  })
+}
+
 export function useUpdateBooking() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -189,6 +208,17 @@ export function useCheckInOptions(id: string | null) {
     queryKey: ['check-in-options', id],
     queryFn: () => getCheckInOptions(id as string),
     enabled: id !== null,
+    retry: false,
+  })
+}
+
+/** Chi tiết booking (lưu trú, hoá đơn, thanh toán, dịch vụ); `id` rỗng thì không gọi. */
+export function useBookingSummary(id: string, options: { code?: string } = {}) {
+  const { code } = options
+  return useQuery({
+    queryKey: ['booking-summary', id, code ?? null],
+    queryFn: () => getBookingSummary(id, code === undefined ? {} : { code }),
+    enabled: id.length > 0,
     retry: false,
   })
 }
@@ -315,6 +345,15 @@ export function useInitiateDeposit() {
 
 export function useInitiateFinal() {
   return useMutation({ mutationFn: initiateFinal })
+}
+
+/** Huỷ giao dịch VNPay đang chờ của booking rồi tải lại hóa đơn. */
+export function useCancelPendingVnpay(bookingId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => cancelPendingVnpay(bookingId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', bookingId] }),
+  })
 }
 
 export function useVerifyReturn(rawQuery: string) {
