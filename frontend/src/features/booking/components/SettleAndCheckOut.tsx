@@ -3,13 +3,15 @@ import { Button } from '@/components/atoms'
 import { Alert } from '@/components/molecules'
 import { getErrorMessage } from '@/lib/api-client'
 import type { BookingListItem, DeskPaymentMethod, InvoiceTotals } from '../api'
-import { useCheckOut, useInitiateFinal, useRecordCash } from '../hooks'
+import { useCheckOut, useConfirmFees, useInitiateFinal, useRecordCash } from '../hooks'
 import { rememberPaymentRef } from '../storage'
 import { money, newRequestId } from '../utils'
 
 interface SettleAndCheckOutProps {
   booking: BookingListItem
   totals: InvoiceTotals
+  /** Lúc khách xác nhận các khoản phí; chưa có thì chưa cho thu tiền. */
+  feesConfirmedAt?: string
   /** Tải lại hóa đơn, dùng sau khi khách thanh toán VNPay ở tab khác. */
   onReload: () => void
   reloading: boolean
@@ -22,11 +24,13 @@ interface SettleAndCheckOutProps {
 export function SettleAndCheckOut({
   booking,
   totals,
+  feesConfirmedAt,
   onReload,
   reloading,
 }: SettleAndCheckOutProps) {
   const cash = useRecordCash(booking.id)
   const card = useRecordCash(booking.id, 'card')
+  const confirmFees = useConfirmFees(booking.id)
   const vnpay = useInitiateFinal()
   const checkOut = useCheckOut()
   const [confirmMethod, setConfirmMethod] = useState<DeskPaymentMethod | null>(null)
@@ -37,6 +41,7 @@ export function SettleAndCheckOut({
   const [cardRequestId, setCardRequestId] = useState(newRequestId)
 
   const paid = totals.balanceDue === 0
+  const feesConfirmed = Boolean(feesConfirmedAt)
   const roomNumbers = booking.rooms
     .map((room) => room.roomNumber)
     .filter(Boolean)
@@ -81,6 +86,26 @@ export function SettleAndCheckOut({
         <p className="text-sm font-semibold text-success">Đã thanh toán đủ</p>
       ) : (
         <div className="space-y-3">
+          {feesConfirmed ? (
+            <p className="text-sm font-semibold text-success">Khách đã xác nhận các khoản phí</p>
+          ) : (
+            <div className="space-y-2 rounded-xl border border-border bg-card p-3">
+              <p className="text-sm text-muted-foreground">
+                Cho khách xem các khoản phí ở trên. Khách đồng ý thì mới thu tiền.
+              </p>
+              <Button
+                size="sm"
+                className="rounded-full"
+                disabled={confirmFees.isPending}
+                onClick={() => confirmFees.mutate()}
+              >
+                Khách đã xác nhận phí
+              </Button>
+              {confirmFees.isError && (
+                <Alert tone="danger">{getErrorMessage(confirmFees.error)}</Alert>
+              )}
+            </div>
+          )}
           {confirmMethod ? (
             <div className="space-y-2 rounded-xl border border-border bg-card p-3">
               <p className="text-sm text-foreground">
@@ -117,6 +142,7 @@ export function SettleAndCheckOut({
                 size="sm"
                 variant="secondary"
                 className="rounded-full"
+                disabled={!feesConfirmed}
                 onClick={() => setConfirmMethod('cash')}
               >
                 Thu tiền mặt
@@ -125,6 +151,7 @@ export function SettleAndCheckOut({
                 size="sm"
                 variant="secondary"
                 className="rounded-full"
+                disabled={!feesConfirmed}
                 onClick={() => setConfirmMethod('card')}
               >
                 Thu thẻ
@@ -133,7 +160,7 @@ export function SettleAndCheckOut({
                 size="sm"
                 variant="secondary"
                 className="rounded-full"
-                disabled={vnpay.isPending}
+                disabled={!feesConfirmed || vnpay.isPending}
                 onClick={startVnpay}
               >
                 Thanh toán VNPay

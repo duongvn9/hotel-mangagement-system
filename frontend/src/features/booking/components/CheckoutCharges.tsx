@@ -112,6 +112,7 @@ export function CheckoutCharges({
                   <SettleAndCheckOut
                     booking={booking}
                     totals={charges.data.totals}
+                    feesConfirmedAt={charges.data.feesConfirmedAt}
                     onReload={() => void charges.refetch()}
                     reloading={charges.isFetching}
                   />

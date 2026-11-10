@@ -12,6 +12,7 @@ import {
   holdBooking,
   initiateDeposit,
   addCheckoutServiceCharge,
+  confirmCheckoutFees,
   getBookingCharges,
   getCheckInOptions,
   getRoomStatusBoard,
@@ -196,6 +197,15 @@ export function useAddCharge(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: AddChargeInput) => addCheckoutCharge(id, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', id] }),
+  })
+}
+
+/** Ghi nhận khách đã xác nhận các khoản phí rồi làm mới hóa đơn của booking. */
+export function useConfirmFees(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => confirmCheckoutFees(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', id] }),
   })
 }

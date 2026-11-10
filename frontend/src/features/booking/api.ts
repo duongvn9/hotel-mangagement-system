@@ -294,6 +294,8 @@ export interface BookingCharges {
   status: string
   /** Trạng thái hóa đơn: UNPAID, PARTIALLY_PAID hoặc PAID. */
   invoiceStatus: string
+  /** Lúc khách xác nhận các khoản phí; không có nghĩa là chưa xác nhận. */
+  feesConfirmedAt?: string
   totals: InvoiceTotals
   charges: BookingCharge[]
 }
@@ -343,6 +345,11 @@ export async function addCheckoutServiceCharge(
   input: AddServiceChargeInput,
 ): Promise<BookingCharges> {
   return (await api.post<BookingCharges>(`/bookings/${id}/charges/services`, input)).data
+}
+
+/** Lễ tân ghi nhận khách đã xem và đồng ý các khoản phí lúc trả phòng. */
+export async function confirmCheckoutFees(id: string): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${id}/charges/confirm`)).data
 }
 
 /** Cách thu thanh toán cuối tại quầy. */
