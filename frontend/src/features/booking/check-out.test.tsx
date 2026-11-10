@@ -229,16 +229,14 @@ describe('Pay and check out from the same-day departures list', () => {
 
   it('offers to cancel a VNPay payment that is still pending, also after a reload', async () => {
     const state = mockGet({ ...invoice(false), vnpayPending: true })
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { cancelled: 1 } })
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: invoice(false) })
     await openPanel()
 
     expect(await departure().findByText(/đang chờ thanh toán VNPay/i)).toBeInTheDocument()
     state.set(invoice(false))
     fireEvent.click(departure().getByRole('button', { name: 'Hủy thanh toán VNPay' }))
 
-    await waitFor(() =>
-      expect(post).toHaveBeenCalledWith('/payments/final/cancel', { bookingId: 'd1' }),
-    )
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/bookings/d1/payments/vnpay/cancel'))
     await waitFor(() =>
       expect(departure().queryByRole('button', { name: 'Hủy thanh toán VNPay' })).toBeNull(),
     )

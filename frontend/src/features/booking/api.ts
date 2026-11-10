@@ -653,8 +653,8 @@ export async function initiateFinal(input: InitiatePaymentInput): Promise<Paymen
 }
 
 /** Lễ tân huỷ giao dịch VNPay thanh toán cuối đang chờ để thu bằng tiền mặt hoặc thẻ. */
-export async function cancelPendingVnpay(bookingId: string): Promise<{ cancelled: number }> {
-  return (await api.post<{ cancelled: number }>('/payments/final/cancel', { bookingId })).data
+export async function cancelPendingVnpay(bookingId: string): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${bookingId}/payments/vnpay/cancel`)).data
 }
 
 export type PaymentResultStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED'
