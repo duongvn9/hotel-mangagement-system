@@ -19,6 +19,35 @@ function renderPage(role = receptionist) {
   })
 }
 
+const created = {
+  id: 'b1',
+  code: 'BKWALK1',
+  status: 'CONFIRMED',
+  rooms: ['r1'],
+  checkIn: '2099-01-10',
+  checkOut: '2099-01-12',
+  adultCount: 2,
+  childCount: 1,
+  source: 'FRONT_DESK',
+  roomTotal: 2_000_000,
+  depositAmount: 200_000,
+}
+
+const failure = (message: string) => ({
+  isAxiosError: true,
+  response: { status: 409, data: { message } },
+})
+
+function fillGuest() {
+  fireEvent.change(screen.getByLabelText(/Họ tên/), { target: { value: 'Khách vãng lai' } })
+  fireEvent.change(screen.getByLabelText(/Email/), { target: { value: 'k@example.test' } })
+  fireEvent.change(screen.getByLabelText(/Số điện thoại/), { target: { value: '0911111111' } })
+}
+
+function chooseDeposit(method: 'CASH' | 'CARD' = 'CASH') {
+  fireEvent.change(screen.getByLabelText(/Hình thức thu cọc/), { target: { value: method } })
+}
+
 async function searchRooms() {
   fireEvent.change(screen.getByLabelText(/Nhận phòng/), { target: { value: '2099-01-10' } })
   fireEvent.change(screen.getByLabelText(/Trả phòng/), { target: { value: '2099-01-12' } })
@@ -41,20 +70,11 @@ describe('WalkInBookingPage', () => {
     expect(screen.getByText('Không có quyền truy cập')).toBeInTheDocument()
   })
 
-  it('searches rooms, creates a confirmed booking and shows its code', async () => {
-    const post = vi.spyOn(api, 'post').mockResolvedValue({
-      data: {
-        id: 'b1',
-        code: 'BKWALK1',
-        status: 'CONFIRMED',
-        rooms: ['r1'],
-        checkIn: '2099-01-10',
-        checkOut: '2099-01-12',
-        adultCount: 2,
-        childCount: 1,
-        source: 'FRONT_DESK',
-        roomTotal: 2_000_000,
-      },
+  it('searches rooms, creates a confirmed booking, takes the deposit and shows both', async () => {
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+      if (url === '/bookings/walk-in') return { data: created }
+      if (url === '/bookings/b1/payments/deposit') return { data: {} }
+      throw new Error(`unexpected POST ${url}`)
     })
     renderPage()
 
@@ -62,9 +82,8 @@ describe('WalkInBookingPage', () => {
     expect(api.get).toHaveBeenCalledWith('/availability', {
       params: { checkIn: '2099-01-10', checkOut: '2099-01-12', guests: 3 },
     })
-    fireEvent.change(screen.getByLabelText(/Họ tên/), { target: { value: 'Khách vãng lai' } })
-    fireEvent.change(screen.getByLabelText(/Email/), { target: { value: 'k@example.test' } })
-    fireEvent.change(screen.getByLabelText(/Số điện thoại/), { target: { value: '0911111111' } })
+    fillGuest()
+    chooseDeposit('CASH')
     fireEvent.click(screen.getByRole('button', { name: 'Tạo booking' }))
 
     expect(await screen.findByText('BKWALK1')).toBeInTheDocument()
@@ -79,6 +98,69 @@ describe('WalkInBookingPage', () => {
       guestEmail: 'k@example.test',
       guestPhone: '0911111111',
     })
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/bookings/b1/payments/deposit', {
+        method: 'CASH',
+        requestId: expect.stringMatching(/^[A-Za-z0-9_-]{8,64}$/),
+      }),
+    )
+    expect(await screen.findByText(/Đã thu cọc 200\.000/)).toBeInTheDocument()
+    expect(screen.getByText(/tiền mặt/)).toBeInTheDocument()
+  })
+
+  it('needs a deposit method before creating', async () => {
+    const post = vi.spyOn(api, 'post')
+    renderPage()
+    fireEvent.click(await searchRooms())
+    fillGuest()
+    const create = screen.getByRole('button', { name: 'Tạo booking' })
+
+    expect(create).toBeDisabled()
+    chooseDeposit('CARD')
+    expect(create).toBeEnabled()
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('records a card deposit', async () => {
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => ({
+      data: url === '/bookings/walk-in' ? created : {},
+    }))
+    renderPage()
+    fireEvent.click(await searchRooms())
+    fillGuest()
+    chooseDeposit('CARD')
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo booking' }))
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/bookings/b1/payments/deposit', {
+        method: 'CARD',
+        requestId: expect.any(String),
+      }),
+    )
+    expect(await screen.findByText(/Đã thu cọc 200\.000/)).toBeInTheDocument()
+    expect(screen.getByText(/thẻ/)).toBeInTheDocument()
+  })
+
+  it('keeps the booking and retries the deposit with the same request id when it fails', async () => {
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValueOnce({ data: created })
+      .mockRejectedValueOnce(failure('Boom'))
+      .mockResolvedValue({ data: {} })
+    renderPage()
+    fireEvent.click(await searchRooms())
+    fillGuest()
+    chooseDeposit('CASH')
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo booking' }))
+
+    expect(await screen.findByText('BKWALK1')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent(/chưa thu được cọc/i)
+    fireEvent.click(screen.getByRole('button', { name: 'Thu cọc lại' }))
+
+    expect(await screen.findByText(/Đã thu cọc 200\.000/)).toBeInTheDocument()
+    const deposits = post.mock.calls.filter((call) => call[0] === '/bookings/b1/payments/deposit')
+    expect(deposits).toHaveLength(2)
+    expect(deposits[1]).toEqual(deposits[0])
   })
 
   it('prefills the guest details from the query string', async () => {
@@ -116,6 +198,7 @@ describe('WalkInBookingPage', () => {
     fireEvent.change(screen.getByLabelText(/Họ tên/), { target: { value: 'A' } })
     fireEvent.change(screen.getByLabelText(/Email/), { target: { value: 'a@example.test' } })
     fireEvent.change(screen.getByLabelText(/Số điện thoại/), { target: { value: '0911111111' } })
+    chooseDeposit()
     fireEvent.click(screen.getByRole('button', { name: 'Tạo booking' }))
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())

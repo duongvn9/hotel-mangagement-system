@@ -15,6 +15,7 @@ import {
   addCheckoutServiceCharge,
   confirmCheckoutFees,
   getBookingCharges,
+  recordDeskDeposit,
   getCheckoutInspection,
   listInspectors,
   requestCheckoutInspection,
@@ -36,6 +37,7 @@ import {
   type BookingListParams,
   type DeskPaymentMethod,
   type GuestListParams,
+  type RecordDeskDepositInput,
   type RequestInspectionInput,
   type RoomReplacement,
   type RoomStatusBoardParams,
@@ -149,6 +151,21 @@ export function useCreateWalkInBooking() {
       Promise.all(
         ['availability', 'bookings', 'same-day', 'room-status-board', 'guests'].map((key) =>
           queryClient.invalidateQueries({ queryKey: [key] }),
+        ),
+      ),
+  })
+}
+
+/** Thu cọc của booking đặt tại quầy rồi làm mới hóa đơn và danh sách. */
+export function useRecordDeskDeposit() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...input }: RecordDeskDepositInput & { id: string }) =>
+      recordDeskDeposit(id, input),
+    onSuccess: (_data, { id }) =>
+      Promise.all(
+        [['booking-charges', id], ['bookings'], ['same-day']].map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey }),
         ),
       ),
   })

@@ -177,7 +177,24 @@ function BookingCard({ booking, tab }: { booking: BookingListItem; tab: 'in' | '
             />
           ) : (
             <div className="flex gap-2">
-              <Button asChild variant="outline" className="w-full rounded-full">
+              {booking.status === 'PENDING_DEPOSIT' && (
+                <Button asChild className="flex-1 rounded-full">
+                  <Link
+                    to={`/reception/booking/new?${new URLSearchParams({
+                      guestName: booking.guestName ?? '',
+                      guestEmail: booking.guestEmail ?? '',
+                      guestPhone: booking.guestPhone ?? '',
+                    }).toString()}`}
+                  >
+                    Đặt phòng tại quầy
+                  </Link>
+                </Button>
+              )}
+              <Button
+                asChild
+                variant="outline"
+                className={cn('rounded-full', booking.status !== 'PENDING_DEPOSIT' && 'w-full')}
+              >
                 <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}`}>Chi tiết</Link>
               </Button>
             </div>

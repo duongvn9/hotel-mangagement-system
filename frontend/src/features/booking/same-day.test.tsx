@@ -122,6 +122,30 @@ describe('FrontDeskPage', () => {
     for (const href of hrefs()) expect(href).toMatch(/^\/reception\/bookings\/[A-Z]+$/)
   })
 
+  it('offers a walk-in booking, prefilled with the guest, for an arrival that has not paid the deposit', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: list() })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Khách đến (3)' })
+
+    const pending = within(screen.getByRole('listitem', { name: 'ARP' }))
+    const link = pending.getByRole('link', { name: 'Đặt phòng tại quầy' })
+    const url = new URL(link.getAttribute('href') ?? '', 'http://localhost')
+    expect(url.pathname).toBe('/reception/booking/new')
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      guestName: 'Khách ARP',
+      guestEmail: 'arp@example.test',
+      guestPhone: '0900000001',
+    })
+
+    for (const code of ['ARC', 'ARI']) {
+      expect(
+        within(screen.getByRole('listitem', { name: code })).queryByRole('link', {
+          name: 'Đặt phòng tại quầy',
+        }),
+      ).not.toBeInTheDocument()
+    }
+  })
+
   it('shows empty lists and an error state', async () => {
     vi.spyOn(api, 'get').mockResolvedValueOnce({
       data: {

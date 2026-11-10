@@ -211,6 +211,30 @@ export interface WalkInBooking {
   source: BookingSource
   /** Tiền phòng server tính (VND). */
   roomTotal: number
+  /** Tiền cọc server tính (VND), thu tại quầy sau khi tạo booking. */
+  depositAmount: number
+}
+
+/** Cách khách đóng cọc tại quầy. */
+export type DeskDepositMethod = 'CASH' | 'CARD'
+
+export const DESK_DEPOSIT_LABEL: Record<DeskDepositMethod, string> = {
+  CASH: 'tiền mặt',
+  CARD: 'thẻ',
+}
+
+export interface RecordDeskDepositInput {
+  method: DeskDepositMethod
+  /** Mã chống trùng; gửi lại cùng mã thì không ghi thêm khoản cọc. */
+  requestId: string
+}
+
+/** Lễ tân ghi nhận khách đã đóng cọc của booking tại quầy; số tiền do server tính. */
+export async function recordDeskDeposit(
+  id: string,
+  input: RecordDeskDepositInput,
+): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${id}/payments/deposit`, input)).data
 }
 
 /** UC08 — Lễ tân/Quản lý tạo booking cho khách vãng lai tại quầy. */

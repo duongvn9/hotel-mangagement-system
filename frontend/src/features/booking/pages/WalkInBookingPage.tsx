@@ -1,13 +1,18 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router'
-import { Button, Input, StatusBadge } from '@/components/atoms'
+import { Button, Input, NativeSelect, StatusBadge } from '@/components/atoms'
 import { Alert, FormField } from '@/components/molecules'
 import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
-import type { CreateWalkInBookingInput, WalkInBooking } from '../api'
-import { useAvailability, useCreateWalkInBooking } from '../hooks'
-import { formatDate, money, nightsBetween, todayISO } from '../utils'
+import {
+  DESK_DEPOSIT_LABEL,
+  type CreateWalkInBookingInput,
+  type DeskDepositMethod,
+  type WalkInBooking,
+} from '../api'
+import { useAvailability, useCreateWalkInBooking, useRecordDeskDeposit } from '../hooks'
+import { formatDate, money, newRequestId, nightsBetween, todayISO } from '../utils'
 
 /** UC08 — Create Booking for Guest. Lễ tân chọn phòng trống rồi đặt hộ khách vãng lai, vào thẳng CONFIRMED. */
 export function WalkInBookingPage() {
@@ -28,6 +33,9 @@ export function WalkInBookingPage() {
   const [guestEmail, setGuestEmail] = useState(params.get('guestEmail') ?? '')
   const [guestPhone, setGuestPhone] = useState(params.get('guestPhone') ?? '')
   const [created, setCreated] = useState<WalkInBooking | null>(null)
+  const [depositMethod, setDepositMethod] = useState<DeskDepositMethod | ''>('')
+  // Giữ nguyên mã khi thu cọc lỗi để bấm lại không ghi trùng.
+  const [depositRequestId, setDepositRequestId] = useState(newRequestId)
 
   const availability = useAvailability(
     criteria
@@ -39,6 +47,7 @@ export function WalkInBookingPage() {
       : null,
   )
   const create = useCreateWalkInBooking()
+  const deposit = useRecordDeskDeposit()
   const nights = criteria ? nightsBetween(criteria.checkIn, criteria.checkOut) : 0
 
   // Đánh số phòng theo thứ tự trong từng loại (kết quả tìm phòng không trả số phòng).
@@ -81,19 +90,28 @@ export function WalkInBookingPage() {
 
   async function submitBooking(event: FormEvent) {
     event.preventDefault()
-    if (!criteria || selected.length === 0) return
+    if (!criteria || selected.length === 0 || !depositMethod) return
     try {
-      setCreated(
-        await create.mutateAsync({
-          rooms: selected,
-          ...criteria,
-          guestName: guestName.trim(),
-          guestEmail: guestEmail.trim(),
-          guestPhone: guestPhone.trim(),
-        }),
-      )
+      const booking = await create.mutateAsync({
+        rooms: selected,
+        ...criteria,
+        guestName: guestName.trim(),
+        guestEmail: guestEmail.trim(),
+        guestPhone: guestPhone.trim(),
+      })
+      setCreated(booking)
+      await takeDeposit(booking.id, depositMethod)
     } catch {
       // Lỗi hiển thị qua create.isError bên dưới.
+    }
+  }
+
+  /** Ghi khoản cọc khách vừa đóng tại quầy; lỗi giữ booking đã tạo và cho thu lại bằng cùng mã. */
+  async function takeDeposit(id: string, method: DeskDepositMethod) {
+    try {
+      await deposit.mutateAsync({ id, method, requestId: depositRequestId })
+    } catch {
+      // Lỗi hiển thị qua deposit.isError ở trang kết quả.
     }
   }
 
@@ -104,7 +122,10 @@ export function WalkInBookingPage() {
     setGuestName('')
     setGuestEmail('')
     setGuestPhone('')
+    setDepositMethod('')
+    setDepositRequestId(newRequestId())
     create.reset()
+    deposit.reset()
   }
 
   if (created) {
@@ -142,7 +163,36 @@ export function WalkInBookingPage() {
                 {money.format(created.roomTotal)}
               </dd>
             </div>
+            <div>
+              <dt className="text-muted-foreground">Tiền cọc</dt>
+              <dd className="font-semibold tabular-nums text-foreground">
+                {money.format(created.depositAmount)}
+              </dd>
+            </div>
           </dl>
+          {deposit.isPending && (
+            <p className="text-sm text-muted-foreground">Đang ghi nhận tiền cọc…</p>
+          )}
+          {deposit.isSuccess && depositMethod && (
+            <Alert tone="success">
+              Đã thu cọc {money.format(created.depositAmount)} bằng{' '}
+              {DESK_DEPOSIT_LABEL[depositMethod]}.
+            </Alert>
+          )}
+          {deposit.isError && depositMethod && (
+            <Alert tone="danger">
+              <p className="mb-2">
+                Đã tạo booking nhưng chưa thu được cọc: {getErrorMessage(deposit.error)}
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void takeDeposit(created.id, depositMethod)}
+              >
+                Thu cọc lại
+              </Button>
+            </Alert>
+          )}
         </Panel>
         <Button onClick={startOver} className="rounded-full">
           Tạo booking khác
@@ -156,7 +206,7 @@ export function WalkInBookingPage() {
       <PageHeader
         eyebrow="Lễ tân"
         title="Tạo booking cho khách vãng lai"
-        subtitle="Booking tại quầy được xác nhận ngay, không cần đặt cọc online."
+        subtitle="Booking tại quầy được xác nhận ngay; khách đóng cọc tại quầy bằng tiền mặt hoặc thẻ."
       />
 
       <form
@@ -300,6 +350,26 @@ export function WalkInBookingPage() {
               </div>
             </Panel>
 
+            <Panel title="Thu cọc">
+              <FormField label="Hình thức thu cọc" htmlFor="walkin-deposit-method" required>
+                <NativeSelect
+                  id="walkin-deposit-method"
+                  required
+                  value={depositMethod}
+                  onChange={(event) =>
+                    setDepositMethod(event.target.value as DeskDepositMethod | '')
+                  }
+                >
+                  <option value="">Chọn hình thức</option>
+                  <option value="CASH">Tiền mặt</option>
+                  <option value="CARD">Thẻ</option>
+                </NativeSelect>
+              </FormField>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Khách đóng cọc ngay tại quầy. Số tiền cọc do hệ thống tính khi tạo booking.
+              </p>
+            </Panel>
+
             {create.isError && <Alert tone="danger">{getErrorMessage(create.error)}</Alert>}
           </div>
 
@@ -323,7 +393,7 @@ export function WalkInBookingPage() {
             <Button
               type="submit"
               className="w-full rounded-full"
-              disabled={selected.length === 0 || create.isPending}
+              disabled={selected.length === 0 || !depositMethod || create.isPending}
             >
               Tạo booking
             </Button>
