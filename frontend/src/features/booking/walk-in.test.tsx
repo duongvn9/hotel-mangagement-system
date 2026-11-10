@@ -44,7 +44,7 @@ function fillGuest() {
   fireEvent.change(screen.getByLabelText(/Số điện thoại/), { target: { value: '0911111111' } })
 }
 
-function chooseDeposit(method: 'CASH' | 'CARD' = 'CASH') {
+function chooseDeposit(method: 'CASH' | 'CARD' | 'VNPAY' = 'CASH') {
   fireEvent.change(screen.getByLabelText(/Hình thức thu cọc/), { target: { value: method } })
 }
 
@@ -139,6 +139,69 @@ describe('WalkInBookingPage', () => {
     )
     expect(await screen.findByText(/Đã thu cọc 200\.000/)).toBeInTheDocument()
     expect(screen.getByText(/thẻ/)).toBeInTheDocument()
+  })
+
+  it('opens the VNPay page for the deposit and links to the booking', async () => {
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+      if (url === '/bookings/walk-in') return { data: created }
+      if (url === '/payments/deposit')
+        return {
+          data: {
+            transactionRef: 'TXN-DEP',
+            paymentUrl: 'https://vnpay.test/pay',
+            amount: 200_000,
+          },
+        }
+      throw new Error(`unexpected POST ${url}`)
+    })
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    renderPage()
+    fireEvent.click(await searchRooms())
+    fillGuest()
+    chooseDeposit('VNPAY')
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo booking' }))
+
+    expect(await screen.findByText('BKWALK1')).toBeInTheDocument()
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/payments/deposit', { bookingId: 'b1' }))
+    await waitFor(() =>
+      expect(open).toHaveBeenCalledWith('https://vnpay.test/pay', '_blank', 'noopener'),
+    )
+    expect(await screen.findByText(/Đã mở trang VNPay/)).toBeInTheDocument()
+    expect(screen.queryByText(/Đã thu cọc/)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Xem booking' })).toHaveAttribute(
+      'href',
+      '/reception/bookings/BKWALK1',
+    )
+    // Không ghi khoản cọc tiền mặt/thẻ cho lần thu qua VNPay.
+    expect(post).not.toHaveBeenCalledWith('/bookings/b1/payments/deposit', expect.anything())
+  })
+
+  it('lets staff open the VNPay page again, and shows the error when it cannot be opened', async () => {
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValueOnce({ data: created })
+      .mockRejectedValueOnce(failure('Cổng lỗi'))
+      .mockResolvedValue({
+        data: {
+          transactionRef: 'TXN-DEP2',
+          paymentUrl: 'https://vnpay.test/pay2',
+          amount: 200_000,
+        },
+      })
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    renderPage()
+    fireEvent.click(await searchRooms())
+    fillGuest()
+    chooseDeposit('VNPAY')
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo booking' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Cổng lỗi/)
+    fireEvent.click(screen.getByRole('button', { name: 'Mở lại trang VNPay' }))
+
+    await waitFor(() =>
+      expect(open).toHaveBeenCalledWith('https://vnpay.test/pay2', '_blank', 'noopener'),
+    )
+    expect(post).toHaveBeenCalledTimes(3)
   })
 
   it('keeps the booking and retries the deposit with the same request id when it fails', async () => {
