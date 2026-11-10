@@ -16,6 +16,7 @@ import {
   confirmCheckoutFees,
   cancelPendingVnpay,
   getBookingCharges,
+  getBookingSummary,
   recordDeskDeposit,
   getCheckoutInspection,
   listInspectors,
@@ -207,6 +208,17 @@ export function useCheckInOptions(id: string | null) {
     queryKey: ['check-in-options', id],
     queryFn: () => getCheckInOptions(id as string),
     enabled: id !== null,
+    retry: false,
+  })
+}
+
+/** Chi tiết booking (lưu trú, hoá đơn, thanh toán, dịch vụ); `id` rỗng thì không gọi. */
+export function useBookingSummary(id: string, options: { code?: string } = {}) {
+  const { code } = options
+  return useQuery({
+    queryKey: ['booking-summary', id, code ?? null],
+    queryFn: () => getBookingSummary(id, code === undefined ? {} : { code }),
+    enabled: id.length > 0,
     retry: false,
   })
 }

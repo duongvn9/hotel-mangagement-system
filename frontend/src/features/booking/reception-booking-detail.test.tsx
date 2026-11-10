@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { bookingRoutes } from './routes'
-import type { BookingCharges, BookingListItem, BookingListPage } from './api'
+import type { BookingListItem, BookingListPage, BookingSummary } from './api'
 
 const receptionist = { ...ME, id: 'u2', email: 'reception@hms.local', role: 'RECEPTIONIST' }
 
@@ -32,13 +32,20 @@ const listPage = (items: BookingListItem[]): BookingListPage => ({
   limit: 20,
 })
 
-/** Hóa đơn: phòng 2.000.000 + dịch vụ 430.000, đã cọc 200.000 và thu thêm 100.000. */
-const invoice = (overrides: Partial<BookingCharges['totals']> = {}): BookingCharges => ({
+const summaryOf = (overrides: Partial<BookingSummary> = {}): BookingSummary => ({
   bookingId: 'b1',
   code: 'BKVIEW1',
   status: 'CONFIRMED',
-  invoiceStatus: 'PARTIALLY_PAID',
-  totals: {
+  source: 'FRONT_DESK',
+  checkIn: '2099-01-09T17:00:00.000Z',
+  checkOut: '2099-01-11T17:00:00.000Z',
+  adultCount: 2,
+  childCount: 0,
+  createdAt: '2099-01-01T00:00:00.000Z',
+  depositAmount: 200_000,
+  guest: { name: 'Nguyễn Văn A', email: 'a@example.test', phone: '0900000001' },
+  rooms: [{ roomNumber: '101', roomTypeName: 'Deluxe' }],
+  invoice: {
     roomTotal: 2_000_000,
     serviceTotal: 430_000,
     additionalTotal: 0,
@@ -48,15 +55,25 @@ const invoice = (overrides: Partial<BookingCharges['totals']> = {}): BookingChar
     depositPaid: 200_000,
     finalPaid: 100_000,
     balanceDue: 2_130_000,
-    ...overrides,
   },
-  charges: [],
+  payments: [
+    {
+      id: 'p1',
+      method: 'CASH',
+      purpose: 'DEPOSIT',
+      status: 'SUCCESS',
+      amount: 200_000,
+      date: '2099-01-01T03:00:00.000Z',
+    },
+  ],
+  serviceOrders: [],
+  ...overrides,
 })
 
-function mockGet(items: BookingListItem[], charges: BookingCharges = invoice()) {
+function mockGet(items: BookingListItem[], summary: BookingSummary = summaryOf()) {
   return vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
     if (url === '/bookings') return { data: listPage(items) }
-    if (url === `/bookings/${items[0]?.id ?? 'b1'}/charges`) return { data: charges }
+    if (url === `/bookings/${items[0]?.id ?? 'b1'}/summary`) return { data: summary }
     throw new Error(`unexpected GET ${url}`)
   })
 }
@@ -74,7 +91,7 @@ describe('ReceptionBookingDetailPage', () => {
     expect(screen.getByText('Không có quyền truy cập')).toBeInTheDocument()
   })
 
-  it('shows the booking details and an edit link for editable bookings', async () => {
+  it('shows the booking in the prototype layout with an edit link for editable bookings', async () => {
     const get = mockGet([item()])
     renderDetail()
 
@@ -88,43 +105,45 @@ describe('ReceptionBookingDetailPage', () => {
     )
     expect(screen.getByText('a@example.test')).toBeInTheDocument()
     expect(screen.getByText('0900000001')).toBeInTheDocument()
-    expect(screen.getByText('Loại phòng')).toBeInTheDocument()
-    expect(screen.getByText('Deluxe', { selector: 'span' })).toBeInTheDocument()
     expect(get).toHaveBeenCalledWith('/bookings', { params: { page: 1, limit: 20, q: 'BKVIEW1' } })
+    expect(get).toHaveBeenCalledWith('/bookings/b1/summary', { params: {} })
 
     const edit = screen.getByRole('link', { name: 'Sửa booking' })
     expect(edit).toHaveAttribute('href', '/reception/bookings/BKVIEW1/edit')
   })
 
-  it('shows the invoice with the paid amount and what is left', async () => {
+  it('shows the payments and the invoice with what is paid and what is left', async () => {
     mockGet([item()])
     renderDetail()
 
-    const invoicePanel = (await screen.findByRole('heading', { name: 'Hoá đơn' })).closest(
+    const payments = (await screen.findByRole('heading', { name: 'Thanh toán' })).closest(
       'section',
     ) as HTMLElement
-    expect(within(invoicePanel).getByText('2.000.000 ₫')).toBeInTheDocument()
-    expect(await within(invoicePanel).findByText('430.000 ₫')).toBeInTheDocument()
-    expect(within(invoicePanel).getByText('200.000 ₫')).toBeInTheDocument()
-    expect(within(invoicePanel).getByText('300.000 ₫')).toBeInTheDocument()
-    expect(within(invoicePanel).getByText('2.130.000 ₫')).toBeInTheDocument()
+    expect(within(payments).getByText(/Đặt cọc · Tiền mặt/)).toBeInTheDocument()
+    const invoice = screen
+      .getByRole('heading', { name: 'Hoá đơn' })
+      .closest('section') as HTMLElement
+    expect(within(invoice).getByText('2.000.000 ₫')).toBeInTheDocument()
+    expect(within(invoice).getByText('430.000 ₫')).toBeInTheDocument()
+    expect(within(invoice).getByText('300.000 ₫')).toBeInTheDocument()
+    expect(within(invoice).getByText('2.130.000 ₫')).toBeInTheDocument()
   })
 
-  it('still shows the room total when the invoice cannot be loaded', async () => {
+  it('shows the server error when the booking details cannot be loaded', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
       if (url === '/bookings') return { data: listPage([item()]) }
-      throw new Error(`unexpected GET ${url}`)
+      throw {
+        isAxiosError: true,
+        response: { status: 500, data: { message: 'Boom' } },
+      }
     })
     renderDetail()
 
-    const invoicePanel = (await screen.findByRole('heading', { name: 'Hoá đơn' })).closest(
-      'section',
-    ) as HTMLElement
-    expect(within(invoicePanel).getByText('2.000.000 ₫')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Boom')
   })
 
   it('hides the edit link for bookings that can no longer be edited', async () => {
-    mockGet([item({ status: 'CHECKED_OUT' })])
+    mockGet([item({ status: 'CHECKED_OUT' })], summaryOf({ status: 'CHECKED_OUT' }))
     renderDetail()
     expect(await screen.findByText(/không còn sửa được/)).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Sửa booking' })).not.toBeInTheDocument()

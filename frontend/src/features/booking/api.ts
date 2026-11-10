@@ -172,6 +172,55 @@ export async function getBooking(id: string, params: { code?: string } = {}): Pr
   return (await api.get<Booking>(`/bookings/${id}`, { params })).data
 }
 
+/** Một khoản thanh toán của booking, đọc từ server. */
+export interface SummaryPayment {
+  id: string
+  method: 'VNPAY' | 'CASH' | 'CARD'
+  purpose: 'DEPOSIT' | 'FINAL'
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED'
+  amount: number
+  /** Lúc thu tiền nếu đã thu, ngược lại lúc tạo giao dịch. */
+  date: string
+}
+
+/** Một yêu cầu dịch vụ trong kỳ lưu trú. */
+export interface SummaryServiceOrder {
+  id: string
+  serviceName: string
+  quantity: number
+  amount: number
+  status: 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED'
+  requestedTime: string
+}
+
+/** Chi tiết một booking cho màn chi tiết (khách và nhân viên). */
+export interface BookingSummary {
+  bookingId: string
+  code: string
+  status: string
+  source: BookingSource
+  checkIn: string
+  checkOut: string
+  adultCount: number
+  childCount: number
+  createdAt: string
+  /** Tiền cọc cần đóng (VND); số đã đóng nằm trong invoice.depositPaid. */
+  depositAmount: number
+  guest: { name?: string; email?: string; phone?: string }
+  rooms: { roomNumber?: string; roomTypeName?: string }[]
+  invoice: InvoiceTotals
+  payments: SummaryPayment[]
+  serviceOrders: SummaryServiceOrder[]
+}
+
+/** Khách xem bằng quyền sở hữu hoặc mã booking (?code); nhân viên xem mọi booking. */
+export async function getBookingSummary(
+  id: string,
+  params: { code?: string } = {},
+): Promise<BookingSummary> {
+  return (await api.get<BookingSummary>(`/bookings/${id}/summary`, { params })).data
+}
+
 /** Một dòng "Đặt phòng của tôi" (Customer đăng nhập, đọc từ server). */
 export interface MyBookingItem {
   id: string
