@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { api } from '@/lib/api-client'
-import { renderWithAuth } from '@/features/auth/test-utils'
+import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { bookingRoutes } from './routes'
 import type { AvailableRoom, Booking } from './api'
 import {
@@ -453,6 +453,39 @@ describe('BookingDetailPage (server-authoritative)', () => {
         expect.objectContaining({ bookingId: 'b1' }),
       ),
     )
+  })
+
+  it.each(['RECEPTIONIST', 'MANAGER'])(
+    'sends %s to the staff booking page inside the dashboard',
+    async (role) => {
+      vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+        if (url === '/bookings/b1') return { data: booking }
+        if (url === '/bookings') return { data: { items: [], total: 0, page: 1, limit: 20 } }
+        throw new Error(`unexpected GET ${url}`)
+      })
+
+      const { router } = renderWithAuth(bookingRoutes, {
+        path: '/booking/b1',
+        auth: { me: { ...ME, role }, status: 'authenticated' },
+      })
+
+      await waitFor(() => expect(router.state.location.pathname).toBe('/reception/bookings/BK123'))
+    },
+  )
+
+  it('keeps a signed-in customer on the guest booking page', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: booking }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    const { router } = renderWithAuth(bookingRoutes, {
+      path: '/booking/b1',
+      auth: { me: { ...ME, role: 'CUSTOMER' }, status: 'authenticated' },
+    })
+
+    expect(await screen.findByText('BK123')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/booking/b1')
   })
 
   it('sends the booking code for a guest who opened the page without ?code', async () => {

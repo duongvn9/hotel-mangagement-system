@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { Link, Navigate, useParams, useSearchParams } from 'react-router'
 import { Button, Input, StatusBadge } from '@/components/atoms'
 import { FormField } from '@/components/molecules'
 import {
@@ -12,6 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/organisms'
+import { Role } from '@/features/auth/api'
 import { useAuth } from '@/features/auth/auth-context'
 import { getErrorMessage } from '@/lib/api-client'
 import { fdate, fshort, vnd } from '@/lib/format'
@@ -76,6 +77,11 @@ export function BookingDetailPage() {
     } catch {
       // Lỗi hiển thị qua cancel.isError.
     }
+  }
+
+  // Lễ tân/Quản lý xem booking trong khung dashboard (trang chi tiết dành cho nhân viên), không ở trang công khai của khách.
+  if (me && (me.role === Role.Receptionist || me.role === Role.Manager) && booking?.code) {
+    return <Navigate to={`/reception/bookings/${encodeURIComponent(booking.code)}`} replace />
   }
 
   return (
