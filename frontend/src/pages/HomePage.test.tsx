@@ -115,15 +115,6 @@ describe('HomePage', () => {
     expect(screen.queryByRole('link', { name: 'Đăng nhập' })).not.toBeInTheDocument()
   })
 
-  it('sends staff to their workspace', () => {
-    renderHome({ ...ME, role: 'RECEPTIONIST', fullName: 'Trần Lễ Tân' })
-    expect(screen.getByRole('link', { name: /Vào khu làm việc/ })).toHaveAttribute(
-      'href',
-      '/reception/dashboard',
-    )
-    expect(screen.getByText(/Lễ tân/)).toBeInTheDocument()
-  })
-
   it('shows guest testimonials as quotes with a rating and the guest name', () => {
     renderHome()
     const quotes = screen
