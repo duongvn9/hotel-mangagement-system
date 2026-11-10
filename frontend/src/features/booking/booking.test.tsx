@@ -455,6 +455,27 @@ describe('BookingDetailPage (server-authoritative)', () => {
     )
   })
 
+  it('sends the booking code for a guest who opened the page without ?code', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: booking }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    const post = vi.spyOn(api, 'post').mockResolvedValue({
+      data: { transactionRef: 'TXN9', paymentUrl: 'https://vnpay.test/pay', amount: 600_000 },
+    })
+
+    renderWithAuth(bookingRoutes, { path: '/booking/b1' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Đặt cọc qua VNPay' }))
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/payments/deposit', { bookingId: 'b1', code: 'BK123' }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Huỷ booking' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận huỷ' }))
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/bookings/b1/cancel', { code: 'BK123' }))
+  })
+
   it('shows the expired state and hides the deposit action', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({
       data: { ...booking, id: 'b2', code: 'BK999', status: 'EXPIRED', holdExpiresAt: undefined },
