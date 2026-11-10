@@ -24,6 +24,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import {
+  CancelPendingPaymentDto,
+  CancelPendingPaymentResponse,
   InitiatePaymentDto,
   PaymentInitiationResponse,
   PaymentReturnResponse,
@@ -78,6 +80,17 @@ export class PaymentsController {
       this.actor(dto, user),
       this.options(dto, req),
     );
+  }
+
+  @Post('final/cancel')
+  @Roles(Role.Receptionist, Role.Manager)
+  @ApiOperation({
+    summary:
+      'Cancel the pending VNPay final payment of a booking so the desk can take cash or card (Receptionist/Manager)',
+  })
+  @ApiCreatedResponse({ type: CancelPendingPaymentResponse })
+  cancelPendingFinal(@Body() dto: CancelPendingPaymentDto) {
+    return this.payments.cancelPendingFinal(dto.bookingId);
   }
 
   @Get('vnpay/return')

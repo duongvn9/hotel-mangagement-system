@@ -264,6 +264,84 @@ describe('Record cash payment at the desk (e2e)', () => {
     expect(body.message).toMatch(/pending/i);
   });
 
+  describe('cancelling a pending VNPay payment', () => {
+    const pendingVnpay = async (
+      booking: { _id: unknown },
+      invoice: { _id?: unknown } | null,
+    ) =>
+      payments.create({
+        booking: booking._id,
+        invoice: invoice?._id,
+        transactionRef: `PEND-${tag}-${++counter}`,
+        method: 'VNPAY',
+        purpose: 'FINAL',
+        status: 'PENDING',
+        amount: 1400000,
+      });
+    const cancel = (
+      id: unknown,
+      headers: Record<string, string> = RECEPTIONIST,
+    ) =>
+      http()
+        .post('/api/v1/payments/final/cancel')
+        .set(headers)
+        .send({ bookingId: String(id) });
+    const charges = async (id: unknown) =>
+      (
+        await http()
+          .get(`/api/v1/bookings/${String(id)}/charges`)
+          .set(RECEPTIONIST)
+          .expect(200)
+      ).body;
+
+    it('reports a pending VNPay payment on the charges, and nothing otherwise', async () => {
+      const { booking, invoice } = await prepare();
+      expect((await charges(booking.id)).vnpayPending).toBeUndefined();
+
+      await pendingVnpay(booking, invoice);
+
+      expect((await charges(booking.id)).vnpayPending).toBe(true);
+    });
+
+    it('cancels it as superseded and frees the desk to take cash', async () => {
+      const { booking, invoice } = await prepare();
+      const pending = await pendingVnpay(booking, invoice);
+
+      const { body } = await cancel(booking.id).expect(201);
+
+      expect(body).toEqual({ cancelled: 1 });
+      const saved = await payments.findById(pending._id).lean();
+      expect(saved?.status).toBe('CANCELLED');
+      expect(saved?.supersededAt).toBeInstanceOf(Date);
+      expect((await charges(booking.id)).vnpayPending).toBeUndefined();
+      await pay(booking.id).expect(201);
+    });
+
+    it('does nothing when no VNPay payment is pending', async () => {
+      const { booking } = await prepare();
+      const { body } = await cancel(booking.id).expect(201);
+      expect(body).toEqual({ cancelled: 0 });
+    });
+
+    it('leaves a settled payment alone', async () => {
+      const { booking } = await prepare();
+      await pay(booking.id).expect(201);
+      const { body } = await cancel(booking.id).expect(201);
+      expect(body).toEqual({ cancelled: 0 });
+      expect(await finalPayments(booking.id)).toHaveLength(1);
+    });
+
+    it('is only for staff and needs a valid booking', async () => {
+      const { booking } = await prepare();
+      await cancel(booking.id, {
+        'x-dev-role': 'CUSTOMER',
+        'x-dev-user-id': String(new Types.ObjectId()),
+      }).expect(403);
+      await cancel('not-an-id').expect(400);
+      await cancel(new Types.ObjectId()).expect(404);
+    });
+  });
+
   it('refuses when nothing is left to pay', async () => {
     const { booking } = await prepare({ deposit: 2000000 });
     const { body } = await pay(booking.id).expect(409);

@@ -60,3 +60,15 @@ export class PaymentReturnResponse {
   @ApiProperty({ description: 'Booking của giao dịch, để đọc lại trạng thái' })
   bookingId: string;
 }
+
+/** Lễ tân huỷ giao dịch VNPay thanh toán cuối đang chờ của một booking. */
+export class CancelPendingPaymentDto {
+  @ApiProperty({ description: 'ObjectId của booking' })
+  @IsMongoId()
+  bookingId: string;
+}
+
+export class CancelPendingPaymentResponse {
+  @ApiProperty({ description: 'Số giao dịch VNPay đang chờ đã được huỷ' })
+  cancelled: number;
+}

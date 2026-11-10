@@ -110,6 +110,8 @@ export class BookingChargesResponse {
   invoiceStatus: string;
   /** Thời điểm khách xác nhận các khoản phí; không có nghĩa là chưa xác nhận. */
   feesConfirmedAt?: string;
+  /** Có giao dịch VNPay thanh toán cuối đang chờ; không có nghĩa là không có. */
+  vnpayPending?: true;
   totals: InvoiceTotals;
   charges: ChargeLine[];
 }
