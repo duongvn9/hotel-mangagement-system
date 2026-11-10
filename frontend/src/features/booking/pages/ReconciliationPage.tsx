@@ -95,7 +95,11 @@ export function ReconciliationPage() {
                         </p>
                       )}
                       <Link
-                        to={`/booking/${item.bookingId}`}
+                        to={
+                          item.bookingCode
+                            ? `/reception/bookings/${encodeURIComponent(item.bookingCode)}`
+                            : `/booking/${item.bookingId}`
+                        }
                         className="inline-block text-xs font-semibold text-primary underline underline-offset-4"
                       >
                         Xem booking
