@@ -91,7 +91,7 @@ export function SettleAndCheckOut({
           ) : (
             <div className="space-y-2 rounded-xl border border-border bg-card p-3">
               <p className="text-sm text-muted-foreground">
-                Cho khách xem các khoản phí ở trên. Khách đồng ý thì mới thu tiền.
+                Cho khách xem các khoản phí của hóa đơn. Khách đồng ý thì mới thu tiền.
               </p>
               <Button
                 size="sm"
