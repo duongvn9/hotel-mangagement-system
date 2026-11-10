@@ -25,6 +25,7 @@ import {
 import {
   VnpaySettlementPort,
   type ExpectedVnpayPayment,
+  type VerifiedVnpayResult,
   type VnpayIpnPlan,
 } from './vnpay.service.js';
 
@@ -149,6 +150,45 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
     }
 
     return duplicate ? 'duplicate' : 'committed';
+  }
+
+  async recordSupersededSuccess(
+    result: VerifiedVnpayResult,
+  ): Promise<'committed' | 'duplicate' | 'conflict'> {
+    try {
+      const recorded = await this.payments.findOneAndUpdate(
+        {
+          transactionRef: result.transactionRef,
+          status: PaymentStatus.Cancelled,
+          supersededAt: { $exists: true },
+          providerTransactionRef: { $exists: false },
+          isActive: true,
+        },
+        {
+          $set: {
+            providerTransactionRef: result.providerTransactionRef,
+            needsReconciliation: true,
+            ...(result.paidAt === undefined ? {} : { paidAt: result.paidAt }),
+          },
+        },
+      );
+      if (recorded) {
+        this.logger.warn(
+          `Payment ${result.transactionRef} was paid through a superseded link; flagged for reconciliation`,
+        );
+        return 'committed';
+      }
+    } catch (error) {
+      // Unique index (method, providerTransactionRef): mã VNPay đã gắn vào payment khác.
+      if ((error as { code?: number }).code === 11000) return 'conflict';
+      throw error;
+    }
+    const current = await this.payments.findOne({
+      transactionRef: result.transactionRef,
+    });
+    return current?.providerTransactionRef === result.providerTransactionRef
+      ? 'duplicate'
+      : 'conflict';
   }
 
   /** Email "booking đã xác nhận" sau khi cọc thành công; lỗi không ảnh hưởng settlement. */
