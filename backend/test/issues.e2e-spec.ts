@@ -375,6 +375,7 @@ describe('Report issue (e2e)', () => {
       roomNumber: null,
       linkedTasks: [],
       linkedTasksAvailable: false,
+      customerHistory: [{ type: 'REPORTED', at: response.body.reportedAt }],
     });
     await get(`/${id}`, 'CUSTOMER', other).expect(404);
     const keyword = encodeURIComponent(`[${booking}].*`);
