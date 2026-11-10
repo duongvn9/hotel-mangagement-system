@@ -35,6 +35,8 @@ const setup = (
     rooms: [new Types.ObjectId()],
     roomTotal: 1_000_000,
     depositAmount: 100_000,
+    guestName: 'Khách Test',
+    guestEmail: 'guest@example.com',
     checkIn: new Date('2094-01-10T00:00:00Z'),
     checkOut: new Date('2094-01-12T00:00:00Z'),
     save: vi.fn(),
@@ -46,15 +48,20 @@ const setup = (
   const holdQuery = Object.assign(Promise.resolve(heldValue), {
     sort: vi.fn().mockResolvedValue(heldValue),
   });
-  const holds = { findOne: vi.fn().mockReturnValue(holdQuery) };
+  const holds = {
+    findOne: vi.fn().mockReturnValue(holdQuery),
+    updateMany: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+  };
   const payments = {
     exists: vi.fn().mockResolvedValue(paymentPending ? {} : null),
+    updateMany: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
   };
   const invoices = {
     findOne: vi.fn().mockReturnValue({
       lean: vi.fn().mockResolvedValue(invoice),
     }),
   };
+  const notifications = { send: vi.fn().mockResolvedValue({ accepted: true }) };
   const service = new BookingsService(
     bookings as unknown as Model<Booking>,
     holds as unknown as Model<RoomHold>,
@@ -62,9 +69,18 @@ const setup = (
     { now: () => now } as AvailabilityClock,
     payments as unknown as Model<PaymentTransaction>,
     invoices as never,
-    {} as never,
+    notifications as never,
   );
-  return { service, booking, bookings, holds, payments, invoices, hold };
+  return {
+    service,
+    booking,
+    bookings,
+    holds,
+    payments,
+    invoices,
+    notifications,
+    hold,
+  };
 };
 
 describe('booking merge integration', () => {
@@ -172,5 +188,28 @@ describe('booking merge integration', () => {
       balanceDue: 800_000,
       invoiceStatus: 'PARTIALLY_PAID',
     });
+  });
+
+  it('on cancel flags paid transactions for reconciliation and emails the guest', async () => {
+    const { service, booking, payments, notifications } = setup(true);
+    const result = await service.cancel(String(booking._id), {
+      code: 'BKTEST',
+    });
+
+    expect(result.status).toBe('CANCELLED');
+    expect(payments.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        booking: booking._id,
+        status: PaymentStatus.Success,
+        isActive: true,
+      }),
+      { $set: { needsReconciliation: true } },
+    );
+    expect(notifications.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        template: 'BOOKING_CANCELLATION',
+        to: 'guest@example.com',
+      }),
+    );
   });
 });
