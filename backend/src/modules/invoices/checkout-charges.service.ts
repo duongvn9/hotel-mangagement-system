@@ -6,10 +6,12 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { Service } from '../services/schemas/service.schema.js';
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema.js';
 import { withBookingFinancialOperation } from '../bookings/booking-financial-operation.js';
 import type {
   AddCheckoutChargeDto,
+  AddCheckoutServiceDto,
   BookingChargesResponse,
 } from './dto/checkout-charge.dto.js';
 import { toBookingChargesResponse } from './invoice-summary.js';
@@ -20,6 +22,7 @@ import { InvoiceChargeType } from './schemas/invoice-charge.schema.js';
 export class CheckoutChargesService {
   constructor(
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
+    @InjectModel(Service.name) private readonly services: Model<Service>,
     private readonly invoices: InvoicesService,
   ) {}
 
@@ -52,6 +55,51 @@ export class CheckoutChargesService {
       amount: dto.amount,
       reason: dto.reason,
       sourceId: `checkout:${dto.requestId}`,
+    });
+    return toBookingChargesResponse(booking, invoice);
+  }
+
+  /**
+   * Lễ tân thêm một dịch vụ/sản phẩm từ danh mục cho khách đang ở: ghi khoản SERVICE bằng đơn giá
+   * hiện tại x số lượng. `requestId` chống ghi trùng như `add`.
+   */
+  async addService(
+    bookingId: string,
+    dto: AddCheckoutServiceDto,
+  ): Promise<BookingChargesResponse> {
+    return withBookingFinancialOperation(this.bookings, bookingId, () =>
+      this.addServiceLocked(bookingId, dto),
+    );
+  }
+
+  private async addServiceLocked(
+    bookingId: string,
+    dto: AddCheckoutServiceDto,
+  ): Promise<BookingChargesResponse> {
+    const booking = await this.booking(bookingId);
+    if (booking.status !== BookingStatus.CheckedIn) {
+      throw new ConflictException(
+        'Services can only be added for a guest who is checked in',
+      );
+    }
+    const service = await this.services.findById(dto.serviceId);
+    if (!service || !service.isActive) {
+      throw new NotFoundException('Service not found');
+    }
+    if (
+      service.billable === false ||
+      typeof service.price !== 'number' ||
+      !Number.isSafeInteger(service.price)
+    ) {
+      throw new BadRequestException('Service has no price to charge');
+    }
+    const unit = service.unit ? ` (${service.unit})` : '';
+    const invoice = await this.invoices.addCharge({
+      bookingId,
+      type: InvoiceChargeType.Service,
+      amount: service.price * dto.quantity,
+      reason: `${service.name} x${dto.quantity}${unit}`,
+      sourceId: `frontdesk-service:${dto.requestId}`,
     });
     return toBookingChargesResponse(booking, invoice);
   }

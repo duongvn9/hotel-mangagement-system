@@ -11,6 +11,7 @@ import { Roles } from '../../common/decorators/roles.decorator.js';
 import { CheckoutChargesService } from './checkout-charges.service.js';
 import {
   AddCheckoutChargeDto,
+  AddCheckoutServiceDto,
   BookingChargesResponse,
 } from './dto/checkout-charge.dto.js';
 
@@ -32,6 +33,20 @@ export class CheckoutChargesController {
   })
   add(@Param('id') id: string, @Body() dto: AddCheckoutChargeDto) {
     return this.charges.add(id, dto);
+  }
+
+  @Post(':id/charges/services')
+  @ApiOperation({
+    summary:
+      'Add a catalog service/product to a checked-in guest (Receptionist/Manager)',
+  })
+  @ApiCreatedResponse({ type: BookingChargesResponse })
+  @ApiConflictResponse({
+    description:
+      'Guest is not checked in, or the request id was already used with different content',
+  })
+  addService(@Param('id') id: string, @Body() dto: AddCheckoutServiceDto) {
+    return this.charges.addService(id, dto);
   }
 
   @Get(':id/charges')

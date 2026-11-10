@@ -1,6 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsInt, IsString, Length, Matches, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsMongoId,
+  IsString,
+  Length,
+  Matches,
+  Max,
+  Min,
+} from 'class-validator';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -28,6 +36,33 @@ export class AddCheckoutChargeDto {
   @ApiProperty({
     description:
       'Mã do giao diện sinh cho mỗi lần lưu; gửi lại cùng mã (retry, bấm hai lần) không ghi thêm khoản mới',
+  })
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{8,64}$/, {
+    message: 'requestId must be 8-64 characters of letters, digits, _ or -',
+  })
+  requestId: string;
+}
+
+/** Số lượng tối đa một lần thêm dịch vụ cho khách đang ở. */
+export const MAX_SERVICE_QUANTITY = 99;
+
+export class AddCheckoutServiceDto {
+  @ApiProperty({
+    description: 'Id dịch vụ trong danh mục (đang hoạt động, có giá)',
+  })
+  @IsMongoId()
+  serviceId: string;
+
+  @ApiProperty({ minimum: 1, maximum: MAX_SERVICE_QUANTITY })
+  @IsInt()
+  @Min(1)
+  @Max(MAX_SERVICE_QUANTITY)
+  quantity: number;
+
+  @ApiProperty({
+    description:
+      'Mã do giao diện sinh cho mỗi lần lưu; gửi lại cùng mã không ghi thêm khoản mới',
   })
   @IsString()
   @Matches(/^[A-Za-z0-9_-]{8,64}$/, {
