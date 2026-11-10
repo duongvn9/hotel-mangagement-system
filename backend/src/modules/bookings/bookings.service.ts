@@ -275,6 +275,7 @@ export class BookingsService {
       childCount: booking.childCount,
       source: booking.source,
       roomTotal: booking.roomTotal,
+      depositAmount: booking.depositAmount,
     };
   }
 
