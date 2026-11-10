@@ -267,7 +267,7 @@ Vercel proxies `/api/*` to Render (`frontend/vercel.json`), so the browser sees 
 2. **Render.** Dashboard > New > Blueprint > this repository. `render.yaml` creates the `hms-backend` web service from `backend/Dockerfile`. Fill in the variables it asks for:
    - `MONGODB_URI`: the Atlas connection string.
    - `CORS_ORIGINS`: the Vercel URL, for example `https://hms.vercel.app` (comma-separate several).
-   - `FIREBASE_*`, `S3_*`, `MAIL_*`: same values as in `backend/.env.example`.
+   - `FIREBASE_*`, `S3_*`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`: same values as in `backend/.env.example`. Set `NOTIFICATIONS_ENABLED=true` once both `GMAIL_*` are filled, or booking emails are skipped.
    - `VNPAY_RETURN_URL`: `https://<vercel-domain>/payment/vnpay-return`.
    - `VNPAY_IPN_URL`: `https://<render-domain>/api/v1/payments/vnpay/ipn`.
    - Check that `https://<render-domain>/api/v1/health/ready` reports MongoDB as up.

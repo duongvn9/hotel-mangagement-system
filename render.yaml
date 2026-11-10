@@ -65,12 +65,11 @@ services:
       - key: VNPAY_IPN_URL
         sync: false
 
-      - key: MAIL_USER
+      # Booking and payment emails (NotificationsModule reads GMAIL_*, not MAIL_*).
+      # Set NOTIFICATIONS_ENABLED=true in the dashboard only after both GMAIL_* are set.
+      - key: GMAIL_USER
         sync: false
-      - key: MAIL_APP_PASSWORD
+      - key: GMAIL_APP_PASSWORD
         sync: false
-      - key: MAIL_FROM
-        sync: false
-
       - key: NOTIFICATIONS_ENABLED
-        value: "false"
+        sync: false
