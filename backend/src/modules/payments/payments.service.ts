@@ -123,34 +123,6 @@ export class PaymentsService {
     );
   }
 
-  /**
-   * Lễ tân huỷ giao dịch VNPay thanh toán cuối đang chờ (khách bỏ trang VNPay hoặc cổng lỗi) để
-   * thu bằng tiền mặt/thẻ. Giống khi khách bấm thanh toán lại: giao dịch chuyển CANCELLED và gắn
-   * `supersededAt`, nên nếu khách vẫn trả bằng link cũ thì IPN đưa khoản đó vào đối soát, không
-   * cộng vào hoá đơn. Không có giao dịch chờ thì không làm gì.
-   */
-  async cancelPendingFinal(bookingId: string): Promise<{ cancelled: number }> {
-    return withBookingFinancialOperation(this.bookings, bookingId, async () => {
-      const booking = await this.bookings.findById(bookingId);
-      if (!booking || !booking.isActive) {
-        throw new NotFoundException('Booking not found');
-      }
-      const result = await this.payments.updateMany(
-        {
-          booking: booking._id,
-          purpose: PaymentPurpose.Final,
-          method: PaymentMethod.Vnpay,
-          status: PaymentStatus.Pending,
-          isActive: true,
-        },
-        {
-          $set: { status: PaymentStatus.Cancelled, supersededAt: new Date() },
-        },
-      );
-      return { cancelled: result.modifiedCount };
-    });
-  }
-
   private async initiateFinalLocked(
     bookingId: string,
     actor: BookingActor,

@@ -283,9 +283,8 @@ describe('Record cash payment at the desk (e2e)', () => {
       headers: Record<string, string> = RECEPTIONIST,
     ) =>
       http()
-        .post('/api/v1/payments/final/cancel')
-        .set(headers)
-        .send({ bookingId: String(id) });
+        .post(`/api/v1/bookings/${String(id)}/payments/vnpay/cancel`)
+        .set(headers);
     const charges = async (id: unknown) =>
       (
         await http()
@@ -309,7 +308,8 @@ describe('Record cash payment at the desk (e2e)', () => {
 
       const { body } = await cancel(booking.id).expect(201);
 
-      expect(body).toEqual({ cancelled: 1 });
+      expect(body.bookingId).toBe(String(booking.id));
+      expect(body.vnpayPending).toBeUndefined();
       const saved = await payments.findById(pending._id).lean();
       expect(saved?.status).toBe('CANCELLED');
       expect(saved?.supersededAt).toBeInstanceOf(Date);
@@ -320,14 +320,13 @@ describe('Record cash payment at the desk (e2e)', () => {
     it('does nothing when no VNPay payment is pending', async () => {
       const { booking } = await prepare();
       const { body } = await cancel(booking.id).expect(201);
-      expect(body).toEqual({ cancelled: 0 });
+      expect(body.bookingId).toBe(String(booking.id));
     });
 
     it('leaves a settled payment alone', async () => {
       const { booking } = await prepare();
       await pay(booking.id).expect(201);
-      const { body } = await cancel(booking.id).expect(201);
-      expect(body).toEqual({ cancelled: 0 });
+      await cancel(booking.id).expect(201);
       expect(await finalPayments(booking.id)).toHaveLength(1);
     });
 

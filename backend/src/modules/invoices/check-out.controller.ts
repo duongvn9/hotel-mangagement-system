@@ -51,6 +51,16 @@ export class CheckOutController {
     return this.cash.record(id, dto, PaymentMethod.Card);
   }
 
+  @Post(':id/payments/vnpay/cancel')
+  @ApiOperation({
+    summary:
+      'Cancel the pending VNPay final payment so the desk can take cash or card (Receptionist/Manager)',
+  })
+  @ApiCreatedResponse({ type: BookingChargesResponse })
+  cancelPendingVnpay(@Param('id') id: string) {
+    return this.cash.cancelPendingVnpay(id);
+  }
+
   @Post(':id/check-out')
   @ApiOperation({
     summary:
