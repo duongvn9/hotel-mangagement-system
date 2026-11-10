@@ -51,8 +51,11 @@ export function BookingDetailPage() {
   const remaining = useHoldCountdown(holding ? booking?.holdExpiresAt : undefined)
   const holdExpired = remaining !== null && remaining <= 0
 
+  // Khách vừa đặt xong đọc được booking qua phiên giữ phòng nên URL chưa có ?code.
+  const guestCode = code || booking?.code
+
   function payload(): InitiatePaymentInput {
-    return { bookingId: id, ...(me ? {} : { code }) }
+    return { bookingId: id, ...(me ? {} : { code: guestCode }) }
   }
 
   async function pay(kind: 'deposit' | 'final') {
@@ -67,7 +70,7 @@ export function BookingDetailPage() {
 
   async function doCancel() {
     try {
-      await cancel.mutateAsync({ id, ...(me ? {} : { code }) })
+      await cancel.mutateAsync({ id, ...(me ? {} : { code: guestCode }) })
       setConfirmCancel(false)
       await query.refetch()
     } catch {
