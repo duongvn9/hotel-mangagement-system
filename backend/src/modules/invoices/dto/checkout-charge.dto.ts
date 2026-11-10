@@ -108,6 +108,8 @@ export class BookingChargesResponse {
   status: string;
   /** Trạng thái hóa đơn: UNPAID, PARTIALLY_PAID hoặc PAID. */
   invoiceStatus: string;
+  /** Thời điểm khách xác nhận các khoản phí; không có nghĩa là chưa xác nhận. */
+  feesConfirmedAt?: string;
   totals: InvoiceTotals;
   charges: ChargeLine[];
 }

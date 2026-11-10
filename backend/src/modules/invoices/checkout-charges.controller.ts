@@ -49,6 +49,17 @@ export class CheckoutChargesController {
     return this.charges.addService(id, dto);
   }
 
+  @Post(':id/charges/confirm')
+  @ApiOperation({
+    summary:
+      'Record that the guest confirmed the check-out fees (Receptionist/Manager)',
+  })
+  @ApiCreatedResponse({ type: BookingChargesResponse })
+  @ApiConflictResponse({ description: 'Guest is not checked in' })
+  confirmFees(@Param('id') id: string) {
+    return this.charges.confirmFees(id);
+  }
+
   @Get(':id/charges')
   @ApiOperation({
     summary:

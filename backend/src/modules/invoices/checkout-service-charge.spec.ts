@@ -63,13 +63,16 @@ function setup(
     balanceDue: 150_000,
     charges: options.charges ?? [],
   };
-  const invoices = { addCharge: vi.fn(async () => invoice) };
+  const invoices = {
+    addCharge: vi.fn(async () => invoice),
+    getOrCreateForBooking: vi.fn(async () => invoice),
+  };
   const sut = new CheckoutChargesService(
     bookings as never,
     services as never,
     invoices as never,
   );
-  return { sut, invoices, services };
+  return { sut, invoices, services, bookings, booking };
 }
 
 describe('CheckoutChargesService.addService', () => {
@@ -168,6 +171,69 @@ describe('AddCheckoutServiceDto', () => {
       ...override,
     });
     expect(errors.length).toBeGreaterThan(0);
+  });
+});
+
+describe('Guest confirmation of the check-out fees', () => {
+  const body = { amount: 30_000, reason: 'Vỡ ly', requestId: 'req-12345678' };
+
+  it('records when the guest confirmed the fees and returns it', async () => {
+    const { sut, bookings } = setup();
+
+    const result = await sut.confirmFees(bookingId);
+
+    expect(bookings.updateOne).toHaveBeenCalledWith(
+      { _id: expect.anything(), status: BookingStatus.CheckedIn },
+      { $set: { checkoutFeesConfirmedAt: expect.any(Date) } },
+    );
+    expect(result.feesConfirmedAt).toEqual(expect.any(String));
+  });
+
+  it('refuses a guest who is not checked in', async () => {
+    const { sut, bookings } = setup({ status: BookingStatus.Confirmed });
+
+    await expect(sut.confirmFees(bookingId)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(bookings.updateOne).not.toHaveBeenCalledWith(expect.anything(), {
+      $set: { checkoutFeesConfirmedAt: expect.any(Date) },
+    });
+  });
+
+  it('withdraws the confirmation when a new charge is added', async () => {
+    const { sut, bookings } = setup();
+
+    await sut.add(bookingId, body);
+
+    expect(bookings.updateOne).toHaveBeenCalledWith(
+      { _id: expect.anything() },
+      { $unset: { checkoutFeesConfirmedAt: 1 } },
+    );
+  });
+
+  it('withdraws the confirmation when a service is added', async () => {
+    const { sut, bookings } = setup();
+
+    await sut.addService(bookingId, {
+      serviceId,
+      quantity: 1,
+      requestId: 'req-12345678',
+    });
+
+    expect(bookings.updateOne).toHaveBeenCalledWith(
+      { _id: expect.anything() },
+      { $unset: { checkoutFeesConfirmedAt: 1 } },
+    );
+  });
+
+  it('shows the confirmation time in the charge list', async () => {
+    const confirmedAt = new Date('2026-11-10T05:00:00Z');
+    const { sut, booking } = setup();
+    Object.assign(booking, { checkoutFeesConfirmedAt: confirmedAt });
+
+    const result = await sut.list(bookingId);
+
+    expect(result.feesConfirmedAt).toBe(confirmedAt.toISOString());
   });
 });
 
