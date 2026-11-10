@@ -29,6 +29,9 @@ describe('Report issue (e2e)', () => {
   const unrelated = new Types.ObjectId();
   const missing = new Types.ObjectId();
   const createdIssueIds: string[] = [];
+  // Issue reporting needs a stay that has not checked out yet (relative to the run date).
+  const checkIn = new Date(Date.now() - 86_400_000);
+  const checkOut = new Date(Date.now() + 86_400_000);
   const customer = { 'x-dev-role': 'CUSTOMER', 'x-dev-user-id': String(owner) };
   const payload = {
     title: ' Broken lamp ',
@@ -81,8 +84,8 @@ describe('Report issue (e2e)', () => {
         guestEmail: 'same@example.test',
         guestPhone: '0900000000',
         rooms: [room, missing],
-        checkIn: new Date('2020-01-01'),
-        checkOut: new Date('2020-01-02'),
+        checkIn,
+        checkOut,
         adultCount: 1,
         status: BookingStatus.CheckedIn,
         roomTotal: 100000,
@@ -186,8 +189,8 @@ describe('Report issue (e2e)', () => {
           id: String(booking),
           code: `ISS-${booking}`,
           status: 'CHECKED_IN',
-          checkIn: '2020-01-01T00:00:00.000Z',
-          checkOut: '2020-01-02T00:00:00.000Z',
+          checkIn: checkIn.toISOString(),
+          checkOut: checkOut.toISOString(),
           rooms: [{ id: String(room), roomNumber: `ISS-${room}` }],
           serviceOrders: [
             {
