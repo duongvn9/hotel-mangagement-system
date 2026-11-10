@@ -18,7 +18,7 @@ import {
 import { Role } from '@/features/auth/api'
 import { useAuth } from '@/features/auth/auth-context'
 import { getErrorMessage } from '@/lib/api-client'
-import { fshort } from '@/lib/format'
+import { fshort, vnd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { InitiatePaymentInput } from '../api'
 import { BookingDetailLayout } from '../components/BookingDetailLayout'
@@ -30,6 +30,15 @@ import {
   useInitiateFinal,
 } from '../hooks'
 import { formatRemaining, useHoldCountdown } from './useHoldCountdown'
+
+/** Dịch lỗi "không còn khoản phải trả" của server sang tiếng Việt cho khách. */
+function finalPaymentError(error: unknown): string {
+  const message = getErrorMessage(error)
+  if (/no positive amount is payable/i.test(message)) {
+    return 'Đơn này đã thanh toán đủ, không còn khoản phải trả.'
+  }
+  return message
+}
 
 /**
  * UC09/UC12/UC20/UC21 — chi tiết & thao tác với một booking. Trạng thái và hạn giữ phòng
@@ -103,7 +112,16 @@ export function BookingDetailPage() {
     return <Navigate to={`/my-bookings/${encodeURIComponent(id)}`} replace />
   }
 
-  const errors = [deposit, final, cancel].filter((mutation) => mutation.isError)
+  const errors = [
+    deposit.isError ? getErrorMessage(deposit.error) : '',
+    final.isError ? finalPaymentError(final.error) : '',
+    cancel.isError ? getErrorMessage(cancel.error) : '',
+  ].filter(Boolean)
+  const paidInFull =
+    !holding &&
+    booking?.balanceDue != null &&
+    booking.balanceDue <= 0 &&
+    (booking.paidAmount ?? 0) > 0
   const alertClass = 'rounded-xl border p-4 text-sm'
 
   const notices = (
@@ -144,13 +162,18 @@ export function BookingDetailPage() {
           Giữ phòng đến {fshort(booking.holdExpiresAt)}
         </p>
       )}
-      {errors.map((mutation, index) => (
+      {paidInFull && (
+        <div className={cn(alertClass, 'border-success/20 bg-success/10 text-success')}>
+          Đơn này đã thanh toán đủ. Cảm ơn bạn!
+        </div>
+      )}
+      {errors.map((message) => (
         <div
-          key={index}
+          key={message}
           role="alert"
           className={cn(alertClass, 'border-destructive/20 bg-destructive/10 text-destructive')}
         >
-          {getErrorMessage(mutation.error)}
+          {message}
         </div>
       ))}
     </div>
@@ -167,21 +190,27 @@ export function BookingDetailPage() {
             onClick={() => void pay('deposit')}
           >
             <CreditCard className="size-4" />
-            {deposit.isPending ? 'Đang chuyển sang cổng VNPay…' : 'Đặt cọc qua VNPay'}
+            {deposit.isPending
+              ? 'Đang chuyển sang cổng VNPay…'
+              : `Đặt cọc qua VNPay (${vnd(booking?.depositAmount ?? 0)})`}
           </Button>
         )}
-        {(status === 'CONFIRMED' || status === 'CHECKED_OUT') && (
-          <Button
-            variant="outline"
-            className="rounded-full"
-            disabled={final.isPending}
-            aria-busy={final.isPending}
-            onClick={() => void pay('final')}
-          >
-            <CreditCard className="size-4" />
-            {final.isPending ? 'Đang chuyển sang cổng VNPay…' : 'Thanh toán phần còn lại'}
-          </Button>
-        )}
+        {(status === 'CONFIRMED' || status === 'CHECKED_IN') &&
+          booking?.balanceDue != null &&
+          booking.balanceDue > 0 && (
+            <Button
+              variant="outline"
+              className="rounded-full"
+              disabled={final.isPending}
+              aria-busy={final.isPending}
+              onClick={() => void pay('final')}
+            >
+              <CreditCard className="size-4" />
+              {final.isPending
+                ? 'Đang chuyển sang cổng VNPay…'
+                : `Thanh toán phần còn lại (${vnd(booking.balanceDue)})`}
+            </Button>
+          )}
         {status !== 'CHECKED_IN' && status !== 'CHECKED_OUT' && status !== 'ROOM_HELD' && (
           <Button
             variant="ghost"

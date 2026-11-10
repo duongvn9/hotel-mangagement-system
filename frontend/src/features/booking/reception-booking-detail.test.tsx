@@ -129,6 +129,35 @@ describe('ReceptionBookingDetailPage', () => {
     expect(within(invoice).getByText('2.130.000 ₫')).toBeInTheDocument()
   })
 
+  it('shows the invoice: services, extra charges, amount paid, balance due', async () => {
+    mockGet(
+      [item()],
+      summaryOf({
+        invoice: {
+          roomTotal: 2_000_000,
+          serviceTotal: 500_000,
+          additionalTotal: 90_000,
+          discountTotal: 0,
+          taxTotal: 0,
+          totalAmount: 2_590_000,
+          depositPaid: 200_000,
+          finalPaid: 2_390_000,
+          balanceDue: 0,
+        },
+      }),
+    )
+    renderDetail()
+
+    const invoice = (await screen.findByRole('heading', { name: 'Hoá đơn' })).closest(
+      'section',
+    ) as HTMLElement
+    expect(within(invoice).getByText('Dịch vụ')).toBeInTheDocument()
+    expect(within(invoice).getByText('500.000 ₫')).toBeInTheDocument()
+    expect(within(invoice).getByText('Phụ phí')).toBeInTheDocument()
+    expect(within(invoice).getByText('2.590.000 ₫')).toBeInTheDocument() // đã thanh toán
+    expect(within(invoice).getByText('0 ₫')).toBeInTheDocument() // còn lại
+  })
+
   it('shows the server error when the booking details cannot be loaded', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
       if (url === '/bookings') return { data: listPage([item()]) }

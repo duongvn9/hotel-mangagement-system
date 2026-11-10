@@ -477,7 +477,7 @@ describe('BookingDetailPage (server-authoritative)', () => {
     expect(await screen.findByText('BK123')).toBeInTheDocument()
     expect(screen.getByText('Chờ đặt cọc')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Đặt cọc qua VNPay' }))
+    fireEvent.click(screen.getByRole('button', { name: /Đặt cọc qua VNPay/ }))
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith(
         '/payments/deposit',
@@ -553,7 +553,7 @@ describe('BookingDetailPage (server-authoritative)', () => {
       expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
     }
     expect(screen.getByText(/Đặt cọc · VNPay/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Đặt cọc qua VNPay' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Đặt cọc qua VNPay/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Huỷ booking' })).toBeInTheDocument()
   })
 
@@ -603,7 +603,7 @@ describe('BookingDetailPage (server-authoritative)', () => {
 
     renderWithAuth(bookingRoutes, { path: '/booking/b1' })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Đặt cọc qua VNPay' }))
+    fireEvent.click(await screen.findByRole('button', { name: /Đặt cọc qua VNPay/ }))
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith('/payments/deposit', { bookingId: 'b1', code: 'BK123' }),
     )
@@ -611,6 +611,56 @@ describe('BookingDetailPage (server-authoritative)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Huỷ booking' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận huỷ' }))
     await waitFor(() => expect(post).toHaveBeenCalledWith('/bookings/b1/cancel', { code: 'BK123' }))
+  })
+
+  it('shows a paid-in-full state and hides the final payment button', async () => {
+    const paid = {
+      ...booking,
+      status: 'CONFIRMED',
+      paidAmount: 2_000_000,
+      balanceDue: 0,
+      invoiceStatus: 'PAID',
+    }
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: paid }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(paid) }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    renderWithAuth(bookingRoutes, { path: '/booking/b1' })
+
+    expect(await screen.findByText(/Đơn này đã thanh toán đủ/)).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Thanh toán phần còn lại/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the final payment button when a balance is still due', async () => {
+    const owing = {
+      ...booking,
+      status: 'CONFIRMED',
+      paidAmount: 600_000,
+      balanceDue: 1_400_000,
+      invoiceStatus: 'PARTIALLY_PAID',
+    }
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/b1') return { data: owing }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(owing) }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    const post = vi.spyOn(api, 'post').mockResolvedValue({
+      data: { transactionRef: 'TXN9', paymentUrl: 'https://vnpay.test/pay', amount: 1_400_000 },
+    })
+
+    renderWithAuth(bookingRoutes, { path: '/booking/b1' })
+
+    fireEvent.click(await screen.findByRole('button', { name: /Thanh toán phần còn lại/ }))
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        '/payments/final',
+        expect.objectContaining({ bookingId: 'b1' }),
+      ),
+    )
   })
 
   it('shows the expired state and hides the deposit action', async () => {
@@ -630,7 +680,7 @@ describe('BookingDetailPage (server-authoritative)', () => {
     renderWithAuth(bookingRoutes, { path: '/booking/b2' })
 
     expect(await screen.findByText('Hết hạn')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Đặt cọc qua VNPay' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Đặt cọc qua VNPay/ })).not.toBeInTheDocument()
   })
 
   it('shows cancellation confirmation dialog and executes cancellation', async () => {
