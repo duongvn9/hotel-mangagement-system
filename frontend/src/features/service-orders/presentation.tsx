@@ -133,7 +133,7 @@ export function OrderNavigation({ variant = 'both' }: { variant?: 'both' | 'back
     return (
       <nav className="mb-6">
         <Link
-          to="/customer/service-orders"
+          to="/customer/service-orders/history"
           className="inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="size-4" />
@@ -144,7 +144,10 @@ export function OrderNavigation({ variant = 'both' }: { variant?: 'both' | 'back
   }
   return (
     <nav className="mb-6 flex flex-wrap gap-4 text-primary">
-      <Link className="inline-flex min-h-11 items-center underline" to="/customer/service-orders">
+      <Link
+        className="inline-flex min-h-11 items-center underline"
+        to="/customer/service-orders/history"
+      >
         Dịch vụ của tôi
       </Link>
       <Link

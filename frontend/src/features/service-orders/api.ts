@@ -58,6 +58,10 @@ export function serviceOrderState(order: Pick<ServiceOrder, 'reviewStatus' | 'ex
 export interface OrderContext {
   id: string
   code: string
+  /** Trạng thái booking: CONFIRMED (chưa nhận phòng) hoặc CHECKED_IN (đang lưu trú). */
+  status: string
+  /** Số phòng đầu tiên; thiếu khi phòng không còn tồn tại. */
+  roomNumber?: string
   checkIn: string
   checkOut: string
 }
