@@ -29,6 +29,7 @@ import {
   type AddChargeInput,
   type AddServiceChargeInput,
   type BookingListParams,
+  type DeskPaymentMethod,
   type GuestListParams,
   type RoomReplacement,
   type RoomStatusBoardParams,
@@ -209,10 +210,10 @@ export function useAddServiceCharge(id: string) {
 }
 
 /** UC18 — xác nhận thu tiền mặt rồi làm mới hóa đơn của booking. */
-export function useRecordCash(id: string) {
+export function useRecordCash(id: string, method: DeskPaymentMethod = 'cash') {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (requestId: string) => recordCashPayment(id, requestId),
+    mutationFn: (requestId: string) => recordCashPayment(id, requestId, method),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', id] }),
   })
 }

@@ -345,9 +345,16 @@ export async function addCheckoutServiceCharge(
   return (await api.post<BookingCharges>(`/bookings/${id}/charges/services`, input)).data
 }
 
+/** Cách thu thanh toán cuối tại quầy. */
+export type DeskPaymentMethod = 'cash' | 'card'
+
 /** UC18 — Lễ tân xác nhận đã thu tiền mặt thanh toán cuối; số tiền do server tính từ hóa đơn. */
-export async function recordCashPayment(id: string, requestId: string): Promise<BookingCharges> {
-  return (await api.post<BookingCharges>(`/bookings/${id}/payments/cash`, { requestId })).data
+export async function recordCashPayment(
+  id: string,
+  requestId: string,
+  method: DeskPaymentMethod = 'cash',
+): Promise<BookingCharges> {
+  return (await api.post<BookingCharges>(`/bookings/${id}/payments/${method}`, { requestId })).data
 }
 
 export interface CheckOutResult {

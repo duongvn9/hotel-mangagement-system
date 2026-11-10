@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/atoms'
 import { Alert } from '@/components/molecules'
 import { getErrorMessage } from '@/lib/api-client'
-import type { BookingListItem, InvoiceTotals } from '../api'
+import type { BookingListItem, DeskPaymentMethod, InvoiceTotals } from '../api'
 import { useCheckOut, useInitiateFinal, useRecordCash } from '../hooks'
 import { rememberPaymentRef } from '../storage'
 import { money, newRequestId } from '../utils'
@@ -26,13 +26,15 @@ export function SettleAndCheckOut({
   reloading,
 }: SettleAndCheckOutProps) {
   const cash = useRecordCash(booking.id)
+  const card = useRecordCash(booking.id, 'card')
   const vnpay = useInitiateFinal()
   const checkOut = useCheckOut()
-  const [confirmCash, setConfirmCash] = useState(false)
+  const [confirmMethod, setConfirmMethod] = useState<DeskPaymentMethod | null>(null)
   const [confirmCheckOut, setConfirmCheckOut] = useState(false)
   const [vnpayOpened, setVnpayOpened] = useState(false)
   // Giữ nguyên mã khi ghi lỗi để bấm lại không thu trùng; chỉ đổi sau khi ghi thành công.
   const [cashRequestId, setCashRequestId] = useState(newRequestId)
+  const [cardRequestId, setCardRequestId] = useState(newRequestId)
 
   const paid = totals.balanceDue === 0
   const roomNumbers = booking.rooms
@@ -40,13 +42,16 @@ export function SettleAndCheckOut({
     .filter(Boolean)
     .join(', ')
 
-  async function confirmCashPayment() {
+  async function confirmDeskPayment(method: DeskPaymentMethod) {
+    const mutation = method === 'card' ? card : cash
+    const requestId = method === 'card' ? cardRequestId : cashRequestId
     try {
-      await cash.mutateAsync(cashRequestId)
-      setCashRequestId(newRequestId())
-      setConfirmCash(false)
+      await mutation.mutateAsync(requestId)
+      if (method === 'card') setCardRequestId(newRequestId())
+      else setCashRequestId(newRequestId())
+      setConfirmMethod(null)
     } catch {
-      // Lỗi hiển thị qua cash.error; giữ mã để lễ tân thử lại.
+      // Lỗi hiển thị qua mutation.error; giữ mã để lễ tân thử lại.
     }
   }
 
@@ -76,27 +81,30 @@ export function SettleAndCheckOut({
         <p className="text-sm font-semibold text-success">Đã thanh toán đủ</p>
       ) : (
         <div className="space-y-3">
-          {confirmCash ? (
+          {confirmMethod ? (
             <div className="space-y-2 rounded-xl border border-border bg-card p-3">
               <p className="text-sm text-foreground">
-                Xác nhận đã thu {money.format(totals.balanceDue)} tiền mặt?
+                {confirmMethod === 'card'
+                  ? `Xác nhận đã thu thẻ ${money.format(totals.balanceDue)}?`
+                  : `Xác nhận đã thu ${money.format(totals.balanceDue)} tiền mặt?`}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
                   className="rounded-full"
-                  disabled={cash.isPending}
-                  onClick={confirmCashPayment}
+                  disabled={(confirmMethod === 'card' ? card : cash).isPending}
+                  onClick={() => confirmDeskPayment(confirmMethod)}
                 >
-                  Xác nhận đã thu tiền mặt
+                  {confirmMethod === 'card' ? 'Xác nhận đã thu thẻ' : 'Xác nhận đã thu tiền mặt'}
                 </Button>
                 <Button
                   size="sm"
                   variant="ghost"
                   className="rounded-full"
                   onClick={() => {
-                    setConfirmCash(false)
+                    setConfirmMethod(null)
                     cash.reset()
+                    card.reset()
                   }}
                 >
                   Hủy
@@ -109,9 +117,17 @@ export function SettleAndCheckOut({
                 size="sm"
                 variant="secondary"
                 className="rounded-full"
-                onClick={() => setConfirmCash(true)}
+                onClick={() => setConfirmMethod('cash')}
               >
                 Thu tiền mặt
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="rounded-full"
+                onClick={() => setConfirmMethod('card')}
+              >
+                Thu thẻ
               </Button>
               <Button
                 size="sm"
@@ -139,6 +155,7 @@ export function SettleAndCheckOut({
             </div>
           )}
           {cash.isError && <Alert tone="danger">{getErrorMessage(cash.error)}</Alert>}
+          {card.isError && <Alert tone="danger">{getErrorMessage(card.error)}</Alert>}
           {vnpay.isError && <Alert tone="danger">{getErrorMessage(vnpay.error)}</Alert>}
         </div>
       )}

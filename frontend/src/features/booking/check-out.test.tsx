@@ -133,6 +133,30 @@ describe('Pay and check out from the same-day departures list', () => {
     expect(departure().queryByRole('button', { name: 'Thu tiền mặt' })).not.toBeInTheDocument()
   })
 
+  it('offers card as another way to settle at the desk', async () => {
+    mockGet(invoice(false))
+    await openPanel()
+    expect(departure().getByRole('button', { name: 'Thu thẻ' })).toBeInTheDocument()
+  })
+
+  it('confirms a card payment through the card endpoint and refreshes the invoice', async () => {
+    const state = mockGet(invoice(false))
+    const post = vi.spyOn(api, 'post').mockImplementation(async () => {
+      state.set(invoice(true))
+      return { data: {} }
+    })
+    await openPanel()
+
+    fireEvent.click(departure().getByRole('button', { name: 'Thu thẻ' }))
+    expect(departure().getByText(/Xác nhận đã thu thẻ 1\.400\.000/)).toBeInTheDocument()
+    fireEvent.click(departure().getByRole('button', { name: 'Xác nhận đã thu thẻ' }))
+
+    expect(await departure().findByText('Đã thanh toán đủ')).toBeInTheDocument()
+    expect(post).toHaveBeenCalledWith('/bookings/d1/payments/card', {
+      requestId: expect.stringMatching(/^[A-Za-z0-9_-]{8,64}$/),
+    })
+  })
+
   it('can back out of the cash confirmation', async () => {
     mockGet(invoice(false))
     const post = vi.spyOn(api, 'post')
