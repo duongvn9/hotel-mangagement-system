@@ -3,7 +3,13 @@ import { Button } from '@/components/atoms'
 import { Alert } from '@/components/molecules'
 import { getErrorMessage } from '@/lib/api-client'
 import type { BookingListItem, DeskPaymentMethod, InvoiceTotals } from '../api'
-import { useCheckOut, useConfirmFees, useInitiateFinal, useRecordCash } from '../hooks'
+import {
+  useCancelPendingVnpay,
+  useCheckOut,
+  useConfirmFees,
+  useInitiateFinal,
+  useRecordCash,
+} from '../hooks'
 import { rememberPaymentRef } from '../storage'
 import { money, newRequestId } from '../utils'
 
@@ -12,6 +18,8 @@ interface SettleAndCheckOutProps {
   totals: InvoiceTotals
   /** Lúc khách xác nhận các khoản phí; chưa có thì chưa cho thu tiền. */
   feesConfirmedAt?: string
+  /** Server báo còn giao dịch VNPay đang chờ (kể cả khi mở lại hộp thoại sau khi đã rời trang VNPay). */
+  vnpayPending?: boolean
   /** Tải lại hóa đơn, dùng sau khi khách thanh toán VNPay ở tab khác. */
   onReload: () => void
   reloading: boolean
@@ -25,6 +33,7 @@ export function SettleAndCheckOut({
   booking,
   totals,
   feesConfirmedAt,
+  vnpayPending = false,
   onReload,
   reloading,
 }: SettleAndCheckOutProps) {
@@ -32,6 +41,7 @@ export function SettleAndCheckOut({
   const card = useRecordCash(booking.id, 'card')
   const confirmFees = useConfirmFees(booking.id)
   const vnpay = useInitiateFinal()
+  const cancelVnpay = useCancelPendingVnpay(booking.id)
   const checkOut = useCheckOut()
   const [confirmMethod, setConfirmMethod] = useState<DeskPaymentMethod | null>(null)
   const [confirmCheckOut, setConfirmCheckOut] = useState(false)
@@ -69,6 +79,15 @@ export function SettleAndCheckOut({
       setVnpayOpened(true)
     } catch {
       // Lỗi hiển thị qua vnpay.error.
+    }
+  }
+
+  async function cancelPendingVnpay() {
+    try {
+      await cancelVnpay.mutateAsync()
+      setVnpayOpened(false)
+    } catch {
+      // Lỗi hiển thị qua cancelVnpay.error; nút huỷ vẫn còn để thử lại.
     }
   }
 
@@ -167,18 +186,37 @@ export function SettleAndCheckOut({
               </Button>
             </div>
           )}
-          {vnpayOpened && (
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span>Đã mở trang VNPay. Sau khi khách thanh toán xong, bấm Tải lại.</span>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="rounded-full"
-                disabled={reloading}
-                onClick={onReload}
-              >
-                Tải lại
-              </Button>
+          {(vnpayOpened || vnpayPending) && (
+            <div className="space-y-2 rounded-xl border border-border bg-card p-3">
+              <p className="text-sm text-muted-foreground">
+                {vnpayOpened
+                  ? 'Đã mở trang VNPay. Sau khi khách thanh toán xong, bấm Tải lại.'
+                  : 'Đang chờ thanh toán VNPay. Sau khi khách thanh toán xong, bấm Tải lại.'}{' '}
+                Khách không thanh toán nữa thì hủy để thu bằng tiền mặt hoặc thẻ.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="rounded-full"
+                  disabled={reloading}
+                  onClick={onReload}
+                >
+                  Tải lại
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full"
+                  disabled={cancelVnpay.isPending}
+                  onClick={cancelPendingVnpay}
+                >
+                  Hủy thanh toán VNPay
+                </Button>
+              </div>
+              {cancelVnpay.isError && (
+                <Alert tone="danger">{getErrorMessage(cancelVnpay.error)}</Alert>
+              )}
             </div>
           )}
           {cash.isError && <Alert tone="danger">{getErrorMessage(cash.error)}</Alert>}

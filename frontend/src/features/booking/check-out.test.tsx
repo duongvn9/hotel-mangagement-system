@@ -227,6 +227,59 @@ describe('Pay and check out from the same-day departures list', () => {
     expect(await departure().findByText('Đã thanh toán đủ')).toBeInTheDocument()
   })
 
+  it('offers to cancel a VNPay payment that is still pending, also after a reload', async () => {
+    const state = mockGet({ ...invoice(false), vnpayPending: true })
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { cancelled: 1 } })
+    await openPanel()
+
+    expect(await departure().findByText(/đang chờ thanh toán VNPay/i)).toBeInTheDocument()
+    state.set(invoice(false))
+    fireEvent.click(departure().getByRole('button', { name: 'Hủy thanh toán VNPay' }))
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/payments/final/cancel', { bookingId: 'd1' }),
+    )
+    await waitFor(() =>
+      expect(departure().queryByRole('button', { name: 'Hủy thanh toán VNPay' })).toBeNull(),
+    )
+    expect(departure().queryByText(/đang chờ thanh toán VNPay/i)).not.toBeInTheDocument()
+    expect(departure().getByRole('button', { name: 'Thu tiền mặt' })).toBeEnabled()
+  })
+
+  it('does not offer the cancel button when no VNPay payment is pending', async () => {
+    mockGet(invoice(false))
+    await openPanel()
+    expect(departure().getByRole('button', { name: 'Thu tiền mặt' })).toBeInTheDocument()
+    expect(
+      departure().queryByRole('button', { name: 'Hủy thanh toán VNPay' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('offers the cancel button right after opening the VNPay page', async () => {
+    mockGet(invoice(false))
+    vi.spyOn(api, 'post').mockResolvedValue({
+      data: { transactionRef: 'TXN-1', paymentUrl: 'https://vnpay.test/pay', amount: 1_400_000 },
+    })
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    await openPanel()
+
+    fireEvent.click(departure().getByRole('button', { name: 'Thanh toán VNPay' }))
+
+    expect(
+      await departure().findByRole('button', { name: 'Hủy thanh toán VNPay' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows the server error when the cancel fails and keeps the button', async () => {
+    mockGet({ ...invoice(false), vnpayPending: true })
+    vi.spyOn(api, 'post').mockRejectedValue(failure('Boom'))
+    await openPanel()
+    fireEvent.click(await departure().findByRole('button', { name: 'Hủy thanh toán VNPay' }))
+
+    expect(await departure().findByRole('alert')).toHaveTextContent('Boom')
+    expect(departure().getByRole('button', { name: 'Hủy thanh toán VNPay' })).toBeInTheDocument()
+  })
+
   it('shows the server error when VNPay cannot be started', async () => {
     mockGet(invoice(false))
     vi.spyOn(api, 'post').mockRejectedValue(failure('A pending payment already exists'))

@@ -332,6 +332,8 @@ export interface BookingCharges {
   invoiceStatus: string
   /** Lúc khách xác nhận các khoản phí; không có nghĩa là chưa xác nhận. */
   feesConfirmedAt?: string
+  /** Có giao dịch VNPay thanh toán cuối đang chờ; không có nghĩa là không có. */
+  vnpayPending?: true
   totals: InvoiceTotals
   charges: BookingCharge[]
 }
@@ -648,6 +650,11 @@ export async function initiateDeposit(input: InitiatePaymentInput): Promise<Paym
 /** UC21 — Khởi tạo thanh toán phần còn lại qua VNPay. */
 export async function initiateFinal(input: InitiatePaymentInput): Promise<PaymentInitiation> {
   return (await api.post<PaymentInitiation>('/payments/final', input)).data
+}
+
+/** Lễ tân huỷ giao dịch VNPay thanh toán cuối đang chờ để thu bằng tiền mặt hoặc thẻ. */
+export async function cancelPendingVnpay(bookingId: string): Promise<{ cancelled: number }> {
+  return (await api.post<{ cancelled: number }>('/payments/final/cancel', { bookingId })).data
 }
 
 export type PaymentResultStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED'

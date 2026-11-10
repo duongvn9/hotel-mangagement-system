@@ -14,6 +14,7 @@ import {
   initiateDeposit,
   addCheckoutServiceCharge,
   confirmCheckoutFees,
+  cancelPendingVnpay,
   getBookingCharges,
   recordDeskDeposit,
   getCheckoutInspection,
@@ -332,6 +333,15 @@ export function useInitiateDeposit() {
 
 export function useInitiateFinal() {
   return useMutation({ mutationFn: initiateFinal })
+}
+
+/** Huỷ giao dịch VNPay đang chờ của booking rồi tải lại hóa đơn. */
+export function useCancelPendingVnpay(bookingId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => cancelPendingVnpay(bookingId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', bookingId] }),
+  })
 }
 
 export function useVerifyReturn(rawQuery: string) {
