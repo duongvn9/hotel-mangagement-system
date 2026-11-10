@@ -1,4 +1,5 @@
 import {
+  bookingCancellationEmail,
   checkInConfirmationEmail,
   checkOutReceiptEmail,
 } from './booking-email.js';
@@ -61,6 +62,34 @@ describe('checkOutReceiptEmail', () => {
   it('sends nothing when the booking has no email', () => {
     expect(
       checkOutReceiptEmail({ ...booking, guestEmail: '' }, invoice, new Date()),
+    ).toBeNull();
+  });
+});
+
+describe('bookingCancellationEmail', () => {
+  const cancelledAt = new Date('2026-11-12T03:00:00Z');
+
+  it('builds the cancellation notice with the cancel time', () => {
+    expect(bookingCancellationEmail({ ...booking, cancelledAt })).toEqual({
+      to: 'alice@example.com',
+      template: 'BOOKING_CANCELLATION',
+      data: {
+        bookingCode: 'GE-123',
+        guestName: 'Alice',
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        cancelledAt,
+      },
+    });
+  });
+
+  it('sends nothing when the booking has no email', () => {
+    expect(
+      bookingCancellationEmail({
+        ...booking,
+        guestEmail: undefined,
+        cancelledAt,
+      }),
     ).toBeNull();
   });
 });

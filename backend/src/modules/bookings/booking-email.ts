@@ -51,6 +51,24 @@ export interface StayEmailData {
   checkOut: Date;
 }
 
+/** Email xác nhận huỷ booking (BOOKING_CANCELLATION). Trả null nếu thiếu email. */
+export function bookingCancellationEmail(
+  booking: StayEmailData & { cancelledAt: Date },
+): NotificationInput | null {
+  if (!booking.guestEmail) return null;
+  return {
+    to: booking.guestEmail,
+    template: 'BOOKING_CANCELLATION',
+    data: {
+      bookingCode: booking.code,
+      guestName: booking.guestName ?? '',
+      checkIn: booking.checkIn,
+      checkOut: booking.checkOut,
+      cancelledAt: booking.cancelledAt,
+    },
+  };
+}
+
 /** Email xác nhận nhận phòng (CHECK_IN_CONFIRMATION). Trả null nếu thiếu email. */
 export function checkInConfirmationEmail(
   booking: StayEmailData,
