@@ -16,12 +16,11 @@ import {
 } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { isStaffRole, roleHome } from '@/app/navigation'
+import { isStaffRole } from '@/app/navigation'
 import { guestImages } from '@/assets/guest'
 import { Button } from '@/components/atoms'
 import { PhotoTile, SectionHeading } from '@/components/molecules'
 import { HeroBanner, SearchBar } from '@/components/organisms'
-import { ROLE_LABELS } from '@/features/auth/api'
 import { useAuth } from '@/features/auth/auth-context'
 import { useAvailability } from '@/features/booking/hooks'
 import { assetUrl } from '@/lib/asset-url'
@@ -77,20 +76,6 @@ export function HomePage() {
 
   return (
     <>
-      {staff && me && (
-        <div className="border-b border-border bg-primary/10">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm text-foreground">
-            <p>Bạn đang đăng nhập với vai trò {ROLE_LABELS[me.role] ?? me.role}.</p>
-            <Link
-              to={roleHome(me.role)}
-              className="inline-flex min-h-11 items-center font-semibold text-primary hover:text-primary/80"
-            >
-              Vào khu làm việc <ArrowRight className="ml-1 size-4" />
-            </Link>
-          </div>
-        </div>
-      )}
-
       <HeroBanner
         image={guestImages.hero}
         imageAlt="Hồ bơi vô cực của Emily Hotel lúc hoàng hôn"
