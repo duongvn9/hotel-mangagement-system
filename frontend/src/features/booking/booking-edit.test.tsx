@@ -99,9 +99,7 @@ describe('EditBookingPage', () => {
       }),
     )
     // Lưu xong chuyển sang trang chi tiết booking của lễ tân.
-    expect(
-      await screen.findByRole('heading', { name: 'Chi tiết booking BKEDIT1' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'BKEDIT1' })).toBeInTheDocument()
   })
 
   it('needs at least one room', async () => {
