@@ -1,5 +1,5 @@
 import { api } from '@/lib/api-client'
-export type PaymentMethod = 'VNPAY' | 'CASH'
+export type PaymentMethod = 'VNPAY' | 'CASH' | 'CARD'
 export type PaymentPurpose = 'DEPOSIT' | 'FINAL'
 export interface RevenueQuery {
   from: string

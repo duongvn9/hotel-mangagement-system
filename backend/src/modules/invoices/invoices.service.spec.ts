@@ -14,7 +14,10 @@ import {
   PersistedInvoiceChargesAdapter,
   UnavailableInvoicePricingAdapter,
 } from './invoice-adapters.js';
-import { InvoiceChargeType } from './schemas/invoice-charge.schema.js';
+import {
+  ChargeCategory,
+  InvoiceChargeType,
+} from './schemas/invoice-charge.schema.js';
 
 const InvoiceModel = model('H7UnitInvoice', InvoiceSchema);
 const BookingModel = model('H7UnitBooking', BookingSchema);
@@ -183,6 +186,45 @@ describe('InvoicesService', () => {
     await expect(
       s.service.addCharge({ ...charge, amount: 20000 }),
     ).rejects.toThrow('different content');
+  });
+  it('keeps the charge category and treats another category as different content', async () => {
+    const s = setup();
+    const charge = {
+      bookingId: s.id,
+      type: InvoiceChargeType.Additional,
+      amount: 30000,
+      reason: 'Vỡ ly',
+      category: ChargeCategory.Damage,
+      sourceId: 'checkout:req-12345678',
+    };
+    await s.service.addCharge(charge);
+    const invoice = await s.service.recalculate(s.id);
+    expect(invoice.charges[0].category).toBe(ChargeCategory.Damage);
+    await expect(
+      s.service.addCharge({ ...charge, category: ChargeCategory.Other }),
+    ).rejects.toThrow('different content');
+  });
+  it('withdraws the guest fee confirmation when a new charge is added, but not on a replay', async () => {
+    const s = setup();
+    const charge = {
+      bookingId: s.id,
+      type: InvoiceChargeType.Service,
+      amount: 10000,
+      reason: 'Laundry',
+      sourceId: 'service-order:9',
+    };
+    const withdrawals = () =>
+      s.bookings.updateOne.mock.calls.filter(
+        (call) =>
+          JSON.stringify(call[1] ?? {}) ===
+          JSON.stringify({ $unset: { checkoutFeesConfirmedAt: 1 } }),
+      ).length;
+
+    await s.service.addCharge(charge);
+    expect(withdrawals()).toBe(1);
+
+    await s.service.addCharge(charge);
+    expect(withdrawals()).toBe(1);
   });
   it('includes additional charges discounts and taxes without invented percentages', async () => {
     const s = setup();

@@ -11,6 +11,7 @@ export const SOURCE_LABELS: Record<QueueSource, string> = {
   SERVICE_ORDER: 'Yêu cầu dịch vụ',
   ISSUE: 'Sự cố',
   MAINTENANCE: 'Bảo trì',
+  CHECKOUT_INSPECTION: 'Kiểm tra trả phòng',
 }
 const priorityLabels: Record<string, string> = {
   LOW: 'Thấp',

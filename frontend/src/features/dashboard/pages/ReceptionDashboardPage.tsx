@@ -1,52 +1,102 @@
 import { Link } from 'react-router'
-import { UserPlus } from 'lucide-react'
-import { Button } from '@/components/atoms'
-import { Alert } from '@/components/molecules'
-import { PageContainer, PageHeader } from '@/components/organisms'
+import { BedDouble, LogIn, LogOut, UserPlus, Wallet } from 'lucide-react'
+import { Button, StatusBadge } from '@/components/atoms'
+import { Alert, StatCard } from '@/components/molecules'
+import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
-import { formatDate } from '@/features/booking/utils'
+import { useAuth } from '@/features/auth/auth-context'
+import type { BookingListItem } from '@/features/booking/api'
+import { useSameDayList } from '@/features/booking/hooks'
+import { todayISO } from '@/features/booking/utils'
 import { BookingAttentionAlert } from '@/features/booking/components/BookingAttentionAlert'
-import { revenueTime } from '@/features/reports/presentation'
-import { DashboardCard } from '../components/DashboardCard'
 import { useReceptionDashboard } from '../hooks'
-import { RECEPTION_SHORTCUTS } from '../shortcuts'
 
-const linkClass =
-  'inline-flex min-h-11 items-center text-primary underline underline-offset-4 hover:text-primary/80'
-const number = (value: number) => value.toLocaleString('vi-VN')
+function getGreeting(fullName?: string) {
+  const hour = new Date().getHours()
+  const timeGreeting =
+    hour < 12 ? 'Chào buổi sáng' : hour < 18 ? 'Chào buổi chiều' : 'Chào buổi tối'
+  const firstName = fullName?.trim().split(' ').pop()
+  return firstName ? `${timeGreeting}, ${firstName}` : `${timeGreeting}, Yến`
+}
 
-function Rows({ rows }: { rows: { label: string; value: number }[] }) {
+interface BookingListProps {
+  rows: BookingListItem[]
+  emptyText: string
+}
+
+function BookingList({ rows, emptyText }: BookingListProps) {
+  if (rows.length === 0) {
+    return <p className="text-sm text-muted-foreground">{emptyText}</p>
+  }
+
   return (
-    <dl className="space-y-2">
-      {rows.map((row) => (
-        <div key={row.label} className="flex items-center justify-between gap-4">
-          <dt className="text-sm text-muted-foreground">{row.label}</dt>
-          <dd className="text-xl font-semibold tabular-nums text-foreground">
-            {number(row.value)}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <div className="divide-y divide-border">
+      {rows.map((b) => {
+        const roomNumbers = b.rooms
+          ?.map((r) => r.roomNumber)
+          .filter(Boolean)
+          .join(', ')
+        return (
+          <Link
+            key={b.id || b.code}
+            to={`/reception/bookings/${b.code}`}
+            className="flex items-center justify-between py-3 text-sm transition-colors hover:text-primary"
+          >
+            <span>
+              <span className="block font-medium text-foreground">{b.guestName || 'Khách'}</span>
+              <span className="text-xs text-muted-foreground">
+                {b.code}
+                {roomNumbers ? ` · Phòng ${roomNumbers}` : ''}
+              </span>
+            </span>
+            <StatusBadge status={b.status} />
+          </Link>
+        )
+      })}
+    </div>
   )
 }
 
-/** Reception Dashboard: tình hình hôm nay ở quầy và các việc đang chờ lễ tân. */
+/** Bảng điều khiển lễ tân: tình hình hôm nay tại quầy (khớp prototype app.reception.tsx). */
 export function ReceptionDashboardPage() {
+  const { me } = useAuth()
   const dashboard = useReceptionDashboard()
+  const sameDay = useSameDayList(todayISO())
+
   const data = dashboard.data
-  const refresh = () => void dashboard.refetch()
-  const loading = dashboard.isFetching
+  const sameDayData = sameDay.data
+
+  const arrivals = sameDayData?.arrivals ?? []
+  const departures = sameDayData?.departures ?? []
+
+  const arrivalsTotal =
+    sameDayData?.summary.arrivals.total ??
+    (data?.frontDesk.available ? data.frontDesk.arrivals.total : 0)
+  const departuresTotal =
+    sameDayData?.summary.departures.total ??
+    (data?.frontDesk.available ? data.frontDesk.departures.total : 0)
+
+  const roomsFree = data?.rooms.available ? data.rooms.free : 0
+  const roomsTotal = data?.rooms.available ? data.rooms.total : 0
+
+  const pendingRequests = data?.requests.available
+    ? data.requests.serviceOrdersPendingReview +
+      data.requests.issuesPendingReview +
+      data.requests.feedbackUnreplied
+    : 0
+
+  const requestsHint = data?.requests.available
+    ? `${data.requests.serviceOrdersPendingReview} dịch vụ · ${data.requests.issuesPendingReview} sự cố`
+    : undefined
+
+  const title = getGreeting(me?.fullName)
 
   return (
-    <PageContainer className="space-y-8">
+    <PageContainer className="space-y-6">
       <PageHeader
         eyebrow="Lễ tân"
-        title="Tổng quan lễ tân"
-        subtitle={
-          data?.frontDesk.available
-            ? `Tình hình ngày ${formatDate(data.frontDesk.date)} và các việc đang chờ xử lý.`
-            : 'Tình hình hôm nay và các việc đang chờ xử lý.'
-        }
+        title={title}
+        subtitle="Tình hình tại quầy lễ tân hôm nay."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="outline" className="rounded-full">
@@ -58,158 +108,55 @@ export function ReceptionDashboardPage() {
                 Tại quầy
               </Link>
             </Button>
-            <Button type="button" variant="secondary" disabled={loading} onClick={refresh}>
-              Làm mới
-            </Button>
           </div>
         }
       />
-      <p aria-live="polite" className="text-sm text-muted-foreground">
-        {loading
-          ? 'Đang cập nhật số liệu…'
-          : data
-            ? `Cập nhật lúc ${revenueTime(data.generatedAt)}`
-            : ''}
-      </p>
 
       <BookingAttentionAlert />
 
-      {dashboard.isError ? (
+      {dashboard.isError && (
         <Alert tone="danger">
-          <p className="mb-3">{getErrorMessage(dashboard.error)}</p>
-          <Button type="button" variant="secondary" onClick={refresh} disabled={loading}>
+          <p className="mb-2">{getErrorMessage(dashboard.error)}</p>
+          <Button type="button" variant="secondary" onClick={() => void dashboard.refetch()}>
             Thử lại
           </Button>
         </Alert>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" aria-busy={loading}>
-          <DashboardCard
-            id="reception-arrivals"
-            title="Khách đến hôm nay"
-            block={data?.frontDesk}
-            loading={loading}
-            retry={refresh}
-          >
-            {({ arrivals }) => (
-              <>
-                <Rows
-                  rows={[
-                    { label: 'Tổng', value: arrivals.total },
-                    { label: 'Chưa cọc', value: arrivals.awaitingDeposit },
-                    { label: 'Sẵn sàng nhận phòng', value: arrivals.ready },
-                    { label: 'Đã nhận phòng', value: arrivals.checkedIn },
-                  ]}
-                />
-                <Link className={linkClass} to="/reception/front-desk">
-                  Xem danh sách đến và đi
-                </Link>
-              </>
-            )}
-          </DashboardCard>
-          <DashboardCard
-            id="reception-departures"
-            title="Khách đi hôm nay"
-            block={data?.frontDesk}
-            loading={loading}
-            retry={refresh}
-          >
-            {({ departures }) => (
-              <>
-                <Rows
-                  rows={[
-                    { label: 'Tổng', value: departures.total },
-                    { label: 'Chờ trả phòng', value: departures.awaitingCheckOut },
-                    { label: 'Đã trả phòng', value: departures.checkedOut },
-                  ]}
-                />
-                <Link className={linkClass} to="/reception/front-desk">
-                  Xem danh sách đến và đi
-                </Link>
-              </>
-            )}
-          </DashboardCard>
-          <DashboardCard
-            id="reception-rooms"
-            title="Phòng hôm nay"
-            block={data?.rooms}
-            loading={loading}
-            retry={refresh}
-          >
-            {(rooms) => (
-              <>
-                <Rows
-                  rows={[
-                    { label: 'Tổng số phòng', value: rooms.total },
-                    { label: 'Trống', value: rooms.free },
-                    { label: 'Giữ chỗ', value: rooms.held },
-                    { label: 'Đã đặt', value: rooms.reserved },
-                    { label: 'Đang ở', value: rooms.inHouse },
-                    { label: 'Đang dọn', value: rooms.cleaning },
-                    { label: 'Bảo trì', value: rooms.maintenance },
-                  ]}
-                />
-                <Link className={linkClass} to="/reception/rooms">
-                  Xem sơ đồ phòng
-                </Link>
-              </>
-            )}
-          </DashboardCard>
-          <DashboardCard
-            id="reception-requests"
-            title="Việc cần xử lý"
-            block={data?.requests}
-            loading={loading}
-            retry={refresh}
-          >
-            {(requests) => (
-              <ul className="space-y-1">
-                {[
-                  {
-                    to: '/staff/service-orders',
-                    label: 'Yêu cầu dịch vụ chờ duyệt',
-                    value: requests.serviceOrdersPendingReview,
-                  },
-                  {
-                    to: '/staff/issues',
-                    label: 'Sự cố chờ duyệt',
-                    value: requests.issuesPendingReview,
-                  },
-                  {
-                    to: '/staff/feedback',
-                    label: 'Phản hồi chưa trả lời',
-                    value: requests.feedbackUnreplied,
-                  },
-                ].map((item) => (
-                  <li key={item.to}>
-                    <Link
-                      to={item.to}
-                      className="flex min-h-11 items-center justify-between gap-4 text-primary hover:text-primary/80"
-                    >
-                      <span className="underline underline-offset-4">{item.label}</span>
-                      <strong className="text-xl tabular-nums">{number(item.value)}</strong>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </DashboardCard>
-        </div>
       )}
 
-      <nav aria-labelledby="reception-shortcuts-heading" className="space-y-4">
-        <h2 id="reception-shortcuts-heading" className="text-2xl font-semibold">
-          Lối tắt
-        </h2>
-        <ul className="flex flex-wrap gap-x-8 gap-y-1">
-          {RECEPTION_SHORTCUTS.map((link) => (
-            <li key={link.to}>
-              <Link className={linkClass} to={link.to}>
-                {link.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Khách đến hôm nay" value={arrivalsTotal} icon={LogIn} />
+        <StatCard label="Khách trả phòng" value={departuresTotal} icon={LogOut} />
+        <StatCard label="Phòng trống" value={`${roomsFree} / ${roomsTotal}`} icon={BedDouble} />
+        <StatCard
+          label="Việc cần xử lý"
+          value={pendingRequests}
+          hint={requestsHint}
+          icon={Wallet}
+        />
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <Panel
+          title="Khách đến"
+          action={
+            <Link to="/reception/front-desk" className="text-xs text-primary hover:underline">
+              Nhận phòng →
+            </Link>
+          }
+        >
+          <BookingList rows={arrivals} emptyText="Không có khách đến." />
+        </Panel>
+        <Panel
+          title="Khách trả phòng"
+          action={
+            <Link to="/reception/front-desk" className="text-xs text-primary hover:underline">
+              Trả phòng →
+            </Link>
+          }
+        >
+          <BookingList rows={departures} emptyText="Không có khách đi." />
+        </Panel>
+      </div>
     </PageContainer>
   )
 }

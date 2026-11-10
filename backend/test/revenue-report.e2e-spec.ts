@@ -124,6 +124,7 @@ describe('UC56 revenue — real AppModule and Mongo aggregation', () => {
     expect(body.byMethod.map((row: { method: string }) => row.method)).toEqual([
       'VNPAY',
       'CASH',
+      'CARD',
     ]);
     expect(
       body.byPurpose.map((row: { purpose: string }) => row.purpose),
@@ -320,7 +321,7 @@ describe('UC56 revenue — real AppModule and Mongo aggregation', () => {
     { from: '2026-02-30', to: '2026-03-01' },
     { from: '01/10/2026', to: period.to },
     { from: '2024-01-01', to: '2025-01-01' },
-    { ...period, method: 'CARD' },
+    { ...period, method: 'CHEQUE' },
     { ...period, purpose: 'REFUND' },
     { ...period, granularity: 'year' },
     { ...period, extra: 'x' },

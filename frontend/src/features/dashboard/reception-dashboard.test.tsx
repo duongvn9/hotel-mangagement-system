@@ -1,10 +1,42 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { dashboardRoutes } from './routes'
 import type { ReceptionDashboard } from './api'
 
-const receptionist = { ...ME, id: 'r1', email: 'reception@hms.local', role: 'RECEPTIONIST' }
+const receptionist = {
+  ...ME,
+  id: 'r1',
+  email: 'reception@hms.local',
+  fullName: 'Trần Thị Lễ Tân',
+  role: 'RECEPTIONIST',
+}
+
+const sameDayData = {
+  date: '2026-10-28',
+  summary: {
+    arrivals: { total: 9, awaitingDeposit: 2, ready: 5, checkedIn: 2 },
+    departures: { total: 4, awaitingCheckOut: 3, checkedOut: 1 },
+  },
+  arrivals: [
+    {
+      id: 'b1',
+      code: 'BK2403',
+      guestName: 'Lê Thu Hà',
+      status: 'CONFIRMED',
+      rooms: [{ id: 'rm1', roomNumber: '205' }],
+    },
+  ],
+  departures: [
+    {
+      id: 'b2',
+      code: 'BK2401',
+      guestName: 'Nguyễn Minh Anh',
+      status: 'CHECKED_IN',
+      rooms: [{ id: 'rm2', roomNumber: '101' }],
+    },
+  ],
+}
 
 const data = (overrides: Partial<ReceptionDashboard> = {}): ReceptionDashboard => ({
   generatedAt: '2026-10-28T03:15:00Z',
@@ -34,14 +66,21 @@ const data = (overrides: Partial<ReceptionDashboard> = {}): ReceptionDashboard =
   ...overrides,
 })
 
+function mockApi(dashboardOverride?: Partial<ReceptionDashboard>) {
+  return vi.spyOn(api, 'get').mockImplementation(async (url) => {
+    if (url.includes('/front-desk/same-day')) {
+      return { data: sameDayData } as never
+    }
+    return { data: data(dashboardOverride) } as never
+  })
+}
+
 function renderPage(role = receptionist) {
   return renderWithAuth(dashboardRoutes, {
     path: '/reception/dashboard',
     auth: { me: role, status: 'authenticated' },
   })
 }
-
-const region = (name: string) => within(screen.getByRole('region', { name }))
 
 describe('Reception dashboard', () => {
   afterEach(() => vi.restoreAllMocks())
@@ -52,107 +91,65 @@ describe('Reception dashboard', () => {
   })
 
   it('lets the manager in too', async () => {
-    vi.spyOn(api, 'get').mockResolvedValue({ data: data() })
+    mockApi()
     renderPage({ ...receptionist, role: 'MANAGER' })
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Tổng quan lễ tân' }),
-    ).toBeInTheDocument()
+    const heading = await screen.findByRole('heading', { level: 1 })
+    expect(heading).toHaveTextContent(/Chào buổi|Tân/)
   })
 
-  it("shows today's arrivals, departures, rooms and pending requests", async () => {
-    const get = vi.spyOn(api, 'get').mockResolvedValue({ data: data() })
+  it("shows today's stat cards, arrivals and departures panels matching the prototype", async () => {
+    const get = mockApi()
     renderPage()
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Tổng quan lễ tân' }),
-    ).toBeInTheDocument()
-    expect(get).toHaveBeenCalledWith('/dashboard/reception')
+    // Wait for data to load
+    await screen.findByText('Lê Thu Hà')
 
-    const arrivals = region('Khách đến hôm nay')
-    expect((await arrivals.findByText('Tổng')).nextElementSibling).toHaveTextContent('9')
-    expect(arrivals.getByText('Chưa cọc').nextElementSibling).toHaveTextContent('2')
-    expect(arrivals.getByText('Sẵn sàng nhận phòng').nextElementSibling).toHaveTextContent('5')
-    expect(arrivals.getByText('Đã nhận phòng').nextElementSibling).toHaveTextContent('2')
-    expect(arrivals.getByRole('link', { name: 'Xem danh sách đến và đi' })).toHaveAttribute(
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading).toHaveTextContent(/Chào buổi|Tân/)
+    expect(screen.getByText('Lễ tân')).toBeInTheDocument()
+    expect(screen.getByText('Tình hình tại quầy lễ tân hôm nay.')).toBeInTheDocument()
+
+    // Action buttons
+    expect(screen.getByRole('link', { name: 'Mở quầy lễ tân' })).toHaveAttribute(
       'href',
       '/reception/front-desk',
     )
-
-    const departures = region('Khách đi hôm nay')
-    expect(departures.getByText('Tổng').nextElementSibling).toHaveTextContent('4')
-    expect(departures.getByText('Chờ trả phòng').nextElementSibling).toHaveTextContent('3')
-    expect(departures.getByText('Đã trả phòng').nextElementSibling).toHaveTextContent('1')
-
-    const rooms = region('Phòng hôm nay')
-    expect(rooms.getByText('Tổng số phòng').nextElementSibling).toHaveTextContent('20')
-    expect(rooms.getByText('Trống').nextElementSibling).toHaveTextContent('8')
-    expect(rooms.getByText('Đang ở').nextElementSibling).toHaveTextContent('5')
-    expect(rooms.getByText('Bảo trì').nextElementSibling).toHaveTextContent('1')
-    expect(rooms.getByRole('link', { name: 'Xem sơ đồ phòng' })).toHaveAttribute(
-      'href',
-      '/reception/rooms',
-    )
-
-    const requests = region('Việc cần xử lý')
-    expect(requests.getByRole('link', { name: /Yêu cầu dịch vụ chờ duyệt/ })).toHaveAttribute(
-      'href',
-      '/staff/service-orders',
-    )
-    expect(requests.getByRole('link', { name: /Sự cố chờ duyệt/ })).toHaveAttribute(
-      'href',
-      '/staff/issues',
-    )
-    expect(requests.getByRole('link', { name: /Phản hồi chưa trả lời/ })).toHaveAttribute(
-      'href',
-      '/staff/feedback',
-    )
-    expect(requests.getByRole('link', { name: /Yêu cầu dịch vụ chờ duyệt/ })).toHaveTextContent('6')
-    expect(requests.getByRole('link', { name: /Phản hồi chưa trả lời/ })).toHaveTextContent('12')
-  })
-
-  it('offers shortcuts to the common reception tasks', async () => {
-    vi.spyOn(api, 'get').mockResolvedValue({ data: data() })
-    renderPage()
-    await screen.findByText(/Cập nhật lúc/)
-    const shortcuts = within(screen.getByRole('navigation', { name: 'Lối tắt' }))
-    expect(shortcuts.getByRole('link', { name: 'Tạo booking' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Tại quầy/ })).toHaveAttribute(
       'href',
       '/reception/booking/new',
     )
-    expect(shortcuts.getByRole('link', { name: 'Tìm khách' })).toHaveAttribute(
+
+    // 4 StatCards
+    expect(screen.getByText('Khách đến hôm nay')).toBeInTheDocument()
+    expect(screen.getAllByText('Khách trả phòng').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Phòng trống')).toBeInTheDocument()
+    expect(screen.getByText('8 / 20')).toBeInTheDocument()
+    expect(screen.getByText('Việc cần xử lý')).toBeInTheDocument()
+    expect(screen.getByText('21')).toBeInTheDocument() // 6 + 3 + 12
+
+    // 2 Panels
+    expect(screen.getByRole('heading', { level: 2, name: 'Khách đến' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Nhận phòng →' })).toHaveAttribute(
       'href',
-      '/reception/guests',
+      '/reception/front-desk',
     )
-    expect(shortcuts.getByRole('link', { name: 'Danh sách booking' })).toHaveAttribute(
+    expect(screen.getByText('Lê Thu Hà')).toBeInTheDocument()
+    expect(screen.getByText(/BK2403 · Phòng 205/)).toBeInTheDocument()
+    expect(screen.getByText('Đã xác nhận')).toBeInTheDocument()
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Khách trả phòng' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Trả phòng →' })).toHaveAttribute(
       'href',
-      '/reception/bookings',
+      '/reception/front-desk',
     )
+    expect(screen.getByText('Nguyễn Minh Anh')).toBeInTheDocument()
+    expect(screen.getByText(/BK2401 · Phòng 101/)).toBeInTheDocument()
+    expect(screen.getByText('Đã nhận phòng')).toBeInTheDocument()
+
+    expect(get).toHaveBeenCalledWith('/dashboard/reception')
   })
 
-  it('keeps the other cards when one source fails and lets staff retry', async () => {
-    // Trang còn gọi /bookings/attention; đếm riêng lời gọi dashboard và cho lần đầu lỗi phòng.
-    let dashboardCalls = 0
-    vi.spyOn(api, 'get').mockImplementation(async (url) => {
-      if (url === '/bookings/attention')
-        return { data: { overdueCheckOut: 0, overdueCheckIn: 0, dueCheckOut: 0, dueCheckIn: 0 } }
-      dashboardCalls += 1
-      return {
-        data:
-          dashboardCalls === 1 ? data({ rooms: { available: false, reason: 'error' } }) : data(),
-      }
-    })
-    renderPage()
-
-    const rooms = screen.getByRole('region', { name: 'Phòng hôm nay' })
-    expect(await within(rooms).findByRole('alert')).toHaveTextContent('Không tải được số liệu')
-    expect(region('Khách đến hôm nay').getByText('Tổng')).toBeInTheDocument()
-
-    fireEvent.click(within(rooms).getByRole('button', { name: 'Thử lại' }))
-    await waitFor(() => expect(dashboardCalls).toBe(2))
-    expect(await region('Phòng hôm nay').findByText('Tổng số phòng')).toBeInTheDocument()
-  })
-
-  it('shows the error and a retry when the whole request fails', async () => {
+  it('shows the error and a retry when the request fails', async () => {
     vi.spyOn(api, 'get').mockRejectedValue({
       isAxiosError: true,
       response: { status: 500, data: { message: 'Boom' } },
@@ -162,21 +159,26 @@ describe('Reception dashboard', () => {
     expect(screen.getByRole('button', { name: 'Thử lại' })).toBeInTheDocument()
   })
 
-  it('refreshes on demand and shows when the numbers were taken', async () => {
-    // Trang còn gọi /bookings/attention; chỉ đếm lời gọi dashboard.
-    const get = vi
-      .spyOn(api, 'get')
-      .mockImplementation(async (url) =>
-        url === '/bookings/attention'
-          ? { data: { overdueCheckOut: 0, overdueCheckIn: 0, dueCheckOut: 0, dueCheckIn: 0 } }
-          : { data: data() },
-      )
+  it('renders empty states when there are no arrivals or departures', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url) => {
+      if (url.includes('/front-desk/same-day')) {
+        return {
+          data: {
+            date: '2026-10-28',
+            summary: {
+              arrivals: { total: 0, awaitingDeposit: 0, ready: 0, checkedIn: 0 },
+              departures: { total: 0, awaitingCheckOut: 0, checkedOut: 0 },
+            },
+            arrivals: [],
+            departures: [],
+          },
+        } as never
+      }
+      return { data: data() } as never
+    })
     renderPage()
-    expect(await screen.findByText(/Cập nhật lúc/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Làm mới' }))
-    await waitFor(() =>
-      expect(get.mock.calls.filter((call) => call[0] === '/dashboard/reception')).toHaveLength(2),
-    )
+    expect(await screen.findByText('Không có khách đến.')).toBeInTheDocument()
+    expect(screen.getByText('Không có khách đi.')).toBeInTheDocument()
   })
 })

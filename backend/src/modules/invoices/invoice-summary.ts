@@ -3,7 +3,12 @@ import type { InvoiceDocument } from './schemas/invoice.schema.js';
 
 /** Các khoản phí và tổng hợp hóa đơn của một booking, dùng chung cho UC17 và UC18. */
 export function toBookingChargesResponse(
-  booking: { _id: unknown; code: string; status: string },
+  booking: {
+    _id: unknown;
+    code: string;
+    status: string;
+    checkoutFeesConfirmedAt?: Date | null;
+  },
   invoice: InvoiceDocument,
 ): BookingChargesResponse {
   return {
@@ -11,6 +16,9 @@ export function toBookingChargesResponse(
     code: booking.code,
     status: booking.status,
     invoiceStatus: invoice.status,
+    ...(booking.checkoutFeesConfirmedAt
+      ? { feesConfirmedAt: booking.checkoutFeesConfirmedAt.toISOString() }
+      : {}),
     totals: {
       roomTotal: invoice.roomTotal,
       serviceTotal: invoice.serviceTotal,
@@ -24,6 +32,7 @@ export function toBookingChargesResponse(
     },
     charges: invoice.charges.map((charge) => ({
       type: charge.type,
+      ...(charge.category ? { category: charge.category } : {}),
       amount: charge.amount,
       reason: charge.reason,
       ...(charge.sourceId ? { sourceId: charge.sourceId } : {}),

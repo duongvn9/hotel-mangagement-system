@@ -11,6 +11,7 @@ export const taskSources = {
   SERVICE_ORDER: 'Yêu cầu dịch vụ',
   ISSUE: 'Sự cố',
   MAINTENANCE: 'Bảo trì',
+  CHECKOUT_INSPECTION: 'Kiểm tra trả phòng',
 }
 
 export function taskDate(value?: string) {

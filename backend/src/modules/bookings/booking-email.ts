@@ -41,3 +41,62 @@ export function bookingConfirmationEmail(
     },
   };
 }
+
+/** Dữ liệu tối thiểu của booking để soạn email lúc nhận/trả phòng. */
+export interface StayEmailData {
+  code: string;
+  guestName?: string;
+  guestEmail?: string;
+  checkIn: Date;
+  checkOut: Date;
+}
+
+/** Email xác nhận nhận phòng (CHECK_IN_CONFIRMATION). Trả null nếu thiếu email. */
+export function checkInConfirmationEmail(
+  booking: StayEmailData,
+  roomNumbers: readonly string[],
+): NotificationInput | null {
+  if (!booking.guestEmail) return null;
+  return {
+    to: booking.guestEmail,
+    template: 'CHECK_IN_CONFIRMATION',
+    data: {
+      bookingCode: booking.code,
+      guestName: booking.guestName ?? '',
+      checkIn: booking.checkIn,
+      checkOut: booking.checkOut,
+      roomsSummary: `Phòng ${roomNumbers.join(', ')}`,
+    },
+  };
+}
+
+/** Email hóa đơn lúc trả phòng (CHECK_OUT_RECEIPT). Trả null nếu thiếu email. */
+export function checkOutReceiptEmail(
+  booking: Pick<StayEmailData, 'code' | 'guestName' | 'guestEmail'>,
+  invoice: {
+    roomTotal: number;
+    serviceTotal: number;
+    additionalTotal: number;
+    totalAmount: number;
+    depositPaid: number;
+    finalPaid: number;
+  },
+  checkedOutAt: Date,
+): NotificationInput | null {
+  if (!booking.guestEmail) return null;
+  return {
+    to: booking.guestEmail,
+    template: 'CHECK_OUT_RECEIPT',
+    data: {
+      bookingCode: booking.code,
+      guestName: booking.guestName ?? '',
+      checkedOutAt,
+      roomTotal: invoice.roomTotal,
+      serviceTotal: invoice.serviceTotal,
+      additionalTotal: invoice.additionalTotal,
+      totalAmount: invoice.totalAmount,
+      depositPaid: invoice.depositPaid,
+      finalPaid: invoice.finalPaid,
+    },
+  };
+}

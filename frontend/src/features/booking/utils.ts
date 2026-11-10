@@ -52,3 +52,9 @@ export function newRequestId(): string {
   }
   return `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
+
+/** Đã quá giờ trả phòng dự kiến chưa (nhận ISO datetime từ backend). */
+export function isPastCheckOut(checkOut: string, now: number = Date.now()): boolean {
+  const end = Date.parse(checkOut)
+  return !Number.isNaN(end) && now > end
+}

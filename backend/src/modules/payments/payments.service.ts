@@ -16,6 +16,7 @@ import {
   authorizeBookingAccess,
   type BookingActor,
 } from '../../common/auth/booking-access.js';
+import { Role } from '../../common/constants/role.enum.js';
 import {
   Booking,
   type BookingDocument,
@@ -137,6 +138,17 @@ export class PaymentsService {
     }
     // Dư nợ lấy từ H7 tại thời điểm khởi tạo, không nhận tổng tiền từ frontend.
     const invoice = await this.invoices.recalculate(bookingId);
+    // Lễ tân thu hộ tại quầy chỉ sau khi khách xác nhận các khoản phí; khách tự thanh toán thì không cần.
+    if (
+      booking.status === BookingStatus.CheckedIn &&
+      actor.user !== undefined &&
+      actor.user.role !== Role.Customer &&
+      !booking.checkoutFeesConfirmedAt
+    ) {
+      throw new ConflictException(
+        'The guest has not confirmed the fees yet; record the confirmation first',
+      );
+    }
     return this.initiate(
       booking,
       PaymentPurpose.Final,

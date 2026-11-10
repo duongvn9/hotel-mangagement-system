@@ -12,7 +12,12 @@ import {
   getServiceCatalog,
   holdBooking,
   initiateDeposit,
+  addCheckoutServiceCharge,
+  confirmCheckoutFees,
   getBookingCharges,
+  getCheckoutInspection,
+  listInspectors,
+  requestCheckoutInspection,
   getCheckInOptions,
   getRoomStatusBoard,
   getSameDayList,
@@ -27,8 +32,11 @@ import {
   updateBooking,
   verifyVnpayReturn,
   type AddChargeInput,
+  type AddServiceChargeInput,
   type BookingListParams,
+  type DeskPaymentMethod,
   type GuestListParams,
+  type RequestInspectionInput,
   type RoomReplacement,
   type RoomStatusBoardParams,
   type SearchAvailabilityParams,
@@ -202,11 +210,54 @@ export function useAddCharge(id: string) {
   })
 }
 
-/** UC18 — xác nhận thu tiền mặt rồi làm mới hóa đơn của booking. */
-export function useRecordCash(id: string) {
+/** Lần kiểm tra phòng gần nhất của booking khi trả phòng. */
+export function useCheckoutInspection(id: string) {
+  return useQuery({
+    queryKey: ['checkout-inspection', id],
+    queryFn: () => getCheckoutInspection(id),
+  })
+}
+
+export function useInspectors(enabled: boolean) {
+  return useQuery({
+    queryKey: ['inspectors'],
+    queryFn: listInspectors,
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+export function useRequestInspection(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (requestId: string) => recordCashPayment(id, requestId),
+    mutationFn: (input: RequestInspectionInput) => requestCheckoutInspection(id, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['checkout-inspection', id] }),
+  })
+}
+
+/** Ghi nhận khách đã xác nhận các khoản phí rồi làm mới hóa đơn của booking. */
+export function useConfirmFees(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => confirmCheckoutFees(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', id] }),
+  })
+}
+
+/** Thêm dịch vụ/sản phẩm cho khách đang ở rồi làm mới hóa đơn của booking. */
+export function useAddServiceCharge(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: AddServiceChargeInput) => addCheckoutServiceCharge(id, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', id] }),
+  })
+}
+
+/** UC18 — xác nhận thu tiền mặt rồi làm mới hóa đơn của booking. */
+export function useRecordCash(id: string, method: DeskPaymentMethod = 'cash') {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (requestId: string) => recordCashPayment(id, requestId, method),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['booking-charges', id] }),
   })
 }
