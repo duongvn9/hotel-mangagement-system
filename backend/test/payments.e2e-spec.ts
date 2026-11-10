@@ -215,6 +215,105 @@ describe('Payments VNPay endpoints (e2e)', () => {
     });
   });
 
+  describe('staff VNPay deposit for a walk-in booking', () => {
+    const RECEPTIONIST = {
+      'x-dev-role': 'RECEPTIONIST',
+      'x-dev-user-id': String(new Types.ObjectId()),
+      'x-forwarded-for': '203.0.113.9',
+    };
+    // Booking tại quầy: CONFIRMED ngay, không có khách đăng nhập và không có RoomHold.
+    const seedWalkIn = () =>
+      bookings.create({
+        _id: bookingId,
+        code: `PAY-${bookingId}`,
+        rooms: [roomId],
+        guestName: 'Walk-in test',
+        guestEmail: 'walkin-pay@example.test',
+        guestPhone: '0900000001',
+        checkIn: new Date('2026-10-23'),
+        checkOut: new Date('2026-10-25'),
+        adultCount: 2,
+        roomTotal: 1000000,
+        depositAmount: 300000,
+        source: 'FRONT_DESK',
+        status: 'CONFIRMED',
+      });
+    const initiate = (headers: Record<string, string> = RECEPTIONIST) =>
+      http()
+        .post('/api/v1/payments/deposit')
+        .set(headers)
+        .send({ bookingId: String(bookingId) });
+
+    it('lets staff open a VNPay deposit for a confirmed booking that has none', async () => {
+      await seedWalkIn();
+
+      const { body } = await initiate().expect(201);
+
+      expect(body.amount).toBe(300000);
+      expect(body.paymentUrl).toContain('vnp_SecureHash=');
+      const pending = await payments.findOne({
+        transactionRef: body.transactionRef,
+      });
+      expect(pending).toMatchObject({
+        method: 'VNPAY',
+        purpose: 'DEPOSIT',
+        status: 'PENDING',
+        amount: 300000,
+      });
+    });
+
+    it('records the deposit on the invoice when VNPay confirms it, keeping the booking confirmed', async () => {
+      await seedWalkIn();
+      const { body } = await initiate().expect(201);
+
+      const raw = ipnCallback(body.transactionRef as string, 300000);
+      const response = await http()
+        .get(`/api/v1/payments/vnpay/ipn?${raw}`)
+        .expect(200);
+
+      expect(response.body).toEqual({
+        RspCode: '00',
+        Message: 'Confirm Success',
+      });
+      expect((await bookings.findById(bookingId))?.status).toBe('CONFIRMED');
+      expect(await invoices.findOne({ booking: bookingId })).toMatchObject({
+        depositPaid: 300000,
+        balanceDue: 700000,
+        status: 'PARTIALLY_PAID',
+      });
+    });
+
+    it('refuses a deposit that is already paid', async () => {
+      await seedWalkIn();
+      const first = await initiate().expect(201);
+      await http()
+        .get(
+          `/api/v1/payments/vnpay/ipn?${ipnCallback(first.body.transactionRef as string, 300000)}`,
+        )
+        .expect(200);
+
+      await initiate().expect(409);
+    });
+
+    it('does not let a customer start a deposit on a confirmed booking', async () => {
+      await seedWalkIn();
+      await bookings.updateOne({ _id: bookingId }, { customer: customerId });
+
+      await initiate(CUSTOMER).expect(409);
+    });
+
+    it('blocks a cash deposit at the desk while the VNPay one is pending', async () => {
+      await seedWalkIn();
+      await initiate().expect(201);
+
+      await http()
+        .post(`/api/v1/bookings/${bookingId}/payments/deposit`)
+        .set(RECEPTIONIST)
+        .send({ method: 'CASH', requestId: 'dep-12345678' })
+        .expect(409);
+    });
+  });
+
   it('returns Order not found for an unknown IPN transaction', async () => {
     const raw = ipnCallback('UNKNOWNREF123', 300000);
     const response = await http()

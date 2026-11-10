@@ -68,6 +68,22 @@ export class PaymentsService {
     options: InitiateOptions,
   ) {
     const booking = await this.authorizedBooking(bookingId, actor);
+    // Booking tại quầy vào thẳng CONFIRMED (không có hold): lễ tân thu cọc qua VNPay ngay tại quầy.
+    // `initiate` vẫn từ chối khi cọc đã thu, và thay link cũ nếu còn giao dịch đang chờ.
+    if (
+      booking.status === BookingStatus.Confirmed &&
+      actor.user !== undefined &&
+      actor.user.role !== Role.Customer
+    ) {
+      return withBookingFinancialOperation(this.bookings, bookingId, () =>
+        this.initiate(
+          booking,
+          PaymentPurpose.Deposit,
+          booking.depositAmount,
+          options,
+        ),
+      );
+    }
     if (booking.status !== BookingStatus.PendingDeposit) {
       throw new ConflictException('Booking is not awaiting a deposit');
     }
