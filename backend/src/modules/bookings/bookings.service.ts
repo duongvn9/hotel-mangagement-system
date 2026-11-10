@@ -28,6 +28,7 @@ import {
   BookingStatus,
   BookingSource,
 } from './schemas/booking.schema.js';
+import { Invoice, InvoiceStatus } from '../invoices/schemas/invoice.schema.js';
 import {
   BLOCKING_BOOKING_STATUSES,
   RELEASED_BOOKING_STATUSES,
@@ -108,6 +109,8 @@ export class BookingsService {
     @Inject(AvailabilityClock) private readonly clock: AvailabilityClock,
     @InjectModel(PaymentTransaction.name)
     private readonly payments: Model<PaymentTransaction>,
+    @InjectModel(Invoice.name)
+    private readonly invoices: Model<Invoice>,
     private readonly notifications: NotificationsService,
   ) {}
 
@@ -180,19 +183,8 @@ export class BookingsService {
       );
     }
 
-    // Gửi mã đặt phòng qua email để khách thanh toán và quản lý đơn.
-    this.emailBooking({
-      code: booking.code,
-      guestName: booking.guestName,
-      guestEmail: booking.guestEmail,
-      checkIn: stay.checkIn,
-      checkOut: stay.checkOut,
-      roomCount: roomIds.length,
-      roomTotal: booking.roomTotal,
-      depositAmount: booking.depositAmount,
-      status: booking.status,
-    });
-
+    // Chưa gửi email ở bước này: booking mới chỉ chờ đặt cọc, chưa thanh toán. Email xác
+    // nhận gửi khi cọc thành công (settlement) hoặc khi lễ tân tạo booking tại quầy.
     return {
       id: String(booking._id),
       code: booking.code,
@@ -1003,18 +995,7 @@ export class BookingsService {
     }
     booking.status = BookingStatus.PendingDeposit;
     await booking.save();
-    // Gửi mã đặt phòng qua email ngay khi chuyển sang chờ đặt cọc.
-    this.emailBooking({
-      code: booking.code,
-      guestName: booking.guestName,
-      guestEmail: booking.guestEmail,
-      checkIn: booking.checkIn,
-      checkOut: booking.checkOut,
-      roomCount: booking.rooms.length,
-      roomTotal: booking.roomTotal,
-      depositAmount: booking.depositAmount,
-      status: booking.status,
-    });
+    // Không gửi email ở bước chờ đặt cọc: chỉ gửi khi cọc thành công (settlement).
     return this.holdResponse(booking, hold);
   }
 
@@ -1131,7 +1112,7 @@ export class BookingsService {
     };
   }
 
-  private readResponse(
+  private async readResponse(
     booking: BookingDocument,
     hold: RoomHoldDocument | null,
   ) {
@@ -1139,6 +1120,7 @@ export class BookingsService {
       hold?.isActive &&
       UNCONFIRMED_BOOKING_STATUSES.includes(booking.status) &&
       hold.expiresAt > this.clock.now();
+    const summary = await this.paymentSummary(booking);
     return {
       id: String(booking._id),
       code: booking.code,
@@ -1151,7 +1133,40 @@ export class BookingsService {
       source: booking.source,
       roomTotal: booking.roomTotal,
       depositAmount: booking.depositAmount,
+      serviceTotal: summary.serviceTotal,
+      paidAmount: summary.paidAmount,
+      balanceDue: summary.balanceDue,
+      invoiceStatus: summary.invoiceStatus,
       ...(holdActive ? { holdExpiresAt: hold!.expiresAt.toISOString() } : {}),
+    };
+  }
+
+  /**
+   * Tóm tắt thanh toán cho một booking, đọc từ hoá đơn H7 (chỉ đọc). Booking chưa có
+   * hoá đơn (chưa phát sinh thanh toán nào) coi như chưa trả: còn lại = tiền phòng.
+   */
+  private async paymentSummary(booking: BookingDocument): Promise<{
+    serviceTotal: number;
+    paidAmount: number;
+    balanceDue: number;
+    invoiceStatus: string;
+  }> {
+    const invoice = await this.invoices
+      .findOne({ booking: booking._id })
+      .lean();
+    if (!invoice) {
+      return {
+        serviceTotal: 0,
+        paidAmount: 0,
+        balanceDue: booking.roomTotal,
+        invoiceStatus: InvoiceStatus.Unpaid,
+      };
+    }
+    return {
+      serviceTotal: invoice.serviceTotal,
+      paidAmount: invoice.depositPaid + invoice.finalPaid,
+      balanceDue: invoice.balanceDue,
+      invoiceStatus: invoice.status,
     };
   }
 }

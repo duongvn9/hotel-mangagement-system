@@ -94,6 +94,14 @@ export interface Booking {
   roomTotal: number
   /** Tiền cọc cần thanh toán (VND). */
   depositAmount: number
+  /** Tiền dịch vụ đã ghi vào hoá đơn (VND). */
+  serviceTotal?: number
+  /** Tổng đã thanh toán thành công: cọc + phần còn lại (VND). */
+  paidAmount?: number
+  /** Số tiền còn phải thanh toán (VND). */
+  balanceDue?: number
+  /** Trạng thái hoá đơn: UNPAID, PARTIALLY_PAID hoặc PAID. */
+  invoiceStatus?: string
   /** Thời điểm giữ phòng hết hạn (ISO); vắng khi booking không còn giữ phòng. */
   holdExpiresAt?: string
 }

@@ -446,10 +446,54 @@ describe('BookingDetailPage (server-authoritative)', () => {
     expect(await screen.findByText('BK123')).toBeInTheDocument()
     expect(screen.getByText('Chờ đặt cọc')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Đặt cọc qua VNPay' }))
+    fireEvent.click(screen.getByRole('button', { name: /Đặt cọc qua VNPay/ }))
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith(
         '/payments/deposit',
+        expect.objectContaining({ bookingId: 'b1' }),
+      ),
+    )
+  })
+
+  it('shows a paid-in-full state and hides the final payment button', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: {
+        ...booking,
+        status: 'CONFIRMED',
+        paidAmount: 2_000_000,
+        balanceDue: 0,
+        invoiceStatus: 'PAID',
+      },
+    })
+
+    renderWithAuth(bookingRoutes, { path: '/booking/b1' })
+
+    expect(await screen.findByText(/Đơn này đã thanh toán đủ/)).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Thanh toán phần còn lại/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the final payment button when a balance is still due', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: {
+        ...booking,
+        status: 'CONFIRMED',
+        paidAmount: 600_000,
+        balanceDue: 1_400_000,
+        invoiceStatus: 'PARTIALLY_PAID',
+      },
+    })
+    const post = vi.spyOn(api, 'post').mockResolvedValue({
+      data: { transactionRef: 'TXN9', paymentUrl: 'https://vnpay.test/pay', amount: 1_400_000 },
+    })
+
+    renderWithAuth(bookingRoutes, { path: '/booking/b1' })
+
+    fireEvent.click(await screen.findByRole('button', { name: /Thanh toán phần còn lại/ }))
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        '/payments/final',
         expect.objectContaining({ bookingId: 'b1' }),
       ),
     )
@@ -466,7 +510,7 @@ describe('BookingDetailPage (server-authoritative)', () => {
 
     renderWithAuth(bookingRoutes, { path: '/booking/b1' })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Đặt cọc qua VNPay' }))
+    fireEvent.click(await screen.findByRole('button', { name: /Đặt cọc qua VNPay/ }))
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith('/payments/deposit', { bookingId: 'b1', code: 'BK123' }),
     )

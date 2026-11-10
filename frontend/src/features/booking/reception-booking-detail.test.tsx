@@ -2,9 +2,32 @@ import { screen } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { bookingRoutes } from './routes'
-import type { BookingListItem, BookingListPage } from './api'
+import type { BookingCharges, BookingListItem, BookingListPage, InvoiceTotals } from './api'
 
 const receptionist = { ...ME, id: 'u2', email: 'reception@hms.local', role: 'RECEPTIONIST' }
+
+const totals = (overrides: Partial<InvoiceTotals> = {}): InvoiceTotals => ({
+  roomTotal: 2_000_000,
+  serviceTotal: 0,
+  additionalTotal: 0,
+  discountTotal: 0,
+  taxTotal: 0,
+  totalAmount: 2_000_000,
+  depositPaid: 200_000,
+  finalPaid: 0,
+  balanceDue: 1_800_000,
+  ...overrides,
+})
+
+const charges = (overrides: Partial<BookingCharges> = {}): BookingCharges => ({
+  bookingId: 'b1',
+  code: 'BKVIEW1',
+  status: 'CONFIRMED',
+  invoiceStatus: 'PARTIALLY_PAID',
+  totals: totals(),
+  charges: [],
+  ...overrides,
+})
 
 const item = (overrides: Partial<BookingListItem> = {}): BookingListItem => ({
   id: 'b1',
@@ -32,9 +55,10 @@ const listPage = (items: BookingListItem[]): BookingListPage => ({
   limit: 20,
 })
 
-function mockGet(items: BookingListItem[]) {
+function mockGet(items: BookingListItem[], invoice: BookingCharges = charges()) {
   return vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
     if (url === '/bookings') return { data: listPage(items) }
+    if (url.endsWith('/charges')) return { data: invoice }
     throw new Error(`unexpected GET ${url}`)
   })
 }
@@ -66,6 +90,29 @@ describe('ReceptionBookingDetailPage', () => {
 
     const edit = screen.getByRole('link', { name: 'Sửa booking' })
     expect(edit).toHaveAttribute('href', '/reception/bookings/BKVIEW1/edit')
+  })
+
+  it('shows the invoice: services, amount paid, balance due and status', async () => {
+    mockGet(
+      [item()],
+      charges({
+        invoiceStatus: 'PAID',
+        totals: totals({
+          serviceTotal: 500_000,
+          totalAmount: 2_500_000,
+          depositPaid: 200_000,
+          finalPaid: 2_300_000,
+          balanceDue: 0,
+        }),
+      }),
+    )
+    renderDetail()
+
+    expect(await screen.findByText('Dịch vụ')).toBeInTheDocument()
+    expect(screen.getByText('Còn phải trả')).toBeInTheDocument()
+    expect(screen.getByText('Đã thanh toán đủ')).toBeInTheDocument()
+    // Dòng "Đã thanh toán thêm" chỉ hiện khi có khoản trả cuối.
+    expect(screen.getByText('Đã thanh toán thêm')).toBeInTheDocument()
   })
 
   it('hides the edit link for bookings that can no longer be edited', async () => {
