@@ -16,7 +16,7 @@ import {
   type ReassignIssueInput,
 } from './api'
 import { issueKeys } from './hooks'
-import { issueDate } from './presentation'
+import { issueDate, personName, taskStatusLabel } from './presentation'
 
 type Action =
   { kind: 'continue'; input: ContinueIssueInput } | { kind: 'reassign'; input: ReassignIssueInput }
@@ -178,8 +178,8 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
       <h3 className="font-semibold">Công việc xử lý hiện tại và lịch sử</h3>
       {current && (
         <p>
-          Công việc hiện tại: {current.title} · {current.id} · {current.assigneeId} ·{' '}
-          {current.status}
+          Công việc hiện tại: {current.title} · {personName(current.assigneeName)} ·{' '}
+          {taskStatusLabel(current.status)}
         </p>
       )}
       {history.map((task) => (
@@ -187,11 +187,9 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
           key={task.id}
           className="min-w-0 space-y-2 rounded-xl border border-border bg-surface/40 p-4 break-words"
         >
-          <h4 className="font-semibold">
-            {task.title} · {task.id}
-          </h4>
+          <h4 className="font-semibold">{task.title}</h4>
           <p>
-            Nhân viên: {task.assigneeId} · Trạng thái: {task.status}
+            Nhân viên: {personName(task.assigneeName)} · Trạng thái: {taskStatusLabel(task.status)}
           </p>
           <p>
             Ngày giao: {issueDate(task.assignedAt)} · Thời hạn:{' '}
@@ -202,6 +200,24 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
             <p className="whitespace-pre-wrap">Kết quả: {task.workResult}</p>
           )}
           <ResolutionHistory task={task} />
+          {task.blockerHistory?.map((report) => (
+            <p key={report.id}>
+              Người báo không thể xử lý: {personName(report.reportedByName)} ·{' '}
+              {issueDate(report.reportedAt)}
+              {report.resolvedAt && <> · Người xem xét: {personName(report.resolvedByName)}</>}
+            </p>
+          ))}
+          {task.continuationHistory?.map((entry, index) => (
+            <p key={`${entry.at}-${index}`}>
+              Người tiếp tục xử lý: {personName(entry.actorName)} · {issueDate(entry.at)}
+            </p>
+          ))}
+          {task.cancellation && (
+            <p>
+              Người yêu cầu phân công lại: {personName(task.cancellation.actorName)} · Người khôi
+              phục: {personName(task.cancellation.recoveryActorName)}
+            </p>
+          )}
         </article>
       ))}
       {pending && (
@@ -209,16 +225,30 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
           <p>
             Phân công lại đang chờ khôi phục. Bất kỳ lễ tân nào cũng có thể tiếp tục cùng yêu cầu.
           </p>
-          <p>
-            Mã yêu cầu: {pending.requestId} · Nhân viên đích: {pending.assigneeId}
-          </p>
+          <p>Nhân viên đích: {personName(pending.assigneeName)}</p>
           <p className="whitespace-pre-wrap">Lý do: {pending.reason}</p>
+          {pending.recoveryActorNames?.map((name, index) => (
+            <p key={index}>Người khôi phục: {personName(name)}</p>
+          ))}
           <p>
             Thời hạn: {pending.dueAt == null ? 'Không có thời hạn' : issueDate(pending.dueAt)} ·
-            Người yêu cầu: {pending.actorId}
+            Người yêu cầu: {personName(pending.actorName)}
           </p>
         </div>
       )}
+      {issue.reassignmentHistory?.map((entry) => (
+        <div key={entry.requestId} className="space-y-2 break-words">
+          <p>Đã phân công lại · {issueDate(entry.completedAt)}</p>
+          <p>
+            Người yêu cầu: {personName(entry.actorName)} · Nhân viên thay thế:{' '}
+            {personName(entry.assigneeName)}
+          </p>
+          <p className="whitespace-pre-wrap">Lý do: {entry.reason}</p>
+          {entry.recoveryActorNames?.map((name, index) => (
+            <p key={index}>Người khôi phục: {personName(name)}</p>
+          ))}
+        </div>
+      ))}
       {mutation.isSuccess && <p role="status">Đã cập nhật xử lý sự cố.</p>}
       {mutation.isError && (
         <p role="alert" className="text-danger">
@@ -368,7 +398,7 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
           </p>
           <p className="whitespace-pre-wrap">
             {confirmation.kind === 'reassign'
-              ? `${confirmation.input.assigneeId} · ${confirmation.input.reason}`
+              ? `${personName(users.find((user) => user.id === (confirmation.input as ReassignIssueInput).assigneeId)?.displayName ?? (pending?.assigneeId === confirmation.input.assigneeId ? pending.assigneeName : undefined))} · ${confirmation.input.reason}`
               : confirmation.input.instructions}
           </p>
           <Button

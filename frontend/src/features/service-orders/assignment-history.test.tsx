@@ -47,7 +47,7 @@ function page(path = '/staff/service-orders/order-1', role: string | null = 'REC
 async function select() {
   await screen.findByRole('option', { name: 'Nhân viên thật' })
   fireEvent.change(screen.getByLabelText('Nhân viên dịch vụ'), { target: { value: 'staff-1' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Xem lại phân công' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Phân công' }))
   return screen.findByRole('dialog')
 }
 beforeEach(() => {
@@ -95,7 +95,7 @@ describe('assignment', () => {
     expect(screen.getByLabelText('Nhân viên dịch vụ')).toHaveClass('border-input')
     expect(screen.getByLabelText(/Hạn hoàn thành/)).toHaveClass('border-input')
     fireEvent.change(screen.getByLabelText('Nhân viên dịch vụ'), { target: { value: 'staff-1' } })
-    const trigger = screen.getByRole('button', { name: 'Xem lại phân công' })
+    const trigger = screen.getByRole('button', { name: 'Phân công' })
     trigger.focus()
     fireEvent.click(trigger)
     const dialog = screen.getByRole('dialog', { name: 'Xác nhận phân công' })
@@ -129,7 +129,7 @@ describe('assignment', () => {
       page()
     })
     await screen.findByRole('option', { name: 'Nhân viên thật' })
-    expect(screen.getByRole('button', { name: 'Xem lại phân công' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Phân công' })).toBeDisabled()
     expect(screen.queryByRole('option', { name: 'Không hợp lệ' })).not.toBeInTheDocument()
   })
   it('confirms an exact ISO payload without billing or actor fields and renders linked task only', async () => {
@@ -141,7 +141,7 @@ describe('assignment', () => {
     const dialog = await select()
     expect(api.post).not.toHaveBeenCalled()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Xác nhận phân công' }))
-    await screen.findByText('Công việc liên kết: task-1')
+    await screen.findByText('Nhân viên: Chưa có tên nhân viên')
     expect(api.post).toHaveBeenCalledExactlyOnceWith('/service-orders/order-1/assignment', {
       assigneeId: 'staff-1',
       dueAt: new Date('2026-10-26T14:30').toISOString(),
@@ -164,7 +164,7 @@ describe('assignment', () => {
     fireEvent.click(
       within(await screen.findByRole('dialog')).getByRole('button', { name: 'Xác nhận phân công' }),
     )
-    await screen.findByText('Công việc liên kết: task-1')
+    await screen.findByText('Nhân viên: Chưa có tên nhân viên')
     expect(vi.mocked(api.post).mock.calls.map((call) => call[1])).toEqual([
       { assigneeId: 'staff-1' },
       { assigneeId: 'staff-1' },
@@ -178,7 +178,7 @@ describe('assignment', () => {
     page()
     const dialog = await select()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Xác nhận phân công' }))
-    await screen.findByText('Công việc liên kết: task-1')
+    await screen.findByText('Nhân viên: Chưa có tên nhân viên')
     expect(screen.queryByRole('button', { name: 'Thử lại cùng phân công' })).not.toBeInTheDocument()
     expect(api.post).toHaveBeenCalledTimes(1)
   })
@@ -191,7 +191,7 @@ describe('assignment', () => {
       page()
     })
     const retry = await screen.findByRole('button', { name: 'Thử lại cùng phân công' })
-    expect(screen.getByText('Nhân viên đã lưu: persisted-staff')).toBeInTheDocument()
+    expect(screen.getByText('Nhân viên đã lưu: Chưa có tên nhân viên')).toBeInTheDocument()
     expect(screen.queryByText(/Máy chủ chưa cung cấp/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Nhân viên dịch vụ')).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/Hạn hoàn thành/)).not.toBeInTheDocument()
@@ -200,9 +200,9 @@ describe('assignment', () => {
     expect(api.post).not.toHaveBeenCalled()
     fireEvent.click(retry)
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('Nhân viên: persisted-staff')).toBeInTheDocument()
+    expect(within(dialog).getByText('Nhân viên: Chưa có tên nhân viên')).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Xác nhận phân công' }))
-    await screen.findByText('Công việc liên kết: task-1')
+    await screen.findByText('Nhân viên: Chưa có tên nhân viên')
     expect(api.post).toHaveBeenCalledExactlyOnceWith(
       '/service-orders/order-1/assignment',
       assignmentIntent,
@@ -230,14 +230,14 @@ describe('assignment', () => {
     fireEvent.click(await screen.findByLabelText('Thay nhân viên đã ngừng hoạt động'))
     await screen.findByRole('option', { name: 'Nhân viên thật' })
     fireEvent.change(screen.getByLabelText('Nhân viên dịch vụ'), { target: { value: 'staff-1' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Xem lại phân công' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Phân công' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('nhập lý do khôi phục')
     expect(api.post).not.toHaveBeenCalled()
     expect(screen.queryByLabelText(/Hạn hoàn thành/)).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Lý do khôi phục'), {
       target: { value: '  Staff deactivated  ' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Xem lại phân công' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Phân công' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('Lý do khôi phục: Staff deactivated')).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Xác nhận phân công' }))
@@ -248,7 +248,7 @@ describe('assignment', () => {
     fireEvent.click(
       within(await screen.findByRole('dialog')).getByRole('button', { name: 'Xác nhận phân công' }),
     )
-    await screen.findByText('Công việc liên kết: task-1')
+    await screen.findByText('Nhân viên: Chưa có tên nhân viên')
     const payload = {
       assigneeId: 'staff-1',
       dueAt: '2026-12-01T10:00:00.000Z',
@@ -266,7 +266,7 @@ describe('assignment', () => {
       task,
     }
     page()
-    await screen.findByText('Công việc liên kết: task-1')
+    await screen.findByText('Nhân viên: Chưa có tên nhân viên')
     expect(screen.queryByLabelText('Thay nhân viên đã ngừng hoạt động')).not.toBeInTheDocument()
     expect(api.get).not.toHaveBeenCalledWith('/service-orders/order-1/assignees')
   })
@@ -289,7 +289,7 @@ describe('assignment', () => {
     )
     page()
     await screen.findByText('Đang tải nhân viên dịch vụ…')
-    expect(screen.getByRole('button', { name: 'Xem lại phân công' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Phân công' })).toBeDisabled()
     await act(async () => finish({ data: { items: [] } }))
     await screen.findByText('Không có nhân viên dịch vụ đang hoạt động.')
   })

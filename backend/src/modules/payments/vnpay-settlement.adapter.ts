@@ -136,6 +136,14 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
         await this.generateServiceOrders(expected.booking.id);
         // Gửi email xác nhận booking cho khách (best-effort).
         await this.emailBookingConfirmed(expected.booking.id);
+        // Biên nhận cho khoản đặt cọc vừa thu (best-effort).
+        await this.emailPaymentSuccess(
+          expected.booking.id,
+          expected.payment.amount,
+          PaymentPurpose.Deposit,
+          result.transactionRef,
+          result.paidAt ?? new Date(),
+        );
       }
       await this.reconcileInvoice(expected);
       if (expected.payment.purpose === PaymentPurpose.Final) {
@@ -143,6 +151,7 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
         await this.emailPaymentSuccess(
           expected.booking.id,
           expected.payment.amount,
+          PaymentPurpose.Final,
           result.transactionRef,
           result.paidAt ?? new Date(),
         );
@@ -222,10 +231,11 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
     }
   }
 
-  /** Email biên nhận thanh toán cuối (PAYMENT_SUCCESS); best-effort. */
+  /** Email biên nhận thanh toán (cọc hoặc cuối) qua hệ thống (PAYMENT_SUCCESS); best-effort. */
   private async emailPaymentSuccess(
     bookingId: string,
     amount: number,
+    purpose: PaymentPurpose,
     transactionRef: string,
     paidAt: Date,
   ): Promise<void> {
@@ -242,7 +252,7 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
           bookingCode: booking.code,
           guestName: booking.guestName ?? '',
           amount,
-          purpose: PaymentPurpose.Final,
+          purpose,
           paidAt,
           transactionRef,
         },

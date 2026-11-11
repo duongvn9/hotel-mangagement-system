@@ -82,6 +82,56 @@ it.each(['SERVICE_STAFF', 'OPERATIONS_STAFF'])(
   },
 )
 
+it.each([
+  ['SERVICE_ORDER_EXECUTION', 'Thực hiện yêu cầu dịch vụ'],
+  ['ISSUE_RESOLUTION', 'Xử lý sự cố'],
+])('shows a human label for %s in assigned lists', async (taskType, label) => {
+  get.mockResolvedValue({ data: { ...list, items: [{ ...task, taskType }] } })
+  renderTasks()
+  expect(await screen.findByText(`Loại: ${label}`)).toBeInTheDocument()
+  expect(document.body).not.toHaveTextContent(taskType)
+})
+
+it('hides technical identifiers and localizes task detail and resolution history', async () => {
+  get.mockResolvedValue({
+    data: {
+      ...task,
+      taskType: 'ISSUE_RESOLUTION',
+      sourceSummary: 'Điều hòa · Phòng 201',
+      blockerHistory: [
+        {
+          id: 'blocker-id',
+          reason: 'Cần hỗ trợ',
+          reportedBy: 'reporter-id',
+          reportedAt: task.assignedAt,
+          resolvedAt: task.assignedAt,
+          resolvedBy: 'resolver-id',
+          resolution: 'CONTINUED',
+        },
+      ],
+      continuationHistory: [
+        { actorId: 'actor-id', at: task.assignedAt, instructions: 'Kiểm tra lại' },
+      ],
+      cancellation: { reason: 'Đổi ca', actorId: 'cancel-actor', at: task.assignedAt },
+    },
+  })
+  renderTasks('/staff/tasks/task-1', 'OPERATIONS_STAFF')
+  expect(await screen.findByText('Xử lý sự cố')).toBeInTheDocument()
+  expect(screen.getByText('Điều hòa · Phòng 201')).toBeInTheDocument()
+  expect(screen.getByText(/Đã tiếp tục xử lý/)).toBeInTheDocument()
+  for (const value of [
+    task.id,
+    task.sourceId,
+    'reporter-id',
+    'resolver-id',
+    'actor-id',
+    'cancel-actor',
+    'CONTINUED',
+  ]) {
+    expect(document.body).not.toHaveTextContent(value)
+  }
+})
+
 it('uses workspace presentation and soft panels without losing list semantics', async () => {
   get.mockResolvedValue({ data: list })
   renderTasks()
@@ -195,13 +245,32 @@ it.each([403, 404])('hides detail on API %s without source links or retry', asyn
   expect(screen.getAllByRole('link')).toHaveLength(1)
 })
 
+it('renders the authorized source summary in the existing source area', async () => {
+  const sourceSummary = 'Giặt ủi · BK-001 · 101'
+  get.mockResolvedValue({ data: { ...task, sourceSummary, status: 'COMPLETED' } })
+  renderTasks('/staff/tasks/task-1')
+  const summary = await screen.findByText(sourceSummary)
+  expect(summary).toHaveClass('break-words')
+  expect(screen.queryByText(/Thông tin nguồn hiện không khả dụng/)).not.toBeInTheDocument()
+  expect(screen.getAllByRole('link')).toHaveLength(1)
+  expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  expect(get).toHaveBeenCalledExactlyOnceWith('/tasks/task-1')
+})
+
+it.each([null, '', '   ', undefined])('keeps the source fallback for %s', async (sourceSummary) => {
+  get.mockResolvedValue({ data: { ...task, sourceSummary, status: 'COMPLETED' } })
+  renderTasks('/staff/tasks/task-1')
+  expect(await screen.findByText(/Thông tin nguồn hiện không khả dụng/)).toBeInTheDocument()
+  expect(screen.queryByText(task.sourceId)).not.toBeInTheDocument()
+})
+
 it('renders detail and trace-only missing source without mutations', async () => {
   get.mockResolvedValue({ data: { ...task, status: 'COMPLETED', workResult: 'Đã kiểm tra' } })
   renderTasks('/staff/tasks/task-1')
   expect(await screen.findByText(task.title)).toBeInTheDocument()
   expect(screen.getByText('Hoàn thành')).toBeInTheDocument()
   expect(screen.getByText('Đã kiểm tra')).toBeInTheDocument()
-  expect(screen.getByText('private-source')).toBeInTheDocument()
+  expect(screen.queryByText('private-source')).not.toBeInTheDocument()
   expect(screen.getByText(/Thông tin nguồn hiện không khả dụng/)).toBeInTheDocument()
   expect(screen.getAllByRole('link')).toHaveLength(1)
   expect(screen.queryByRole('button')).not.toBeInTheDocument()

@@ -151,11 +151,20 @@ export class ServiceOrdersService implements OnModuleInit {
     await Promise.all(rows.map((row) => this.executionTask(row)));
   }
 
-  private async response(row: ServiceOrderDocument) {
+  private readonly customerSelection = '+reviewReason +acceptanceRecovery';
+
+  private async response(
+    row: ServiceOrderDocument,
+    contexts?: Awaited<ReturnType<ServiceOrdersService['requestContexts']>>,
+  ) {
     await this.executionTask(row);
+    const context = contexts ?? (await this.requestContexts([row], false));
+    const booking = context.bookings.get(String(row.booking));
     return {
       id: String(row._id),
       bookingId: String(row.booking),
+      bookingCode: booking?.code ?? null,
+      roomNumbers: booking?.roomNumbers ?? [],
       serviceId: String(row.service),
       service: { name: row.serviceName, unit: row.unit },
       quantity: row.quantity,
@@ -163,6 +172,12 @@ export class ServiceOrdersService implements OnModuleInit {
       amount: row.amount,
       requestedTime: row.requestedTime,
       reviewStatus: row.reviewStatus,
+      ...(row.reviewStatus === ServiceOrderReviewStatus.Rejected
+        ? {
+            reviewReason:
+              row.acceptanceRecovery?.rejectionReason ?? row.reviewReason ?? '',
+          }
+        : {}),
       executionStatus: row.executionStatus,
       ...(row.notes === undefined ? {} : { notes: row.notes }),
       createdAt: row.createdAt,
@@ -176,7 +191,7 @@ export class ServiceOrdersService implements OnModuleInit {
   ) {
     const row = await this.orders
       .findOne({ customer, requestId })
-      .select('+requestFingerprint')
+      .select(`+requestFingerprint ${this.customerSelection}`)
       .exec();
     if (!row) return null;
     await this.ownedBooking(row.booking, customer, 'orderable');
@@ -358,14 +373,16 @@ export class ServiceOrdersService implements OnModuleInit {
     const [rows, total] = await Promise.all([
       this.orders
         .find(filter)
+        .select(this.customerSelection)
         .sort({ createdAt: -1, _id: -1 })
         .skip((query.page - 1) * query.limit)
         .limit(query.limit)
         .exec(),
       this.orders.countDocuments(filter).exec(),
     ]);
+    const contexts = await this.requestContexts(rows, false);
     return {
-      items: await Promise.all(rows.map((row) => this.response(row))),
+      items: await Promise.all(rows.map((row) => this.response(row, contexts))),
       total,
       page: query.page,
       limit: query.limit,
@@ -376,6 +393,7 @@ export class ServiceOrdersService implements OnModuleInit {
     const customer = this.customer(user);
     const row = await this.orders
       .findOne({ _id: this.id(id), customer })
+      .select(this.customerSelection)
       .exec();
     if (!row) throw new NotFoundException('Service order not found');
     await this.ownedBooking(row.booking, customer);
@@ -391,18 +409,85 @@ export class ServiceOrdersService implements OnModuleInit {
   private staffSelection =
     '+reviewedBy +reviewedAt +reviewDecision +reviewReason +acceptanceRecovery +billedInvoiceId +billedAt +assignmentAssignee +assignmentDueAt';
 
-  private async staffResponse(row: ServiceOrderDocument) {
-    const [booking, customer] = await Promise.all([
-      this.bookings
-        .findById(row.booking)
-        .select('code status checkIn checkOut')
-        .exec(),
-      row.customer
-        ? this.users.findById(row.customer).select('fullName').exec()
-        : null,
+  private async requestContexts(
+    rows: ServiceOrderDocument[],
+    includeStaff = true,
+  ) {
+    const bookingIds = [...new Set(rows.map((row) => String(row.booking)))];
+    const userIds = includeStaff
+      ? [
+          ...new Set(
+            rows.flatMap((row) =>
+              [row.customer, row.reviewedBy].flatMap((id) =>
+                id ? [String(id)] : [],
+              ),
+            ),
+          ),
+        ]
+      : [];
+    const [bookings, customers] = await Promise.all([
+      bookingIds.length
+        ? this.bookings
+            .find({ _id: { $in: bookingIds } })
+            .select('code status checkIn checkOut rooms')
+            .exec()
+        : [],
+      userIds.length
+        ? this.users
+            .find({ _id: { $in: userIds } })
+            .select('fullName')
+            .exec()
+        : [],
     ]);
+    const roomIds = [
+      ...new Set(
+        bookings.flatMap((booking) => (booking.rooms ?? []).map(String)),
+      ),
+    ];
+    const rooms = roomIds.length
+      ? await this.bookings.db
+          .collection('rooms')
+          .find(
+            { _id: { $in: roomIds.map((id) => new Types.ObjectId(id)) } },
+            { projection: { roomNumber: 1 } },
+          )
+          .toArray()
+      : [];
+    const roomNumbers = new Map(
+      rooms.map((room) => [String(room._id), room.roomNumber as string]),
+    );
     return {
-      ...(await this.response(row)),
+      bookings: new Map(
+        bookings.map((booking) => [
+          String(booking._id),
+          {
+            code: booking.code,
+            status: booking.status,
+            checkIn: booking.checkIn,
+            checkOut: booking.checkOut,
+            roomNumbers: (booking.rooms ?? []).flatMap((id) => {
+              const number = roomNumbers.get(String(id));
+              return typeof number === 'string' ? [number] : [];
+            }),
+          },
+        ]),
+      ),
+      customers: new Map(
+        customers.map((customer) => [String(customer._id), customer]),
+      ),
+    };
+  }
+
+  private async staffResponse(
+    row: ServiceOrderDocument,
+    contexts?: Awaited<ReturnType<ServiceOrdersService['requestContexts']>>,
+  ) {
+    const context = contexts ?? (await this.requestContexts([row]));
+    const booking = context.bookings.get(String(row.booking));
+    const customer = context.customers.get(String(row.customer));
+    const reviewer = context.customers.get(String(row.reviewedBy));
+    return {
+      ...(await this.response(row, context)),
       task: await this.taskSummary(row),
       ...(row.executionStatus === ServiceOrderExecutionStatus.Assigning &&
       row.assignmentAssignee
@@ -425,6 +510,7 @@ export class ServiceOrdersService implements OnModuleInit {
             status: booking.status,
             checkIn: booking.checkIn,
             checkOut: booking.checkOut,
+            roomNumbers: booking.roomNumbers,
           }
         : null,
       feeRequired: row.amount > 0,
@@ -445,6 +531,7 @@ export class ServiceOrdersService implements OnModuleInit {
                 row.reviewReason ??
                 '',
               reviewedBy: String(row.reviewedBy),
+              reviewedByName: reviewer?.fullName ?? null,
               reviewedAt: row.reviewedAt,
             },
           }
@@ -487,8 +574,11 @@ export class ServiceOrdersService implements OnModuleInit {
         .exec(),
       this.orders.countDocuments(filter).exec(),
     ]);
+    const contexts = await this.requestContexts(rows);
     return {
-      items: await Promise.all(rows.map((row) => this.staffResponse(row))),
+      items: await Promise.all(
+        rows.map((row) => this.staffResponse(row, contexts)),
+      ),
       total,
       page: query.page,
       limit: query.limit,
@@ -1233,9 +1323,16 @@ export class ServiceOrdersService implements OnModuleInit {
 
   private async taskSummary(row: ServiceOrderDocument) {
     const task = await this.executionTask(row);
-    return task
-      ? { ...this.taskResponse(task), assigneeId: String(task.assignedTo) }
-      : null;
+    if (!task) return null;
+    const assignee = await this.users
+      .findById(task.assignedTo)
+      .select('fullName')
+      .exec();
+    return {
+      ...this.taskResponse(task),
+      assigneeId: String(task.assignedTo),
+      assigneeName: assignee?.fullName ?? null,
+    };
   }
 
   private serviceStaff(user: AuthUser) {

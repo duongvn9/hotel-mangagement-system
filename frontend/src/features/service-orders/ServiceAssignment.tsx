@@ -114,9 +114,8 @@ export function ServiceAssignment({
       <div className="space-y-4 text-sm">
         {order.task ? (
           <div className="space-y-2 break-words">
-            <p>Công việc liên kết: {order.task.id}</p>
-            <p>Nhân viên: {order.task.assigneeId}</p>
-            <p>Trạng thái: {executionLabels[order.executionStatus] ?? order.task.status}</p>
+            <p>Nhân viên: {order.task.assigneeName?.trim() || 'Chưa có tên nhân viên'}</p>
+            <p>Trạng thái: {executionLabels[order.executionStatus] ?? 'Chưa xác định'}</p>
             <p>Đã giao: {dateTime(order.task.assignedAt)}</p>
             {order.task.dueAt && <p>Hạn hoàn thành: {dateTime(order.task.dueAt)}</p>}
             {order.task.completedAt && <p>Hoàn thành: {dateTime(order.task.completedAt)}</p>}
@@ -133,7 +132,11 @@ export function ServiceAssignment({
             {activeIntent && (
               <div role="status" className="space-y-2 break-words">
                 <p>Chưa xác nhận kết quả. Nội dung đã gửi được khóa để thử lại an toàn.</p>
-                <p>Nhân viên đã lưu: {activeIntent.assigneeId}</p>
+                <p>
+                  Nhân viên đã lưu:{' '}
+                  {staff.find((item) => item.id === activeIntent.assigneeId)?.displayName?.trim() ||
+                    'Chưa có tên nhân viên'}
+                </p>
                 <p>Hạn đã lưu: {activeIntent.dueAt ? dateTime(activeIntent.dueAt) : 'Không có'}</p>
               </div>
             )}
@@ -228,7 +231,7 @@ export function ServiceAssignment({
                 ? 'Đang phân công…'
                 : activeIntent && !editingRecovery
                   ? 'Thử lại cùng phân công'
-                  : 'Xem lại phân công'}
+                  : 'Phân công'}
             </Button>
             {confirmation && (
               <ConfirmationDialog
@@ -242,8 +245,8 @@ export function ServiceAssignment({
                 </h3>
                 <p>
                   Nhân viên:{' '}
-                  {staff.find((item) => item.id === confirmation.assigneeId)?.displayName ??
-                    confirmation.assigneeId}
+                  {staff.find((item) => item.id === confirmation.assigneeId)?.displayName?.trim() ||
+                    'Chưa có tên nhân viên'}
                 </p>
                 <p>
                   Hạn hoàn thành: {confirmation.dueAt ? dateTime(confirmation.dueAt) : 'Không có'}

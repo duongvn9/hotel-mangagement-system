@@ -21,26 +21,27 @@ export function ResolutionHistory({ task }: { task: TaskResolution }) {
       {task.blockerHistory?.map((report) => (
         <div key={report.id} className="border-l-2 border-border pl-3">
           <p className="whitespace-pre-wrap">Lý do không thể xử lý: {report.reason}</p>
-          <p>
-            Người báo: {report.reportedBy} · {taskDate(report.reportedAt)}
-          </p>
+          <p>Thời điểm báo: {taskDate(report.reportedAt)}</p>
           {report.resolvedAt && (
             <p>
-              {report.resolution} · {report.resolvedBy} · {taskDate(report.resolvedAt)}
+              {report.resolution === 'CONTINUED'
+                ? 'Đã tiếp tục xử lý'
+                : report.resolution === 'REASSIGNED'
+                  ? 'Đã phân công lại'
+                  : 'Đã xem xét báo cáo'}{' '}
+              · {taskDate(report.resolvedAt)}
             </p>
           )}
         </div>
       ))}
       {task.continuationHistory?.map((entry, index) => (
         <p key={`${entry.at}:${index}`} className="whitespace-pre-wrap">
-          Tiếp tục: {entry.actorId} · {taskDate(entry.at)} · Hạn: {taskDate(entry.dueAt)} ·{' '}
-          {entry.instructions}
+          Tiếp tục: {taskDate(entry.at)} · Hạn: {taskDate(entry.dueAt)} · {entry.instructions}
         </p>
       ))}
       {task.cancellation && (
         <p className="whitespace-pre-wrap">
-          Đã hủy do phân công lại: {task.cancellation.reason} · {task.cancellation.actorId} ·{' '}
-          {taskDate(task.cancellation.at)}
+          Đã hủy do phân công lại: {task.cancellation.reason} · {taskDate(task.cancellation.at)}
         </p>
       )}
     </section>

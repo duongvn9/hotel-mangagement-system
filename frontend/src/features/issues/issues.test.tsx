@@ -66,7 +66,7 @@ function send() {
   fireEvent.click(screen.getByRole('button', { name: 'Gửi báo cáo' }))
 }
 function mode(value: string) {
-  fireEvent.change(screen.getByLabelText(/Ngữ cảnh/), { target: { value } })
+  fireEvent.change(screen.getByLabelText(/Sự cố liên quan đến/), { target: { value } })
 }
 beforeEach(() => {
   vi.restoreAllMocks()
@@ -231,7 +231,7 @@ test('multiple bookings require explicit selection and reset dependent selectors
   mode('room')
   expect(screen.getByLabelText(/^Phòng/)).toHaveValue('')
   fireEvent.change(select, { target: { value: otherId } })
-  expect(screen.getByLabelText(/Ngữ cảnh/)).toHaveValue('booking')
+  expect(screen.getByLabelText(/Sự cố liên quan đến/)).toHaveValue('booking')
   expect(screen.queryByLabelText(/^Phòng/)).not.toBeInTheDocument()
   mode('room')
   expect(screen.getByLabelText(/^Phòng/)).toHaveValue('')
@@ -247,7 +247,7 @@ test.each(['room', 'service'])(
     const extra = contextMode === 'room' ? { roomId } : { serviceOrderId }
     renderPage(`?bookingId=${bookingId}&${Object.keys(extra)[0]}=${Object.values(extra)[0]}`)
     await ready()
-    expect(screen.getByLabelText(/Ngữ cảnh/)).toHaveValue(contextMode)
+    expect(screen.getByLabelText(/Sự cố liên quan đến/)).toHaveValue(contextMode)
     fill()
     send()
     await screen.findByText('Đã tiếp nhận báo cáo')
@@ -358,7 +358,7 @@ test('blocks double submission until confirmed and starts a new intent for anoth
   resolve({ data: receipt })
   await screen.findByText('Đã tiếp nhận báo cáo')
   expect(screen.getByRole('status')).toHaveTextContent('Chờ xem xét')
-  expect(screen.getByRole('status')).toHaveTextContent(receipt.id)
+  expect(screen.getByRole('status')).not.toHaveTextContent(receipt.id)
   expect(screen.getByRole('status').querySelector('dl')).toHaveClass('break-words')
   fireEvent.click(screen.getByRole('button', { name: 'Báo sự cố khác' }))
   await ready()

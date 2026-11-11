@@ -67,6 +67,7 @@ import type {
 import type { MyBookingItem } from './dto/my-bookings.dto.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import {
+  bookingCancellationEmail,
   bookingConfirmationEmail,
   type BookingEmailData,
 } from './booking-email.js';
@@ -124,6 +125,20 @@ export class BookingsService {
   /** Gửi email booking (best-effort): không bao giờ làm hỏng luồng nghiệp vụ. */
   private emailBooking(data: BookingEmailData): void {
     const input = bookingConfirmationEmail(data);
+    if (!input) return;
+    void this.notifications.send(input).catch(() => undefined);
+  }
+
+  /** Gửi email xác nhận huỷ booking cho khách (best-effort). */
+  private emailBookingCancelled(data: {
+    code: string;
+    guestName?: string;
+    guestEmail?: string;
+    checkIn: Date;
+    checkOut: Date;
+    cancelledAt: Date;
+  }): void {
+    const input = bookingCancellationEmail(data);
     if (!input) return;
     void this.notifications.send(input).catch(() => undefined);
   }
@@ -633,6 +648,26 @@ export class BookingsService {
       { booking: booking._id, isActive: true },
       { $set: { isActive: false } },
     );
+    // Đơn đã thu tiền (cọc/cuối) nay huỷ: đánh dấu các khoản thành công cần đối soát để
+    // Manager/lễ tân xử lý hoàn tiền; xuất hiện trong hàng đợi đối soát.
+    await this.payments.updateMany(
+      {
+        booking: booking._id,
+        status: PaymentStatus.Success,
+        isActive: true,
+        reconciledAt: { $exists: false },
+      },
+      { $set: { needsReconciliation: true } },
+    );
+    // Gửi email xác nhận huỷ cho khách (best-effort).
+    this.emailBookingCancelled({
+      code: booking.code,
+      guestName: booking.guestName,
+      guestEmail: booking.guestEmail,
+      checkIn: booking.checkIn,
+      checkOut: booking.checkOut,
+      cancelledAt: booking.cancelledAt,
+    });
     return {
       id: String(booking._id),
       code: booking.code,

@@ -197,6 +197,48 @@ it.each([undefined, 'not-a-date', ''])(
   },
 )
 
+it('shows named resolution actors and Vietnamese task status without operational IDs', () => {
+  mount(
+    {
+      ...issue,
+      linkedTasks: [{ ...issue.linkedTasks[0], assigneeName: 'Mai Phương' }],
+      resolutionTasks: [
+        {
+          ...issue.resolutionTasks![0],
+          assigneeName: 'Mai Phương',
+          blockerHistory: [
+            {
+              ...task.blockerHistory![0],
+              reportedByName: 'Nguyễn Văn An',
+              resolvedByName: 'Trần Hải Yến',
+              resolvedAt: task.assignedAt,
+              resolution: 'CONTINUED',
+            },
+          ],
+          continuationHistory: [
+            { actorId: 'c'.repeat(24), actorName: 'Trần Hải Yến', at: task.assignedAt },
+          ],
+          cancellation: {
+            actorId: 'd'.repeat(24),
+            actorName: 'Lê Thanh Tâm',
+            recoveryActorId: 'e'.repeat(24),
+            recoveryActorName: 'Trịnh Minh Anh',
+            reason: 'Đổi ca',
+            at: task.assignedAt,
+            requestId: 'request',
+          },
+        },
+      ],
+    },
+    'MANAGER',
+  )
+  expect(screen.getByText(/Người báo không thể xử lý: Nguyễn Văn An/)).toBeInTheDocument()
+  expect(screen.getByText(/Người tiếp tục xử lý: Trần Hải Yến/)).toBeInTheDocument()
+  expect(screen.getByText(/Người khôi phục: Trịnh Minh Anh/)).toBeInTheDocument()
+  expect(document.body.textContent).toContain('Đang xử lý')
+  expect(document.body.textContent).not.toMatch(/[a-f\d]{24}|IN_PROGRESS|ISSUE_RESOLUTION/)
+})
+
 it('continues the same task with optional trimmed instructions and deadline', async () => {
   const post = vi.spyOn(api, 'post').mockResolvedValue({ data: issue })
   mount()

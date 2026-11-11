@@ -128,6 +128,11 @@ export function ServiceOrdersPage() {
                       {order.quantity} {order.service.unit} · {money(order.amount)}
                     </p>
                     <OrderBusinessState order={order} />
+                    {order.reviewStatus === 'REJECTED' && (
+                      <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
+                        Lý do từ chối: {order.reviewReason?.trim() || 'Không có lý do từ chối.'}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       Tạo lúc: {dateTime(order.createdAt)}
                     </p>

@@ -77,7 +77,7 @@ describe('Issue review and durable assignment', () => {
   const service = new IssuesService(
     issues as unknown as Model<Issue>,
     {} as IssueContextAdapter,
-    {} as Model<Booking>,
+    { find: () => chain([]) } as unknown as Model<Booking>,
     users as unknown as Model<User>,
     tasks as unknown as TasksService,
   );

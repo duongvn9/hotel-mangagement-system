@@ -179,7 +179,8 @@ test.each([
     expect(get).toHaveBeenCalledTimes(2)
     expect(screen.getByText('Đã đóng')).toBeInTheDocument()
     expect(screen.getByText(closed.closureConclusion!)).toBeInTheDocument()
-    expect(screen.getByText(closed.closedBy!)).toBeInTheDocument()
+    expect(screen.queryByText(closed.closedBy!)).not.toBeInTheDocument()
+    expect(screen.getAllByText('Chưa có thông tin người dùng').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'Đóng sự cố' })).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   },
