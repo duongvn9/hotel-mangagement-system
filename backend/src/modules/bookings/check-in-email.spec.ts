@@ -26,6 +26,7 @@ function setup(guestEmail: string | undefined = 'alice@example.com') {
     checkOut: new Date('2026-11-11T05:00:00Z'),
     rooms: [roomId],
     rateSnapshot: [{ room: roomId, ratePerNight: 850_000 }],
+    depositAmount: 170_000,
   };
   const bookings = {
     findById: vi.fn(async () => booking),
@@ -56,6 +57,8 @@ function setup(guestEmail: string | undefined = 'alice@example.com') {
     {} as never,
     clock as never,
     { send } as never,
+    // Cọc đã được thu.
+    { exists: vi.fn(async () => ({ _id: new Types.ObjectId() })) } as never,
   );
   return { sut, send, bookings };
 }

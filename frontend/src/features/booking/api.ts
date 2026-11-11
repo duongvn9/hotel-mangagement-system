@@ -343,6 +343,10 @@ export interface BookingListItem {
   createdAt: string
   /** Booking do nhân viên tạo tại quầy (UC08). */
   walkIn: boolean
+  /** Tiền cọc cần thu (VND); chỉ có trong danh sách đến/đi trong ngày. */
+  depositAmount?: number
+  /** Đã có khoản cọc thành công; chỉ có trong danh sách đến/đi trong ngày. */
+  depositPaid?: boolean
 }
 
 export interface BookingListPage {
