@@ -29,6 +29,7 @@ import {
   listReconciliation,
   reconcilePayment,
   recordCashPayment,
+  resolveBookingCode,
   searchGuests,
   searchAvailability,
   submitBookingDetails,
@@ -119,6 +120,10 @@ export function useSubmitBookingDetails() {
 
 export function useUpdateHoldRooms() {
   return useMutation({ mutationFn: updateHoldRooms })
+}
+
+export function useResolveBookingCode() {
+  return useMutation({ mutationFn: (code: string) => resolveBookingCode(code) })
 }
 
 /**

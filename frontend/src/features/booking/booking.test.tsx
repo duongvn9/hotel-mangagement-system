@@ -943,20 +943,37 @@ describe('BookingDetailPage (server-authoritative)', () => {
 })
 
 describe('LookupBookingPage', () => {
-  it('navigates to booking detail on submit', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('resolves the booking code and opens the booking detail', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/by-code/BK456') return { data: { id: 'b123' } }
+      if (url === '/bookings/b123') return { data: { ...booking, id: 'b123', code: 'BK456' } }
+      if (url === '/bookings/b123/summary')
+        return { data: summaryFor({ ...booking, id: 'b123', code: 'BK456' }) }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
     const { router } = renderWithAuth(bookingRoutes, { path: '/booking/lookup' })
     expect(screen.getByRole('heading', { name: 'Tra cứu đặt phòng' })).toBeInTheDocument()
+    // Không còn ô ID: chỉ nhập mã booking (vé).
+    expect(screen.queryByLabelText(/Mã định danh booking/i)).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText(/Mã định danh booking/i), {
-      target: { value: 'b123' },
-    })
-    fireEvent.change(screen.getByLabelText(/Mã booking/i), {
-      target: { value: 'BK456' },
-    })
+    fireEvent.change(screen.getByLabelText(/Mã booking/i), { target: { value: 'BK456' } })
     fireEvent.click(screen.getByRole('button', { name: 'Mở booking' }))
 
-    expect(router.state.location.pathname).toBe('/booking/b123')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/booking/b123'))
     expect(router.state.location.search).toBe('?code=BK456')
+  })
+
+  it('shows an error when the booking code is not found', async () => {
+    vi.spyOn(api, 'get').mockRejectedValue(new Error('Booking not found for this code'))
+
+    renderWithAuth(bookingRoutes, { path: '/booking/lookup' })
+    fireEvent.change(screen.getByLabelText(/Mã booking/i), { target: { value: 'BKNOPE' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Mở booking' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Không tìm thấy đơn|not found/i)
   })
 })
 

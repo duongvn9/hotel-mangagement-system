@@ -177,6 +177,16 @@ export class BookingsController {
     return this.bookings.createWalkIn(dto, user);
   }
 
+  @Get('by-code/:code')
+  @Public()
+  @ApiOperation({
+    summary: 'Resolve a booking id from its booking code (for guest lookup)',
+  })
+  @ApiOkResponse({ description: 'The booking id for this code' })
+  resolveByCode(@Param('code') code: string) {
+    return this.bookings.resolveByCode(code);
+  }
+
   @Get(':id')
   @Public()
   @ApiOperation({

@@ -390,3 +390,48 @@ describe('updateHoldRooms', () => {
     ).rejects.toThrow('not awaiting room selection');
   });
 });
+
+describe('resolveByCode', () => {
+  const makeService = (found: unknown) => {
+    const bookings = {
+      findOne: vi
+        .fn()
+        .mockReturnValue({ select: vi.fn().mockResolvedValue(found) }),
+    };
+    const service = new BookingsService(
+      bookings as unknown as Model<Booking>,
+      {} as Model<RoomHold>,
+      {} as Model<Room>,
+      { now: () => new Date() } as AvailabilityClock,
+      {} as Model<PaymentTransaction>,
+      {} as never,
+      {} as never,
+    );
+    return { service, bookings };
+  };
+
+  it('returns the id for an existing code (trimmed and uppercased)', async () => {
+    const id = new Types.ObjectId();
+    const { service, bookings } = makeService({ _id: id });
+    expect(await service.resolveByCode('  bk456  ')).toEqual({
+      id: String(id),
+    });
+    expect(bookings.findOne).toHaveBeenCalledWith({
+      code: 'BK456',
+      isActive: true,
+    });
+  });
+
+  it('rejects a malformed code before querying', async () => {
+    const { service, bookings } = makeService({ _id: new Types.ObjectId() });
+    await expect(service.resolveByCode('!!')).rejects.toThrow(
+      'Invalid booking code',
+    );
+    expect(bookings.findOne).not.toHaveBeenCalled();
+  });
+
+  it('throws when no booking matches the code', async () => {
+    const { service } = makeService(null);
+    await expect(service.resolveByCode('BKZZZ9')).rejects.toThrow('not found');
+  });
+});

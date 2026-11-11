@@ -161,6 +161,11 @@ export async function updateHoldRooms(input: UpdateHoldRoomsInput): Promise<Held
   return (await api.post<HeldBooking>('/bookings/hold/rooms', input)).data
 }
 
+/** Tra ObjectId của đơn theo mã booking (vé) — để khách vãng lai mở đơn chỉ bằng mã. */
+export async function resolveBookingCode(code: string): Promise<{ id: string }> {
+  return (await api.get<{ id: string }>(`/bookings/by-code/${encodeURIComponent(code)}`)).data
+}
+
 /** Dịch vụ khách chọn kèm khi đặt; tự sinh ServiceOrder khi booking xác nhận. */
 export interface ServiceSelectionInput {
   serviceId: string

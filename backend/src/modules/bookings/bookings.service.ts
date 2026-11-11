@@ -1122,6 +1122,24 @@ export class BookingsService {
     return await this.holdResponse(booking, hold);
   }
 
+  /**
+   * Tra ObjectId của một booking theo mã booking (vé) khách nhận qua email — để khách vãng lai
+   * mở đơn mà không cần biết ObjectId. Có mã hợp lệ là đủ; quyền đọc/thao tác vẫn kiểm ở bước sau.
+   */
+  async resolveByCode(code: string) {
+    const trimmed = (code ?? '').trim().toUpperCase();
+    if (!/^[A-Z0-9-]{4,40}$/.test(trimmed)) {
+      throw new BadRequestException('Invalid booking code');
+    }
+    const booking = await this.bookings
+      .findOne({ code: trimmed, isActive: true })
+      .select('_id');
+    if (!booking) {
+      throw new NotFoundException('Booking not found for this code');
+    }
+    return { id: String(booking._id) };
+  }
+
   /** Đọc authoritative một booking + deadline thật từ server (thay localStorage). */
   async getBooking(
     id: string,
