@@ -182,6 +182,36 @@ describe('SearchRoomsPage', () => {
       )
     })
 
+    it('carries the dates the guest picked into the room cards, not the default ones', async () => {
+      mockCatalog()
+      renderWithAuth(bookingRoutes, { path: '/search' })
+      await screen.findByRole('heading', { name: 'Standard' })
+
+      // Tháng sau tháng hiện tại luôn nằm trong lịch hai tháng.
+      const target = new Date()
+      target.setDate(1)
+      target.setMonth(target.getMonth() + 1)
+      const monthNumber = target.getMonth() + 1
+      const dayButton = async (n: number) =>
+        (
+          await screen.findAllByRole('button', {
+            name: new RegExp(`\\b${n} tháng ${monthNumber}\\b`),
+          })
+        )[0]
+
+      fireEvent.click(screen.getByRole('button', { name: /Nhận phòng/ }))
+      fireEvent.click(await dayButton(20))
+      fireEvent.click(await dayButton(23))
+
+      const month = String(monthNumber).padStart(2, '0')
+      const year = target.getFullYear()
+      const expected = `checkIn=${year}-${month}-20&checkOut=${year}-${month}-23`
+      expect(screen.getAllByRole('link', { name: 'Xem phòng trống' })[0]).toHaveAttribute(
+        'href',
+        expect.stringContaining(expected),
+      )
+    })
+
     it('lists the cheapest room type first', async () => {
       mockCatalog()
       renderWithAuth(bookingRoutes, { path: '/search' })
