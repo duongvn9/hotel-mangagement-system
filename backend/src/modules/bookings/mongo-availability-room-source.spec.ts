@@ -55,6 +55,59 @@ function build(rooms: unknown, roomTypes: unknown) {
 }
 
 describe('MongoAvailabilityRoomSource filters', () => {
+  it('populates and maps current public beds, excluding inactive and broken references', async () => {
+    const bedId = new Types.ObjectId();
+    const row = roomRow(new Types.ObjectId());
+    const query = roomChain([
+      {
+        ...row,
+        roomType: {
+          ...row.roomType,
+          beds: [
+            {
+              bedType: {
+                _id: bedId,
+                name: 'Giường đôi cập nhật',
+                isActive: true,
+              },
+              quantity: 2,
+            },
+            {
+              bedType: {
+                _id: new Types.ObjectId(),
+                name: 'Inactive',
+                isActive: false,
+              },
+              quantity: 1,
+            },
+            { bedType: null, quantity: 1 },
+          ],
+        },
+      },
+      roomRow(new Types.ObjectId()),
+    ]);
+    const result = await build(
+      { find: vi.fn().mockReturnValue(query) },
+      {},
+    ).findCandidates({
+      ...stay,
+      guests: 1,
+    });
+    expect(query.populate).toHaveBeenCalledWith({
+      path: 'roomType',
+      select: 'name images basePrice adultCapacity childCapacity isActive beds',
+      populate: { path: 'beds.bedType', select: 'name isActive' },
+    });
+    expect(result[0]).toHaveProperty('beds', [
+      {
+        bedTypeId: String(bedId),
+        bedTypeName: 'Giường đôi cập nhật',
+        quantity: 2,
+      },
+    ]);
+    expect(result[1]).toHaveProperty('beds', []);
+  });
+
   it('skips the room-type query when no room-type filter is present', async () => {
     const rooms = { find: vi.fn().mockReturnValue(roomChain([])) };
     const roomTypes = { find: vi.fn() };

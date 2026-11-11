@@ -20,7 +20,6 @@ import { nightsBetween } from '../utils'
 
 interface RoomTypeMeta {
   size: number
-  bed: string
   description: string
   amenities: string[]
 }
@@ -28,27 +27,23 @@ interface RoomTypeMeta {
 const ROOM_TYPE_META: Record<string, RoomTypeMeta> = {
   standard: {
     size: 28,
-    bed: '2 giường đơn',
     description:
       'Phòng hai giường yên tĩnh, ngập ánh sáng nhìn ra khu vườn — lý tưởng cho bạn bè hoặc đồng nghiệp.',
     amenities: ['Wi-Fi', 'Điều hoà', 'Sen mưa', 'Bàn làm việc'],
   },
   deluxe: {
     size: 36,
-    bed: '1 giường King',
     description: 'Ốp gỗ sồi, chất liệu lanh và vách kính kịch trần đón trọn vịnh lúc bình minh.',
     amenities: ['Wi-Fi', 'Hướng biển', 'Minibar', 'Bồn tắm', 'TV thông minh'],
   },
   family: {
     size: 44,
-    bed: '1 giường King + ghế dài',
     description:
       'Không gian rộng rãi cho gia đình với ghế dài đọc sách và chỗ ngồi bên cửa sổ nhìn ra vườn.',
     amenities: ['Wi-Fi', 'Hướng vườn', 'Minibar', 'Tiện nghi cho trẻ em', 'Bồn tắm'],
   },
   suite: {
     size: 68,
-    bed: '1 giường King',
     description:
       'Phòng khách riêng, ban công riêng và chi tiết đồng thau — hạng phòng được yêu thích nhất.',
     amenities: [
@@ -72,8 +67,6 @@ function getRoomTypeMeta(name: string, capacity: number): RoomTypeMeta {
   }
   return {
     size: capacity >= 4 ? 44 : capacity >= 3 ? 36 : 28,
-    bed:
-      capacity >= 4 ? '1 giường King + ghế dài' : capacity >= 2 ? '1 giường King' : '1 giường đơn',
     description: 'Phòng tiện nghi, thiết kế hiện đại và ngập tràn ánh sáng tự nhiên.',
     amenities: ['Wi-Fi', 'Điều hoà', 'Sen mưa', 'Bàn làm việc'],
   }
@@ -113,8 +106,8 @@ interface TypeGroup {
   meta: RoomTypeMeta
 }
 
-const bedLabel = (beds: RoomTypeBedSummary[] | undefined, fallback: string): string =>
-  beds?.length ? beds.map((bed) => `${bed.quantity} ${bed.bedTypeName}`).join(', ') : fallback
+const bedLabel = (beds: RoomTypeBedSummary[]): string =>
+  beds.map((bed) => `${bed.quantity} ${bed.bedTypeName}`).join(', ')
 
 /** UC05 — Search Rooms. Guest và Customer đều dùng được (màn công khai). */
 export function SearchRoomsPage() {
@@ -133,8 +126,6 @@ export function SearchRoomsPage() {
   // Bộ lọc nâng cao (gửi lên server để thu hẹp theo loại phòng).
   const [bedTypeIds, setBedTypeIds] = useState<string[]>([])
   const [amenityIds, setAmenityIds] = useState<string[]>([])
-  const [adults, setAdults] = useState(0)
-  const [children, setChildren] = useState(0)
   const filterOptions = useSearchFilters()
   const bedFilterOptions = Array.isArray(filterOptions.data?.bedTypes)
     ? filterOptions.data.bedTypes
@@ -146,8 +137,6 @@ export function SearchRoomsPage() {
   const serverFilters: RoomTypeSearchFilters = {
     ...(bedTypeIds.length ? { bedTypeIds } : {}),
     ...(amenityIds.length ? { amenityIds } : {}),
-    ...(adults > 0 ? { adults } : {}),
-    ...(children > 0 ? { children } : {}),
   }
   const toggleId = (setList: (updater: (prev: string[]) => string[]) => void, id: string) =>
     setList((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
@@ -191,6 +180,7 @@ export function SearchRoomsPage() {
           pricePerNight: rooms[0]?.pricePerNight ?? 0,
           capacity,
           rooms,
+          beds: rooms[0]?.beds,
           meta: getRoomTypeMeta(name, capacity),
         }
       })
@@ -321,66 +311,6 @@ export function SearchRoomsPage() {
                   {k === 'price' ? 'Giá thấp nhất' : 'Rộng nhất'}
                 </button>
               ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="mb-2 text-sm font-semibold">Sức chứa</div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Người lớn</span>
-                <div className="flex items-center gap-1" role="group" aria-label="Người lớn">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="size-8 rounded-full p-0"
-                    aria-label="Bớt người lớn"
-                    disabled={adults === 0}
-                    onClick={() => setAdults((v) => Math.max(0, v - 1))}
-                  >
-                    <Minus className="size-4" />
-                  </Button>
-                  <span className="w-6 text-center tabular-nums" aria-live="polite">
-                    {adults}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="size-8 rounded-full p-0"
-                    aria-label="Thêm người lớn"
-                    onClick={() => setAdults((v) => v + 1)}
-                  >
-                    <Plus className="size-4" />
-                  </Button>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Trẻ em</span>
-                <div className="flex items-center gap-1" role="group" aria-label="Trẻ em">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="size-8 rounded-full p-0"
-                    aria-label="Bớt trẻ em"
-                    disabled={children === 0}
-                    onClick={() => setChildren((v) => Math.max(0, v - 1))}
-                  >
-                    <Minus className="size-4" />
-                  </Button>
-                  <span className="w-6 text-center tabular-nums" aria-live="polite">
-                    {children}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="size-8 rounded-full p-0"
-                    aria-label="Thêm trẻ em"
-                    onClick={() => setChildren((v) => v + 1)}
-                  >
-                    <Plus className="size-4" />
-                  </Button>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -521,10 +451,12 @@ export function SearchRoomsPage() {
                             <Maximize2 className="size-3.5" />
                             {group.meta.size} m²
                           </span>
-                          <span className="flex items-center gap-1">
-                            <BedDouble className="size-3.5" />
-                            {bedLabel(group.beds, group.meta.bed)}
-                          </span>
+                          {group.beds?.length ? (
+                            <span className="flex items-center gap-1">
+                              <BedDouble className="size-3.5" />
+                              {bedLabel(group.beds)}
+                            </span>
+                          ) : null}
                           <span className="flex items-center gap-1">
                             <Users className="size-3.5" />
                             Tối đa {group.capacity}
@@ -601,7 +533,7 @@ export function SearchRoomsPage() {
                 Đã chọn {selectedRoomIds.length} phòng · {nights} đêm · tối đa {selectedCapacity}{' '}
                 khách
               </p>
-              <p className="font-display text-2xl font-semibold text-foreground">
+              <p className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">
                 Tạm tính {vnd(estimatedTotal)}
               </p>
               {underCapacity ? (

@@ -9,6 +9,7 @@ import { api } from '@/lib/api-client'
 /** Một phòng còn trống trả từ UC05; không lộ booking/customer. */
 export interface AvailableRoom {
   images?: string[]
+  beds?: RoomTypeBedSummary[]
   id: string
   roomTypeId: string
   capacity: number

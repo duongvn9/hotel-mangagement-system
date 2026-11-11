@@ -5,6 +5,7 @@ import { RoomStatus } from '../../common/constants/room-status.enum.js';
 import { Room } from '../rooms/schemas/room.schema.js';
 import { RoomType } from '../room-types/schemas/room-type.schema.js';
 import { AvailabilityRoomSource } from './availability.adapters.js';
+import { publicBeds, type PopulatedBed } from './room-type-overview.service.js';
 import { hasRoomTypeFilter, roomTypeFilter } from './room-type-filter.js';
 import type {
   AvailabilityQuery,
@@ -16,6 +17,7 @@ type PopulatedRoomType = {
   _id: Types.ObjectId;
   name: string;
   images?: string[];
+  beds?: PopulatedBed[];
   basePrice: number;
   adultCapacity: number;
   childCapacity: number;
@@ -66,10 +68,12 @@ export class MongoAvailabilityRoomSource extends AvailabilityRoomSource {
     const rows = await this.rooms
       .find(filter)
       .select('roomType status isActive')
-      .populate<{ roomType: PopulatedRoomType }>(
-        'roomType',
-        'name images basePrice adultCapacity childCapacity isActive',
-      )
+      .populate<{ roomType: PopulatedRoomType }>({
+        path: 'roomType',
+        select:
+          'name images basePrice adultCapacity childCapacity isActive beds',
+        populate: { path: 'beds.bedType', select: 'name isActive' },
+      })
       .lean()
       .exec();
 
@@ -82,6 +86,7 @@ export class MongoAvailabilityRoomSource extends AvailabilityRoomSource {
           roomTypeId: String(roomType._id),
           roomTypeName: roomType.name,
           images: roomType.images ?? [],
+          beds: publicBeds(roomType.beds),
           pricePerNight: roomType.basePrice,
           capacity: roomType.adultCapacity + roomType.childCapacity,
           isActive: row.isActive,

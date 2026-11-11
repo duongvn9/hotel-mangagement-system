@@ -5,6 +5,8 @@ import {
 } from '../../common/constants/booking-status.enum.js';
 import { toBusinessDate } from '../../common/database/conventions.js';
 
+import type { RoomTypeBedSummary } from './dto/room-type-overview.dto.js';
+
 export interface AvailabilityQuery {
   checkIn: Date | string;
   checkOut: Date | string;
@@ -30,6 +32,7 @@ export interface AvailableRoom {
   /** Tên loại phòng, để hiển thị cho khách (có khi nguồn phòng cung cấp). */
   roomTypeName?: string;
   images?: string[];
+  beds?: RoomTypeBedSummary[];
   /** Đơn giá mỗi đêm của loại phòng (VND). */
   pricePerNight?: number;
 }
@@ -180,6 +183,7 @@ export function calculateAvailability(
       roomTypeId: room.roomTypeId,
       capacity: room.capacity,
       ...(room.images !== undefined ? { images: room.images } : {}),
+      ...(room.beds !== undefined ? { beds: room.beds } : {}),
       // Chỉ kèm khi nguồn phòng cung cấp, giữ nguyên shape tối thiểu cho các stub/test.
       ...(room.roomTypeName !== undefined
         ? { roomTypeName: room.roomTypeName }

@@ -130,6 +130,7 @@ describe('Public room type overview (e2e)', () => {
           childCapacity: 1,
           pricePerNight: 1500000,
           images: [],
+          beds: [],
         }),
       ]);
       // Loại phòng đã ngừng kinh doanh không hiện cho khách.
@@ -151,6 +152,7 @@ describe('Public room type overview (e2e)', () => {
       expect(Object.keys(item).sort()).toEqual(
         [
           'adultCapacity',
+          'beds',
           'capacity',
           'childCapacity',
           'description',

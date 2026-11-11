@@ -41,6 +41,20 @@ const run = (
 ) => calculateAvailability(query, rooms, bookings, holds, now);
 
 describe('availability core', () => {
+  it('preserves public bed configuration when supplied by the room source', () => {
+    const beds = [
+      { bedTypeId: 'bed-1', bedTypeName: 'Giường đôi', quantity: 1 },
+      { bedTypeId: 'bed-2', bedTypeName: 'Giường đơn', quantity: 2 },
+    ];
+    expect(run([], [], [{ ...room, beds }])[0]).toEqual({
+      id: room.id,
+      roomTypeId: room.roomTypeId,
+      capacity: room.capacity,
+      beds,
+    });
+    expect(run([], [], [{ ...room, beds: [] }])[0]).toHaveProperty('beds', []);
+  });
+
   it('returns safe fresh results with no reservations', () => {
     expect(run()).toEqual([
       { id: room.id, roomTypeId: room.roomTypeId, capacity: 2 },

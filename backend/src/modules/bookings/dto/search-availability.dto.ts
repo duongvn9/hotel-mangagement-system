@@ -9,6 +9,7 @@ import {
   Matches,
   Min,
 } from 'class-validator';
+import { RoomTypeBedSummary } from './room-type-overview.dto.js';
 
 /** Chấp nhận `?x=a&x=b` hoặc `?x=a,b`; bỏ phần tử rỗng. */
 const toIdArray = ({ value }: { value: unknown }) =>
@@ -111,6 +112,9 @@ export class AvailableRoomResponse {
 
   @ApiPropertyOptional({ description: 'Tên loại phòng để hiển thị' })
   roomTypeName?: string;
+
+  @ApiPropertyOptional({ type: [RoomTypeBedSummary] })
+  beds?: RoomTypeBedSummary[];
 
   @ApiPropertyOptional({ description: 'Đơn giá mỗi đêm (VND)' })
   pricePerNight?: number;

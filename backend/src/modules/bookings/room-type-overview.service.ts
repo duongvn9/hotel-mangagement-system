@@ -19,13 +19,13 @@ type PopulatedAmenity = {
   isActive?: boolean;
 } | null;
 
-type PopulatedBed = {
+export type PopulatedBed = {
   bedType: { _id: Types.ObjectId; name: string; isActive?: boolean } | null;
   quantity: number;
 };
 
 /** Cấu hình giường công khai: chỉ loại giường còn hoạt động, bỏ tham chiếu hỏng. */
-function publicBeds(beds?: PopulatedBed[]) {
+export function publicBeds(beds?: PopulatedBed[]) {
   return (beds ?? [])
     .filter(
       (

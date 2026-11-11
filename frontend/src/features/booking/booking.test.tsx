@@ -107,6 +107,60 @@ const availableRooms: AvailableRoom[] = [
 describe('SearchRoomsPage', () => {
   beforeEach(() => localStorage.clear())
 
+  it.each(['/search', '/search?checkIn=2099-01-10&checkOut=2099-01-12&guests=2'])(
+    'shows actual bed configuration without advanced occupancy controls at %s',
+    async (path) => {
+      const beds = [
+        { bedTypeId: 'bed-1', bedTypeName: 'Giường đôi cập nhật', quantity: 1 },
+        { bedTypeId: 'bed-2', bedTypeName: 'Giường đơn bổ sung', quantity: 2 },
+      ]
+      vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+        if (url === '/availability/filters')
+          return { data: { bedTypes: [], amenities: [], priceRange: { min: 0, max: 0 } } }
+        if (url === '/availability/room-types')
+          return {
+            data: [{ id: 'type1', name: 'Standard', capacity: 3, pricePerNight: 850_000, beds }],
+          }
+        if (url === '/availability')
+          return { data: [{ ...availableRooms[0], roomTypeName: 'Standard', beds }] }
+        throw new Error(`unexpected GET ${url}`)
+      })
+      renderWithAuth(bookingRoutes, { path })
+      await screen.findByRole('heading', { name: 'Standard' })
+      expect(screen.getByText('1 Giường đôi cập nhật, 2 Giường đơn bổ sung')).toBeInTheDocument()
+      expect(screen.queryByText('2 giường đơn')).not.toBeInTheDocument()
+      expect(screen.queryByText('Sức chứa')).not.toBeInTheDocument()
+      expect(screen.queryByRole('group', { name: 'Người lớn' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('group', { name: 'Trẻ em' })).not.toBeInTheDocument()
+      const search = screen.getByRole('search', { name: 'Tìm phòng trống' })
+      expect(within(search).getByRole('combobox')).toHaveTextContent('2 khách')
+    },
+  )
+
+  it.each([
+    ['/search', undefined],
+    ['/search', []],
+    ['/search?checkIn=2099-01-10&checkOut=2099-01-12&guests=2', undefined],
+    ['/search?checkIn=2099-01-10&checkOut=2099-01-12&guests=2', []],
+  ])('hides missing or empty bed metadata at %s (%s)', async (path, beds) => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/availability/filters')
+        return { data: { bedTypes: [], amenities: [], priceRange: { min: 0, max: 0 } } }
+      if (url === '/availability/room-types')
+        return {
+          data: [{ id: 'type1', name: 'Standard', capacity: 3, pricePerNight: 850_000, beds }],
+        }
+      if (url === '/availability')
+        return { data: [{ ...availableRooms[0], roomTypeName: 'Standard', beds }] }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    const { container } = renderWithAuth(bookingRoutes, { path })
+    await screen.findByRole('heading', { name: 'Standard' })
+    expect(screen.queryByText('2 giường đơn')).not.toBeInTheDocument()
+    expect(container.querySelector('.lucide-bed-double.size-3\\.5')).not.toBeInTheDocument()
+    expect(screen.getByText('Tối đa 3')).toBeInTheDocument()
+  })
+
   it('lists available rooms by type and lets the guest proceed', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
       if (url === '/availability') return { data: availableRooms }
@@ -123,6 +177,10 @@ describe('SearchRoomsPage', () => {
     // Tăng số phòng bằng stepper -> hiện thanh tiếp tục.
     fireEvent.click(screen.getByRole('button', { name: /Thêm phòng/ }))
     expect(await screen.findByText(/Tiếp tục đặt phòng/)).toBeInTheDocument()
+    const total = screen.getByText(/^Tạm tính/)
+    expect(total).not.toHaveClass('font-display')
+    expect(total).toHaveClass('tabular-nums', 'tracking-tight')
+    expect(total).toHaveTextContent('2.000.000')
   })
 
   it('lets the guest pick several rooms of one type and caps at what is free', async () => {
