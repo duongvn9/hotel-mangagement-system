@@ -15,7 +15,7 @@ import type {
   RoomTypeSearchFilters,
   SearchAvailabilityParams,
 } from '../api'
-import { useAvailability, useRoomTypeList, useSearchFilters } from '../hooks'
+import { useAvailability, useSearchFilters } from '../hooks'
 import { nightsBetween } from '../utils'
 
 interface RoomTypeMeta {
@@ -114,9 +114,9 @@ export function SearchRoomsPage() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const urlCriteria = readCriteria(params)
-  const criteria = urlCriteria ?? defaultCriteria()
-  // Ngày và số khách khách đang chọn trong ô tìm kiếm, kể cả khi chưa bấm "Kiểm tra phòng trống".
-  const [draft, setDraft] = useState<SearchAvailabilityParams | null>(null)
+  // Keep the initial dates stable across renders so the search bar and availability request agree.
+  const [initialCriteria] = useState(defaultCriteria)
+  const criteria = urlCriteria ?? initialCriteria
 
   // Số phòng đã chọn theo loại, dùng để sang bước tạo booking.
   const [selection, setSelection] = useState<Record<string, number>>({})
@@ -141,28 +141,10 @@ export function SearchRoomsPage() {
   const toggleId = (setList: (updater: (prev: string[]) => string[]) => void, id: string) =>
     setList((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
 
-  // Chưa chọn ngày (URL không có tiêu chí): hiện mọi loại phòng, chỉ tìm phòng trống khi khách bấm tìm.
-  const browsing = urlCriteria === null
-  const availability = useAvailability(urlCriteria ? { ...urlCriteria, ...serverFilters } : null)
-  const catalog = useRoomTypeList(browsing, serverFilters)
-  const active = browsing ? catalog : availability
+  const availability = useAvailability({ ...criteria, ...serverFilters })
   const nights = nightsBetween(criteria.checkIn, criteria.checkOut)
 
   const groups = useMemo<TypeGroup[]>(() => {
-    if (browsing) {
-      return (catalog.data ?? [])
-        .map((type) => ({
-          roomTypeId: type.id,
-          images: type.images ?? [],
-          name: type.name,
-          pricePerNight: type.pricePerNight,
-          capacity: type.capacity,
-          rooms: [],
-          beds: type.beds,
-          meta: getRoomTypeMeta(type.name, type.capacity),
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name))
-    }
     const byType = new Map<string, AvailableRoom[]>()
     for (const room of availability.data ?? []) {
       const list = byType.get(room.roomTypeId) ?? []
@@ -185,7 +167,7 @@ export function SearchRoomsPage() {
         }
       })
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [browsing, catalog.data, availability.data])
+  }, [availability.data])
 
   const list = useMemo(() => {
     return groups
@@ -253,14 +235,8 @@ export function SearchRoomsPage() {
     <div className="mx-auto max-w-7xl px-5 py-10 lg:px-8">
       <h1 className="font-display text-5xl">Tìm phòng của bạn</h1>
       <p className="mt-2 text-muted-foreground">
-        {browsing ? (
-          'Tất cả loại phòng của khách sạn — chọn ngày để kiểm tra phòng trống.'
-        ) : (
-          <>
-            {fshort(criteria.checkIn)} — {fshort(criteria.checkOut)} · {nights} đêm ·{' '}
-            {criteria.guests} khách
-          </>
-        )}
+        {fshort(criteria.checkIn)} — {fshort(criteria.checkOut)} · {nights} đêm · {criteria.guests}{' '}
+        khách
       </p>
 
       <div className="mt-6">
@@ -272,9 +248,6 @@ export function SearchRoomsPage() {
             guests: criteria.guests,
           }}
           onSearch={handleSearch}
-          onChange={(value) =>
-            setDraft({ checkIn: value.from, checkOut: value.to, guests: value.guests })
-          }
         />
       </div>
 
@@ -365,12 +338,10 @@ export function SearchRoomsPage() {
 
         <div className="grid gap-5">
           <p className="sr-only" aria-live="polite">
-            {browsing
-              ? `${groups.length} loại phòng`
-              : `${nights} đêm · ${availability.data?.length ?? 0} phòng phù hợp`}
+            {`${nights} đêm · ${availability.data?.length ?? 0} phòng phù hợp`}
           </p>
 
-          {active.isPending && (
+          {availability.isPending && (
             <div className="grid gap-5" aria-busy="true" aria-label="Đang tìm phòng trống">
               <p role="status" className="sr-only">
                 Đang tìm phòng trống…
@@ -392,35 +363,31 @@ export function SearchRoomsPage() {
             </div>
           )}
 
-          {active.isError && (
+          {availability.isError && (
             <div
               role="alert"
               className="rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
             >
-              {getErrorMessage(active.error)}
+              {getErrorMessage(availability.error)}
             </div>
           )}
 
-          {!active.isPending && !active.isError && (
+          {!availability.isPending && !availability.isError && (
             <>
               {list.length === 0 ? (
                 <EmptyState
-                  title={browsing ? 'Hiện chưa có loại phòng nào.' : 'Không có phòng phù hợp'}
-                  body={browsing ? undefined : 'Thử giảm số khách hoặc tăng mức giá.'}
+                  title="Không có phòng phù hợp"
+                  body="Thử giảm số khách hoặc tăng mức giá."
                 />
               ) : (
                 list.map((group) => {
                   const qty = selection[group.roomTypeId] ?? 0
                   const free = group.rooms.length
-                  // Chưa tìm phòng trống thì các nút trên thẻ dùng ngày khách vừa chọn, không phải ngày mặc định.
-                  const chosen = browsing ? (draft ?? criteria) : criteria
-                  const chosenQuery = new URLSearchParams({
-                    checkIn: chosen.checkIn,
-                    checkOut: chosen.checkOut,
-                    guests: String(chosen.guests),
-                  }).toString()
-                  const detailQuery = browsing && !draft ? '' : `?${chosenQuery}`
-                  const searchQuery = chosenQuery
+                  const detailQuery = `?${new URLSearchParams({
+                    checkIn: criteria.checkIn,
+                    checkOut: criteria.checkOut,
+                    guests: String(criteria.guests),
+                  }).toString()}`
                   return (
                     <RoomCard
                       key={group.roomTypeId}
@@ -430,20 +397,18 @@ export function SearchRoomsPage() {
                       amenities={group.meta.amenities}
                       price={group.pricePerNight}
                       priceNote="/ đêm"
-                      subPrice={browsing ? undefined : `Tổng ${vnd(group.pricePerNight * nights)}`}
+                      subPrice={`Tổng ${vnd(group.pricePerNight * nights)}`}
                       badge={
-                        browsing ? undefined : (
-                          <span
-                            className={cn(
-                              'rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap',
-                              free > 0
-                                ? 'bg-success/12 text-success'
-                                : 'bg-destructive/10 text-destructive',
-                            )}
-                          >
-                            {free > 0 ? `Còn ${free} phòng` : 'Hết phòng'}
-                          </span>
-                        )
+                        <span
+                          className={cn(
+                            'rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap',
+                            free > 0
+                              ? 'bg-success/12 text-success'
+                              : 'bg-destructive/10 text-destructive',
+                          )}
+                        >
+                          {free > 0 ? `Còn ${free} phòng` : 'Hết phòng'}
+                        </span>
                       }
                       meta={
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
@@ -470,11 +435,7 @@ export function SearchRoomsPage() {
                               Chi tiết
                             </Link>
                           </Button>
-                          {browsing ? (
-                            <Button asChild className="rounded-full">
-                              <Link to={`/search?${searchQuery}`}>Xem phòng trống</Link>
-                            </Button>
-                          ) : free > 0 ? (
+                          {free > 0 ? (
                             <div
                               className="flex items-center gap-1"
                               role="group"
