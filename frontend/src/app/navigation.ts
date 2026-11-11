@@ -101,6 +101,7 @@ const NAV_BY_ROLE: Record<string, NavGroup[]> = {
         { to: '/manager/rooms', label: 'Phòng' },
         { to: '/manager/room-types', label: 'Loại phòng' },
         { to: '/manager/amenities', label: 'Tiện nghi' },
+        { to: '/manager/bed-types', label: 'Loại giường' },
         { to: '/manager/services', label: 'Dịch vụ' },
       ],
     },

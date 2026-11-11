@@ -1,24 +1,30 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { Button, Input } from '@/components/atoms'
-import { FormField } from '@/components/molecules'
+import { Alert, FormField } from '@/components/molecules'
+import { getErrorMessage } from '@/lib/api-client'
+import { useResolveBookingCode } from '../hooks'
 
 /**
- * Tra cứu đơn bằng mã cho khách vãng lai (chưa đăng nhập). Nhập mã định danh booking (ID)
- * và mã booking (vé) đã nhận qua email để mở trang chi tiết và thanh toán/huỷ.
+ * Tra cứu đơn cho khách vãng lai (chưa đăng nhập): chỉ cần nhập mã booking (vé) đã nhận qua
+ * email. Hệ thống tra ra đơn tương ứng rồi mở trang chi tiết để xem/thanh toán/huỷ.
  */
 export function LookupBookingPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const [lookupId, setLookupId] = useState(params.get('id') ?? '')
   const [lookupCode, setLookupCode] = useState(params.get('code') ?? '')
+  const resolve = useResolveBookingCode()
 
-  function openLookup(event: FormEvent) {
+  async function openLookup(event: FormEvent) {
     event.preventDefault()
-    const id = lookupId.trim()
-    if (!id) return
     const code = lookupCode.trim()
-    navigate(`/booking/${id}${code ? `?code=${encodeURIComponent(code)}` : ''}`)
+    if (!code) return
+    try {
+      const { id } = await resolve.mutateAsync(code)
+      navigate(`/booking/${id}?code=${encodeURIComponent(code)}`)
+    } catch {
+      // Lỗi hiển thị qua resolve.isError bên dưới.
+    }
   }
 
   return (
@@ -28,8 +34,8 @@ export function LookupBookingPage() {
           <p className="text-xs font-semibold tracking-widest text-primary uppercase">Đặt phòng</p>
           <h1 className="mt-2 font-display text-5xl">Tra cứu đặt phòng</h1>
           <p className="mt-3 text-muted-foreground">
-            Dành cho khách chưa đăng nhập. Nhập mã định danh booking và mã booking (vé) đã nhận qua
-            email để xem và thanh toán đơn.
+            Dành cho khách chưa đăng nhập. Nhập mã booking (vé) đã nhận qua email để xem và thanh
+            toán đơn.
           </p>
 
           <form
@@ -37,27 +43,33 @@ export function LookupBookingPage() {
             className="mt-8 grid gap-4"
             aria-label="Tra cứu booking bằng mã"
           >
-            <FormField label="Mã định danh booking (ID)" htmlFor="lookupId" required>
-              <Input
-                id="lookupId"
-                placeholder="vd: 6716..."
-                value={lookupId}
-                onChange={(event) => setLookupId(event.target.value)}
-              />
-            </FormField>
-
-            <FormField label="Mã booking (vé)" htmlFor="lookupCode">
+            <FormField label="Mã booking (vé)" htmlFor="lookupCode" required>
               <Input
                 id="lookupCode"
                 placeholder="BK..."
+                autoComplete="off"
                 value={lookupCode}
                 onChange={(event) => setLookupCode(event.target.value)}
               />
             </FormField>
 
+            {resolve.isError && (
+              <Alert tone="danger">
+                {getErrorMessage(
+                  resolve.error,
+                  'Không tìm thấy đơn với mã này. Vui lòng kiểm tra lại mã booking trong email.',
+                )}
+              </Alert>
+            )}
+
             <div className="pt-2">
-              <Button type="submit" className="rounded-full px-8">
-                Mở booking
+              <Button
+                type="submit"
+                className="rounded-full px-8"
+                disabled={!lookupCode.trim() || resolve.isPending}
+                aria-busy={resolve.isPending}
+              >
+                {resolve.isPending ? 'Đang tìm đơn…' : 'Mở booking'}
               </Button>
             </div>
           </form>

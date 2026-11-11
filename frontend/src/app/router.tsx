@@ -8,6 +8,7 @@ import { roleRoutes } from '@/features/roles/routes'
 import { roomTypeRoutes } from '@/features/room-types/routes'
 import { roomRoutes } from '@/features/rooms/routes'
 import { amenityRoutes } from '@/features/amenities/routes'
+import { bedTypeRoutes } from '@/features/bed-types/routes'
 import { serviceRoutes } from '@/features/services/routes'
 import { serviceOrderRoutes } from '@/features/service-orders/routes'
 import { taskRoutes } from '@/features/tasks/routes'
@@ -39,6 +40,7 @@ const { workspace, other } = partitionWorkspaceRoutes([
   ...roomTypeRoutes,
   ...roomRoutes,
   ...amenityRoutes,
+  ...bedTypeRoutes,
   ...serviceRoutes,
   ...serviceOrderRoutes,
   ...feedbackRoutes,

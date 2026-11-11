@@ -6,6 +6,7 @@ import { RoomType, RoomTypeSchema } from './schemas/room-type.schema.js';
 import { AmenitySchema } from '../amenities/schemas/amenity.schema.js';
 import { RoomTypesService } from './room-types.service.js';
 import type { AmenitiesService } from '../amenities/amenities.service.js';
+import type { BedTypesService } from '../bed-types/bed-types.service.js';
 
 describe('UC49 query and schema', () => {
   const RoomTypes = model<RoomType>('UC49UnitRoomType', RoomTypeSchema);
@@ -49,6 +50,44 @@ describe('UC49 query and schema', () => {
       { unique: true },
     ]);
     await expect(new Amenities({ name: '' }).validate()).rejects.toThrow();
+  });
+  it('rejects duplicate or out-of-range beds and indexes the bed reference', async () => {
+    const bedA = new Types.ObjectId();
+    const bedB = new Types.ObjectId();
+    await expect(
+      new RoomTypes({
+        ...valid,
+        beds: [
+          { bedType: bedA, quantity: 1 },
+          { bedType: bedA, quantity: 2 },
+        ],
+      }).validate(),
+    ).rejects.toThrow();
+    await expect(
+      new RoomTypes({
+        ...valid,
+        beds: [{ bedType: bedA, quantity: 0 }],
+      }).validate(),
+    ).rejects.toThrow();
+    await expect(
+      new RoomTypes({
+        ...valid,
+        beds: [{ bedType: bedA, quantity: 21 }],
+      }).validate(),
+    ).rejects.toThrow();
+    await expect(
+      new RoomTypes({
+        ...valid,
+        beds: [
+          { bedType: bedA, quantity: 2 },
+          { bedType: bedB, quantity: 1 },
+        ],
+      }).validate(),
+    ).resolves.toBeUndefined();
+    expect(RoomTypeSchema.indexes()).toContainEqual([
+      { 'beds.bedType': 1 },
+      {},
+    ]);
   });
   it('defaults and transforms supported query values', async () => {
     const query = plainToInstance(ListRoomTypesQuery, {
@@ -106,6 +145,7 @@ describe('RoomTypesService', () => {
       service: new RoomTypesService(
         modelMock as unknown as Model<RoomType>,
         {} as AmenitiesService,
+        {} as BedTypesService,
       ),
       modelMock,
       chain,

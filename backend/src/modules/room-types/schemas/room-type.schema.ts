@@ -38,9 +38,31 @@ export class RoomType {
   })
   amenities: Types.ObjectId[];
 
+  @Prop({
+    type: [
+      {
+        _id: false,
+        bedType: { type: Types.ObjectId, ref: 'BedType', required: true },
+        quantity: {
+          type: Number,
+          required: true,
+          min: 1,
+          max: 20,
+          validate: Number.isSafeInteger,
+        },
+      },
+    ],
+    default: [],
+    validate: (values: { bedType: Types.ObjectId }[]) =>
+      new Set(values.map((value) => String(value.bedType))).size ===
+      values.length,
+  })
+  beds: { bedType: Types.ObjectId; quantity: number }[];
+
   @Prop({ default: true })
   isActive: boolean;
 }
 
 export const RoomTypeSchema = SchemaFactory.createForClass(RoomType);
 RoomTypeSchema.index({ amenities: 1 });
+RoomTypeSchema.index({ 'beds.bedType': 1 });

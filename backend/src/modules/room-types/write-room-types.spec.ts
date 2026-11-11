@@ -9,6 +9,7 @@ import {
 import { RoomTypesService } from './room-types.service.js';
 import { RoomType } from './schemas/room-type.schema.js';
 import { AmenitiesService } from '../amenities/amenities.service.js';
+import { BedTypesService } from '../bed-types/bed-types.service.js';
 
 const valid = {
   name: ' Standard ',
@@ -131,13 +132,16 @@ describe('UC50 service rules', () => {
       findOneAndUpdate: vi.fn().mockReturnValue(write),
     };
     const amenities = { validateNew: vi.fn().mockResolvedValue(undefined) };
+    const bedTypes = { validateNew: vi.fn().mockResolvedValue(undefined) };
     return {
       service: new RoomTypesService(
         model as unknown as Model<RoomType>,
         amenities as unknown as AmenitiesService,
+        bedTypes as unknown as BedTypesService,
       ),
       model,
       amenities,
+      bedTypes,
       write,
     };
   }
@@ -227,6 +231,92 @@ describe('UC50 service rules', () => {
     write.exec.mockRejectedValueOnce({ code: 11000 });
     await expect(service.update(id, { name: 'Other' })).rejects.toMatchObject({
       status: 409,
+    });
+  });
+
+  describe('bed configuration', () => {
+    const bedA = '0123456789abcdef01234567';
+    const bedB = '0123456789abcdef0123abcd';
+    it('accepts a valid bed configuration', async () => {
+      expect(
+        await validate(
+          plainToInstance(CreateRoomTypeDto, {
+            ...valid,
+            beds: [
+              { bedTypeId: bedA, quantity: 2 },
+              { bedTypeId: bedB, quantity: 1 },
+            ],
+          }),
+        ),
+      ).toEqual([]);
+    });
+    it.each([
+      { beds: 'x' },
+      { beds: [{ bedTypeId: 'bad', quantity: 1 }] },
+      { beds: [{ bedTypeId: bedA.toUpperCase(), quantity: 1 }] },
+      { beds: [{ bedTypeId: bedA, quantity: 0 }] },
+      { beds: [{ bedTypeId: bedA, quantity: 21 }] },
+      { beds: [{ bedTypeId: bedA, quantity: 1.5 }] },
+      { beds: [{ bedTypeId: bedA, quantity: '1' }] },
+      { beds: [{ bedTypeId: bedA }] },
+      { beds: [{ quantity: 1 }] },
+      {
+        beds: [
+          { bedTypeId: bedA, quantity: 1 },
+          { bedTypeId: bedA, quantity: 2 },
+        ],
+      },
+    ])('rejects invalid beds %j', async (change) => {
+      expect(
+        (
+          await validate(
+            plainToInstance(CreateRoomTypeDto, { ...valid, ...change }),
+            {
+              whitelist: true,
+              forbidNonWhitelisted: true,
+            },
+          )
+        ).length,
+      ).toBeGreaterThan(0);
+    });
+    it('maps bed DTOs to stored shape and validates bed-type references on create', async () => {
+      const { service, model, bedTypes } = setup();
+      await service.create({
+        ...valid,
+        beds: [{ bedTypeId: bedA, quantity: 2 }],
+      });
+      expect(bedTypes.validateNew).toHaveBeenCalledWith([bedA]);
+      const created = model.create.mock.calls[0][0] as {
+        beds: { bedType: Types.ObjectId; quantity: number }[];
+      };
+      expect(created.beds).toHaveLength(1);
+      expect(String(created.beds[0].bedType)).toBe(bedA);
+      expect(created.beds[0].quantity).toBe(2);
+    });
+    it('maps beds into the atomic update and validates retained references', async () => {
+      const old = new Types.ObjectId();
+      const { service, model, bedTypes } = setup({
+        _id: new Types.ObjectId(id),
+        name: 'X',
+        adultCapacity: 2,
+        childCapacity: 0,
+        basePrice: 1,
+        isActive: true,
+        amenities: [],
+        beds: [{ bedType: old, quantity: 1 }],
+      } as never);
+      await service.update(id, {
+        beds: [{ bedTypeId: String(old), quantity: 3 }],
+      });
+      expect(bedTypes.validateNew).toHaveBeenCalledWith(
+        [String(old)],
+        [String(old)],
+      );
+      const update = model.findOneAndUpdate.mock.calls[0][1] as {
+        $set: { beds: { bedType: Types.ObjectId; quantity: number }[] };
+      };
+      expect(String(update.$set.beds[0].bedType)).toBe(String(old));
+      expect(update.$set.beds[0].quantity).toBe(3);
     });
   });
 });

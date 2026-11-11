@@ -7,6 +7,8 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { RoomsModule } from '../rooms/rooms.module.js';
 import { ServicesModule } from '../services/services.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
+import { AmenitiesModule } from '../amenities/amenities.module.js';
+import { BedTypesModule } from '../bed-types/bed-types.module.js';
 import {
   PaymentTransaction,
   PaymentTransactionSchema,
@@ -42,6 +44,8 @@ import { RoomStatusBoardService } from './room-status-board.service.js';
     RoomsModule,
     ServicesModule,
     NotificationsModule,
+    AmenitiesModule,
+    BedTypesModule,
     MongooseModule.forFeature([
       { name: Booking.name, schema: BookingSchema },
       { name: RoomHold.name, schema: RoomHoldSchema },
