@@ -44,3 +44,33 @@ export class RoomTypeOverviewResponse {
   @ApiProperty({ type: [RoomTypeAmenityResponse] })
   amenities: RoomTypeAmenityResponse[];
 }
+
+/** Một loại phòng trong danh sách công khai (chưa chọn ngày); không kèm tiện nghi. */
+export class RoomTypeSummaryResponse {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  name: string;
+
+  @ApiProperty({ description: 'Mô tả loại phòng' })
+  description: string;
+
+  @ApiProperty({ description: 'Số người lớn tối đa' })
+  adultCapacity: number;
+
+  @ApiProperty({ description: 'Số trẻ em tối đa' })
+  childCapacity: number;
+
+  @ApiProperty({ description: 'Sức chứa tối đa (người lớn + trẻ em)' })
+  capacity: number;
+
+  @ApiProperty({ description: 'Đơn giá mỗi đêm (VND)' })
+  pricePerNight: number;
+
+  @ApiProperty({
+    type: [String],
+    description: 'Ảnh loại phòng, ảnh đầu là ảnh đại diện',
+  })
+  images: string[];
+}
