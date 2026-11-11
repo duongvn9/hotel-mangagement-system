@@ -51,6 +51,14 @@ export async function getRoomTypeOverview(id: string): Promise<RoomTypeOverview>
   return (await api.get<RoomTypeOverview>(`/room-types/${id}/overview`)).data
 }
 
+/** Một loại phòng trong danh sách công khai khi khách chưa chọn ngày. */
+export type RoomTypeSummary = Omit<RoomTypeOverview, 'amenities'>
+
+/** Mọi loại phòng đang kinh doanh (rẻ nhất trước), không cần ngày hay đăng nhập. */
+export async function listRoomTypes(): Promise<RoomTypeSummary[]> {
+  return (await api.get<RoomTypeSummary[]>('/availability/room-types')).data
+}
+
 export interface CreateBookingInput {
   rooms: string[]
   checkIn: string

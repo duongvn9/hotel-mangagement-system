@@ -125,13 +125,103 @@ describe('SearchRoomsPage', () => {
     expect(await screen.findByText(/Tiếp tục đặt phòng/)).toBeInTheDocument()
   })
 
-  it('defaults to upcoming dates when criteria are missing from the URL', async () => {
-    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
-      if (url === '/availability') return { data: availableRooms }
-      throw new Error(`unexpected GET ${url}`)
+  describe('before any dates are chosen', () => {
+    const roomTypes = [
+      {
+        id: 'type-std',
+        name: 'Standard',
+        description: '',
+        adultCapacity: 2,
+        childCapacity: 1,
+        capacity: 3,
+        pricePerNight: 850_000,
+        images: ['/images/seeds/room-types/standard-01.jpg'],
+      },
+      {
+        id: 'type-suite',
+        name: 'Suite',
+        description: '',
+        adultCapacity: 2,
+        childCapacity: 2,
+        capacity: 4,
+        pricePerNight: 4_500_000,
+        images: [],
+      },
+    ]
+    const mockCatalog = (types = roomTypes) =>
+      vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+        if (url === '/availability/room-types') return { data: types }
+        throw new Error(`unexpected GET ${url}`)
+      })
+
+    it('shows every room type first instead of searching with default dates', async () => {
+      const get = mockCatalog()
+      renderWithAuth(bookingRoutes, { path: '/search' })
+
+      expect(await screen.findByRole('heading', { name: 'Standard' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Suite' })).toBeInTheDocument()
+      expect(screen.getByText(/Tất cả loại phòng/)).toBeInTheDocument()
+      expect(get).toHaveBeenCalledWith('/availability/room-types')
+      expect(get).not.toHaveBeenCalledWith('/availability', expect.anything())
     })
-    renderWithAuth(bookingRoutes, { path: '/search' })
-    expect(await screen.findByRole('heading', { name: 'Deluxe' })).toBeInTheDocument()
+
+    it('does not claim any availability, and sends the guest to check it', async () => {
+      mockCatalog()
+      renderWithAuth(bookingRoutes, { path: '/search' })
+      await screen.findByRole('heading', { name: 'Standard' })
+
+      expect(screen.queryByText(/Còn \d+ phòng/)).not.toBeInTheDocument()
+      expect(screen.queryByText('Hết phòng')).not.toBeInTheDocument()
+      expect(screen.queryByText(/Tiếp tục đặt phòng/)).not.toBeInTheDocument()
+      const check = screen.getAllByRole('link', { name: 'Xem phòng trống' })
+      expect(check).toHaveLength(2)
+      expect(check[0]).toHaveAttribute('href', expect.stringMatching(/^\/search\?checkIn=\d{4}-/))
+      expect(screen.getAllByRole('link', { name: 'Chi tiết' })[0]).toHaveAttribute(
+        'href',
+        expect.stringContaining('/room-types/type-std'),
+      )
+    })
+
+    it('lists the cheapest room type first', async () => {
+      mockCatalog()
+      renderWithAuth(bookingRoutes, { path: '/search' })
+      await screen.findByRole('heading', { name: 'Standard' })
+
+      const names = screen
+        .getAllByRole('heading')
+        .map((heading) => heading.textContent)
+        .filter((name) => name === 'Standard' || name === 'Suite')
+      expect(names).toEqual(['Standard', 'Suite'])
+    })
+
+    it('searches availability only after the guest asks for it', async () => {
+      const get = vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+        if (url === '/availability/room-types') return { data: roomTypes }
+        if (url === '/availability') return { data: availableRooms }
+        throw new Error(`unexpected GET ${url}`)
+      })
+      renderWithAuth(bookingRoutes, { path: '/search' })
+      await screen.findByRole('heading', { name: 'Standard' })
+      expect(get).not.toHaveBeenCalledWith('/availability', expect.anything())
+
+      fireEvent.click(screen.getByRole('button', { name: /Kiểm tra phòng trống/ }))
+
+      expect(await screen.findByRole('heading', { name: 'Deluxe' })).toBeInTheDocument()
+      expect(get).toHaveBeenCalledWith('/availability', expect.anything())
+      expect(screen.getByText(/phòng phù hợp/)).toBeInTheDocument()
+    })
+
+    it('says so when the hotel has no room type on sale', async () => {
+      mockCatalog([])
+      renderWithAuth(bookingRoutes, { path: '/search' })
+      expect(await screen.findByText('Hiện chưa có loại phòng nào.')).toBeInTheDocument()
+    })
+
+    it('shows an error when the room types cannot be loaded', async () => {
+      vi.spyOn(api, 'get').mockRejectedValue(new Error('Máy chủ bận'))
+      renderWithAuth(bookingRoutes, { path: '/search' })
+      expect(await screen.findByRole('alert')).toHaveTextContent(/Có lỗi xảy ra|Máy chủ bận/)
+    })
   })
 
   it('shows empty message when no rooms match', async () => {

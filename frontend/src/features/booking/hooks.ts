@@ -17,6 +17,7 @@ import {
   cancelPendingVnpay,
   getBookingCharges,
   getBookingSummary,
+  listRoomTypes,
   recordDeskDeposit,
   getCheckoutInspection,
   listInspectors,
@@ -53,6 +54,15 @@ export function useAvailability(params: SearchAvailabilityParams | null) {
     queryKey: ['availability', params],
     queryFn: () => searchAvailability(params as SearchAvailabilityParams),
     enabled: params !== null,
+  })
+}
+
+/** Mọi loại phòng để khách xem trước khi chọn ngày; chỉ chạy khi `enabled`. */
+export function useRoomTypeList(enabled: boolean) {
+  return useQuery({
+    queryKey: ['room-type-list'],
+    queryFn: listRoomTypes,
+    enabled,
   })
 }
 
