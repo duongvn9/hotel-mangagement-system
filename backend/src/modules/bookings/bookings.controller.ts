@@ -35,6 +35,7 @@ import {
   HoldBookingDto,
   HoldResponse,
   SubmitBookingDetailsDto,
+  UpdateHoldRoomsDto,
 } from './dto/hold-booking.dto.js';
 import {
   GuestSession,
@@ -103,6 +104,21 @@ export class BookingsController {
   @ApiConflictResponse({ description: 'Hold expired or not awaiting details' })
   submitDetails(@Body() dto: SubmitBookingDetailsDto) {
     return this.bookings.submitDetails(dto);
+  }
+
+  @Post('hold/rooms')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Adjust the rooms of a held booking in place (ROOM_HELD), re-checking availability',
+  })
+  @ApiOkResponse({ type: HoldResponse })
+  @ApiConflictResponse({
+    description: 'Hold expired, not editable, or rooms unavailable',
+  })
+  updateHoldRooms(@Body() dto: UpdateHoldRoomsDto) {
+    return this.bookings.updateHoldRooms(dto);
   }
 
   @Post()

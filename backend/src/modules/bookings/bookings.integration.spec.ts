@@ -213,3 +213,180 @@ describe('booking merge integration', () => {
     );
   });
 });
+
+describe('updateHoldRooms', () => {
+  const now = new Date('2026-10-28T00:00:00Z');
+  // find().select().lean().exec() và find().populate().lean().exec() đều trả `value`.
+  const chain = (value: unknown) => ({
+    select: () => ({ lean: () => ({ exec: () => Promise.resolve(value) }) }),
+    populate: () => ({ lean: () => ({ exec: () => Promise.resolve(value) }) }),
+  });
+
+  const build = (
+    opts: { hold?: unknown; booking?: unknown; roomRows?: unknown[] } = {},
+  ) => {
+    const bookingId = new Types.ObjectId();
+    const typeId = new Types.ObjectId();
+    const roomA = new Types.ObjectId();
+    const roomB = new Types.ObjectId();
+    const booking =
+      opts.booking === undefined
+        ? {
+            _id: bookingId,
+            code: 'BKUPD',
+            isActive: true,
+            status: BookingStatus.RoomHeld,
+            checkIn: new Date('2094-01-10T00:00:00Z'),
+            checkOut: new Date('2094-01-12T00:00:00Z'),
+            adultCount: 2,
+            childCount: 0,
+            rooms: [roomA],
+            roomTotal: 1_000_000,
+            depositAmount: 100_000,
+            rateSnapshot: [],
+            save: vi.fn(),
+          }
+        : opts.booking;
+    const hold =
+      opts.hold === undefined
+        ? {
+            _id: new Types.ObjectId(),
+            booking: bookingId,
+            holdToken: 'HOLDTOKEN_UPDATE_1',
+            isActive: true,
+            expiresAt: new Date(now.getTime() + 60_000),
+            rooms: [roomA],
+            checkIn: new Date('2094-01-10T00:00:00Z'),
+            checkOut: new Date('2094-01-12T00:00:00Z'),
+            save: vi.fn(),
+          }
+        : opts.hold;
+    const roomRows =
+      opts.roomRows ??
+      [roomA, roomB].map((id) => ({
+        _id: id,
+        isActive: true,
+        status: 'AVAILABLE',
+        roomType: {
+          _id: typeId,
+          name: 'Deluxe',
+          basePrice: 1_000_000,
+          adultCapacity: 2,
+          childCapacity: 1,
+          isActive: true,
+        },
+      }));
+    const holds = {
+      findOne: vi.fn().mockResolvedValue(hold),
+      find: vi.fn().mockReturnValue(chain([])),
+    };
+    const bookings = {
+      findById: vi.fn().mockResolvedValue(booking),
+      find: vi.fn().mockReturnValue(chain([])),
+    };
+    const rooms = { find: vi.fn().mockReturnValue(chain(roomRows)) };
+    const service = new BookingsService(
+      bookings as unknown as Model<Booking>,
+      holds as unknown as Model<RoomHold>,
+      rooms as unknown as Model<Room>,
+      { now: () => now } as AvailabilityClock,
+      {} as Model<PaymentTransaction>,
+      {} as never,
+      { send: vi.fn() } as never,
+    );
+    return { service, booking, hold, roomA, roomB };
+  };
+
+  it('re-prices and saves the new rooms in place (no new hold)', async () => {
+    const { service, booking, hold, roomA, roomB } = build() as {
+      service: BookingsService;
+      booking: {
+        save: ReturnType<typeof vi.fn>;
+        rooms: unknown[];
+        roomTotal: number;
+        depositAmount: number;
+      };
+      hold: { save: ReturnType<typeof vi.fn> };
+      roomA: Types.ObjectId;
+      roomB: Types.ObjectId;
+    };
+    const result = await service.updateHoldRooms({
+      holdToken: 'HOLDTOKEN_UPDATE_1',
+      rooms: [String(roomA), String(roomB)],
+    });
+    expect(hold.save).toHaveBeenCalled();
+    expect(booking.save).toHaveBeenCalled();
+    expect(booking.rooms).toHaveLength(2);
+    expect(booking.roomTotal).toBe(4_000_000); // 2 phòng × 1tr × 2 đêm
+    expect(booking.depositAmount).toBe(400_000);
+    expect(result.rooms).toEqual([String(roomA), String(roomB)]);
+    expect(result.roomTypes[0].roomIds).toHaveLength(2);
+  });
+
+  it('rejects a duplicate room in the request', async () => {
+    const { service, roomA } = build();
+    await expect(
+      service.updateHoldRooms({
+        holdToken: 'HOLDTOKEN_UPDATE_1',
+        rooms: [String(roomA), String(roomA)],
+      }),
+    ).rejects.toThrow('Duplicate');
+  });
+
+  it('rejects when the hold is no longer active', async () => {
+    const { service } = build({ hold: null });
+    await expect(
+      service.updateHoldRooms({
+        holdToken: 'HOLDTOKEN_UPDATE_1',
+        rooms: [String(new Types.ObjectId())],
+      }),
+    ).rejects.toThrow('Hold not found');
+  });
+
+  it('expires and rejects when the hold window has passed', async () => {
+    const booking = {
+      _id: new Types.ObjectId(),
+      isActive: true,
+      status: BookingStatus.RoomHeld,
+      save: vi.fn(),
+    };
+    const hold = {
+      _id: new Types.ObjectId(),
+      booking: booking._id,
+      isActive: true,
+      expiresAt: new Date(now.getTime() - 1_000),
+      save: vi.fn(),
+    };
+    const { service } = build({ hold, booking });
+    await expect(
+      service.updateHoldRooms({
+        holdToken: 'HOLDTOKEN_UPDATE_1',
+        rooms: [String(new Types.ObjectId())],
+      }),
+    ).rejects.toThrow('expired');
+    expect(booking.status).toBe(BookingStatus.Expired);
+  });
+
+  it('rejects editing once the booking has left ROOM_HELD', async () => {
+    const booking = {
+      _id: new Types.ObjectId(),
+      isActive: true,
+      status: BookingStatus.PendingDeposit,
+      save: vi.fn(),
+    };
+    const hold = {
+      _id: new Types.ObjectId(),
+      booking: booking._id,
+      isActive: true,
+      expiresAt: new Date(now.getTime() + 60_000),
+      save: vi.fn(),
+    };
+    const { service } = build({ hold, booking });
+    await expect(
+      service.updateHoldRooms({
+        holdToken: 'HOLDTOKEN_UPDATE_1',
+        rooms: [String(new Types.ObjectId())],
+      }),
+    ).rejects.toThrow('not awaiting room selection');
+  });
+});
