@@ -113,6 +113,8 @@ export function SearchRoomsPage() {
   const navigate = useNavigate()
   const urlCriteria = readCriteria(params)
   const criteria = urlCriteria ?? defaultCriteria()
+  // Ngày và số khách khách đang chọn trong ô tìm kiếm, kể cả khi chưa bấm "Kiểm tra phòng trống".
+  const [draft, setDraft] = useState<SearchAvailabilityParams | null>(null)
 
   // Số phòng đã chọn theo loại, dùng để sang bước tạo booking.
   const [selection, setSelection] = useState<Record<string, number>>({})
@@ -232,6 +234,9 @@ export function SearchRoomsPage() {
             guests: criteria.guests,
           }}
           onSearch={handleSearch}
+          onChange={(value) =>
+            setDraft({ checkIn: value.from, checkOut: value.to, guests: value.guests })
+          }
         />
       </div>
 
@@ -321,14 +326,15 @@ export function SearchRoomsPage() {
                 list.map((group) => {
                   const qty = selection[group.roomTypeId] ?? 0
                   const free = group.rooms.length
-                  const detailQuery = browsing
-                    ? ''
-                    : `?checkIn=${criteria.checkIn}&checkOut=${criteria.checkOut}&guests=${criteria.guests}`
-                  const searchQuery = new URLSearchParams({
-                    checkIn: criteria.checkIn,
-                    checkOut: criteria.checkOut,
-                    guests: String(criteria.guests),
+                  // Chưa tìm phòng trống thì các nút trên thẻ dùng ngày khách vừa chọn, không phải ngày mặc định.
+                  const chosen = browsing ? (draft ?? criteria) : criteria
+                  const chosenQuery = new URLSearchParams({
+                    checkIn: chosen.checkIn,
+                    checkOut: chosen.checkOut,
+                    guests: String(chosen.guests),
                   }).toString()
+                  const detailQuery = browsing && !draft ? '' : `?${chosenQuery}`
+                  const searchQuery = chosenQuery
                   return (
                     <RoomCard
                       key={group.roomTypeId}

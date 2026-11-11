@@ -210,6 +210,39 @@ describe('SearchBar', () => {
     expect(onSearch).toHaveBeenCalledWith({ from: '2026-11-10', to: '2026-11-12', guests: 2 })
   })
 
+  it('reports the guest count as soon as it changes, before anyone searches', async () => {
+    // jsdom không có scrollIntoView, Radix Select cần nó khi mở danh sách.
+    Element.prototype.scrollIntoView = vi.fn()
+    const onChange = vi.fn()
+    render(
+      <SearchBar
+        initial={{ from: '2026-11-10', to: '2026-11-12', guests: 2 }}
+        onSearch={vi.fn()}
+        onChange={onChange}
+      />,
+    )
+    fireEvent.click(screen.getByRole('combobox'))
+    fireEvent.click(await screen.findByRole('option', { name: '4 khách' }))
+    expect(onChange).toHaveBeenLastCalledWith({ from: '2026-11-10', to: '2026-11-12', guests: 4 })
+  })
+
+  it('reports the chosen dates as soon as they change, before anyone searches', async () => {
+    const onChange = vi.fn()
+    render(
+      <SearchBar
+        initial={{ from: '2026-11-10', to: '2026-11-12', guests: 2 }}
+        onSearch={vi.fn()}
+        onChange={onChange}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Nhận phòng/ }))
+    const day = (n: number) => screen.findByRole('button', { name: new RegExp(`${n} tháng 11`) })
+    fireEvent.click(await day(20))
+    fireEvent.click(await day(23))
+    const last = onChange.mock.calls.at(-1)?.[0]
+    expect(last).toMatchObject({ from: '2026-11-20', to: '2026-11-23', guests: 2 })
+  })
+
   it('defaults to a valid future range when no initial value is given', () => {
     const onSearch = vi.fn()
     render(<SearchBar onSearch={onSearch} />)
