@@ -735,6 +735,8 @@ export interface PaymentReturn {
   responseCode: string
   /** Booking của giao dịch (server trả) để đọc lại trạng thái, không cần localStorage. */
   bookingId: string
+  /** Đặt cọc hay thanh toán phần còn lại. Thiếu (backend cũ) thì coi như đặt cọc. */
+  purpose?: 'DEPOSIT' | 'FINAL'
 }
 
 export const PAYMENT_RESULT_DISPLAY: Record<
