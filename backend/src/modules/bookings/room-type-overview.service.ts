@@ -2,7 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { RoomType } from '../room-types/schemas/room-type.schema.js';
-import type { RoomTypeOverviewResponse } from './dto/room-type-overview.dto.js';
+import type {
+  RoomTypeOverviewResponse,
+  RoomTypeSummaryResponse,
+} from './dto/room-type-overview.dto.js';
 
 type PopulatedAmenity = {
   _id: Types.ObjectId;
@@ -50,5 +53,27 @@ export class RoomTypeOverviewService {
         )
         .map((amenity) => ({ id: String(amenity._id), name: amenity.name })),
     };
+  }
+
+  /**
+   * Mọi loại phòng đang kinh doanh để khách xem khi chưa chọn ngày (rẻ nhất trước). Chỉ field
+   * an toàn của danh sách; chi tiết và tiện nghi vẫn lấy qua `findPublicById`.
+   */
+  async listPublic(): Promise<RoomTypeSummaryResponse[]> {
+    const types = await this.roomTypes
+      .find({ isActive: true })
+      .sort({ basePrice: 1, name: 1, _id: 1 })
+      .lean()
+      .exec();
+    return types.map((type) => ({
+      id: String(type._id),
+      images: type.images ?? [],
+      name: type.name,
+      description: type.description ?? '',
+      adultCapacity: type.adultCapacity,
+      childCapacity: type.childCapacity,
+      capacity: type.adultCapacity + type.childCapacity,
+      pricePerNight: type.basePrice,
+    }));
   }
 }

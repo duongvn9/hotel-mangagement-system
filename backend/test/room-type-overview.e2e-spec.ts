@@ -111,4 +111,55 @@ describe('Public room type overview (e2e)', () => {
       .expect(404);
     await http().get('/api/v1/room-types/not-an-id/overview').expect(404);
   });
+
+  describe('listing every room type', () => {
+    it('lists all active room types without authentication, cheapest first', async () => {
+      const response = await http()
+        .get('/api/v1/availability/room-types')
+        .expect(200);
+
+      const mine = response.body.filter((item: { name: string }) =>
+        item.name.startsWith(prefix),
+      );
+      expect(mine).toEqual([
+        expect.objectContaining({
+          id: String(activeId),
+          name: prefix + 'Deluxe',
+          capacity: 3,
+          adultCapacity: 2,
+          childCapacity: 1,
+          pricePerNight: 1500000,
+          images: [],
+        }),
+      ]);
+      // Loại phòng đã ngừng kinh doanh không hiện cho khách.
+      expect(
+        response.body.some(
+          (item: { id: string }) => item.id === String(inactiveTypeId),
+        ),
+      ).toBe(false);
+    });
+
+    it('only exposes public fields', async () => {
+      const response = await http()
+        .get('/api/v1/availability/room-types')
+        .expect(200);
+      const item = response.body.find(
+        (entry: { id: string }) => entry.id === String(activeId),
+      );
+
+      expect(Object.keys(item).sort()).toEqual(
+        [
+          'adultCapacity',
+          'capacity',
+          'childCapacity',
+          'description',
+          'id',
+          'images',
+          'name',
+          'pricePerNight',
+        ].sort(),
+      );
+    });
+  });
 });

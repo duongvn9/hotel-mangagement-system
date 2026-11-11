@@ -6,11 +6,16 @@ import {
   SearchAvailabilityDto,
 } from './dto/search-availability.dto.js';
 import { AvailabilityService } from './availability.service.js';
+import { RoomTypeSummaryResponse } from './dto/room-type-overview.dto.js';
+import { RoomTypeOverviewService } from './room-type-overview.service.js';
 
 @ApiTags('availability')
 @Controller('availability')
 export class AvailabilityController {
-  constructor(private readonly availability: AvailabilityService) {}
+  constructor(
+    private readonly availability: AvailabilityService,
+    private readonly roomTypes: RoomTypeOverviewService,
+  ) {}
 
   @Get()
   @Public()
@@ -18,5 +23,16 @@ export class AvailabilityController {
   @ApiOkResponse({ type: [AvailableRoomResponse] })
   search(@Query() query: SearchAvailabilityDto) {
     return this.availability.findAvailableRooms(query);
+  }
+
+  @Get('room-types')
+  @Public()
+  @ApiOperation({
+    summary:
+      'UC05 companion — every room type on sale, before any dates are chosen',
+  })
+  @ApiOkResponse({ type: [RoomTypeSummaryResponse] })
+  roomTypeList() {
+    return this.roomTypes.listPublic();
   }
 }
