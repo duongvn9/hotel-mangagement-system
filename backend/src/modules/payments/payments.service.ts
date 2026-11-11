@@ -262,6 +262,8 @@ export class PaymentsService {
         // Trả bookingId từ server để trang Return đọc lại trạng thái booking mà không
         // cần localStorage (dùng được khi khách thanh toán trên thiết bị khác).
         bookingId: expected.booking.id,
+        // Đặt cọc hay thanh toán phần còn lại, để trang Return hiện đúng thông báo.
+        purpose: expected.payment.purpose,
       };
     } catch (error) {
       if (error instanceof VnpayValidationError) {

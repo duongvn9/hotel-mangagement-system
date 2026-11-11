@@ -931,4 +931,52 @@ describe('PaymentReturnPage (server-authoritative)', () => {
     ).toBeInTheDocument()
     expect(screen.queryByText(/đang hoàn tất xác nhận booking/i)).not.toBeInTheDocument()
   })
+
+  function mockReturn(purpose: 'DEPOSIT' | 'FINAL', status: string, bookingStatus: string) {
+    const path = '/payment/vnpay-return?vnp_TxnRef=TXN1&vnp_ResponseCode=00'
+    window.history.replaceState({}, '', path)
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url.startsWith('/payments/vnpay/return'))
+        return {
+          data: {
+            transactionRef: 'TXN1',
+            status,
+            responseCode: status === 'SUCCESS' ? '00' : '24',
+            bookingId: 'b1',
+            purpose,
+          },
+        }
+      if (url === '/bookings/b1') return { data: { ...booking, status: bookingStatus } }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    return path
+  }
+
+  it('titles a successful deposit as a confirmed booking', async () => {
+    renderWithAuth(bookingRoutes, { path: mockReturn('DEPOSIT', 'SUCCESS', 'CONFIRMED') })
+
+    expect(
+      await screen.findByRole('heading', { name: 'Đặt phòng thành công.' }),
+    ).toBeInTheDocument()
+  })
+
+  it('titles a successful final payment as a payment, not a booking', async () => {
+    renderWithAuth(bookingRoutes, { path: mockReturn('FINAL', 'SUCCESS', 'CHECKED_IN') })
+
+    expect(
+      await screen.findByRole('heading', { name: 'Thanh toán thành công.' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText(/đã nhận khoản thanh toán còn lại/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Đặt phòng thành công/)).not.toBeInTheDocument()
+  })
+
+  it('does not mention the room hold when a final payment fails', async () => {
+    renderWithAuth(bookingRoutes, { path: mockReturn('FINAL', 'CANCELLED', 'CHECKED_IN') })
+
+    expect(
+      await screen.findByRole('heading', { name: 'Thanh toán chưa thành công' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/thử lại từ trang chi tiết booking/i)).toBeInTheDocument()
+    expect(screen.queryByText(/phòng vẫn đang được giữ/i)).not.toBeInTheDocument()
+  })
 })
