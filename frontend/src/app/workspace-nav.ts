@@ -3,6 +3,7 @@ import {
   Armchair,
   BarChart3,
   BedDouble,
+  BedSingle,
   Bell,
   CalendarDays,
   CircleDot,
@@ -79,6 +80,7 @@ const ICONS_BY_PATH: Record<string, LucideIcon> = {
   '/manager/rooms': BedDouble,
   '/manager/room-types': Layers,
   '/manager/amenities': Armchair,
+  '/manager/bed-types': BedSingle,
   '/manager/services': UtensilsCrossed,
 
   // Quản trị hệ thống

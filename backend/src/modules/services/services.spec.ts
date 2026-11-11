@@ -90,6 +90,7 @@ describe('UC53 Service H4 schema', () => {
       'roles',
       'users',
       'amenities',
+      'bed-types',
       'room-types',
       'rooms',
       'equipment',
