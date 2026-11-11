@@ -116,7 +116,6 @@ export function ServiceTaskIssueReport({
             {mutation.isSuccess ? (
               <div role="status" className="space-y-3 break-words">
                 <h3 className="font-semibold text-success">Đã tiếp nhận báo cáo — Chờ xem xét</h3>
-                <p>Mã báo cáo: {mutation.data.id}</p>
                 <p>Tiêu đề: {mutation.data.title}</p>
                 <p>
                   Thời điểm tiếp nhận: {new Date(mutation.data.reportedAt).toLocaleString('vi-VN')}

@@ -84,6 +84,8 @@ export interface OrderInput {
 }
 export interface ServiceOrder extends OrderInput {
   id: string
+  bookingCode?: string | null
+  roomNumbers?: string[]
   service: { name: string; unit: string }
   unitPriceVND: number
   amount: number

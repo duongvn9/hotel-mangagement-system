@@ -89,6 +89,7 @@ const assignmentFixture = (status = 'ASSIGNED') => {
     ],
   };
   const invoiceLookup = vi.fn(() => ({ exec: async () => invoice }));
+  const userLookup = vi.fn(() => query(null));
   const service = new ServiceOrdersService(
     {
       findById,
@@ -97,11 +98,12 @@ const assignmentFixture = (status = 'ASSIGNED') => {
     } as never,
     {
       findById: () => query(null),
+      find: () => query([]),
       updateOne: vi.fn(async () => ({ modifiedCount: 1 })),
     } as never,
     {} as never,
     {} as never,
-    { findById: () => query(null) } as never,
+    { findById: userLookup, find: () => query([]) } as never,
     {
       create,
       findServiceOrderExecutionWork,
@@ -124,6 +126,7 @@ const assignmentFixture = (status = 'ASSIGNED') => {
     create,
     invoice,
     invoiceLookup,
+    userLookup,
   };
 };
 
@@ -145,6 +148,7 @@ describe('service orders read fixes', () => {
       reviewReason: 'Unavailable today',
       executionStatus: 'NOT_STARTED',
       reviewedBy: new Types.ObjectId(),
+      reviewDecision: 'REJECT',
       billedInvoiceId: new Types.ObjectId(),
       acceptanceRecovery: undefined as
         { rejectionReason: string; reason: string } | undefined,
@@ -161,6 +165,7 @@ describe('service orders read fixes', () => {
     };
     const orders = {
       findOne: vi.fn(() => query(row)),
+      findById: vi.fn(() => query(row)),
       find: vi.fn(() => query([row])),
       countDocuments: () => query(1),
     };
@@ -199,6 +204,81 @@ describe('service orders read fixes', () => {
     );
     return { service, row, orders, bookings, users, roomFind, invoices, tasks };
   };
+
+  it('includes safe booking labels in customer detail and list without staff audit fields', async () => {
+    const f = fixture();
+    const detail = await f.service.findOne(String(f.row._id), user);
+    const list = await f.service.list({ page: 1, limit: 20 }, user);
+    for (const result of [detail, list.items[0]]) {
+      expect(result).toMatchObject({
+        bookingId: String(f.row.booking),
+        bookingCode: 'BK001',
+        roomNumbers: ['201', '202'],
+      });
+      for (const key of [
+        'booking',
+        'customer',
+        'review',
+        'reviewedBy',
+        'reviewedByName',
+        'acceptanceRecovery',
+        'assignmentIntent',
+        'task',
+        'invoiceId',
+      ])
+        expect(result).not.toHaveProperty(key);
+    }
+    expect(f.users.find).not.toHaveBeenCalled();
+  });
+
+  it('returns matching staff detail and list room labels and a nullable reviewer full name', async () => {
+    const f = fixture();
+    f.users.find.mockImplementation(
+      () =>
+        ({
+          select: () => ({
+            exec: async () => [
+              { _id: f.row.customer, fullName: 'Customer' },
+              { _id: f.row.reviewedBy, fullName: 'Nguyễn Thị An' },
+            ],
+          }),
+        }) as never,
+    );
+    const actor = { ...user, role: 'RECEPTIONIST' };
+    const detail = await f.service.requestDetail(String(f.row._id), actor);
+    const list = await f.service.requests({ page: 1, limit: 20 }, actor);
+    for (const result of [detail, list.items[0]])
+      expect(result).toMatchObject({
+        bookingCode: 'BK001',
+        roomNumbers: ['201', '202'],
+        booking: { code: 'BK001', roomNumbers: ['201', '202'] },
+        review: {
+          reviewedBy: String(f.row.reviewedBy),
+          reviewedByName: 'Nguyễn Thị An',
+        },
+      });
+    f.users.find.mockReturnValueOnce({
+      select: () => ({ exec: async () => [] }),
+    } as never);
+    expect(
+      await f.service.requestDetail(String(f.row._id), actor),
+    ).toMatchObject({
+      review: { reviewedByName: null },
+    });
+  });
+
+  it('uses null booking code and empty room labels for a missing booking', async () => {
+    const f = fixture();
+    f.bookings.find.mockReturnValueOnce({
+      select: () => ({ exec: async () => [] }),
+    } as never);
+    expect(
+      await f.service.requestDetail(String(f.row._id), {
+        ...user,
+        role: 'RECEPTIONIST',
+      }),
+    ).toMatchObject({ bookingCode: null, roomNumbers: [], booking: null });
+  });
 
   it('returns only the rejection reason to the authorized owner without billing or tasks', async () => {
     const f = fixture();
@@ -314,6 +394,30 @@ describe('service orders read fixes', () => {
 });
 
 describe('service orders contract', () => {
+  it('resolves a persisted inactive assignee full name without consulting candidates', async () => {
+    const f = assignmentFixture();
+    f.userLookup.mockReturnValue({
+      select: () => ({
+        exec: async () => ({ fullName: 'Trần Minh Bình', isActive: false }),
+      }),
+    } as never);
+    const result = await f.service.requestDetail(String(f.row._id), f.actor);
+    expect(result.task).toMatchObject({
+      assigneeId: f.input.assigneeId,
+      assigneeName: 'Trần Minh Bình',
+    });
+    expect(f.userLookup).toHaveBeenCalledWith(f.task.assignedTo);
+  });
+
+  it('preserves the assigned user ID with a null name when the user is missing', async () => {
+    const f = assignmentFixture();
+    expect(
+      await f.service.requestDetail(String(f.row._id), f.actor),
+    ).toMatchObject({
+      task: { assigneeId: f.input.assigneeId, assigneeName: null },
+    });
+  });
+
   it.each(['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'])(
     'replays the same finalized assignment at %s without writes or regression',
     async (status) => {

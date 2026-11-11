@@ -16,6 +16,7 @@ export interface StaffServiceOrder extends ServiceOrder {
     decision: 'ACCEPT' | 'REJECT'
     reason?: string
     reviewedBy: string
+    reviewedByName?: string | null
     reviewedAt: string
   }
   invoiceId?: string
@@ -25,6 +26,7 @@ export interface StaffServiceOrder extends ServiceOrder {
     id: string
     status: string
     assigneeId: string
+    assigneeName?: string | null
     assignedAt: string
     dueAt?: string
     completedAt?: string

@@ -180,7 +180,8 @@ test.each(views)('%s sees exact role title, list and detail', async (role, path,
   expect(await screen.findByRole('heading', { level: 2 })).toHaveTextContent(detail.title)
   expect(screen.getByText(/Điều này không có nghĩa/)).toBeInTheDocument()
   expect(screen.getByText('Ngày kết luận')).toBeInTheDocument()
-  expect(screen.getByText(detail.bookingId)).toBeInTheDocument()
+  expect(screen.queryByText(detail.bookingId)).not.toBeInTheDocument()
+  expect(screen.getByText('Chưa có thông tin đặt phòng')).toBeInTheDocument()
   expect(screen.queryByRole('link', { name: detail.bookingId })).not.toBeInTheDocument()
   if (role === 'RECEPTIONIST')
     expect(screen.getByRole('button', { name: 'Xem xét' })).toBeInTheDocument()
@@ -310,6 +311,8 @@ test.each(views)(
       data: {
         ...detail,
         reviewedBy: 'internal-reviewer',
+        reviewedByName: 'Nguyễn Hải Yến',
+        closedByName: 'Trần Thanh Tâm',
         reviewNotes: 'internal-review-note',
         closureConclusion: 'internal-conclusion',
         closedBy: 'internal-closer',
@@ -333,10 +336,10 @@ test.each(views)(
     expect(title.closest('section')).toHaveClass('card-soft')
     expect(screen.getByRole('heading', { level: 1 })).toHaveClass('text-2xl')
     for (const value of [
-      'internal-reviewer',
+      'Nguyễn Hải Yến',
       'internal-review-note',
       'internal-conclusion',
-      'internal-closer',
+      'Trần Thanh Tâm',
     ]) {
       if (role === 'CUSTOMER') expect(screen.queryByText(value)).not.toBeInTheDocument()
       else expect(screen.getByText(value)).toBeInTheDocument()

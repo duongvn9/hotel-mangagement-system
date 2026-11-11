@@ -126,6 +126,133 @@ describe('Customer issue reporting', () => {
   });
 });
 
+describe('Issue readable staff context', () => {
+  it('resolves inactive historical actors and safe booking context without leaking staff to customers', async () => {
+    const reporter = new Types.ObjectId();
+    const staff = new Types.ObjectId();
+    const room = new Types.ObjectId();
+    const booking = new Types.ObjectId();
+    const record = {
+      _id: new Types.ObjectId(),
+      booking,
+      reporter,
+      title: 'Lamp',
+      category: 'Lighting',
+      description: 'Broken',
+      status: 'ASSIGNED',
+      priority: 'NORMAL',
+      reportedAt: new Date(),
+      reviewedBy: staff,
+      assignmentAssignee: staff,
+      assignmentRequestedBy: staff,
+      reassignmentHistory: [
+        {
+          actorId: String(staff),
+          assigneeId: String(staff),
+          recoveryActors: [String(staff)],
+        },
+      ],
+    };
+    const users = {
+      find: vi.fn(() =>
+        query([
+          { _id: reporter, fullName: 'Guest' },
+          { _id: staff, fullName: 'Historical employee', isActive: false },
+        ]),
+      ),
+    };
+    const service = new IssuesService(
+      { findOne: () => query(record) } as unknown as Model<Issue>,
+      {
+        roomNumbers: async () => new Map([[String(room), '101']]),
+      } as unknown as IssueContextAdapter,
+      {
+        find: () => query([{ _id: booking, code: 'BK001', rooms: [room] }]),
+      } as unknown as Model<Booking>,
+      users as unknown as Model<User>,
+      {
+        issueTaskHistory: async () => [
+          {
+            _id: new Types.ObjectId(),
+            title: 'Repair',
+            assignedTo: staff,
+            assignedAt: new Date(),
+            blockerHistory: [
+              { reportedBy: String(staff), resolvedBy: String(staff) },
+            ],
+            continuationHistory: [{ actorId: String(staff) }],
+            cancellation: {
+              actorId: String(staff),
+              recoveryActorId: String(new Types.ObjectId()),
+            },
+          },
+        ],
+      } as unknown as TasksService,
+    );
+    const actor = {
+      id: String(reporter),
+      email: 'guest@example.test',
+      role: 'RECEPTIONIST',
+    };
+    const result = await service.findOne(String(record._id), actor);
+    expect(result).toMatchObject({
+      reporterId: String(reporter),
+      reporterName: 'Guest',
+      bookingCode: 'BK001',
+      roomNumbers: ['101'],
+      reviewedByName: 'Historical employee',
+      assigneeName: 'Historical employee',
+      assignmentRequestedByName: 'Historical employee',
+      resolutionTasks: [
+        {
+          assigneeName: 'Historical employee',
+          blockerHistory: [
+            {
+              reportedByName: 'Historical employee',
+              resolvedByName: 'Historical employee',
+            },
+          ],
+          continuationHistory: [{ actorName: 'Historical employee' }],
+          cancellation: {
+            actorName: 'Historical employee',
+            recoveryActorName: null,
+          },
+        },
+      ],
+      reassignmentHistory: [
+        {
+          actorName: 'Historical employee',
+          assigneeName: 'Historical employee',
+          recoveryActorNames: ['Historical employee'],
+        },
+      ],
+    });
+    expect(users.find).toHaveBeenCalledWith({
+      _id: { $in: expect.any(Array) },
+    });
+    users.find.mockClear();
+    const customer = await service.findOne(String(record._id), {
+      ...actor,
+      role: 'CUSTOMER',
+    });
+    expect(customer).toMatchObject({
+      bookingCode: 'BK001',
+      roomNumbers: ['101'],
+    });
+    for (const key of [
+      'reporterName',
+      'reporterId',
+      'reviewedByName',
+      'assigneeName',
+      'assignmentRequestedByName',
+      'resolutionTasks',
+      'reassignmentHistory',
+    ])
+      expect(customer).not.toHaveProperty(key);
+    expect(users.find).not.toHaveBeenCalled();
+  });
+});
+
 describe('Authorized issue room display', () => {
   const owner = new Types.ObjectId();
   const booking = new Types.ObjectId();

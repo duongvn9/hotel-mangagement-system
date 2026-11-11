@@ -55,6 +55,65 @@ function setup(role = 'SERVICE_STAFF', active = true, sourceExists = true) {
   return { tasks, users, roles, connection, findOne, service };
 }
 
+describe('issue task detail context', () => {
+  it('uses only the canonical issue assignment and projected booking context', async () => {
+    const task = {
+      _id: new Types.ObjectId(),
+      sourceId: new Types.ObjectId(),
+      sourceType: TaskSourceType.Issue,
+      taskType: 'ISSUE_RESOLUTION',
+      title: 'Repair',
+      assignedAt: new Date(),
+      status: TaskStatus.Assigned,
+      priority: 'NORMAL',
+    };
+    const bookingId = new Types.ObjectId();
+    const roomId = new Types.ObjectId();
+    const source = vi.fn(
+      async () =>
+        ({ title: 'Broken lamp', booking: bookingId, room: roomId }) as
+          object | null,
+    );
+    const connection = {
+      collection: vi.fn((name: string) =>
+        name === 'issues'
+          ? { findOne: source }
+          : name === 'bookings'
+            ? { findOne: async () => ({ code: 'BK001', rooms: [roomId] }) }
+            : {
+                find: () => ({
+                  toArray: async () => [{ _id: roomId, roomNumber: '101' }],
+                }),
+              },
+      ),
+    };
+    const service = new TasksService(
+      {
+        findOne: () => ({ select: () => ({ lean: async () => task }) }),
+      } as unknown as Model<Task>,
+      {} as Model<User>,
+      {} as Model<Role>,
+      connection as unknown as Connection,
+    );
+    expect(await service.findAssigned(ID, String(task._id))).toMatchObject({
+      sourceSummary: 'Broken lamp · BK001 · 101',
+    });
+    expect(source).toHaveBeenCalledWith(
+      {
+        _id: task.sourceId,
+        linkedTask: task._id,
+        pendingReassignment: { $exists: false },
+      },
+      { projection: { title: 1, booking: 1, room: 1 } },
+    );
+    source.mockResolvedValueOnce(null);
+    expect(await service.findAssigned(ID, String(task._id))).toHaveProperty(
+      'sourceSummary',
+      null,
+    );
+  });
+});
+
 describe('service order task detail context', () => {
   const fixture = () => {
     const task = {

@@ -47,7 +47,7 @@ export class AssignedTaskDto {
     type: String,
     nullable: true,
     description:
-      'Authorized service order, booking and room context; null when unavailable or unsupported',
+      'Authorized service order or issue, booking and room context; null when unavailable or unsupported',
   })
   sourceSummary: string | null;
 }

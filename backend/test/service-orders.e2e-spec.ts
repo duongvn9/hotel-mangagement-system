@@ -1398,6 +1398,8 @@ describe('UC22/23 customer service orders', () => {
       [
         'id',
         'bookingId',
+        'bookingCode',
+        'roomNumbers',
         'serviceId',
         'service',
         'quantity',

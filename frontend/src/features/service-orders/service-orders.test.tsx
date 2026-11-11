@@ -78,6 +78,25 @@ beforeEach(() => {
   vi.mocked(api.post).mockResolvedValue({ data: receipt })
 })
 
+it('shows booking codes and rooms instead of technical receipt identifiers', () => {
+  render(
+    <OrderReceipt
+      order={{ ...receipt, ...{ bookingCode: 'BK001', roomNumbers: ['201', '202'] } }}
+    />,
+  )
+  expect(screen.getByText('BK001')).toBeInTheDocument()
+  expect(screen.getByText('201, 202')).toBeInTheDocument()
+  expect(document.body).not.toHaveTextContent(bookingId)
+  expect(document.body).not.toHaveTextContent(receipt.id)
+})
+
+it('uses human fallbacks when booking context is missing', () => {
+  render(<OrderReceipt order={receipt} />)
+  expect(screen.getByText('Không còn thông tin đặt phòng')).toBeInTheDocument()
+  expect(document.body).not.toHaveTextContent(bookingId)
+  expect(document.body).not.toHaveTextContent(receipt.id)
+})
+
 describe('shared service-order business states', () => {
   it.each([
     ['PENDING_REVIEW', 'NOT_STARTED', 'PENDING_REVIEW', 'Chờ duyệt'],
@@ -309,7 +328,7 @@ describe('customer service-order detail workspace', () => {
     expect(heading.closest('.card-soft')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     for (const label of [
-      'Mã yêu cầu',
+      'Phòng',
       'Mã đặt phòng',
       'Số lượng',
       'Đơn giá ghi nhận',

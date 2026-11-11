@@ -4,6 +4,11 @@ import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { useIssue } from '../hooks'
 import { IssueBadges, IssueError } from '../IssuePresentation'
 import {
+  bookingCode,
+  personName,
+  taskStatusLabel,
+  taskTypeLabel,
+  taskPriorityLabel,
   issueDate,
   issueRoomLabel,
   issueViews,
@@ -50,10 +55,6 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
             <IssueBadges issue={issue} />
             <dl className="grid gap-4 text-sm sm:grid-cols-2">
               <div>
-                <dt className="font-semibold">Mã sự cố</dt>
-                <dd className="break-all">{issue.id}</dd>
-              </div>
-              <div>
                 <dt className="font-semibold">Nhóm sự cố</dt>
                 <dd className="break-words">{issue.category}</dd>
               </div>
@@ -93,28 +94,32 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
               )}
               {role !== 'CUSTOMER' && (
                 <>
+                  <div>
+                    <dt className="font-semibold">Người báo</dt>
+                    <dd>{personName(issue.reporterName)}</dd>
+                  </div>
                   {issue.closedBy && (
                     <div>
-                      <dt className="font-semibold">Người đóng (mã tham chiếu)</dt>
-                      <dd className="break-all">{issue.closedBy}</dd>
+                      <dt className="font-semibold">Người đóng</dt>
+                      <dd className="break-all">{personName(issue.closedByName)}</dd>
                     </div>
                   )}
                   {issue.reviewedBy && (
                     <div>
                       <dt className="font-semibold">Người xem xét</dt>
-                      <dd>{issue.reviewedBy}</dd>
+                      <dd>{personName(issue.reviewedByName)}</dd>
                     </div>
                   )}
                   {issue.assigneeId && (
                     <div>
                       <dt className="font-semibold">Nhân viên được phân công</dt>
-                      <dd>{issue.assigneeId}</dd>
+                      <dd>{personName(issue.assigneeName)}</dd>
                     </div>
                   )}
                   {issue.assignmentRequestedBy && (
                     <div>
                       <dt className="font-semibold">Người yêu cầu phân công</dt>
-                      <dd>{issue.assignmentRequestedBy}</dd>
+                      <dd>{personName(issue.assignmentRequestedByName)}</dd>
                     </div>
                   )}
                   {issue.assignmentRequestedAt && (
@@ -138,21 +143,13 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
                 </>
               )}
               <div>
-                <dt className="font-semibold">Mã đặt phòng tham chiếu</dt>
-                <dd className="break-all">{issue.bookingId}</dd>
+                <dt className="font-semibold">Mã đặt phòng</dt>
+                <dd className="break-words">{bookingCode(issue.bookingCode)}</dd>
               </div>
-              {role === 'CUSTOMER' && (
-                <div>
-                  <dt className="font-semibold">Phòng</dt>
-                  <dd>{issueRoomLabel(issue)}</dd>
-                </div>
-              )}
-              {role !== 'CUSTOMER' && issue.roomId && (
-                <div>
-                  <dt className="font-semibold">Mã phòng tham chiếu</dt>
-                  <dd className="break-all">{issue.roomId}</dd>
-                </div>
-              )}
+              <div>
+                <dt className="font-semibold">Phòng</dt>
+                <dd>{issueRoomLabel(issue)}</dd>
+              </div>
             </dl>
             <div>
               <h3 className="font-semibold">Mô tả</h3>
@@ -160,11 +157,6 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
                 {issue.description}
               </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              {role === 'CUSTOMER'
-                ? 'Thông tin nguồn đặt phòng chỉ hiển thị mã tham chiếu trong phạm vi truy cập này.'
-                : 'Chỉ hiển thị mã tham chiếu; thông tin nguồn đặt phòng và phòng chưa được cung cấp trong phạm vi truy cập này.'}
-            </p>
             {role === 'CUSTOMER' && (
               <section className="space-y-3" aria-labelledby="customer-history-heading">
                 <h3 id="customer-history-heading" className="text-sm font-semibold">
@@ -218,12 +210,12 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
                     {issue.linkedTasks.map((task) => (
                       <li key={task.id} className="space-y-2 break-words">
                         <h4 className="font-semibold">{task.title}</h4>
-                        <p>Mã công việc: {task.id}</p>
                         <p>
-                          Loại: {task.taskType} · Ưu tiên: {task.priority} · Trạng thái:{' '}
-                          {task.status}
+                          Loại: {taskTypeLabel(task.taskType)} · Ưu tiên:{' '}
+                          {taskPriorityLabel(task.priority)} · Trạng thái:{' '}
+                          {taskStatusLabel(task.status)}
                         </p>
-                        <p>Nhân viên: {task.assigneeId}</p>
+                        <p>Nhân viên: {personName(task.assigneeName)}</p>
                         <p>Ngày phân công: {issueDate(task.assignedAt)}</p>
                         {task.dueAt && <p>Thời hạn: {issueDate(task.dueAt)}</p>}
                         {task.completedAt && <p>Ngày hoàn tất: {issueDate(task.completedAt)}</p>}

@@ -54,6 +54,14 @@ export interface IssueReceipt extends IssueInput {
 }
 
 export interface IssueRead extends IssueReceipt {
+  bookingCode?: string | null
+  roomNumbers?: string[]
+  reporterId?: string
+  reporterName?: string | null
+  reviewedByName?: string | null
+  assigneeName?: string | null
+  assignmentRequestedByName?: string | null
+  closedByName?: string | null
   roomNumber?: string | null
   handlingCategory?: HandlingCategory
   needsStaffAction?: boolean
@@ -78,6 +86,18 @@ export interface LinkedIssueTask extends TaskResolution {
   taskType: string
   priority: string
   status: string
+  assigneeName?: string | null
+  blockerHistory?: (NonNullable<TaskResolution['blockerHistory']>[number] & {
+    reportedByName?: string | null
+    resolvedByName?: string | null
+  })[]
+  continuationHistory?: (NonNullable<TaskResolution['continuationHistory']>[number] & {
+    actorName?: string | null
+  })[]
+  cancellation?: NonNullable<TaskResolution['cancellation']> & {
+    actorName?: string | null
+    recoveryActorName?: string | null
+  }
   assigneeId: string
   assignedAt: string
   dueAt?: string
@@ -99,6 +119,9 @@ export interface ReassignIssueInput {
 }
 
 export interface ReassignmentIntent extends ReassignIssueInput {
+  actorName?: string | null
+  assigneeName?: string | null
+  recoveryActorNames?: (string | null)[]
   taskRevision: number
   targetTaskId: string
   actorId: string

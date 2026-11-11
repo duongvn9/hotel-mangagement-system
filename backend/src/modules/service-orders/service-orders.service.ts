@@ -153,11 +153,18 @@ export class ServiceOrdersService implements OnModuleInit {
 
   private readonly customerSelection = '+reviewReason +acceptanceRecovery';
 
-  private async response(row: ServiceOrderDocument) {
+  private async response(
+    row: ServiceOrderDocument,
+    contexts?: Awaited<ReturnType<ServiceOrdersService['requestContexts']>>,
+  ) {
     await this.executionTask(row);
+    const context = contexts ?? (await this.requestContexts([row], false));
+    const booking = context.bookings.get(String(row.booking));
     return {
       id: String(row._id),
       bookingId: String(row.booking),
+      bookingCode: booking?.code ?? null,
+      roomNumbers: booking?.roomNumbers ?? [],
       serviceId: String(row.service),
       service: { name: row.serviceName, unit: row.unit },
       quantity: row.quantity,
@@ -373,8 +380,9 @@ export class ServiceOrdersService implements OnModuleInit {
         .exec(),
       this.orders.countDocuments(filter).exec(),
     ]);
+    const contexts = await this.requestContexts(rows, false);
     return {
-      items: await Promise.all(rows.map((row) => this.response(row))),
+      items: await Promise.all(rows.map((row) => this.response(row, contexts))),
       total,
       page: query.page,
       limit: query.limit,
@@ -401,13 +409,22 @@ export class ServiceOrdersService implements OnModuleInit {
   private staffSelection =
     '+reviewedBy +reviewedAt +reviewDecision +reviewReason +acceptanceRecovery +billedInvoiceId +billedAt +assignmentAssignee +assignmentDueAt';
 
-  private async requestContexts(rows: ServiceOrderDocument[]) {
+  private async requestContexts(
+    rows: ServiceOrderDocument[],
+    includeStaff = true,
+  ) {
     const bookingIds = [...new Set(rows.map((row) => String(row.booking)))];
-    const customerIds = [
-      ...new Set(
-        rows.flatMap((row) => (row.customer ? [String(row.customer)] : [])),
-      ),
-    ];
+    const userIds = includeStaff
+      ? [
+          ...new Set(
+            rows.flatMap((row) =>
+              [row.customer, row.reviewedBy].flatMap((id) =>
+                id ? [String(id)] : [],
+              ),
+            ),
+          ),
+        ]
+      : [];
     const [bookings, customers] = await Promise.all([
       bookingIds.length
         ? this.bookings
@@ -415,9 +432,9 @@ export class ServiceOrdersService implements OnModuleInit {
             .select('code status checkIn checkOut rooms')
             .exec()
         : [],
-      customerIds.length
+      userIds.length
         ? this.users
-            .find({ _id: { $in: customerIds } })
+            .find({ _id: { $in: userIds } })
             .select('fullName')
             .exec()
         : [],
@@ -465,22 +482,12 @@ export class ServiceOrdersService implements OnModuleInit {
     row: ServiceOrderDocument,
     contexts?: Awaited<ReturnType<ServiceOrdersService['requestContexts']>>,
   ) {
-    const [booking, customer] = contexts
-      ? [
-          contexts.bookings.get(String(row.booking)) ?? null,
-          contexts.customers.get(String(row.customer)) ?? null,
-        ]
-      : await Promise.all([
-          this.bookings
-            .findById(row.booking)
-            .select('code status checkIn checkOut')
-            .exec(),
-          row.customer
-            ? this.users.findById(row.customer).select('fullName').exec()
-            : null,
-        ]);
+    const context = contexts ?? (await this.requestContexts([row]));
+    const booking = context.bookings.get(String(row.booking));
+    const customer = context.customers.get(String(row.customer));
+    const reviewer = context.customers.get(String(row.reviewedBy));
     return {
-      ...(await this.response(row)),
+      ...(await this.response(row, context)),
       task: await this.taskSummary(row),
       ...(row.executionStatus === ServiceOrderExecutionStatus.Assigning &&
       row.assignmentAssignee
@@ -503,13 +510,7 @@ export class ServiceOrdersService implements OnModuleInit {
             status: booking.status,
             checkIn: booking.checkIn,
             checkOut: booking.checkOut,
-            ...(contexts
-              ? {
-                  roomNumbers:
-                    contexts.bookings.get(String(row.booking))?.roomNumbers ??
-                    [],
-                }
-              : {}),
+            roomNumbers: booking.roomNumbers,
           }
         : null,
       feeRequired: row.amount > 0,
@@ -530,6 +531,7 @@ export class ServiceOrdersService implements OnModuleInit {
                 row.reviewReason ??
                 '',
               reviewedBy: String(row.reviewedBy),
+              reviewedByName: reviewer?.fullName ?? null,
               reviewedAt: row.reviewedAt,
             },
           }
@@ -1321,9 +1323,16 @@ export class ServiceOrdersService implements OnModuleInit {
 
   private async taskSummary(row: ServiceOrderDocument) {
     const task = await this.executionTask(row);
-    return task
-      ? { ...this.taskResponse(task), assigneeId: String(task.assignedTo) }
-      : null;
+    if (!task) return null;
+    const assignee = await this.users
+      .findById(task.assignedTo)
+      .select('fullName')
+      .exec();
+    return {
+      ...this.taskResponse(task),
+      assigneeId: String(task.assignedTo),
+      assigneeName: assignee?.fullName ?? null,
+    };
   }
 
   private serviceStaff(user: AuthUser) {

@@ -9,7 +9,7 @@ import { ServiceTaskIssueReport } from '@/features/issues/ServiceTaskIssueReport
 import type { AssignedTask, TaskProgressInput } from '../api'
 import { useAssignedTask, useUpdateTaskProgress } from '../hooks'
 import { TaskError, TaskPriorityBadge, TaskStatusBadge } from '../TaskPresentation'
-import { taskDate, taskSources } from '../presentation'
+import { taskDate, taskSources, taskTypeLabel } from '../presentation'
 import { ResolutionHistory, UnableToResolve } from '../TaskResolution'
 
 function TaskProgress({ task, fetching }: { task: AssignedTask; fetching: boolean }) {
@@ -144,14 +144,12 @@ export function AssignedTaskDetailPage() {
             </div>
             <dl className="grid gap-4 text-sm sm:grid-cols-2">
               {[
-                ['Mã công việc', task.id],
-                ['Loại công việc', task.taskType],
+                ['Loại công việc', taskTypeLabel(task.taskType)],
                 ['Ngày giao', taskDate(task.assignedAt)],
                 ['Hạn hoàn thành', taskDate(task.dueAt)],
                 ['Ngày hoàn thành', taskDate(task.completedAt)],
                 ['Kết quả thực hiện', task.workResult || 'Chưa có kết quả'],
                 ['Nguồn công việc', taskSources[task.sourceType]],
-                ['Mã nguồn tham chiếu', task.sourceId],
               ].map(([label, value]) => (
                 <div key={label} className="min-w-0">
                   <dt className="font-semibold text-muted-foreground">{label}</dt>
@@ -161,7 +159,7 @@ export function AssignedTaskDetailPage() {
             </dl>
             <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
               {task.sourceSummary?.trim() ||
-                'Thông tin nguồn hiện không khả dụng. Công việc vẫn có thể được xem; mã nguồn chỉ dùng để đối chiếu.'}
+                'Thông tin nguồn hiện không khả dụng. Bạn vẫn có thể xem thông tin công việc.'}
             </p>
             <ResolutionHistory task={task} />
             <TaskProgress key={task.id} task={task} fetching={isFetching} />

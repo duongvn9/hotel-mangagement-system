@@ -16,6 +16,7 @@ import {
   type ReportIssueInput,
 } from '../api'
 import { useIssueReportContext, useReportIssue } from '../hooks'
+import { bookingCode } from '../presentation'
 
 const categories = ['', 'Phòng và tiện nghi', 'Vệ sinh', 'Khác']
 type Mode = 'booking' | 'room' | 'service'
@@ -34,7 +35,7 @@ function checkoutPassed(checkOut: string) {
 }
 
 function bookingLabel(booking: IssueReportBooking) {
-  return `${booking.code} · ${new Date(booking.checkIn).toLocaleDateString('vi-VN')} – ${new Date(booking.checkOut).toLocaleDateString('vi-VN')} · ${booking.status === 'CHECKED_IN' ? 'Đang lưu trú' : booking.status} · ${booking.rooms.map((room) => room.roomNumber).join(', ')}`
+  return `${bookingCode(booking.code)} · ${new Date(booking.checkIn).toLocaleDateString('vi-VN')} – ${new Date(booking.checkOut).toLocaleDateString('vi-VN')} · ${booking.status === 'CHECKED_IN' ? 'Đang lưu trú' : booking.status} · ${booking.rooms.map((room) => room.roomNumber).join(', ')}`
 }
 
 function errorMessage(error: unknown) {
@@ -211,8 +212,6 @@ function CustomerIssueForm() {
           />
           <Panel>
             <dl className="space-y-2 break-words text-sm">
-              <dt className="font-semibold">Mã báo cáo</dt>
-              <dd>{mutation.data.id}</dd>
               <dt className="font-semibold">Tiêu đề</dt>
               <dd>{mutation.data.title}</dd>
               <dt className="font-semibold">Đặt phòng</dt>
@@ -274,8 +273,8 @@ function CustomerIssueForm() {
                   aria-busy={mutation.isPending}
                 >
                   <p className="text-sm text-muted-foreground">
-                    Chọn đặt phòng đang lưu trú và ngữ cảnh xảy ra sự cố. Khách sạn sẽ xem xét báo
-                    cáo trước khi giao xử lý.
+                    Chọn đặt phòng đang lưu trú, sau đó chọn sự cố liên quan đến kỳ lưu trú, phòng
+                    hay dịch vụ. Khách sạn sẽ xem xét báo cáo trước khi giao xử lý.
                   </p>
                   {invalidPrefill && (
                     <Alert tone="danger">
@@ -310,7 +309,12 @@ function CustomerIssueForm() {
                           )}
                         </NativeSelect>
                       </FormField>
-                      <FormField htmlFor="issue-mode" label="Ngữ cảnh" required>
+                      <FormField
+                        htmlFor="issue-mode"
+                        label="Sự cố liên quan đến"
+                        hint="Chọn vấn đề chung của kỳ lưu trú, một phòng cụ thể hoặc dịch vụ đã yêu cầu."
+                        required
+                      >
                         <NativeSelect
                           id="issue-mode"
                           value={mode}
@@ -325,9 +329,9 @@ function CustomerIssueForm() {
                             mutation.reset()
                           }}
                         >
-                          <option value="booking">Đặt phòng</option>
-                          <option value="room">Phòng</option>
-                          <option value="service">Đơn dịch vụ</option>
+                          <option value="booking">Kỳ lưu trú nói chung</option>
+                          <option value="room">Một phòng cụ thể</option>
+                          <option value="service">Dịch vụ đã yêu cầu</option>
                         </NativeSelect>
                       </FormField>
                     </div>
@@ -375,11 +379,11 @@ function CustomerIssueForm() {
                               <option key={order.id} value={order.id}>
                                 {index + 1}. {order.serviceName} ·{' '}
                                 {reviewLabels[order.reviewStatus as keyof typeof reviewLabels] ??
-                                  order.reviewStatus}{' '}
+                                  'Chưa có thông tin xét duyệt'}{' '}
                                 ·{' '}
                                 {executionLabels[
                                   order.executionStatus as keyof typeof executionLabels
-                                ] ?? order.executionStatus}
+                                ] ?? 'Chưa có thông tin thực hiện'}
                               </option>
                             ),
                           )}

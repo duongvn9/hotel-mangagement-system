@@ -51,7 +51,7 @@ async function prepare(decision = 'ACCEPT', reason = '') {
   await screen.findByRole('heading', { name: 'Duyệt yêu cầu' })
   fireEvent.change(screen.getByLabelText('Quyết định'), { target: { value: decision } })
   fireEvent.change(screen.getByLabelText(/Lý do \(bắt buộc/), { target: { value: reason } })
-  fireEvent.click(screen.getByRole('button', { name: 'Xem lại quyết định' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Gửi đơn' }))
 }
 beforeEach(() => {
   vi.resetAllMocks()
@@ -84,6 +84,71 @@ beforeEach(() => {
     }
     return { data: current }
   })
+})
+
+it('shows names and booking context without technical customer, reviewer or task IDs', async () => {
+  current = {
+    ...receipt,
+    ...{ bookingCode: 'BK001', roomNumbers: ['201', '202'] },
+    reviewStatus: 'ACCEPTED',
+    executionStatus: 'ASSIGNED',
+    review: {
+      decision: 'ACCEPT',
+      reviewedBy: 'reviewer-id',
+      reviewedAt: receipt.createdAt,
+      ...{ reviewedByName: 'Trần Bình' },
+    },
+    task: {
+      id: 'task-id',
+      assigneeId: 'assignee-id',
+      assignedAt: receipt.createdAt,
+      status: 'ASSIGNED',
+      ...{ assigneeName: 'Lê Mai' },
+    },
+  }
+  page()
+  expect(await screen.findByText('Người duyệt: Trần Bình')).toBeInTheDocument()
+  expect(screen.getByText('Nhân viên: Lê Mai')).toBeInTheDocument()
+  expect(screen.getByText('Quyết định đã lưu: Chấp nhận')).toBeInTheDocument()
+  expect(screen.getByText('201, 202')).toBeInTheDocument()
+  for (const value of [
+    'customer-1',
+    'reviewer-id',
+    'task-id',
+    'assignee-id',
+    receipt.id,
+    receipt.bookingId,
+  ]) {
+    expect(document.body).not.toHaveTextContent(value)
+  }
+})
+
+it('never falls back to reviewer or assignee IDs when names are missing', async () => {
+  current = {
+    ...receipt,
+    reviewStatus: 'ACCEPTED',
+    executionStatus: 'ASSIGNED',
+    review: {
+      decision: 'REJECT',
+      reviewedBy: 'reviewer-id',
+      reviewedAt: receipt.createdAt,
+      reviewedByName: null,
+    },
+    task: {
+      id: 'task-id',
+      assigneeId: 'assignee-id',
+      assignedAt: receipt.createdAt,
+      status: 'ASSIGNED',
+      assigneeName: null,
+    },
+  }
+  page()
+  expect(await screen.findByText('Người duyệt: Chưa có tên người duyệt')).toBeInTheDocument()
+  expect(screen.getByText('Nhân viên: Chưa có tên nhân viên')).toBeInTheDocument()
+  expect(screen.getByText('Quyết định đã lưu: Từ chối')).toBeInTheDocument()
+  for (const value of ['reviewer-id', 'task-id', 'assignee-id']) {
+    expect(document.body).not.toHaveTextContent(value)
+  }
 })
 
 describe('Receptionist service-order access', () => {
@@ -204,7 +269,7 @@ describe('staff list and detail', () => {
     expect(screen.getByLabelText('Từ khóa dịch vụ')).toHaveClass('border-input')
     expect(screen.getByLabelText('Từ khóa dịch vụ')).toHaveAttribute('maxlength', '100')
     expect(screen.getByRole('button', { name: 'Tìm kiếm' })).toHaveClass('rounded-full')
-    expect(screen.getByText(/Nguyễn An/)).toHaveTextContent('customer-1')
+    expect(screen.getByText(/Nguyễn An/)).not.toHaveTextContent('customer-1')
     expect(screen.getByText(/Không còn thông tin đặt phòng/)).toBeInTheDocument()
     expect(screen.getByText('Chưa ghi phí')).toBeInTheDocument()
     expect(screen.getByText(/Thời gian yêu cầu:/)).toBeInTheDocument()
@@ -309,7 +374,7 @@ describe('staff list and detail', () => {
   it('renders snapshot, booking, nullable customer and missing booking safely', async () => {
     current = { ...current, customer: { id: 'customer-1', fullName: null }, booking: null }
     page()
-    await screen.findByText(/Không có tên/)
+    await screen.findByText(/Chưa có tên khách hàng/)
     expect(screen.getByText('Không còn thông tin đặt phòng.')).toBeInTheDocument()
     expect(screen.getByText('2 kg')).toBeInTheDocument()
     expect(screen.getByText(/26\.000/)).toBeInTheDocument()
@@ -343,7 +408,7 @@ describe('review safety', () => {
       '/staff/service-orders',
     )
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    const trigger = screen.getByRole('button', { name: 'Xem lại quyết định' })
+    const trigger = screen.getByRole('button', { name: 'Gửi đơn' })
     trigger.focus()
     fireEvent.click(trigger)
     const dialog = screen.getByRole('dialog', { name: 'Xác nhận chấp nhận' })
@@ -398,7 +463,7 @@ describe('review safety', () => {
     fireEvent.change(screen.getByLabelText(/Lý do \(bắt buộc/), {
       target: { value: '  Hết khả năng phục vụ  ' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Xem lại quyết định' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đơn' }))
     expect(screen.getByRole('dialog')).toHaveTextContent('không ghi phí và không tạo công việc')
     fireEvent.click(screen.getByRole('button', { name: 'Quay lại' }))
     expect(api.patch).not.toHaveBeenCalled()
@@ -406,7 +471,7 @@ describe('review safety', () => {
       current = { ...current, reviewStatus: 'REJECTED' }
       return { data: current }
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Xem lại quyết định' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đơn' }))
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận gửi' }))
     await screen.findByText('Kết quả duyệt đã hoàn tất, chỉ xem.')
     expect(api.patch).toHaveBeenCalledWith('/service-orders/order-1/review', {

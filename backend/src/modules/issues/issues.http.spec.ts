@@ -101,6 +101,7 @@ describe('Report issue HTTP', () => {
         {
           provide: getModelToken(User.name),
           useValue: {
+            find: () => chain([]),
             findOne: vi
               .fn()
               .mockImplementation(
@@ -180,6 +181,8 @@ describe('Report issue HTTP', () => {
           bookingId: String(booking),
           roomId: String(room),
           roomNumber: '101',
+          bookingCode: null,
+          roomNumbers: [],
         },
       ],
       total: 1,
@@ -201,7 +204,11 @@ describe('Report issue HTTP', () => {
     async (role) => {
       await get('', role).expect(200);
       await get(`/${issueId}`, role).expect(200);
-      expect(findBookings).not.toHaveBeenCalled();
+      expect(findBookings).toHaveBeenCalledWith({ _id: { $in: [booking] } });
+      expect(findBookings).not.toHaveBeenCalledWith({
+        customer: owner,
+        isActive: true,
+      });
       expect(find).toHaveBeenCalledWith({});
     },
   );

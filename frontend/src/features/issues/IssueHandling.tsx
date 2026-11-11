@@ -17,7 +17,13 @@ import {
   type ReviewIssueInput,
 } from './api'
 import { issueKeys } from './hooks'
-import { handlingLabels, issueDate, priorityLabels, staffRoleLabels } from './presentation'
+import {
+  handlingLabels,
+  issueDate,
+  personName,
+  priorityLabels,
+  staffRoleLabels,
+} from './presentation'
 
 function mutationError(error: unknown) {
   const status = isAxiosError(error) ? error.response?.status : undefined
@@ -222,7 +228,7 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
                   Phân công chưa hoàn tất. Chỉ thử lại cùng nhân viên và thời hạn đã lưu; không thay
                   đổi ý định.
                 </p>
-                <p>Nhân viên đã lưu: {issue.assigneeId ?? 'Chưa có thông tin'}</p>
+                <p>Nhân viên đã lưu: {personName(issue.assigneeName)}</p>
                 <p>Thời hạn đã lưu: {issue.dueAt ? issueDate(issue.dueAt) : 'Không có'}</p>
                 <p className="break-words whitespace-pre-wrap">
                   Hướng dẫn đã lưu: {issue.assignmentInstructions ?? 'Không có'}
@@ -326,8 +332,10 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
             <>
               <p>
                 Nhân viên:{' '}
-                {users.find((user) => user.id === confirmation.input.assigneeId)?.displayName ??
-                  confirmation.input.assigneeId}
+                {personName(
+                  users.find((user) => user.id === confirmation.input.assigneeId)?.displayName ??
+                    issue.assigneeName,
+                )}
               </p>
               <p>
                 Thời hạn:{' '}
