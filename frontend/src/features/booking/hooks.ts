@@ -33,6 +33,7 @@ import {
   searchAvailability,
   submitBookingDetails,
   updateBooking,
+  updateHoldRooms,
   verifyVnpayReturn,
   type AddChargeInput,
   type AddServiceChargeInput,
@@ -114,6 +115,10 @@ export function useHoldBooking() {
 
 export function useSubmitBookingDetails() {
   return useMutation({ mutationFn: submitBookingDetails })
+}
+
+export function useUpdateHoldRooms() {
+  return useMutation({ mutationFn: updateHoldRooms })
 }
 
 /**

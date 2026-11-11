@@ -1,5 +1,5 @@
 import { addDays, format } from 'date-fns'
-import { BedDouble, Maximize2, Users } from 'lucide-react'
+import { BedDouble, Maximize2, Minus, Plus, TriangleAlert, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Button, Skeleton, Slider } from '@/components/atoms'
@@ -172,6 +172,22 @@ export function SearchRoomsPage() {
     [groups, selection, nights],
   )
 
+  // Tổng sức chứa các phòng đã chọn; dùng để nhắc mềm khi chưa đủ chỗ cho số khách.
+  const selectedCapacity = useMemo(
+    () =>
+      groups.reduce((sum, group) => sum + (selection[group.roomTypeId] ?? 0) * group.capacity, 0),
+    [groups, selection],
+  )
+  const underCapacity = selectedRoomIds.length > 0 && selectedCapacity < criteria.guests
+
+  // Tăng/giảm số phòng của một loại, kẹp trong [0, số phòng còn trống].
+  function changeQty(roomTypeId: string, delta: number, free: number) {
+    setSelection((prev) => ({
+      ...prev,
+      [roomTypeId]: Math.max(0, Math.min(free, (prev[roomTypeId] ?? 0) + delta)),
+    }))
+  }
+
   const handleSearch = ({ from, to, guests }: SearchValue) => {
     setSelection({})
     setParams({
@@ -335,7 +351,7 @@ export function SearchRoomsPage() {
                         </div>
                       }
                       actions={
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2">
                           <Button asChild variant="outline" className="rounded-full">
                             <Link
                               to={`/room-types/${group.roomTypeId}?checkIn=${criteria.checkIn}&checkOut=${criteria.checkOut}&guests=${criteria.guests}`}
@@ -343,31 +359,48 @@ export function SearchRoomsPage() {
                               Chi tiết
                             </Link>
                           </Button>
-                          <Button asChild disabled={free === 0} className="rounded-full">
-                            {free > 0 ? (
-                              <Link
-                                to={`/booking/new?checkIn=${criteria.checkIn}&checkOut=${criteria.checkOut}&guests=${criteria.guests}&rooms=${group.rooms[0].id}`}
+                          {free > 0 ? (
+                            <div
+                              className="flex items-center gap-1"
+                              role="group"
+                              aria-label={`Số phòng ${group.name}`}
+                            >
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="size-9 rounded-full p-0"
+                                aria-label={`Bớt phòng ${group.name}`}
+                                disabled={qty === 0}
+                                onClick={() => changeQty(group.roomTypeId, -1, free)}
                               >
-                                Đặt ngay
-                              </Link>
-                            ) : (
-                              <span>Đặt ngay</span>
-                            )}
-                          </Button>
+                                <Minus className="size-4" />
+                              </Button>
+                              <span
+                                className="w-8 text-center font-medium tabular-nums"
+                                aria-live="polite"
+                                aria-label={`${qty} phòng ${group.name}`}
+                              >
+                                {qty}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="size-9 rounded-full p-0"
+                                aria-label={`Thêm phòng ${group.name}`}
+                                disabled={qty >= free}
+                                onClick={() => changeQty(group.roomTypeId, 1, free)}
+                              >
+                                <Plus className="size-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button disabled className="rounded-full">
+                              Hết phòng
+                            </Button>
+                          )}
                         </div>
                       }
                       selected={qty > 0}
-                      onToggle={
-                        free > 0
-                          ? () => {
-                              setSelection((prev) => ({
-                                ...prev,
-                                [group.roomTypeId]: (prev[group.roomTypeId] ?? 0) > 0 ? 0 : 1,
-                              }))
-                            }
-                          : undefined
-                      }
-                      toggleLabel={`Chọn phòng ${group.name}`}
                     />
                   )
                 })
@@ -382,14 +415,23 @@ export function SearchRoomsPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-sm text-muted-foreground">
-                Đã chọn {selectedRoomIds.length} phòng · {nights} đêm
+                Đã chọn {selectedRoomIds.length} phòng · {nights} đêm · tối đa {selectedCapacity}{' '}
+                khách
               </p>
               <p className="font-display text-2xl font-semibold text-foreground">
                 Tạm tính {vnd(estimatedTotal)}
               </p>
-              <p className="text-xs text-muted-foreground">
-                Tiền cọc và tổng tiền chính thức do hệ thống xác nhận ở bước sau.
-              </p>
+              {underCapacity ? (
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-warning">
+                  <TriangleAlert className="size-3.5 shrink-0" />
+                  Sức chứa đã chọn ({selectedCapacity} khách) nhỏ hơn số khách ({criteria.guests}).
+                  Cân nhắc thêm phòng.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Tiền cọc và tổng tiền chính thức do hệ thống xác nhận ở bước sau.
+                </p>
+              )}
             </div>
             <Button onClick={proceed} className="rounded-full px-6">
               Tiếp tục đặt phòng

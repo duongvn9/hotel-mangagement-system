@@ -115,12 +115,24 @@ export interface HoldBookingInput {
   childCount?: number
 }
 
+/** Một nhóm phòng cùng loại trong hold, kèm id từng phòng để client chỉnh số lượng. */
+export interface HeldRoomTypeGroup {
+  roomTypeId: string
+  roomTypeName: string
+  pricePerNight: number
+  roomIds: string[]
+}
+
 /** Phản hồi khi giữ phòng (ROOM_HELD) — nguồn chuẩn để hiện tạm tính và đếm ngược. */
 export interface HeldBooking {
   bookingId: string
+  /** Mã booking (vé) — để khách vãng lai huỷ/tra cứu đơn đang giữ. */
+  code: string
   holdToken: string
   status: string
   rooms: string[]
+  /** Phòng đang giữ, gom theo loại — để chỉnh số lượng từng loại trong trang đặt. */
+  roomTypes: HeldRoomTypeGroup[]
   checkIn: string
   checkOut: string
   adultCount: number
@@ -136,6 +148,17 @@ export interface HeldBooking {
  */
 export async function holdBooking(input: HoldBookingInput): Promise<HeldBooking> {
   return (await api.post<HeldBooking>('/bookings/hold', input)).data
+}
+
+/** Chỉnh danh sách phòng của một hold còn hạn (ROOM_HELD) — không tạo hold mới, không gia hạn. */
+export interface UpdateHoldRoomsInput {
+  holdToken: string
+  rooms: string[]
+}
+
+/** Cập nhật số lượng/loại phòng đang giữ ngay trong trang đặt; trả về hold đã tính lại tiền. */
+export async function updateHoldRooms(input: UpdateHoldRoomsInput): Promise<HeldBooking> {
+  return (await api.post<HeldBooking>('/bookings/hold/rooms', input)).data
 }
 
 /** Dịch vụ khách chọn kèm khi đặt; tự sinh ServiceOrder khi booking xác nhận. */

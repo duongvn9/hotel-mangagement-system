@@ -120,9 +120,41 @@ describe('SearchRoomsPage', () => {
     expect(await screen.findByRole('heading', { name: 'Deluxe' })).toBeInTheDocument()
     expect(screen.getByText('2 đêm · 2 phòng phù hợp')).toBeInTheDocument()
 
-    // Chọn 1 phòng -> hiện thanh tiếp tục.
-    fireEvent.click(screen.getByRole('checkbox', { name: /Chọn phòng/ }))
+    // Tăng số phòng bằng stepper -> hiện thanh tiếp tục.
+    fireEvent.click(screen.getByRole('button', { name: /Thêm phòng/ }))
     expect(await screen.findByText(/Tiếp tục đặt phòng/)).toBeInTheDocument()
+  })
+
+  it('lets the guest pick several rooms of one type and caps at what is free', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/availability') return { data: availableRooms }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    renderWithAuth(bookingRoutes, {
+      path: '/search?checkIn=2099-01-10&checkOut=2099-01-12&guests=2',
+    })
+
+    await screen.findByRole('heading', { name: 'Deluxe' })
+    const add = screen.getByRole('button', { name: /Thêm phòng/ })
+    fireEvent.click(add)
+    fireEvent.click(add)
+    expect(await screen.findByText(/Đã chọn 2 phòng/)).toBeInTheDocument()
+    // Chỉ còn 2 phòng trống nên không thể tăng thêm.
+    expect(add).toBeDisabled()
+  })
+
+  it('warns softly when the chosen rooms hold fewer guests than requested', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/availability') return { data: availableRooms }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    renderWithAuth(bookingRoutes, {
+      path: '/search?checkIn=2099-01-10&checkOut=2099-01-12&guests=4',
+    })
+
+    await screen.findByRole('heading', { name: 'Deluxe' })
+    fireEvent.click(screen.getByRole('button', { name: /Thêm phòng/ }))
+    expect(await screen.findByText(/nhỏ hơn số khách/)).toBeInTheDocument()
   })
 
   it('defaults to upcoming dates when criteria are missing from the URL', async () => {
@@ -184,6 +216,35 @@ describe('RoomDetailsPage', () => {
     expect(screen.getByText('Ban công ngắm biển')).toBeInTheDocument()
     expect(screen.getByText('Bồn tắm nằm')).toBeInTheDocument()
     expect(screen.getByText(/1\.800\.000/)).toBeInTheDocument()
+  })
+
+  it('books now straight from the detail page using a free room of the type', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/room-types/t1/overview') return { data: mockRoom }
+      if (url === '/availability')
+        return {
+          data: [
+            {
+              id: 'r5',
+              roomTypeId: 't1',
+              roomTypeName: 'Phòng Biển Deluxe',
+              pricePerNight: 1_800_000,
+              capacity: 3,
+            },
+          ],
+        }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    renderWithAuth(bookingRoutes, {
+      path: '/room-types/t1?checkIn=2099-01-10&checkOut=2099-01-12&guests=2',
+    })
+
+    const cta = await screen.findByRole('link', { name: 'Đặt ngay' })
+    expect(cta).toHaveAttribute(
+      'href',
+      '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r5',
+    )
   })
 })
 
@@ -370,9 +431,13 @@ describe('MyBookingsPage', () => {
 
 const held = {
   bookingId: 'b9',
+  code: 'BK900',
   holdToken: 'HOLDTOKEN123',
   status: 'ROOM_HELD',
   rooms: ['r1'],
+  roomTypes: [
+    { roomTypeId: 'type1', roomTypeName: 'Deluxe', pricePerNight: 1_000_000, roomIds: ['r1'] },
+  ],
   checkIn: '2099-01-10',
   checkOut: '2099-01-12',
   adultCount: 2,
@@ -394,6 +459,7 @@ describe('CreateBookingPage (hold-first flow)', () => {
     })
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
       if (url === '/bookings/service-catalog') return { data: { items: [] } }
+      if (url === '/availability') return { data: [] }
       if (url === '/bookings/b9')
         return { data: { ...booking, id: 'b9', status: 'PENDING_DEPOSIT' } }
       throw new Error(`unexpected GET ${url}`)
@@ -443,6 +509,7 @@ describe('CreateBookingPage (hold-first flow)', () => {
             ],
           },
         }
+      if (url === '/availability') return { data: [] }
       if (url === '/bookings/b9')
         return { data: { ...booking, id: 'b9', status: 'PENDING_DEPOSIT' } }
       throw new Error(`unexpected GET ${url}`)
@@ -502,6 +569,129 @@ describe('CreateBookingPage (hold-first flow)', () => {
     expect(
       screen.getByText(/Đã quá thời gian giữ phòng|Thời gian giữ phòng đã hết/i),
     ).toBeInTheDocument()
+  })
+
+  it('lets the guest cancel the hold and returns to search', async () => {
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+      if (url === '/bookings/hold') return { data: held }
+      if (url === '/bookings/b9/cancel')
+        return { data: { id: 'b9', code: 'BK900', status: 'CANCELLED' } }
+      throw new Error(`unexpected POST ${url}`)
+    })
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/service-catalog') return { data: { items: [] } }
+      if (url === '/availability') return { data: [] }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    const { router } = renderWithAuth(bookingRoutes, {
+      path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ giữ phòng' }))
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/bookings/b9/cancel', { code: 'BK900' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/search'))
+  })
+
+  it('releases the hold when the guest leaves before paying', async () => {
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+      if (url === '/bookings/hold') return { data: held }
+      if (url === '/bookings/b9/cancel')
+        return { data: { id: 'b9', code: 'BK900', status: 'CANCELLED' } }
+      throw new Error(`unexpected POST ${url}`)
+    })
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/service-catalog') return { data: { items: [] } }
+      if (url === '/availability') return { data: [] }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    const { unmount } = renderWithAuth(bookingRoutes, {
+      path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+    })
+
+    await screen.findByRole('button', { name: 'Tiếp tục đặt cọc' })
+    unmount()
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/bookings/b9/cancel', { code: 'BK900' }))
+  })
+
+  it('lets the guest adjust the room quantity on the booking page', async () => {
+    const updated = {
+      ...held,
+      rooms: ['r1', 'r2'],
+      roomTypes: [
+        {
+          roomTypeId: 'type1',
+          roomTypeName: 'Deluxe',
+          pricePerNight: 1_000_000,
+          roomIds: ['r1', 'r2'],
+        },
+      ],
+      roomTotal: 4_000_000,
+      depositAmount: 400_000,
+    }
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+      if (url === '/bookings/hold') return { data: held }
+      if (url === '/bookings/hold/rooms') return { data: updated }
+      throw new Error(`unexpected POST ${url}`)
+    })
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/service-catalog') return { data: { items: [] } }
+      if (url === '/availability')
+        return {
+          data: [
+            {
+              id: 'r2',
+              roomTypeId: 'type1',
+              roomTypeName: 'Deluxe',
+              pricePerNight: 1_000_000,
+              capacity: 3,
+            },
+          ],
+        }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    renderWithAuth(bookingRoutes, {
+      path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+    })
+
+    // Tăng thêm 1 phòng trong bộ chỉnh số lượng rồi cập nhật -> gọi endpoint chỉnh hold.
+    fireEvent.click(await screen.findByRole('button', { name: /Thêm phòng Deluxe/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật số phòng' }))
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/bookings/hold/rooms', {
+        holdToken: 'HOLDTOKEN123',
+        rooms: ['r1', 'r2'],
+      }),
+    )
+  })
+
+  it('warns before leaving via in-app navigation and cancels the hold on confirm', async () => {
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+      if (url === '/bookings/hold') return { data: held }
+      if (url === '/bookings/b9/cancel')
+        return { data: { id: 'b9', code: 'BK900', status: 'CANCELLED' } }
+      throw new Error(`unexpected POST ${url}`)
+    })
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/service-catalog') return { data: { items: [] } }
+      if (url === '/availability') return { data: [] }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    const { router } = renderWithAuth(bookingRoutes, {
+      path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+    })
+
+    // Đang giữ phòng, bấm "Chọn lại phòng" (điều hướng nội bộ) -> hiện cảnh báo rời trang.
+    fireEvent.click(await screen.findByRole('link', { name: /Chọn lại phòng/ }))
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent(/Rời trang khi đang giữ phòng/)
+
+    // Xác nhận rời -> huỷ giữ phòng rồi điều hướng tiếp.
+    fireEvent.click(screen.getByRole('button', { name: /Rời .* huỷ giữ phòng/ }))
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/bookings/b9/cancel', { code: 'BK900' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/search'))
   })
 })
 
