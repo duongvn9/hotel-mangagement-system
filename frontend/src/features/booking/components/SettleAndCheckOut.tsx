@@ -6,6 +6,7 @@ import type { BookingListItem, DeskPaymentMethod, InvoiceTotals } from '../api'
 import {
   useCancelPendingVnpay,
   useCheckOut,
+  useCheckoutInspection,
   useConfirmFees,
   useInitiateFinal,
   useRecordCash,
@@ -43,6 +44,7 @@ export function SettleAndCheckOut({
   const vnpay = useInitiateFinal()
   const cancelVnpay = useCancelPendingVnpay(booking.id)
   const checkOut = useCheckOut()
+  const inspection = useCheckoutInspection(booking.id)
   const [confirmMethod, setConfirmMethod] = useState<DeskPaymentMethod | null>(null)
   const [confirmCheckOut, setConfirmCheckOut] = useState(false)
   const [vnpayOpened, setVnpayOpened] = useState(false)
@@ -51,6 +53,18 @@ export function SettleAndCheckOut({
   const [cardRequestId, setCardRequestId] = useState(newRequestId)
 
   const paid = totals.balanceDue === 0
+  // Chỉ Check Out khi nhân viên dịch vụ đã xác nhận kiểm tra phòng (lần kiểm tra gần nhất hoàn thành).
+  const inspectionStatus = inspection.data?.status
+  const roomInspected = inspectionStatus === 'COMPLETED'
+  const inspectionHint = !inspection.isSuccess
+    ? inspection.isError
+      ? 'Không tải được trạng thái kiểm tra phòng.'
+      : ''
+    : roomInspected
+      ? ''
+      : inspectionStatus === 'ASSIGNED' || inspectionStatus === 'IN_PROGRESS'
+        ? 'Đang chờ nhân viên dịch vụ xác nhận kiểm tra phòng.'
+        : 'Cần yêu cầu nhân viên dịch vụ kiểm tra phòng trước khi Check Out.'
   const feesConfirmed = Boolean(feesConfirmedAt)
   const roomNumbers = booking.rooms
     .map((room) => room.roomNumber)
@@ -254,7 +268,7 @@ export function SettleAndCheckOut({
         <div className="space-y-1">
           <Button
             size="sm"
-            disabled={!paid}
+            disabled={!paid || !roomInspected}
             className="rounded-full"
             onClick={() => setConfirmCheckOut(true)}
           >
@@ -265,6 +279,7 @@ export function SettleAndCheckOut({
               Cần thanh toán đủ hóa đơn trước khi Check Out.
             </p>
           )}
+          {inspectionHint && <p className="text-xs text-muted-foreground">{inspectionHint}</p>}
         </div>
       )}
       {checkOut.isError && <Alert tone="danger">{getErrorMessage(checkOut.error)}</Alert>}

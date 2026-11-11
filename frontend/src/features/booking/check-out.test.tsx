@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { bookingRoutes } from './routes'
-import type { BookingCharges, BookingListItem, SameDayList } from './api'
+import type { BookingCharges, BookingListItem, CheckoutInspectionView, SameDayList } from './api'
 import { todayISO } from './utils'
 
 const receptionist = { ...ME, id: 'u2', email: 'reception@hms.local', role: 'RECEPTIONIST' }
@@ -63,17 +63,34 @@ function renderPage() {
   })
 }
 
-function mockGet(initial: BookingCharges) {
+/** Nhân viên dịch vụ đã xác nhận kiểm tra phòng (điều kiện để Check Out). */
+const inspected = (
+  status: CheckoutInspectionView['status'] = 'COMPLETED',
+): CheckoutInspectionView => ({
+  taskId: 't1',
+  status,
+  assigneeName: 'Lê Dịch Vụ',
+  requestedAt: '2099-01-10T00:00:00.000Z',
+  ...(status === 'COMPLETED' ? { completedAt: '2099-01-10T01:00:00.000Z' } : {}),
+})
+
+function mockGet(initial: BookingCharges, inspection: CheckoutInspectionView | null = inspected()) {
   let current = initial
+  let currentInspection = inspection
   const get = vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
     if (url === '/front-desk/same-day') return { data: list() }
     if (url === '/bookings/d1/charges') return { data: current }
+    if (url === '/bookings/d1/checkout-inspection')
+      return { data: { inspection: currentInspection } }
     throw new Error(`unexpected GET ${url}`)
   })
   return {
     get,
     set: (next: BookingCharges) => {
       current = next
+    },
+    setInspection: (next: CheckoutInspectionView | null) => {
+      currentInspection = next
     },
   }
 }
@@ -288,6 +305,61 @@ describe('Pay and check out from the same-day departures list', () => {
     )
   })
 
+  it('does not allow Check Out until service staff has been asked to inspect the room', async () => {
+    mockGet(invoice(true), null)
+    await openPanel()
+
+    await waitFor(() =>
+      expect(
+        departure().getByText(/Cần yêu cầu nhân viên dịch vụ kiểm tra phòng trước khi Check Out/),
+      ).toBeInTheDocument(),
+    )
+    expect(departure().getByRole('button', { name: 'Check Out' })).toBeDisabled()
+  })
+
+  it.each(['ASSIGNED', 'IN_PROGRESS'] as const)(
+    'waits for service staff to confirm while the inspection is %s',
+    async (status) => {
+      mockGet(invoice(true), inspected(status))
+      await openPanel()
+
+      await waitFor(() =>
+        expect(
+          departure().getByText(/Đang chờ nhân viên dịch vụ xác nhận kiểm tra phòng/),
+        ).toBeInTheDocument(),
+      )
+      expect(departure().getByRole('button', { name: 'Check Out' })).toBeDisabled()
+    },
+  )
+
+  it('asks for a new inspection after a cancelled one', async () => {
+    mockGet(invoice(true), inspected('CANCELLED'))
+    await openPanel()
+
+    await waitFor(() =>
+      expect(
+        departure().getByText(/Cần yêu cầu nhân viên dịch vụ kiểm tra phòng trước khi Check Out/),
+      ).toBeInTheDocument(),
+    )
+    expect(departure().getByRole('button', { name: 'Check Out' })).toBeDisabled()
+  })
+
+  it('enables Check Out once the inspection is confirmed, after a reload of the status', async () => {
+    const state = mockGet(invoice(true), inspected('ASSIGNED'))
+    await openPanel()
+    await waitFor(() =>
+      expect(departure().getByRole('button', { name: 'Check Out' })).toBeDisabled(),
+    )
+
+    state.setInspection(inspected('COMPLETED'))
+    fireEvent.click(departure().getByRole('button', { name: 'Tải lại' }))
+
+    await waitFor(() =>
+      expect(departure().getByRole('button', { name: 'Check Out' })).toBeEnabled(),
+    )
+    expect(departure().queryByText(/Đang chờ nhân viên dịch vụ xác nhận/)).toBeNull()
+  })
+
   it('checks the guest out after a confirmation and reloads the list', async () => {
     const state = mockGet(invoice(true))
     const post = vi.spyOn(api, 'post').mockResolvedValue({ data: {} })
@@ -296,6 +368,10 @@ describe('Pay and check out from the same-day departures list', () => {
     expect(departure().getByLabelText(/Số tiền/)).toBeInTheDocument()
     const before = state.get.mock.calls.length
 
+    // Check Out chờ trạng thái kiểm tra phòng của nhân viên dịch vụ tải xong.
+    await waitFor(() =>
+      expect(departure().getByRole('button', { name: 'Check Out' })).toBeEnabled(),
+    )
     fireEvent.click(departure().getByRole('button', { name: 'Check Out' }))
     expect(departure().getByText(/Xác nhận Check Out phòng 201/)).toBeInTheDocument()
     expect(post).not.toHaveBeenCalled()
@@ -309,6 +385,9 @@ describe('Pay and check out from the same-day departures list', () => {
     mockGet(invoice(true))
     vi.spyOn(api, 'post').mockRejectedValue(failure('Invoice not fully paid: 100 VND still due'))
     await openPanel()
+    await waitFor(() =>
+      expect(departure().getByRole('button', { name: 'Check Out' })).toBeEnabled(),
+    )
     fireEvent.click(departure().getByRole('button', { name: 'Check Out' }))
     fireEvent.click(departure().getByRole('button', { name: 'Xác nhận Check Out' }))
     expect(await departure().findByRole('alert')).toHaveTextContent('Invoice not fully paid')

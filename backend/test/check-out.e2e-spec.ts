@@ -12,6 +12,9 @@ import { Invoice } from '../src/modules/invoices/schemas/invoice.schema.js';
 import { PaymentTransaction } from '../src/modules/payments/schemas/payment-transaction.schema.js';
 import { Room } from '../src/modules/rooms/schemas/room.schema.js';
 import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
+import { Task } from '../src/modules/tasks/schemas/task.schema.js';
+import { TaskStatus } from '../src/modules/tasks/task-contract.js';
+import { addInspection } from './inspection-fixture.js';
 
 describe('Check out guest (e2e)', () => {
   let app: INestApplication;
@@ -20,6 +23,7 @@ describe('Check out guest (e2e)', () => {
   let payments: Model<PaymentTransaction>;
   let rooms: Model<Room>;
   let roomTypes: Model<RoomType>;
+  let tasks: Model<Task>;
   const tag = String(new Types.ObjectId()).slice(-8).toUpperCase();
   const typeId = new Types.ObjectId();
   const r1 = new Types.ObjectId();
@@ -38,6 +42,8 @@ describe('Check out guest (e2e)', () => {
       status?: BookingStatus;
       deposit?: number;
       roomIds?: Types.ObjectId[];
+      /** Kiểm tra phòng của nhân viên dịch vụ; mặc định đã hoàn thành. `none` = chưa yêu cầu. */
+      inspection?: TaskStatus | 'none';
     } = {},
   ) => {
     const roomIds = options.roomIds ?? [r1];
@@ -61,6 +67,9 @@ describe('Check out guest (e2e)', () => {
       .get(`/api/v1/bookings/${booking.id}/charges`)
       .set(RECEPTIONIST)
       .expect(200);
+    if (options.inspection !== 'none') {
+      await addInspection(tasks, booking._id, options.inspection);
+    }
     const invoice = await invoices.findOne({ booking: booking._id });
     const deposit = options.deposit ?? 300000;
     if (deposit > 0) {
@@ -100,6 +109,7 @@ describe('Check out guest (e2e)', () => {
     const ids = docs.map((doc) => doc._id);
     await payments.deleteMany({ booking: { $in: ids } });
     await invoices.deleteMany({ booking: { $in: ids } });
+    await tasks.deleteMany({ sourceId: { $in: ids } });
     await bookings.deleteMany({ code: new RegExp(`^OUT${tag}`) });
     await rooms.updateMany({ _id: r1 }, { $set: { status: 'OCCUPIED' } });
     await rooms.updateMany({ _id: r2 }, { $set: { status: 'MAINTENANCE' } });
@@ -118,6 +128,7 @@ describe('Check out guest (e2e)', () => {
     payments = app.get(getModelToken(PaymentTransaction.name));
     rooms = app.get(getModelToken(Room.name));
     roomTypes = app.get(getModelToken(RoomType.name));
+    tasks = app.get(getModelToken(Task.name));
     await Promise.all([
       bookings.init(),
       invoices.init(),
@@ -200,6 +211,44 @@ describe('Check out guest (e2e)', () => {
   it('checks out straight away when the deposit already covers the invoice', async () => {
     const { booking } = await prepare({ deposit: 1000000 });
     await checkOut(booking.id).expect(201);
+  });
+
+  describe('room inspection by service staff', () => {
+    it('refuses to check out until service staff has been asked to inspect the room', async () => {
+      const { booking } = await prepare({ inspection: 'none' });
+      await payCash(booking.id);
+
+      const { body } = await checkOut(booking.id).expect(409);
+
+      expect(body.message).toMatch(/not been inspected/i);
+      expect((await bookings.findById(booking._id))?.status).toBe('CHECKED_IN');
+    });
+
+    it.each([TaskStatus.Assigned, TaskStatus.InProgress, TaskStatus.Cancelled])(
+      'refuses while the inspection is %s',
+      async (status) => {
+        const { booking } = await prepare({ inspection: status });
+        await payCash(booking.id);
+
+        const { body } = await checkOut(booking.id).expect(409);
+
+        expect(body.message).toMatch(/has not confirmed/i);
+        expect((await bookings.findById(booking._id))?.status).toBe(
+          'CHECKED_IN',
+        );
+      },
+    );
+
+    it('checks out once service staff has completed the inspection', async () => {
+      const { booking } = await prepare({ inspection: TaskStatus.Completed });
+      await payCash(booking.id);
+
+      await checkOut(booking.id).expect(201);
+
+      expect((await bookings.findById(booking._id))?.status).toBe(
+        'CHECKED_OUT',
+      );
+    });
   });
 
   it('refuses while money is still due and changes nothing', async () => {
