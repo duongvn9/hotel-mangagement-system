@@ -1,6 +1,7 @@
 import { parseISO } from 'date-fns'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { Inbox } from 'lucide-react'
+import { useState } from 'react'
 import * as molecules from '.'
 import { normalizeRange } from './date-range'
 import { DateField } from './DateField'
@@ -110,6 +111,45 @@ describe('DateRangeField', () => {
     render(<DateRangeField from="2026-11-10" to="2026-11-12" onChange={() => {}} />)
     expect(screen.getByRole('button')).toHaveTextContent('10/11')
     expect(screen.getByRole('button')).toHaveTextContent('12/11')
+  })
+
+  describe('choosing dates', () => {
+    const day = (n: number) => screen.findByRole('button', { name: new RegExp(`${n} tháng 11`) })
+    const Harness = ({ onChange }: { onChange: (from: string, to: string) => void }) => {
+      const [range, setRange] = useState(['2026-11-10', '2026-11-12'])
+      return (
+        <DateRangeField
+          from={range[0]}
+          to={range[1]}
+          onChange={(from, to) => {
+            setRange([from, to])
+            onChange(from, to)
+          }}
+        />
+      )
+    }
+    const open = () => fireEvent.click(screen.getByRole('button', { name: /Nhận phòng/ }))
+
+    it('starts a new stay from the first day clicked instead of stretching the old one', async () => {
+      const onChange = vi.fn()
+      render(<Harness onChange={onChange} />)
+      open()
+      fireEvent.click(await day(20))
+      expect(onChange).toHaveBeenLastCalledWith('2026-11-20', '2026-11-21')
+      fireEvent.click(await day(23))
+      expect(onChange).toHaveBeenLastCalledWith('2026-11-20', '2026-11-23')
+    })
+
+    it('restarts from the new day when the second click is earlier than the first', async () => {
+      const onChange = vi.fn()
+      render(<Harness onChange={onChange} />)
+      open()
+      fireEvent.click(await day(20))
+      fireEvent.click(await day(18))
+      expect(onChange).toHaveBeenLastCalledWith('2026-11-18', '2026-11-19')
+      fireEvent.click(await day(22))
+      expect(onChange).toHaveBeenLastCalledWith('2026-11-18', '2026-11-22')
+    })
   })
 
   it('does not throw when to is not after from', () => {

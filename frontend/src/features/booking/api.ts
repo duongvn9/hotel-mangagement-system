@@ -51,6 +51,14 @@ export async function getRoomTypeOverview(id: string): Promise<RoomTypeOverview>
   return (await api.get<RoomTypeOverview>(`/room-types/${id}/overview`)).data
 }
 
+/** Một loại phòng trong danh sách công khai khi khách chưa chọn ngày. */
+export type RoomTypeSummary = Omit<RoomTypeOverview, 'amenities'>
+
+/** Mọi loại phòng đang kinh doanh (rẻ nhất trước), không cần ngày hay đăng nhập. */
+export async function listRoomTypes(): Promise<RoomTypeSummary[]> {
+  return (await api.get<RoomTypeSummary[]>('/availability/room-types')).data
+}
+
 export interface CreateBookingInput {
   rooms: string[]
   checkIn: string
@@ -363,6 +371,10 @@ export interface BookingListItem {
   createdAt: string
   /** Booking do nhân viên tạo tại quầy (UC08). */
   walkIn: boolean
+  /** Tiền cọc cần thu (VND); chỉ có trong danh sách đến/đi trong ngày. */
+  depositAmount?: number
+  /** Đã có khoản cọc thành công; chỉ có trong danh sách đến/đi trong ngày. */
+  depositPaid?: boolean
 }
 
 export interface BookingListPage {
@@ -751,6 +763,8 @@ export interface PaymentReturn {
   responseCode: string
   /** Booking của giao dịch (server trả) để đọc lại trạng thái, không cần localStorage. */
   bookingId: string
+  /** Đặt cọc hay thanh toán phần còn lại. Thiếu (backend cũ) thì coi như đặt cọc. */
+  purpose?: 'DEPOSIT' | 'FINAL'
 }
 
 export const PAYMENT_RESULT_DISPLAY: Record<

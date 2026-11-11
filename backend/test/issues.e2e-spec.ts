@@ -376,8 +376,12 @@ describe('Report issue (e2e)', () => {
     expect(detail.body).toEqual({
       ...response.body,
       roomNumber: null,
+      // Ngữ cảnh đọc được của booking (mã booking và số phòng) mà chi tiết sự cố trả về.
+      bookingCode: expect.any(String),
+      roomNumbers: [expect.any(String)],
       linkedTasks: [],
       linkedTasksAvailable: false,
+      customerHistory: [{ type: 'REPORTED', at: response.body.reportedAt }],
     });
     await get(`/${id}`, 'CUSTOMER', other).expect(404);
     const keyword = encodeURIComponent(`[${booking}].*`);

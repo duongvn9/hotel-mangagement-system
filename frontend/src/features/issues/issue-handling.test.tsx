@@ -119,6 +119,36 @@ beforeEach(() => {
   })
 })
 
+test('staff detail shows readable source and people without exposing operational IDs', async () => {
+  setup({
+    ...initial,
+    bookingCode: 'BK-2026-101',
+    roomNumbers: ['101', '102'],
+    reporterName: 'Nguyễn Minh Anh',
+    reviewedBy: staff,
+    reviewedByName: 'Trần Hải Yến',
+    assigneeId: staff,
+    assigneeName: 'Mai Phương',
+    assignmentRequestedBy: staff,
+    assignmentRequestedByName: 'Trần Hải Yến',
+  } as IssueDetail)
+  await settle()
+  expect(screen.getByText('Nguyễn Minh Anh')).toBeInTheDocument()
+  expect(screen.getByText('BK-2026-101')).toBeInTheDocument()
+  expect(screen.getByText('Phòng 101, 102')).toBeInTheDocument()
+  expect(screen.getAllByText('Trần Hải Yến')).toHaveLength(2)
+  expect(screen.getByText('Mai Phương')).toBeInTheDocument()
+  expect(document.body.textContent).not.toMatch(/[a-f\d]{24}/i)
+})
+
+test('missing display data uses honest fallbacks instead of IDs', async () => {
+  setup({ ...initial, reviewedBy: staff, assigneeId: staff })
+  await settle()
+  expect(screen.getByText('Chưa có thông tin đặt phòng')).toBeInTheDocument()
+  expect(screen.getAllByText('Chưa có thông tin người dùng').length).toBeGreaterThan(0)
+  expect(document.body.textContent).not.toMatch(/[a-f\d]{24}/i)
+})
+
 test('review confirmation traps keyboard focus and cancels without a request', async () => {
   setup()
   const patch = vi.spyOn(api, 'patch')
@@ -382,7 +412,7 @@ test.each(['MANAGER', 'CUSTOMER'])(
     if (role === 'CUSTOMER') {
       expect(screen.queryByText('Công việc nội bộ')).not.toBeInTheDocument()
       expect(screen.queryByText('Ghi chú nội bộ')).not.toBeInTheDocument()
-    } else expect(screen.getByText('Công việc nội bộ')).toBeInTheDocument()
+    } else expect(screen.getAllByText('Công việc nội bộ').length).toBeGreaterThan(0)
     expect(screen.queryByText('Bí mật')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Công việc nội bộ/ })).not.toBeInTheDocument()
   },

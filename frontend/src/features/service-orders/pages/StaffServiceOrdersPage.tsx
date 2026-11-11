@@ -118,10 +118,9 @@ export function StaffServiceOrdersPage() {
                         {order.service.name}
                       </Link>
                     </h2>
-                    <p>
-                      Khách hàng: {order.customer.fullName ?? 'Không có tên'} · {order.customer.id}
-                    </p>
+                    <p>Khách hàng: {order.customer.fullName?.trim() || 'Chưa có tên khách hàng'}</p>
                     <p>Đặt phòng: {order.booking?.code ?? 'Không còn thông tin đặt phòng'}</p>
+                    <p>Phòng: {order.booking?.roomNumbers?.join(', ') || '—'}</p>
                     <p>
                       {order.quantity} {order.service.unit} · {money(order.amount)}
                     </p>

@@ -38,7 +38,7 @@ export interface AssignedTask extends TaskResolution {
   workResult?: string
   sourceType: 'SERVICE_ORDER' | 'ISSUE' | 'MAINTENANCE' | 'CHECKOUT_INSPECTION'
   sourceId: string
-  sourceSummary: null
+  sourceSummary: string | null
 }
 
 export interface TaskQuery {

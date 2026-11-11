@@ -47,9 +47,9 @@ export class AssignedTaskDto {
     type: String,
     nullable: true,
     description:
-      'Unavailable: no authorized source-summary adapter is available',
+      'Authorized service order or issue, booking and room context; null when unavailable or unsupported',
   })
-  sourceSummary: null;
+  sourceSummary: string | null;
 }
 
 export class AssignedTasksPageDto {

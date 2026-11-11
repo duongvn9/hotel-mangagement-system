@@ -10,6 +10,10 @@ import {
 } from '../src/modules/bookings/schemas/booking.schema.js';
 import { Room } from '../src/modules/rooms/schemas/room.schema.js';
 import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
+import {
+  PaymentTransaction,
+  PaymentStatus,
+} from '../src/modules/payments/schemas/payment-transaction.schema.js';
 import { businessDay } from '../src/modules/bookings/room-status-board.core.js';
 
 describe('Check in guest (e2e)', () => {
@@ -17,6 +21,7 @@ describe('Check in guest (e2e)', () => {
   let bookings: Model<Booking>;
   let rooms: Model<Room>;
   let roomTypes: Model<RoomType>;
+  let payments: Model<PaymentTransaction>;
   const tag = String(new Types.ObjectId()).slice(-8).toUpperCase();
   const typeStd = new Types.ObjectId();
   const typeOther = new Types.ObjectId();
@@ -34,15 +39,35 @@ describe('Check in guest (e2e)', () => {
     businessDay(new Date(Date.now() + offset * 86_400_000));
   let counter = 0;
 
-  const seed = (
+  /** Khoản cọc của booking: mặc định đã thu thành công (điều kiện để nhận phòng). */
+  const addDeposit = (
+    bookingId: unknown,
+    status: PaymentStatus = PaymentStatus.Success,
+    method = 'CASH',
+  ) =>
+    payments.create({
+      booking: new Types.ObjectId(String(bookingId)),
+      invoice: new Types.ObjectId(),
+      transactionRef: `CIN-${tag}-${new Types.ObjectId()}`,
+      method,
+      purpose: 'DEPOSIT',
+      status,
+      amount: 600000,
+      ...(status === PaymentStatus.Success ? { paidAt: new Date() } : {}),
+    });
+
+  const seed = async (
     roomIds: Types.ObjectId[],
     options: {
       status?: BookingStatus;
       checkIn?: number;
       checkOut?: number;
+      /** `paid` (mặc định) | `none` (chưa thu) | `pending` (VNPay đang chờ). */
+      deposit?: 'paid' | 'none' | 'pending';
+      depositAmount?: number;
     } = {},
-  ) =>
-    bookings.create({
+  ) => {
+    const booking = await bookings.create({
       code: `CIN${tag}${++counter}`,
       guestName: 'Check In Guest',
       guestEmail: `cin-${tag}@example.test`,
@@ -54,12 +79,19 @@ describe('Check in guest (e2e)', () => {
       childCount: 0,
       status: options.status ?? BookingStatus.Confirmed,
       roomTotal: 2000000 * roomIds.length,
-      depositAmount: 600000,
+      depositAmount: options.depositAmount ?? 600000,
       rateSnapshot: roomIds.map((room) => ({
         room,
         ratePerNight: 1000000,
       })),
     });
+    const deposit = options.deposit ?? 'paid';
+    if (deposit === 'paid') await addDeposit(booking._id);
+    if (deposit === 'pending') {
+      await addDeposit(booking._id, PaymentStatus.Pending, 'VNPAY');
+    }
+    return booking;
+  };
   const setStatus = (key: keyof typeof ids, status: string) =>
     rooms.updateOne({ _id: ids[key] }, { $set: { status } });
   const roomStatus = async (key: keyof typeof ids) =>
@@ -75,6 +107,7 @@ describe('Check in guest (e2e)', () => {
       .set(RECEPTIONIST);
 
   const reset = async () => {
+    await payments.deleteMany({ transactionRef: new RegExp(`^CIN-${tag}`) });
     await bookings.deleteMany({ code: new RegExp(`^CIN${tag}`) });
     await rooms.updateMany(
       { _id: { $in: Object.values(ids) } },
@@ -93,7 +126,13 @@ describe('Check in guest (e2e)', () => {
     bookings = app.get(getModelToken(Booking.name));
     rooms = app.get(getModelToken(Room.name));
     roomTypes = app.get(getModelToken(RoomType.name));
-    await Promise.all([bookings.init(), rooms.init(), roomTypes.init()]);
+    payments = app.get(getModelToken(PaymentTransaction.name));
+    await Promise.all([
+      bookings.init(),
+      rooms.init(),
+      roomTypes.init(),
+      payments.init(),
+    ]);
     await roomTypes.create([
       {
         _id: typeStd,
@@ -124,6 +163,7 @@ describe('Check in guest (e2e)', () => {
   beforeEach(reset);
 
   afterAll(async () => {
+    await payments.deleteMany({ transactionRef: new RegExp(`^CIN-${tag}`) });
     await bookings.deleteMany({ code: new RegExp(`^CIN${tag}`) });
     await rooms.deleteMany({ _id: { $in: Object.values(ids) } });
     await roomTypes.deleteMany({ _id: { $in: [typeStd, typeOther] } });
@@ -169,6 +209,42 @@ describe('Check in guest (e2e)', () => {
     expect(saved?.checkedInAt).toBeDefined();
     expect(await roomStatus('r1')).toBe('OCCUPIED');
     expect(await roomStatus('r2')).toBe('OCCUPIED');
+  });
+
+  describe('deposit', () => {
+    it.each(['none', 'pending'] as const)(
+      'refuses check-in while the deposit is not paid (%s) and changes nothing',
+      async (deposit) => {
+        const booking = await seed([ids.r1], { deposit });
+
+        const { body } = await checkIn(booking.id).expect(409);
+
+        expect(body.message).toMatch(/deposit/i);
+        expect((await bookings.findById(booking._id))?.status).toBe(
+          'CONFIRMED',
+        );
+        expect(await roomStatus('r1')).toBe('AVAILABLE');
+      },
+    );
+
+    it('checks in once the deposit has been paid', async () => {
+      const booking = await seed([ids.r1], { deposit: 'none' });
+      await checkIn(booking.id).expect(409);
+
+      await addDeposit(booking._id);
+
+      await checkIn(booking.id).expect(201);
+      expect((await bookings.findById(booking._id))?.status).toBe('CHECKED_IN');
+    });
+
+    it('does not ask for a deposit when none is due', async () => {
+      const booking = await seed([ids.r1], {
+        deposit: 'none',
+        depositAmount: 0,
+      });
+
+      await checkIn(booking.id).expect(201);
+    });
   });
 
   it('lets a late guest in during the stay', async () => {

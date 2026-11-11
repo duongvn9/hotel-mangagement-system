@@ -84,11 +84,14 @@ export interface OrderInput {
 }
 export interface ServiceOrder extends OrderInput {
   id: string
+  bookingCode?: string | null
+  roomNumbers?: string[]
   service: { name: string; unit: string }
   unitPriceVND: number
   amount: number
   requestedTime: string
   reviewStatus: (typeof reviewStatuses)[number]
+  reviewReason?: string
   executionStatus: (typeof executionStatuses)[number]
   createdAt: string
 }

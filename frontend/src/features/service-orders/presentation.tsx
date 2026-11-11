@@ -89,19 +89,21 @@ export function OrderReceipt({
           {order.service.name}
         </h2>
         <OrderBusinessState order={order} />
+        {order.reviewStatus === 'REJECTED' && (
+          <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
+            Lý do từ chối: {order.reviewReason?.trim() || 'Không có lý do từ chối.'}
+          </p>
+        )}
         <dl className="grid gap-4 sm:grid-cols-2">
           {[
-            ['Mã yêu cầu', order.id],
-            ['Mã đặt phòng', order.bookingId],
+            ['Mã đặt phòng', order.bookingCode?.trim() || 'Không còn thông tin đặt phòng'],
+            ['Phòng', order.roomNumbers?.join(', ') || 'Chưa có thông tin phòng'],
             ['Số lượng', `${order.quantity} ${order.service.unit}`],
             ['Đơn giá ghi nhận', money(order.unitPriceVND)],
             ['Thành tiền ghi nhận từ máy chủ', money(order.amount)],
             ['Thời gian yêu cầu', dateTime(order.requestedTime)],
-            ['Trạng thái duyệt', reviewLabels[order.reviewStatus] ?? order.reviewStatus],
-            [
-              'Trạng thái thực hiện',
-              executionLabels[order.executionStatus] ?? order.executionStatus,
-            ],
+            ['Trạng thái duyệt', reviewLabels[order.reviewStatus] ?? 'Chưa xác định'],
+            ['Trạng thái thực hiện', executionLabels[order.executionStatus] ?? 'Chưa xác định'],
             ['Ngày tạo', dateTime(order.createdAt)],
             ['Ghi chú', order.notes || 'Không có'],
           ].map(([label, value]) => (
