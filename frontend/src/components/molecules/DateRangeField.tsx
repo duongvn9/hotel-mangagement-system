@@ -1,4 +1,5 @@
 import { format, isValid, parseISO, startOfToday } from 'date-fns'
+import { useState } from 'react'
 import { vi } from 'date-fns/locale'
 import { CalendarIcon } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
@@ -23,6 +24,8 @@ export function DateRangeField({
   onChange: (from: string, to: string) => void
   className?: string
 }) {
+  // Ngày nhận vừa bấm, đang chờ bấm ngày trả. Không có thì lần bấm kế tiếp bắt đầu một kỳ lưu trú mới.
+  const [anchor, setAnchor] = useState<Date | undefined>()
   const start = parse(from)
   const end = parse(to)
   const range: DateRange | undefined = start ? { from: start, to: end } : undefined
@@ -50,8 +53,15 @@ export function DateRangeField({
           numberOfMonths={2}
           selected={range}
           disabled={(date) => date < startOfToday()}
-          onSelect={(r) => {
-            if (r?.from) onChange(...normalizeRange(r.from, r.to))
+          onDayClick={(day) => {
+            // Lịch mặc định kéo dài khoảng cũ; ở đây bấm đầu tiên luôn là ngày nhận mới.
+            if (anchor && day > anchor) {
+              onChange(...normalizeRange(anchor, day))
+              setAnchor(undefined)
+              return
+            }
+            onChange(...normalizeRange(day))
+            setAnchor(day)
           }}
           className="pointer-events-auto p-3"
         />
