@@ -340,6 +340,7 @@ describe('Payments VNPay endpoints (e2e)', () => {
     expect(response.body).toMatchObject({
       transactionRef: txnRef,
       status: 'SUCCESS',
+      purpose: 'DEPOSIT',
     });
     // Return không đổi trạng thái: payment vẫn PENDING, booking vẫn chờ cọc.
     expect((await payments.findOne({ transactionRef: txnRef }))?.status).toBe(

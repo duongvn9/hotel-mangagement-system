@@ -59,4 +59,7 @@ export class PaymentReturnResponse {
 
   @ApiProperty({ description: 'Booking của giao dịch, để đọc lại trạng thái' })
   bookingId: string;
+
+  @ApiProperty({ enum: ['DEPOSIT', 'FINAL'] })
+  purpose: string;
 }
