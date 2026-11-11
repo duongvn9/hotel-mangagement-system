@@ -22,6 +22,8 @@ import { ServiceOrdersService } from '../src/modules/service-orders/service-orde
 import { ServiceOrder } from '../src/modules/service-orders/schemas/service-order.schema.js';
 import { Role } from '../src/common/constants/role.enum.js';
 import { withBookingFinancialOperation } from '../src/modules/bookings/booking-financial-operation.js';
+import { Task } from '../src/modules/tasks/schemas/task.schema.js';
+import { addInspection } from './inspection-fixture.js';
 import { assertTestDatabase } from './test-database.js';
 
 function barrier() {
@@ -48,6 +50,7 @@ describe('financial coordination on standalone MongoDB', () => {
   let billing: InvoicesService;
   let cash: CashPaymentService;
   let checkout: CheckOutService;
+  let tasks: Model<Task>;
   let online: PaymentsService;
   let reviews: ServiceOrdersService;
   let id: string;
@@ -76,6 +79,7 @@ describe('financial coordination on standalone MongoDB', () => {
     invoices = app.get(getModelToken(Invoice.name));
     payments = app.get(getModelToken(PaymentTransaction.name));
     orders = app.get(getModelToken(ServiceOrder.name));
+    tasks = app.get(getModelToken(Task.name));
     billing = app.get(InvoicesService);
     cash = app.get(CashPaymentService);
     checkout = app.get(CheckOutService);
@@ -107,12 +111,15 @@ describe('financial coordination on standalone MongoDB', () => {
       rateSnapshot: [{ room, ratePerNight: 100000 }],
     });
     id = String(booking._id);
+    // Nhân viên dịch vụ đã xác nhận kiểm tra phòng, điều kiện để check-out.
+    await addInspection(tasks, id);
   });
   afterEach(async () => {
     vi.restoreAllMocks();
     await payments.deleteMany({ booking: new Types.ObjectId(id) });
     await invoices.deleteMany({ booking: new Types.ObjectId(id) });
     await orders.deleteMany({ booking: new Types.ObjectId(id) });
+    await tasks.deleteMany({ sourceId: new Types.ObjectId(id) });
     await bookings.deleteOne({ _id: id });
   });
   afterAll(async () => {

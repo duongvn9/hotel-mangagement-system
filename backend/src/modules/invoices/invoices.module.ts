@@ -6,6 +6,7 @@ import { NotificationsModule } from '../notifications/notifications.module.js';
 import { PaymentsModule } from '../payments/payments.module.js';
 import { RoomsModule } from '../rooms/rooms.module.js';
 import { ServicesModule } from '../services/services.module.js';
+import { TasksModule } from '../tasks/tasks.module.js';
 import { CashPaymentService } from './cash-payment.service.js';
 import { DeskDepositController } from './desk-deposit.controller.js';
 import { DeskDepositService } from './desk-deposit.service.js';
@@ -28,6 +29,7 @@ import { RoomTypePricingAdapter } from './room-type-pricing.adapter.js';
     PaymentsModule,
     RoomsModule,
     ServicesModule,
+    TasksModule,
     MongooseModule.forFeature([{ name: Invoice.name, schema: InvoiceSchema }]),
   ],
   controllers: [

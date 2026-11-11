@@ -67,6 +67,8 @@ function setup(options: { alreadyCheckedOut?: boolean } = {}) {
     payments as never,
     invoices as never,
     { send } as never,
+    // Nhân viên dịch vụ đã xác nhận kiểm tra phòng.
+    { latestForSource: vi.fn(async () => ({ status: 'COMPLETED' })) } as never,
   );
   return { sut, send };
 }
