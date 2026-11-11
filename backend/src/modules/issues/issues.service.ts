@@ -703,6 +703,8 @@ export class IssuesService {
       issue.status === IssueStatus.Reviewed &&
       issue.needsStaffAction === true
     ) {
+      if (dueAt && dueAt.getTime() <= Date.now())
+        throw new BadRequestException('Deadline must be in the future');
       const staff = await this.users
         .findOne({
           _id: new Types.ObjectId(dto.assigneeId),
@@ -872,6 +874,11 @@ export class IssuesService {
     if (issue.status !== IssueStatus.Assigned)
       throw new ConflictException('Issue is not assigned');
     if (!issue.pendingReassignment) {
+      if (
+        dto.dueAt !== undefined &&
+        new Date(dto.dueAt).getTime() <= Date.now()
+      )
+        throw new BadRequestException('Deadline must be in the future');
       if (String(issue.linkedTask) !== dto.taskId)
         throw new ConflictException('Not the current assignment');
       const task = await this.tasks.issueTask(id, dto.taskId);

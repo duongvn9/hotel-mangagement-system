@@ -110,6 +110,36 @@ describe('Issue review and durable assignment', () => {
     users.findOne.mockImplementation(() => chain({ _id: assignee }));
   });
 
+  it.each([-86400000, -60000, 0])(
+    'rejects new deadline offset %s',
+    async (offset) => {
+      await service.review(String(id), review, actor);
+      const dueAt = new Date(Date.now() + offset).toISOString();
+      await expect(
+        service.assign(String(id), { ...assignment, dueAt }, actor),
+      ).rejects.toThrow('future');
+      expect(tasks.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('replays an accepted assignment after its deadline expires', async () => {
+    await service.review(String(id), review, actor);
+    failCreate = true;
+    const now = Date.now();
+    const input = { ...assignment, dueAt: new Date(now + 60000).toISOString() };
+    await expect(service.assign(String(id), input, actor)).rejects.toThrow(
+      'task unavailable',
+    );
+    vi.spyOn(Date, 'now').mockReturnValue(now + 120000);
+    failCreate = false;
+    try {
+      await service.assign(String(id), input, actor);
+      expect(savedTask?.dueAt.toISOString()).toBe(input.dueAt);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it.each(['RECEPTIONIST', 'MANAGER'])(
     'closes concluded work once as %s with immutable audit',
     async (role) => {

@@ -63,6 +63,7 @@ function error(status: number) {
   } as AxiosResponse)
 }
 beforeEach(() => {
+  vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-25T00:00').getTime())
   for (const name of ['showModal', 'close'] as const)
     if (!HTMLDialogElement.prototype[name])
       Object.defineProperty(HTMLDialogElement.prototype, name, { configurable: true, value() {} })
@@ -80,6 +81,34 @@ beforeEach(() => {
   vi.spyOn(api, 'get').mockResolvedValue({ data: users })
 })
 afterEach(() => vi.restoreAllMocks())
+
+it.each(['Tiếp tục xử lý', 'Phân công lại'])(
+  'validates new deadlines for %s at preparation and confirmation',
+  async (action) => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-11-11T12:00').getTime())
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: issue })
+    mount()
+    await screen.findByRole('option', { name: 'Mới' })
+    fireEvent.change(screen.getByLabelText('Nhân viên thay thế'), { target: { value: 'new' } })
+    fireEvent.change(screen.getByLabelText('Lý do phân công lại (bắt buộc)'), {
+      target: { value: 'Thiếu linh kiện' },
+    })
+    const field = screen.getByLabelText('Thời hạn mới (không bắt buộc)')
+    expect(field).toHaveAttribute('min', '2026-11-11T12:00')
+    for (const due of ['2026-11-10T12:00', '2026-11-11T09:00', '2026-11-11T12:00']) {
+      fireEvent.change(field, { target: { value: due } })
+      fireEvent.click(screen.getByRole('button', { name: action }))
+      expect(screen.getByRole('alert')).toHaveTextContent('Thời hạn phải sau thời điểm hiện tại.')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    }
+    fireEvent.change(field, { target: { value: '2026-11-11T12:01' } })
+    fireEvent.click(screen.getByRole('button', { name: action }))
+    clock.mockReturnValue(new Date('2026-11-11T12:01').getTime())
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận xử lý công việc' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Thời hạn phải sau thời điểm hiện tại.')
+    expect(post).not.toHaveBeenCalled()
+  },
+)
 
 it('validates report reason, confirms trimmed input and shows success without cancelling progress', async () => {
   vi.mocked(api.get).mockResolvedValue({ data: task })
