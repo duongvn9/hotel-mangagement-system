@@ -87,6 +87,10 @@ export class BookingListItem {
   createdAt: string;
   /** true nếu booking do nhân viên tạo tại quầy (UC08). */
   walkIn: boolean;
+  /** Tiền cọc cần thu (VND); chỉ có trong danh sách đến/đi trong ngày (UC15). */
+  depositAmount?: number;
+  /** Đã có khoản cọc thành công chưa; chỉ có trong danh sách đến/đi trong ngày (UC15). */
+  depositPaid?: boolean;
 }
 
 export class BookingListResponse {
