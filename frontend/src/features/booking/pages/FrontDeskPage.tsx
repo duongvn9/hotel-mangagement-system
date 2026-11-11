@@ -8,6 +8,7 @@ import { getErrorMessage } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import type { BookingListItem } from '../api'
 import { CheckInConfirmDialog } from '../components/CheckInConfirmDialog'
+import { DepositDueAction } from '../components/DepositDueAction'
 import { CheckoutCharges } from '../components/CheckoutCharges'
 import { useCheckIn, useCheckInOptions, useSameDayList } from '../hooks'
 import { money, todayISO } from '../utils'
@@ -18,6 +19,15 @@ function formatShortDate(iso: string): string {
   const day = String(d.getDate()).padStart(2, '0')
   const month = String(d.getMonth() + 1).padStart(2, '0')
   return `${day}/${month}`
+}
+
+/** Nút "Chi tiết" mở trang booking của lễ tân trong dashboard. */
+function detailLink(code: string) {
+  return (
+    <Button asChild variant="outline" className="rounded-full">
+      <Link to={`/reception/bookings/${encodeURIComponent(code)}`}>Chi tiết</Link>
+    </Button>
+  )
 }
 
 /** UC15 — Quầy lễ tân: nhận phòng và trả phòng trong ngày (khớp prototype app.front-desk.tsx). */
@@ -166,16 +176,12 @@ function BookingCard({ booking, tab }: { booking: BookingListItem; tab: 'in' | '
       <div className="mt-4 space-y-3">
         {tab === 'in' ? (
           booking.status === 'CONFIRMED' ? (
-            <CheckInAction
-              booking={booking}
-              detailLink={
-                <Button asChild variant="outline" className="rounded-full">
-                  <Link to={`/reception/bookings/${encodeURIComponent(booking.code)}`}>
-                    Chi tiết
-                  </Link>
-                </Button>
-              }
-            />
+            // Chưa đóng cọc thì chưa nhận phòng được: thu cọc hoặc nhả phòng.
+            booking.depositPaid === false && (booking.depositAmount ?? 0) > 0 ? (
+              <DepositDueAction booking={booking} detailLink={detailLink(booking.code)} />
+            ) : (
+              <CheckInAction booking={booking} detailLink={detailLink(booking.code)} />
+            )
           ) : (
             <div className="flex gap-2">
               {booking.status === 'PENDING_DEPOSIT' && (
