@@ -39,9 +39,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Đang đăng ký: Firebase tự đăng nhập tài khoản mới, không coi đó là một phiên HMS.
   const registering = useRef(false)
+  const principal = useRef<string | null>(null)
 
   const loadMe = useCallback(async () => {
-    setMe(await getMe())
+    const nextMe = await getMe()
+    const nextPrincipal = `${nextMe.id}:${nextMe.role}`
+    if (principal.current !== nextPrincipal) queryClient.clear()
+    principal.current = nextPrincipal
+    setMe(nextMe)
     setStatus('authenticated')
   }, [])
 
@@ -49,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthTokenProvider(null)
     setDevUser(null)
     localStorage.removeItem(DEV_USER_KEY)
+    principal.current = null
     setMe(null)
     setStatus('anonymous')
     queryClient.clear()

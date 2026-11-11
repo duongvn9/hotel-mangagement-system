@@ -932,19 +932,20 @@ export class BookingsService {
     }
     const now = this.clock.now();
 
-    // Một hold/phiên: nếu phiên đang giữ một hold còn hạn thì trả lại chính nó.
+    // Reuse only this principal's hold; a browser session can outlive sign-in changes.
     if (ctx.sessionId) {
-      const existing = await this.holds
-        .findOne({
+      const existingHolds = await this.holds
+        .find({
           sessionId: ctx.sessionId,
           isActive: true,
           expiresAt: { $gt: now },
         })
         .sort({ createdAt: -1 });
-      if (existing) {
+      for (const existing of existingHolds) {
         const current = await this.bookings.findById(existing.booking);
+        if (!current || !this.isHoldPrincipal(current, user)) continue;
         if (
-          current?.isActive &&
+          current.isActive &&
           UNCONFIRMED_BOOKING_STATUSES.includes(current.status)
         ) {
           return await this.holdResponse(current, existing);
@@ -970,8 +971,10 @@ export class BookingsService {
         : BookingSource.Online;
 
     const booking = await this.insertBooking({
-      ...(user?.role === Role.Customer
-        ? { customer: new Types.ObjectId(user.id) }
+      ...(user
+        ? user.role === Role.Customer
+          ? { customer: new Types.ObjectId(user.id) }
+          : { createdBy: new Types.ObjectId(user.id) }
         : {}),
       rooms: roomIds,
       checkIn: stay.checkIn,
@@ -1185,6 +1188,20 @@ export class BookingsService {
     return expired;
   }
 
+  private isHoldPrincipal(booking: BookingDocument, user?: AuthUser): boolean {
+    if (user) {
+      const principal =
+        user.role === Role.Customer ? booking.customer : booking.createdBy;
+      return principal?.toString() === user.id;
+    }
+    // Legacy staff holds without createdBy cannot safely be treated as anonymous.
+    return (
+      booking.source === BookingSource.Online &&
+      !booking.customer &&
+      !booking.createdBy
+    );
+  }
+
   private async enforceHoldRate(
     ctx: GuestSessionContext,
     now: Date,
@@ -1200,7 +1217,7 @@ export class BookingsService {
     });
     if (recent >= HOLD_RATE_MAX) {
       throw new HttpException(
-        'Too many booking holds from this session; please wait a few minutes',
+        'Bạn đã đạt giới hạn 3 lượt giữ phòng trong 30 phút cho phiên hoặc địa chỉ mạng này. Vui lòng chờ các lượt giữ phòng cũ ra khỏi khoảng 30 phút rồi thử lại.',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
@@ -1211,7 +1228,12 @@ export class BookingsService {
     hold: RoomHoldDocument | null,
     ctx: { code?: string; user?: AuthUser; sessionId?: string },
   ): void {
-    if (ctx.sessionId && hold?.sessionId && ctx.sessionId === hold.sessionId) {
+    if (
+      ctx.sessionId &&
+      hold?.sessionId &&
+      ctx.sessionId === hold.sessionId &&
+      this.isHoldPrincipal(booking, ctx.user)
+    ) {
       return;
     }
     authorizeBookingAccess(booking, {
