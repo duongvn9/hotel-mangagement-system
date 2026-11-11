@@ -52,6 +52,7 @@ async function select() {
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-25T00:00').getTime())
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
     configurable: true,
     value: function (this: HTMLDialogElement) {
@@ -86,6 +87,38 @@ beforeEach(() => {
 })
 
 describe('assignment', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it.each(['2026-11-10T12:00', '2026-11-11T09:00', '2026-11-11T12:00'])(
+    'rejects new deadline %s',
+    async (due) => {
+      vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-11-11T12:00').getTime())
+      page()
+      await screen.findByRole('option', { name: 'Nhân viên thật' })
+      fireEvent.change(screen.getByLabelText('Nhân viên dịch vụ'), { target: { value: 'staff-1' } })
+      fireEvent.change(screen.getByLabelText(/Hạn hoàn thành/), { target: { value: due } })
+      fireEvent.submit(screen.getByRole('button', { name: 'Phân công' }).closest('form')!)
+      expect(screen.getByRole('alert')).toHaveTextContent('Thời hạn phải sau thời điểm hiện tại.')
+      expect(api.post).not.toHaveBeenCalled()
+    },
+  )
+
+  it('uses local min and rejects stale confirmation without locking a retry', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-11-11T12:00').getTime())
+    page()
+    await screen.findByRole('option', { name: 'Nhân viên thật' })
+    expect(screen.getByLabelText(/Hạn hoàn thành/)).toHaveAttribute('min', '2026-11-11T12:00')
+    fireEvent.change(screen.getByLabelText(/Hạn hoàn thành/), {
+      target: { value: '2026-11-11T12:01' },
+    })
+    await select()
+    clock.mockReturnValue(new Date('2026-11-11T12:01').getTime())
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận phân công' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Thời hạn phải sau thời điểm hiện tại.')
+    expect(api.post).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Phân công' })).toBeEnabled()
+  })
+
   it('uses atomic assignment controls and a focus-safe confirmation without sending on cancel', async () => {
     page()
     await screen.findByRole('option', { name: 'Nhân viên thật' })

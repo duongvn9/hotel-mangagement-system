@@ -103,7 +103,11 @@ const assignmentFixture = (status = 'ASSIGNED') => {
     } as never,
     {} as never,
     {} as never,
-    { findById: userLookup, find: () => query([]) } as never,
+    {
+      findById: userLookup,
+      findOne: () => ({ lean: async () => ({ _id: assigneeId }) }),
+      find: () => query([]),
+    } as never,
     {
       create,
       findServiceOrderExecutionWork,
@@ -129,6 +133,36 @@ const assignmentFixture = (status = 'ASSIGNED') => {
     userLookup,
   };
 };
+
+describe('new assignment deadlines', () => {
+  it.each([-86400000, -60000, 0])(
+    'rejects new service deadline offset %s',
+    async (offset) => {
+      const f = assignmentFixture('NOT_STARTED');
+      await expect(
+        f.service.assign(
+          String(f.row._id),
+          { ...f.input, dueAt: new Date(Date.now() + offset).toISOString() },
+          f.actor,
+        ),
+      ).rejects.toThrow('future');
+      expect(f.findOneAndUpdate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('replays an accepted service assignment after deadline expiry', async () => {
+    const f = assignmentFixture();
+    vi.spyOn(Date, 'now').mockReturnValue(
+      f.row.assignmentDueAt.getTime() + 60000,
+    );
+    try {
+      await f.service.assign(String(f.row._id), f.input, f.actor);
+      expect(f.create).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+});
 
 describe('service orders read fixes', () => {
   const fixture = () => {

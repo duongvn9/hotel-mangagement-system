@@ -1206,6 +1206,8 @@ export class ServiceOrdersService implements OnModuleInit {
       );
     }
     if (row.executionStatus === ServiceOrderExecutionStatus.NotStarted) {
+      if (dueAt && dueAt.getTime() <= Date.now())
+        throw new BadRequestException('Deadline must be in the future');
       const staff = await this.users
         .findOne({ _id: assigneeId, isActive: true, role: Role.ServiceStaff })
         .lean();

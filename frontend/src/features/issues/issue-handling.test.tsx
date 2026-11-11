@@ -103,6 +103,7 @@ function setup(detail = initial, role = 'RECEPTIONIST') {
 }
 beforeEach(() => {
   vi.restoreAllMocks()
+  vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-25T00:00').getTime())
   for (const name of ['showModal', 'close'] as const)
     if (!HTMLDialogElement.prototype[name])
       Object.defineProperty(HTMLDialogElement.prototype, name, { configurable: true, value() {} })
@@ -117,6 +118,36 @@ beforeEach(() => {
   ) {
     this.removeAttribute('open')
   })
+})
+
+test.each(['2026-11-10T12:00', '2026-11-11T09:00', '2026-11-11T12:00'])(
+  'rejects new assignment deadline %s',
+  async (due) => {
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-11-11T12:00').getTime())
+    const post = vi.spyOn(api, 'post')
+    setup(reviewed)
+    fireEvent.change(await assigneeField(), { target: { value: staff } })
+    fireEvent.change(screen.getByLabelText('Thời hạn xử lý'), { target: { value: due } })
+    fireEvent.click(screen.getByRole('button', { name: 'Phân công' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Thời hạn phải sau thời điểm hiện tại.')
+    expect(post).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  },
+)
+
+test('rejects a deadline that expires while confirmation is open', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-11-11T12:00').getTime())
+  const post = vi.spyOn(api, 'post')
+  setup(reviewed)
+  fireEvent.change(await assigneeField(), { target: { value: staff } })
+  fireEvent.change(screen.getByLabelText('Thời hạn xử lý'), {
+    target: { value: '2026-11-11T12:01' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Phân công' }))
+  clock.mockReturnValue(new Date('2026-11-11T12:01').getTime())
+  await confirm()
+  expect(screen.getByRole('alert')).toHaveTextContent('Thời hạn phải sau thời điểm hiện tại.')
+  expect(post).not.toHaveBeenCalled()
 })
 
 test('staff detail shows readable source and people without exposing operational IDs', async () => {

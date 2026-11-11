@@ -1,5 +1,6 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useCallback, useRef, useState, type FormEvent } from 'react'
 import { isAxiosError } from 'axios'
+import { format } from 'date-fns'
 import { Button, Input, NativeSelect, Textarea } from '@/components/atoms'
 import { FormField } from '@/components/molecules'
 import { ConfirmationDialog, Panel } from '@/components/organisms'
@@ -25,6 +26,7 @@ export function ServiceAssignment({
   const mutation = useAssignServiceOrder(order.id)
   const [assigneeId, setAssigneeId] = useState('')
   const [due, setDue] = useState('')
+  const [minimumDue] = useState(() => format(new Date(Date.now()), "yyyy-MM-dd'T'HH:mm"))
   const [intent, setIntent] = useState<AssignmentInput | null>(null)
   const [confirmation, setConfirmation] = useState<AssignmentInput | null>(null)
   const [validation, setValidation] = useState('')
@@ -41,52 +43,74 @@ export function ServiceAssignment({
   const editingRecovery = recoveryMode && canRecover && !intent?.recoveryReason
   const activeIntent = intent ?? (pending ? order.assignmentIntent : undefined)
   const disabled = mutation.isPending || refreshing
-  function prepare(event: FormEvent) {
-    event.preventDefault()
-    if (disabled || sending.current || !eligible || order.task || (!open && !pending)) return
-    if (editingRecovery) {
+  const prepare = useCallback(
+    (event: FormEvent) => {
+      event.preventDefault()
+      if (disabled || sending.current || !eligible || order.task || (!open && !pending)) return
+      if (editingRecovery) {
+        if (
+          assignees.isFetching ||
+          assignees.isError ||
+          !staff.some((item) => item.id === assigneeId) ||
+          assigneeId === order.assignmentIntent?.assigneeId ||
+          !recoveryReason.trim() ||
+          recoveryReason.trim().length > 2000
+        ) {
+          setValidation('Chọn nhân viên thay thế và nhập lý do khôi phục (tối đa 2000 ký tự).')
+          return
+        }
+        setValidation('')
+        setConfirmation({
+          assigneeId,
+          ...(order.assignmentIntent?.dueAt !== undefined
+            ? { dueAt: order.assignmentIntent.dueAt }
+            : {}),
+          recoveryReason: recoveryReason.trim(),
+        })
+        return
+      }
+      if (activeIntent) {
+        setConfirmation({ ...activeIntent })
+        return
+      }
       if (
+        !open ||
         assignees.isFetching ||
         assignees.isError ||
-        !staff.some((item) => item.id === assigneeId) ||
-        assigneeId === order.assignmentIntent?.assigneeId ||
-        !recoveryReason.trim() ||
-        recoveryReason.trim().length > 2000
+        !staff.some((item) => item.id === assigneeId)
       ) {
-        setValidation('Chọn nhân viên thay thế và nhập lý do khôi phục (tối đa 2000 ký tự).')
+        setValidation('Vui lòng chọn nhân viên dịch vụ từ danh sách đã tải.')
+        return
+      }
+      const parsed = due ? new Date(due) : undefined
+      if (parsed && !Number.isFinite(parsed.getTime())) {
+        setValidation('Hạn hoàn thành không hợp lệ.')
+        return
+      }
+      if (parsed && parsed.getTime() <= Date.now()) {
+        setValidation('Thời hạn phải sau thời điểm hiện tại.')
         return
       }
       setValidation('')
-      setConfirmation({
-        assigneeId,
-        ...(order.assignmentIntent?.dueAt !== undefined
-          ? { dueAt: order.assignmentIntent.dueAt }
-          : {}),
-        recoveryReason: recoveryReason.trim(),
-      })
-      return
-    }
-    if (activeIntent) {
-      setConfirmation({ ...activeIntent })
-      return
-    }
-    if (
-      !open ||
-      assignees.isFetching ||
-      assignees.isError ||
-      !staff.some((item) => item.id === assigneeId)
-    ) {
-      setValidation('Vui lòng chọn nhân viên dịch vụ từ danh sách đã tải.')
-      return
-    }
-    const parsed = due ? new Date(due) : undefined
-    if (parsed && !Number.isFinite(parsed.getTime())) {
-      setValidation('Hạn hoàn thành không hợp lệ.')
-      return
-    }
-    setValidation('')
-    setConfirmation({ assigneeId, ...(parsed ? { dueAt: parsed.toISOString() } : {}) })
-  }
+      setConfirmation({ assigneeId, ...(parsed ? { dueAt: parsed.toISOString() } : {}) })
+    },
+    [
+      disabled,
+      eligible,
+      order.task,
+      order.assignmentIntent,
+      open,
+      pending,
+      editingRecovery,
+      assignees.isFetching,
+      assignees.isError,
+      staff,
+      assigneeId,
+      recoveryReason,
+      activeIntent,
+      due,
+    ],
+  )
   async function confirm() {
     if (
       !confirmation ||
@@ -97,6 +121,15 @@ export function ServiceAssignment({
       (!open && !pending)
     )
       return
+    if (
+      !activeIntent &&
+      confirmation.dueAt &&
+      new Date(confirmation.dueAt).getTime() <= Date.now()
+    ) {
+      setValidation('Thời hạn phải sau thời điểm hiện tại.')
+      setConfirmation(null)
+      return
+    }
     sending.current = true
     const payload = confirmation
     setIntent(payload)
@@ -199,6 +232,7 @@ export function ServiceAssignment({
                     <Input
                       id="assignment-due"
                       type="datetime-local"
+                      min={minimumDue}
                       value={due}
                       disabled={disabled}
                       onChange={(event) => setDue(event.target.value)}

@@ -504,6 +504,12 @@ export class TasksService {
       throw new ConflictException('Task must be blocked or overdue');
     if (
       dueAt !== undefined &&
+      (!Number.isFinite(new Date(dueAt).getTime()) ||
+        new Date(dueAt).getTime() <= Date.now())
+    )
+      throw new BadRequestException('Deadline must be in the future');
+    if (
+      dueAt !== undefined &&
       task.dueAt &&
       new Date(dueAt).getTime() < task.dueAt.getTime()
     )
