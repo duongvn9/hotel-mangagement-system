@@ -9,8 +9,13 @@ import { getErrorMessage } from '@/lib/api-client'
 import { assetUrl } from '@/lib/asset-url'
 import { fshort, vnd } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { AvailableRoom, SearchAvailabilityParams } from '../api'
-import { useAvailability, useRoomTypeList } from '../hooks'
+import type {
+  AvailableRoom,
+  RoomTypeBedSummary,
+  RoomTypeSearchFilters,
+  SearchAvailabilityParams,
+} from '../api'
+import { useAvailability, useRoomTypeList, useSearchFilters } from '../hooks'
 import { nightsBetween } from '../utils'
 
 interface RoomTypeMeta {
@@ -104,8 +109,12 @@ interface TypeGroup {
   pricePerNight: number
   capacity: number
   rooms: AvailableRoom[]
+  beds?: RoomTypeBedSummary[]
   meta: RoomTypeMeta
 }
+
+const bedLabel = (beds: RoomTypeBedSummary[] | undefined, fallback: string): string =>
+  beds?.length ? beds.map((bed) => `${bed.quantity} ${bed.bedTypeName}`).join(', ') : fallback
 
 /** UC05 — Search Rooms. Guest và Customer đều dùng được (màn công khai). */
 export function SearchRoomsPage() {
@@ -121,10 +130,32 @@ export function SearchRoomsPage() {
   const [max, setMax] = useState(5000000)
   const [sort, setSort] = useState<'price' | 'size'>('price')
 
+  // Bộ lọc nâng cao (gửi lên server để thu hẹp theo loại phòng).
+  const [bedTypeIds, setBedTypeIds] = useState<string[]>([])
+  const [amenityIds, setAmenityIds] = useState<string[]>([])
+  const [adults, setAdults] = useState(0)
+  const [children, setChildren] = useState(0)
+  const filterOptions = useSearchFilters()
+  const bedFilterOptions = Array.isArray(filterOptions.data?.bedTypes)
+    ? filterOptions.data.bedTypes
+    : []
+  const amenityFilterOptions = Array.isArray(filterOptions.data?.amenities)
+    ? filterOptions.data.amenities
+    : []
+  // react-query băm queryKey theo giá trị nên không cần ổn định tham chiếu ở đây.
+  const serverFilters: RoomTypeSearchFilters = {
+    ...(bedTypeIds.length ? { bedTypeIds } : {}),
+    ...(amenityIds.length ? { amenityIds } : {}),
+    ...(adults > 0 ? { adults } : {}),
+    ...(children > 0 ? { children } : {}),
+  }
+  const toggleId = (setList: (updater: (prev: string[]) => string[]) => void, id: string) =>
+    setList((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+
   // Chưa chọn ngày (URL không có tiêu chí): hiện mọi loại phòng, chỉ tìm phòng trống khi khách bấm tìm.
   const browsing = urlCriteria === null
-  const availability = useAvailability(urlCriteria)
-  const catalog = useRoomTypeList(browsing)
+  const availability = useAvailability(urlCriteria ? { ...urlCriteria, ...serverFilters } : null)
+  const catalog = useRoomTypeList(browsing, serverFilters)
   const active = browsing ? catalog : availability
   const nights = nightsBetween(criteria.checkIn, criteria.checkOut)
 
@@ -138,6 +169,7 @@ export function SearchRoomsPage() {
           pricePerNight: type.pricePerNight,
           capacity: type.capacity,
           rooms: [],
+          beds: type.beds,
           meta: getRoomTypeMeta(type.name, type.capacity),
         }))
         .sort((a, b) => a.name.localeCompare(b.name))
@@ -291,6 +323,114 @@ export function SearchRoomsPage() {
               ))}
             </div>
           </div>
+
+          <div>
+            <div className="mb-2 text-sm font-semibold">Sức chứa</div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Người lớn</span>
+                <div className="flex items-center gap-1" role="group" aria-label="Người lớn">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="size-8 rounded-full p-0"
+                    aria-label="Bớt người lớn"
+                    disabled={adults === 0}
+                    onClick={() => setAdults((v) => Math.max(0, v - 1))}
+                  >
+                    <Minus className="size-4" />
+                  </Button>
+                  <span className="w-6 text-center tabular-nums" aria-live="polite">
+                    {adults}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="size-8 rounded-full p-0"
+                    aria-label="Thêm người lớn"
+                    onClick={() => setAdults((v) => v + 1)}
+                  >
+                    <Plus className="size-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Trẻ em</span>
+                <div className="flex items-center gap-1" role="group" aria-label="Trẻ em">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="size-8 rounded-full p-0"
+                    aria-label="Bớt trẻ em"
+                    disabled={children === 0}
+                    onClick={() => setChildren((v) => Math.max(0, v - 1))}
+                  >
+                    <Minus className="size-4" />
+                  </Button>
+                  <span className="w-6 text-center tabular-nums" aria-live="polite">
+                    {children}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="size-8 rounded-full p-0"
+                    aria-label="Thêm trẻ em"
+                    onClick={() => setChildren((v) => v + 1)}
+                  >
+                    <Plus className="size-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {bedFilterOptions.length ? (
+            <div>
+              <div className="mb-2 text-sm font-semibold">Loại giường</div>
+              <div className="flex flex-wrap gap-2">
+                {bedFilterOptions.map((bedType) => (
+                  <button
+                    key={bedType.id}
+                    type="button"
+                    aria-pressed={bedTypeIds.includes(bedType.id)}
+                    onClick={() => toggleId(setBedTypeIds, bedType.id)}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                      bedTypeIds.includes(bedType.id)
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {bedType.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {amenityFilterOptions.length ? (
+            <div>
+              <div className="mb-2 text-sm font-semibold">Tiện nghi</div>
+              <div className="flex flex-wrap gap-2">
+                {amenityFilterOptions.map((amenity) => (
+                  <button
+                    key={amenity.id}
+                    type="button"
+                    aria-pressed={amenityIds.includes(amenity.id)}
+                    onClick={() => toggleId(setAmenityIds, amenity.id)}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                      amenityIds.includes(amenity.id)
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {amenity.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </aside>
 
         <div className="grid gap-5">
@@ -383,7 +523,7 @@ export function SearchRoomsPage() {
                           </span>
                           <span className="flex items-center gap-1">
                             <BedDouble className="size-3.5" />
-                            {group.meta.bed}
+                            {bedLabel(group.beds, group.meta.bed)}
                           </span>
                           <span className="flex items-center gap-1">
                             <Users className="size-3.5" />

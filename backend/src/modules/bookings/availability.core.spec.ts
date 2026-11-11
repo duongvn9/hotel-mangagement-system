@@ -4,6 +4,7 @@ import {
   calculateAvailability,
   normalizeStay,
   overlaps,
+  validateQuery,
   type AvailabilityBooking,
   type AvailabilityHold,
   type AvailabilityRoom,
@@ -182,4 +183,33 @@ describe('availability core', () => {
   });
   it('fails closed for malformed active intervals', () =>
     expect(run([{ ...booking, checkOut: new Date(NaN) }])).toEqual([]));
+});
+
+describe('validateQuery filters', () => {
+  const oid = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+  it('accepts the optional bed/amenity/price/occupancy filters', () => {
+    expect(() =>
+      validateQuery({
+        ...query,
+        bedTypeIds: [oid],
+        amenityIds: [oid],
+        priceMin: 0,
+        priceMax: 1000000,
+        adults: 2,
+        children: 1,
+      }),
+    ).not.toThrow();
+  });
+  it.each([
+    { bedTypeIds: ['bad'] },
+    { bedTypeIds: [oid, oid] },
+    { amenityIds: ['bad'] },
+    { priceMin: -1 },
+    { priceMax: 1.5 },
+    { adults: -1 },
+    { children: 1.5 },
+    { priceMin: 500, priceMax: 100 },
+  ])('rejects %j', (change) => {
+    expect(() => validateQuery({ ...query, ...change })).toThrow();
+  });
 });

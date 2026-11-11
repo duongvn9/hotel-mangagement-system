@@ -157,6 +157,68 @@ describe('SearchRoomsPage', () => {
     expect(await screen.findByText(/nhỏ hơn số khách/)).toBeInTheDocument()
   })
 
+  it('filters the browse list by bed type and shows the bed configuration', async () => {
+    const typesWithBeds = [
+      {
+        id: 'type-std',
+        name: 'Standard',
+        description: '',
+        adultCapacity: 2,
+        childCapacity: 1,
+        capacity: 3,
+        pricePerNight: 850_000,
+        images: [],
+        beds: [{ bedTypeId: 'bed-1', bedTypeName: 'Giường đôi', quantity: 1 }],
+      },
+    ]
+    const get = vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/availability/filters')
+        return {
+          data: {
+            bedTypes: [{ id: 'bed-1', name: 'Giường đôi' }],
+            amenities: [{ id: 'am-1', name: 'Wi-Fi' }],
+            priceRange: { min: 850_000, max: 850_000 },
+          },
+        }
+      if (url === '/availability/room-types') return { data: typesWithBeds }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    renderWithAuth(bookingRoutes, { path: '/search' })
+    await screen.findByRole('heading', { name: 'Standard' })
+    expect(screen.getByText('1 Giường đôi')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Giường đôi' }))
+    await waitFor(() =>
+      expect(get).toHaveBeenCalledWith('/availability/room-types', {
+        params: { bedTypeIds: 'bed-1' },
+      }),
+    )
+  })
+
+  it('filters availability by an amenity chip', async () => {
+    const get = vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/availability/filters')
+        return {
+          data: {
+            bedTypes: [],
+            amenities: [{ id: 'am-1', name: 'Wi-Fi' }],
+            priceRange: { min: 0, max: 0 },
+          },
+        }
+      if (url === '/availability') return { data: availableRooms }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    renderWithAuth(bookingRoutes, {
+      path: '/search?checkIn=2099-01-10&checkOut=2099-01-12&guests=2',
+    })
+    await screen.findByRole('heading', { name: 'Deluxe' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Wi-Fi' }))
+    await waitFor(() =>
+      expect(get).toHaveBeenCalledWith('/availability', {
+        params: expect.objectContaining({ amenityIds: 'am-1' }),
+      }),
+    )
+  })
+
   describe('before any dates are chosen', () => {
     const roomTypes = [
       {
@@ -365,6 +427,23 @@ describe('RoomDetailsPage', () => {
       'href',
       '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r5',
     )
+  })
+
+  it('shows the room bed configuration', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/room-types/t1/overview')
+        return {
+          data: {
+            ...mockRoom,
+            beds: [{ bedTypeId: 'bed-1', bedTypeName: 'Giường đôi', quantity: 1 }],
+          },
+        }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    renderWithAuth(bookingRoutes, { path: '/room-types/t1' })
+    await screen.findByRole('heading', { level: 1, name: 'Phòng Biển Deluxe' })
+    expect(screen.getByRole('heading', { name: 'Cấu hình giường' })).toBeInTheDocument()
+    expect(screen.getByText('1 Giường đôi')).toBeInTheDocument()
   })
 })
 

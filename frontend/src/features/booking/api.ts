@@ -18,7 +18,36 @@ export interface AvailableRoom {
   pricePerNight?: number
 }
 
-export interface SearchAvailabilityParams {
+/** Một cấu hình giường công khai của loại phòng. */
+export interface RoomTypeBedSummary {
+  bedTypeId: string
+  bedTypeName: string
+  quantity: number
+}
+
+/** Bộ lọc loại phòng dùng chung cho tìm phòng và danh sách công khai (tất cả AND). */
+export interface RoomTypeSearchFilters {
+  bedTypeIds?: string[]
+  amenityIds?: string[]
+  priceMin?: number
+  priceMax?: number
+  adults?: number
+  children?: number
+}
+
+/** Đưa bộ lọc vào query string; mảng nối bằng dấu phẩy để tránh rắc rối serialize. */
+function filterParams(filters: RoomTypeSearchFilters): Record<string, string | number> {
+  return {
+    ...(filters.bedTypeIds?.length ? { bedTypeIds: filters.bedTypeIds.join(',') } : {}),
+    ...(filters.amenityIds?.length ? { amenityIds: filters.amenityIds.join(',') } : {}),
+    ...(filters.priceMin !== undefined ? { priceMin: filters.priceMin } : {}),
+    ...(filters.priceMax !== undefined ? { priceMax: filters.priceMax } : {}),
+    ...(filters.adults !== undefined ? { adults: filters.adults } : {}),
+    ...(filters.children !== undefined ? { children: filters.children } : {}),
+  }
+}
+
+export interface SearchAvailabilityParams extends RoomTypeSearchFilters {
   /** YYYY-MM-DD, giờ Việt Nam. */
   checkIn: string
   checkOut: string
@@ -26,11 +55,30 @@ export interface SearchAvailabilityParams {
   roomTypeId?: string
 }
 
-/** UC05 — Tìm phòng trống theo ngày ở và số khách. */
+/** UC05 — Tìm phòng trống theo ngày ở, số khách và các tiêu chí lọc. */
 export async function searchAvailability(
   params: SearchAvailabilityParams,
 ): Promise<AvailableRoom[]> {
-  return (await api.get<AvailableRoom[]>('/availability', { params })).data
+  const { bedTypeIds, amenityIds, priceMin, priceMax, adults, children, ...rest } = params
+  return (
+    await api.get<AvailableRoom[]>('/availability', {
+      params: {
+        ...rest,
+        ...filterParams({ bedTypeIds, amenityIds, priceMin, priceMax, adults, children }),
+      },
+    })
+  ).data
+}
+
+/** Lựa chọn cho bộ lọc tìm phòng công khai (loại giường, tiện nghi, khoảng giá). */
+export interface SearchFilters {
+  bedTypes: { id: string; name: string }[]
+  amenities: { id: string; name: string }[]
+  priceRange: { min: number; max: number }
+}
+
+export async function getSearchFilters(): Promise<SearchFilters> {
+  return (await api.get<SearchFilters>('/availability/filters')).data
 }
 
 /** Chi tiết loại phòng công khai (đi kèm UC05) để khách xem trước khi đặt. */
@@ -44,6 +92,7 @@ export interface RoomTypeOverview {
   pricePerNight: number
   images?: string[]
   amenities: { id: string; name: string }[]
+  beds?: RoomTypeBedSummary[]
 }
 
 /** 2.2.2 View Room Details — đọc chi tiết một loại phòng (endpoint công khai). */
@@ -54,9 +103,16 @@ export async function getRoomTypeOverview(id: string): Promise<RoomTypeOverview>
 /** Một loại phòng trong danh sách công khai khi khách chưa chọn ngày. */
 export type RoomTypeSummary = Omit<RoomTypeOverview, 'amenities'>
 
-/** Mọi loại phòng đang kinh doanh (rẻ nhất trước), không cần ngày hay đăng nhập. */
-export async function listRoomTypes(): Promise<RoomTypeSummary[]> {
-  return (await api.get<RoomTypeSummary[]>('/availability/room-types')).data
+/** Mọi loại phòng đang kinh doanh (rẻ nhất trước), có thể lọc, không cần ngày hay đăng nhập. */
+export async function listRoomTypes(
+  filters: RoomTypeSearchFilters = {},
+): Promise<RoomTypeSummary[]> {
+  const params = filterParams(filters)
+  return (
+    await (Object.keys(params).length
+      ? api.get<RoomTypeSummary[]>('/availability/room-types', { params })
+      : api.get<RoomTypeSummary[]>('/availability/room-types'))
+  ).data
 }
 
 export interface CreateBookingInput {

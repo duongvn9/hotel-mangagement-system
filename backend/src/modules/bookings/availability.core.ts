@@ -10,6 +10,13 @@ export interface AvailabilityQuery {
   checkOut: Date | string;
   guests: number;
   roomTypeId?: string;
+  /** Lọc bổ sung ở tầng loại phòng (áp dụng trong nguồn phòng, không ở core). */
+  bedTypeIds?: string[];
+  amenityIds?: string[];
+  priceMin?: number;
+  priceMax?: number;
+  adults?: number;
+  children?: number;
 }
 
 export interface StayInterval {
@@ -85,6 +92,34 @@ export function validateQuery(query: AvailabilityQuery): StayInterval {
     !/^[a-f\d]{24}$/i.test(query.roomTypeId)
   )
     throw new RangeError('Invalid roomTypeId');
+  for (const [label, ids] of [
+    ['bedTypeIds', query.bedTypeIds],
+    ['amenityIds', query.amenityIds],
+  ] as const) {
+    if (ids === undefined) continue;
+    if (
+      !Array.isArray(ids) ||
+      ids.some((id) => typeof id !== 'string' || !/^[a-f\d]{24}$/i.test(id)) ||
+      new Set(ids).size !== ids.length
+    )
+      throw new RangeError(`Invalid ${label}`);
+  }
+  for (const [label, value] of [
+    ['priceMin', query.priceMin],
+    ['priceMax', query.priceMax],
+    ['adults', query.adults],
+    ['children', query.children],
+  ] as const) {
+    if (value === undefined) continue;
+    if (!Number.isSafeInteger(value) || value < 0)
+      throw new RangeError(`Invalid ${label}`);
+  }
+  if (
+    query.priceMin !== undefined &&
+    query.priceMax !== undefined &&
+    query.priceMin > query.priceMax
+  )
+    throw new RangeError('priceMin must be <= priceMax');
   return normalizeStay(query);
 }
 

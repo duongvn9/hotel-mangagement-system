@@ -166,6 +166,25 @@ export function RoomDetailsPage() {
                 </div>
               )}
 
+              <h2 className="mt-8 text-lg font-semibold">Cấu hình giường</h2>
+              {room.beds?.length ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {room.beds.map((bed) => (
+                    <span
+                      key={bed.bedTypeId}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-surface px-4 py-2 text-sm text-foreground"
+                    >
+                      <BedDouble className="size-3.5 text-primary" />
+                      {bed.quantity} {bed.bedTypeName}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Chưa cập nhật cấu hình giường cho loại phòng này.
+                </p>
+              )}
+
               <h2 className="mt-8 text-lg font-semibold">Chính sách</h2>
               <ul className="mt-2 space-y-1.5 text-sm text-muted-foreground">
                 <li>Nhận phòng từ 14:00 · Trả phòng trước 12:00</li>

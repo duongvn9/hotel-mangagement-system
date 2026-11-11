@@ -60,6 +60,35 @@ export class RoomTypeOverviewResponse {
   beds: RoomTypeBedSummary[];
 }
 
+/** Một lựa chọn cho bộ lọc (loại giường hoặc tiện nghi). */
+export class SearchFilterOption {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  name: string;
+}
+
+export class SearchFilterPriceRange {
+  @ApiProperty({ description: 'Giá mỗi đêm thấp nhất đang bán (VND)' })
+  min: number;
+
+  @ApiProperty({ description: 'Giá mỗi đêm cao nhất đang bán (VND)' })
+  max: number;
+}
+
+/** Dữ liệu cho bộ lọc tìm phòng công khai. */
+export class SearchFiltersResponse {
+  @ApiProperty({ type: [SearchFilterOption] })
+  bedTypes: SearchFilterOption[];
+
+  @ApiProperty({ type: [SearchFilterOption] })
+  amenities: SearchFilterOption[];
+
+  @ApiProperty({ type: SearchFilterPriceRange })
+  priceRange: SearchFilterPriceRange;
+}
+
 /** Một loại phòng trong danh sách công khai (chưa chọn ngày); không kèm tiện nghi. */
 export class RoomTypeSummaryResponse {
   @ApiProperty()
