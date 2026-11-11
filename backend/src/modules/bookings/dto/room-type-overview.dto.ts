@@ -9,6 +9,18 @@ export class RoomTypeAmenityResponse {
   name: string;
 }
 
+/** Một cấu hình giường hiển thị công khai (tên loại giường + số lượng). */
+export class RoomTypeBedSummary {
+  @ApiProperty()
+  bedTypeId: string;
+
+  @ApiProperty()
+  bedTypeName: string;
+
+  @ApiProperty({ minimum: 1 })
+  quantity: number;
+}
+
 /**
  * Chi tiết loại phòng công khai cho Guest xem trước khi đặt (đi kèm UC05 tìm phòng).
  * Chỉ lộ field an toàn; không trả cờ quản trị (isActive) hay _id nội bộ.
@@ -43,6 +55,9 @@ export class RoomTypeOverviewResponse {
 
   @ApiProperty({ type: [RoomTypeAmenityResponse] })
   amenities: RoomTypeAmenityResponse[];
+
+  @ApiProperty({ type: [RoomTypeBedSummary] })
+  beds: RoomTypeBedSummary[];
 }
 
 /** Một loại phòng trong danh sách công khai (chưa chọn ngày); không kèm tiện nghi. */
@@ -73,4 +88,7 @@ export class RoomTypeSummaryResponse {
     description: 'Ảnh loại phòng, ảnh đầu là ảnh đại diện',
   })
   images: string[];
+
+  @ApiProperty({ type: [RoomTypeBedSummary] })
+  beds: RoomTypeBedSummary[];
 }

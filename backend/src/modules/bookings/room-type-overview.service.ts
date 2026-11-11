@@ -13,6 +13,28 @@ type PopulatedAmenity = {
   isActive?: boolean;
 } | null;
 
+type PopulatedBed = {
+  bedType: { _id: Types.ObjectId; name: string; isActive?: boolean } | null;
+  quantity: number;
+};
+
+/** Cấu hình giường công khai: chỉ loại giường còn hoạt động, bỏ tham chiếu hỏng. */
+function publicBeds(beds?: PopulatedBed[]) {
+  return (beds ?? [])
+    .filter(
+      (
+        bed,
+      ): bed is PopulatedBed & {
+        bedType: NonNullable<PopulatedBed['bedType']>;
+      } => bed?.bedType != null && bed.bedType.isActive !== false,
+    )
+    .map((bed) => ({
+      bedTypeId: String(bed.bedType._id),
+      bedTypeName: bed.bedType.name,
+      quantity: bed.quantity,
+    }));
+}
+
 /**
  * Đọc công khai một loại phòng cho Guest xem trước khi đặt (đi kèm UC05).
  * Dùng lại model RoomType (H3 của Lâm) ở chế độ chỉ đọc; chỉ trả field an toàn,
@@ -31,6 +53,7 @@ export class RoomTypeOverviewService {
     const type = await this.roomTypes
       .findOne({ _id: new Types.ObjectId(id), isActive: true })
       .populate<{ amenities: PopulatedAmenity[] }>('amenities', 'name isActive')
+      .populate<{ beds: PopulatedBed[] }>('beds.bedType', 'name isActive')
       .lean()
       .exec();
     if (!type) {
@@ -52,6 +75,7 @@ export class RoomTypeOverviewService {
             amenity != null && amenity.isActive !== false,
         )
         .map((amenity) => ({ id: String(amenity._id), name: amenity.name })),
+      beds: publicBeds(type.beds),
     };
   }
 
@@ -63,6 +87,7 @@ export class RoomTypeOverviewService {
     const types = await this.roomTypes
       .find({ isActive: true })
       .sort({ basePrice: 1, name: 1, _id: 1 })
+      .populate<{ beds: PopulatedBed[] }>('beds.bedType', 'name isActive')
       .lean()
       .exec();
     return types.map((type) => ({
@@ -74,6 +99,7 @@ export class RoomTypeOverviewService {
       childCapacity: type.childCapacity,
       capacity: type.adultCapacity + type.childCapacity,
       pricePerNight: type.basePrice,
+      beds: publicBeds(type.beds),
     }));
   }
 }

@@ -13,6 +13,17 @@ export class RoomTypeAmenityResponse {
   name: string;
 }
 
+export class RoomTypeBedResponse {
+  @ApiProperty()
+  bedTypeId: string;
+
+  @ApiProperty()
+  bedTypeName: string;
+
+  @ApiProperty({ minimum: 1, maximum: 20 })
+  quantity: number;
+}
+
 export class RoomTypeResponse {
   @ApiPropertyOptional({ type: [String] })
   images?: string[];
@@ -36,6 +47,9 @@ export class RoomTypeResponse {
 
   @ApiProperty({ type: [RoomTypeAmenityResponse] })
   amenities: RoomTypeAmenityResponse[];
+
+  @ApiProperty({ type: [RoomTypeBedResponse] })
+  beds: RoomTypeBedResponse[];
 
   @ApiProperty()
   isActive: boolean;

@@ -1,5 +1,11 @@
 import { api } from '@/lib/api-client'
 
+export interface RoomTypeBed {
+  bedTypeId: string
+  bedTypeName: string
+  quantity: number
+}
+
 export interface RoomType {
   images?: string[]
   id: string
@@ -9,6 +15,7 @@ export interface RoomType {
   childCapacity: number
   basePrice: number
   amenities: { id: string; name: string; iconUrl?: string; isActive?: boolean }[]
+  beds: RoomTypeBed[]
   isActive: boolean
   availableForBooking: boolean
 }
@@ -41,6 +48,7 @@ export interface RoomTypeInput {
   childCapacity: number
   basePrice: number
   amenities: string[]
+  beds: { bedTypeId: string; quantity: number }[]
   isActive: boolean
 }
 
@@ -49,6 +57,9 @@ export async function getRoomType(id: string): Promise<RoomType> {
 }
 export async function getAmenityOptions(): Promise<{ id: string; name: string }[]> {
   return (await api.get<{ id: string; name: string }[]>('/amenities/options')).data
+}
+export async function getBedTypeOptions(): Promise<{ id: string; name: string }[]> {
+  return (await api.get<{ id: string; name: string }[]>('/bed-types/options')).data
 }
 export async function createRoomType(input: RoomTypeInput): Promise<RoomType> {
   return (await api.post<RoomType>('/room-types', input)).data

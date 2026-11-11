@@ -3,8 +3,9 @@ import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { roomTypeRoutes } from '../routes'
 import { RoomTypeForm } from './RoomTypeForm'
+import type { RoomType } from '../api'
 
-const room = {
+const room: RoomType = {
   id: 'abcdef0123456789abcdef01',
   name: 'Standard',
   description: 'Hai khách',
@@ -12,10 +13,11 @@ const room = {
   childCapacity: 0,
   basePrice: 850000,
   amenities: [{ id: 'abcdef0123456789abcdef02', name: 'Wi-Fi', isActive: false }],
+  beds: [],
   isActive: true,
   availableForBooking: true,
 }
-function renderForm(initial?: typeof room) {
+function renderForm(initial?: RoomType) {
   const success = vi.fn()
   const close = vi.fn()
   renderWithAuth(
@@ -226,6 +228,68 @@ describe('UC50 form', () => {
     expect(patch).not.toHaveBeenCalled()
   })
 
+  it('adds a bed configuration row and submits it', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) =>
+      url === '/bed-types/options'
+        ? {
+            data: [
+              { id: 'bed-1', name: 'Giường đôi' },
+              { id: 'bed-2', name: 'Giường đơn' },
+            ],
+          }
+        : { data: [] },
+    )
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: room })
+    renderForm()
+    fill()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Thêm giường' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm giường' }))
+    expect(screen.getByLabelText('Loại giường')).toHaveValue('bed-1')
+    fireEvent.change(screen.getByLabelText('Số lượng'), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu loại phòng' }))
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        '/room-types',
+        expect.objectContaining({ beds: [{ bedTypeId: 'bed-1', quantity: 2 }] }),
+      ),
+    )
+  })
+
+  it('preloads an existing bed configuration and patches only beds when quantity changes', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) =>
+      url === '/bed-types/options' ? { data: [{ id: 'bed-1', name: 'Giường đôi' }] } : { data: [] },
+    )
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: room })
+    renderForm({
+      ...room,
+      beds: [{ bedTypeId: 'bed-1', bedTypeName: 'Giường đôi', quantity: 2 }],
+    })
+    await waitFor(() => expect(screen.getByLabelText('Loại giường')).toHaveValue('bed-1'))
+    expect(screen.getByLabelText('Số lượng')).toHaveValue(2)
+    fireEvent.change(screen.getByLabelText('Số lượng'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu loại phòng' }))
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(`/room-types/${room.id}`, {
+        beds: [{ bedTypeId: 'bed-1', quantity: 3 }],
+      }),
+    )
+  })
+
+  it('rejects an empty bed row before submitting', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) =>
+      url === '/bed-types/options' ? { data: [{ id: 'bed-1', name: 'Giường đôi' }] } : { data: [] },
+    )
+    const post = vi.spyOn(api, 'post')
+    renderForm()
+    fill()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Thêm giường' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm giường' }))
+    fireEvent.change(screen.getByLabelText('Loại giường'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu loại phòng' }))
+    expect(await screen.findByText('Chọn loại giường cho mỗi dòng đã thêm.')).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+  })
+
   it('keeps the editor open when Escape belongs to the image lightbox', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => ({
       data:
@@ -266,9 +330,12 @@ describe('UC50 form', () => {
     expect(await screen.findByText('Chưa có tiện nghi nào')).toBeInTheDocument()
   })
   it('shows amenity request errors', async () => {
-    vi.mocked(api.get).mockRejectedValue({
-      isAxiosError: true,
-      response: { data: { message: 'Không tải được tiện nghi' } },
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/bed-types/options') return { data: [] }
+      throw {
+        isAxiosError: true,
+        response: { data: { message: 'Không tải được tiện nghi' } },
+      }
     })
     renderForm()
     expect(await screen.findByText('Không tải được tiện nghi')).toBeInTheDocument()
