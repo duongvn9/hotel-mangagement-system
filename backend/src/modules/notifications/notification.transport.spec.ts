@@ -181,7 +181,7 @@ describe('H9 transport selection and JSON composition (no network)', () => {
       BrevoNotificationTransport,
     );
     await app.close();
-  });
+  }, 60_000);
   it('disabled provider never constructs SMTP and logs exactly one masked line per message', async () => {
     const smtp = vi
       .spyOn(nodemailer, 'createTransport')

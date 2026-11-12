@@ -25,8 +25,8 @@ export class GmailNotificationTransport implements NotificationTransport {
     private readonly options: NotificationOptions,
     private readonly create: (signal: AbortSignal) => Transporter = (signal) =>
       nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 465,
+        host: options.host,
+        port: options.port,
         secure: true,
         auth: { user: options.user, pass: options.appPassword },
         connectionTimeout: options.sendTimeoutMs,
@@ -40,9 +40,9 @@ export class GmailNotificationTransport implements NotificationTransport {
         // Own the TLS socket so attempt timeout/shutdown can actually abort it.
         getSocket: (_options, callback) => {
           const socket = tls.connect({
-            host: 'smtp.gmail.com',
-            port: 465,
-            servername: 'smtp.gmail.com',
+            host: options.host,
+            port: options.port,
+            servername: options.host,
             rejectUnauthorized: true,
           });
           const abort = () =>

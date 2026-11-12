@@ -56,6 +56,96 @@ describe('H9 background queue', () => {
     expect(warn).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
+  it('persists SENT and FAILED states and deduplicates a related event', async () => {
+    const log = {
+      _id: '507f1f77bcf86cd799439011',
+      recipient: 'alice@example.com',
+      type: 'booking-cancelled',
+      subject: 'cancelled',
+      payload: { html: '<p>cancelled</p>', text: 'cancelled' },
+      retryCount: 0,
+    };
+    const logs = {
+      findOne: vi.fn().mockReturnValue({ lean: () => Promise.resolve(null) }),
+      create: vi.fn().mockResolvedValue(log),
+      updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+    };
+    service = new NotificationsService(
+      { send },
+      { ...notificationConfiguration({}), maxAttempts: 1 },
+      new NotificationScheduler(),
+    );
+    (service as unknown as { logs: typeof logs }).logs = logs;
+    const input: NotificationInput = {
+      to: 'alice@example.com',
+      type: 'booking-cancelled',
+      relatedBookingId: '507f1f77bcf86cd799439012',
+      data: {
+        bookingCode: 'GE-1',
+        guestName: 'Alice',
+        checkIn: '2026-10-24',
+        checkOut: '2026-10-25',
+        cancelledAt: '2026-10-23',
+      },
+    };
+    await service.send(input);
+    await service.drain();
+    await service.send(input);
+    await service.drain();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(logs.updateOne).toHaveBeenCalledWith(
+      { _id: log._id },
+      { $set: expect.objectContaining({ status: 'SENT' }) },
+    );
+    send.mockRejectedValue(new Error('smtp failure'));
+    await service.send({
+      ...input,
+      relatedBookingId: '507f1f77bcf86cd799439013',
+    });
+    await vi.runAllTimersAsync();
+    await service.drain();
+    expect(logs.updateOne).toHaveBeenCalledWith(
+      { _id: log._id },
+      {
+        $set: expect.objectContaining({
+          status: 'FAILED',
+          lastError: 'SEND_FAILED',
+        }),
+      },
+    );
+  });
+  it('queues only due FAILED logs under the retry limit', async () => {
+    const dueLog = {
+      _id: '507f1f77bcf86cd799439014',
+      recipient: 'alice@example.com',
+      type: 'booking-cancelled',
+      subject: 'cancelled',
+      payload: { html: '<p>cancelled</p>', text: 'cancelled' },
+      retryCount: 0,
+    };
+    const logs = {
+      find: vi.fn().mockReturnValue({
+        limit: () => ({ lean: () => ({ exec: async () => [dueLog] }) }),
+      }),
+      updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+    };
+    service = new NotificationsService(
+      { send },
+      notificationConfiguration({}),
+      new NotificationScheduler(),
+    );
+    (service as unknown as { logs: typeof logs }).logs = logs;
+    await expect(service.retryFailedNotifications()).resolves.toBe(1);
+    await service.drain();
+    expect(logs.find).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'FAILED', retryCount: { $lt: 3 } }),
+    );
+    expect(logs.updateOne).toHaveBeenCalledWith(
+      { _id: dueLog._id, status: 'FAILED' },
+      { $set: { status: 'PENDING' }, $inc: { retryCount: 1 } },
+    );
+    expect(send).toHaveBeenCalledTimes(1);
+  });
   it('returns acceptance without waiting for delivery; bounds active plus pending messages and snapshots data', async () => {
     send.mockImplementation(() => new Promise(() => {}));
     service = setup({ queueCapacity: 2 });
