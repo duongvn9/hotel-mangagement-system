@@ -37,6 +37,7 @@ import {
 import { RoomHold, type RoomHoldDocument } from './schemas/room-hold.schema.js';
 import { HoldPrincipalLock } from './schemas/hold-principal-lock.schema.js';
 import { AvailabilityClock } from './availability.adapters.js';
+import { withBookingFinancialOperation } from './booking-financial-operation.js';
 import {
   businessBoundary,
   normalizeStay,
@@ -381,6 +382,12 @@ export class BookingsService {
    * (khách có thể đã cọc, phần chênh lệch xử lý ở hóa đơn cuối).
    */
   async update(bookingId: string, dto: UpdateBookingDto) {
+    return withBookingFinancialOperation(this.bookings, bookingId, () =>
+      this.updateLocked(bookingId, dto),
+    );
+  }
+
+  private async updateLocked(bookingId: string, dto: UpdateBookingDto) {
     if (!/^[a-f\d]{24}$/i.test(bookingId)) {
       throw new BadRequestException('Invalid booking ID');
     }
@@ -574,6 +581,12 @@ export class BookingsService {
    * không tự động hoàn tiền (xử lý thủ công/ngoài phạm vi).
    */
   async cancel(bookingId: string, actor: BookingActor) {
+    return withBookingFinancialOperation(this.bookings, bookingId, () =>
+      this.cancelLocked(bookingId, actor),
+    );
+  }
+
+  private async cancelLocked(bookingId: string, actor: BookingActor) {
     if (!/^[a-f\d]{24}$/i.test(bookingId)) {
       throw new BadRequestException('Invalid booking ID');
     }

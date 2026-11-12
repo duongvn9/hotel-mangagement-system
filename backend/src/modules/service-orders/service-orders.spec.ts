@@ -134,6 +134,115 @@ const assignmentFixture = (status = 'ASSIGNED') => {
   };
 };
 
+describe('service order reassignment candidates', () => {
+  const fixture = (status = 'ASSIGNED') => {
+    const f = assignmentFixture(status);
+    const find = vi.fn(() => ({
+      select: () => ({
+        sort: () => ({
+          lean: async () => [
+            {
+              _id: f.task.assignedTo,
+              fullName: 'Worker',
+              role: 'SERVICE_STAFF',
+            },
+          ],
+        }),
+      }),
+    }));
+    Object.assign((f.service as unknown as { users: object }).users, { find });
+    return { ...f, find };
+  };
+
+  it('returns the unchanged active-staff contract for canonical ASSIGNED work', async () => {
+    const f = fixture();
+    await expect(
+      f.service.assignees(String(f.row._id), f.actor),
+    ).resolves.toEqual({
+      recoveryAllowed: false,
+      items: [
+        {
+          id: String(f.task.assignedTo),
+          displayName: 'Worker',
+          role: 'SERVICE_STAFF',
+        },
+      ],
+    });
+    expect(f.find).toHaveBeenCalledWith({
+      isActive: true,
+      role: 'SERVICE_STAFF',
+    });
+    expect(f.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each(['IN_PROGRESS', 'COMPLETED', 'CANCELLED'])(
+    'rejects canonical task state %s despite stale ASSIGNED order',
+    async (status) => {
+      const f = fixture();
+      f.task.status = status;
+      await expect(
+        f.service.assignees(String(f.row._id), f.actor),
+      ).rejects.toThrow();
+      expect(f.find).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['linkedTask', 'assignmentTaskId'])(
+    'rejects missing canonical %s',
+    async (field) => {
+      const f = fixture();
+      delete (f.row as unknown as Record<string, unknown>)[field];
+      await expect(
+        f.service.assignees(String(f.row._id), f.actor),
+      ).rejects.toThrow();
+      expect(f.find).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['completedAt', 'workResult', 'cancellation'])(
+    'rejects assigned task carrying %s',
+    async (field) => {
+      const f = fixture();
+      Object.assign(f.task, {
+        [field]: field === 'workResult' ? 'Done' : new Date(),
+      });
+      await expect(
+        f.service.assignees(String(f.row._id), f.actor),
+      ).rejects.toThrow();
+    },
+  );
+
+  it('rejects mismatched task intent and missing task', async () => {
+    const f = fixture();
+    f.task._id = new Types.ObjectId();
+    await expect(
+      f.service.assignees(String(f.row._id), f.actor),
+    ).rejects.toThrow();
+    vi.spyOn(
+      (
+        f.service as unknown as {
+          tasks: { findServiceOrderExecutionWork: () => Promise<unknown> };
+        }
+      ).tasks,
+      'findServiceOrderExecutionWork',
+    ).mockResolvedValue(null);
+    await expect(
+      f.service.assignees(String(f.row._id), f.actor),
+    ).rejects.toThrow();
+  });
+
+  it('preserves initial assignment response and excludes completed-on-site orders', async () => {
+    const f = fixture('NOT_STARTED');
+    await expect(
+      f.service.assignees(String(f.row._id), f.actor),
+    ).resolves.toHaveProperty('recoveryAllowed', false);
+    Object.assign(f.row, { intakeMode: 'COMPLETED_ON_SITE' });
+    await expect(
+      f.service.assignees(String(f.row._id), f.actor),
+    ).rejects.toThrow('cannot have a task');
+  });
+});
+
 describe('new assignment deadlines', () => {
   it.each([-86400000, -60000, 0])(
     'rejects new service deadline offset %s',
@@ -342,19 +451,23 @@ describe('service orders read fixes', () => {
     });
   });
 
-  it('includes rejection reasons in the owner list and uses only the public recovery rejection reason', async () => {
-    const f = fixture();
-    f.row.acceptanceRecovery = {
-      rejectionReason: 'Service cannot be provided',
-      reason: 'Internal reconciliation',
-    };
-    const result = await f.service.list({ page: 1, limit: 20 }, user);
-    expect(result.items[0]).toHaveProperty(
-      'reviewReason',
-      'Service cannot be provided',
-    );
-    expect(result.items[0]).not.toHaveProperty('acceptanceRecovery');
-  });
+  it.each(['REJECTED', 'ABANDONED'])(
+    'includes public recovery reasons for %s without internal evidence',
+    async (status) => {
+      const f = fixture();
+      f.row.reviewStatus = status;
+      f.row.acceptanceRecovery = {
+        rejectionReason: 'Service cannot be provided',
+        reason: 'Internal reconciliation',
+      };
+      const result = await f.service.list({ page: 1, limit: 20 }, user);
+      expect(result.items[0]).toHaveProperty(
+        'reviewReason',
+        'Service cannot be provided',
+      );
+      expect(result.items[0]).not.toHaveProperty('acceptanceRecovery');
+    },
+  );
 
   it.each(['PENDING_REVIEW', 'ACCEPTING', 'ACCEPTED'])(
     'omits reviewReason for %s',

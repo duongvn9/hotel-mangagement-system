@@ -46,7 +46,10 @@ export class CreateServiceOrderDto {
   @MaxLength(2000)
   notes?: string;
 
-  @ValidateIf(optional)
+  @ValidateIf(
+    (object: CreateServiceOrderDto, value: unknown) =>
+      object instanceof IntakeServiceOrderDto || value !== undefined,
+  )
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.toLowerCase() : value,
   )
@@ -54,7 +57,62 @@ export class CreateServiceOrderDto {
   requestId?: string;
 }
 
+export class IntakeServiceOrderDto extends CreateServiceOrderDto {
+  @IsUUID()
+  declare requestId: string;
+
+  @IsIn(['UNPERFORMED', 'COMPLETED_ON_SITE'])
+  intakeMode: 'UNPERFORMED' | 'COMPLETED_ON_SITE';
+
+  @ValidateIf(optional)
+  @IsMongoId()
+  roomId?: string;
+
+  @ValidateIf(optional)
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  requesterName?: string;
+
+  @ValidateIf(optional)
+  @IsMongoId()
+  actualPerformerId?: string;
+
+  @ValidateIf(optional)
+  @IsISO8601({ strict: true, strictSeparator: true })
+  actualCompletedAt?: string;
+
+  @ValidateIf(optional)
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  completionDetails?: string;
+}
+
+export class ReassignServiceOrderDto {
+  @IsUUID()
+  requestId: string;
+
+  @IsMongoId()
+  assigneeId: string;
+
+  @IsMongoId()
+  expectedAssigneeId: string;
+
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  reason: string;
+}
+
 export class ReviewServiceOrderDto {
+  @ValidateIf(optional)
+  @IsIn(['ABANDON_EXPIRED'])
+  recoveryAction?: 'ABANDON_EXPIRED';
+
   @IsIn(['ACCEPT', 'REJECT'])
   decision: 'ACCEPT' | 'REJECT';
 

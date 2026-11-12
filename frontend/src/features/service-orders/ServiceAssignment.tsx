@@ -7,6 +7,7 @@ import { ConfirmationDialog, Panel } from '@/components/organisms'
 import { dateTime, executionLabels } from './api'
 import type { AssignmentInput, StaffServiceOrder } from './staff-api'
 import { useAssignServiceOrder, useServiceAssignees } from './staff-hooks'
+import { ServiceReassignment } from './ServiceReassignment'
 
 export function ServiceAssignment({
   order,
@@ -16,7 +17,9 @@ export function ServiceAssignment({
   refreshing: boolean
 }) {
   const eligible =
-    order.reviewStatus === 'ACCEPTED' && (!order.feeRequired || order.billingStatus === 'BILLED')
+    order.intakeMode !== 'COMPLETED_ON_SITE' &&
+    order.reviewStatus === 'ACCEPTED' &&
+    (!order.feeRequired || order.billingStatus === 'BILLED')
   const open = eligible && !order.task && order.executionStatus === 'NOT_STARTED'
   const pending = order.executionStatus === 'ASSIGNING'
   const assignees = useServiceAssignees(
@@ -142,6 +145,7 @@ export function ServiceAssignment({
       sending.current = false
     }
   }
+  if (order.intakeMode === 'COMPLETED_ON_SITE') return null
   return (
     <Panel title="Phân công dịch vụ" className="min-w-0 break-words">
       <div className="space-y-4 text-sm">
@@ -152,6 +156,17 @@ export function ServiceAssignment({
             <p>Đã giao: {dateTime(order.task.assignedAt)}</p>
             {order.task.dueAt && <p>Hạn hoàn thành: {dateTime(order.task.dueAt)}</p>}
             {order.task.completedAt && <p>Hoàn thành: {dateTime(order.task.completedAt)}</p>}
+            {order.task.reassignments?.map((entry) => (
+              <div key={entry.requestId} className="space-y-1 border-t border-border pt-2">
+                <p>Đổi phân công: {dateTime(entry.at)}</p>
+                <p>
+                  Nhân viên trước: {entry.previousAssigneeId} · Nhân viên mới: {entry.assigneeId}
+                </p>
+                <p>Người đổi: {entry.actorId}</p>
+                <p className="whitespace-pre-wrap">Lý do: {entry.reason}</p>
+              </div>
+            ))}
+            <ServiceReassignment order={order} refreshing={refreshing} />
           </div>
         ) : !eligible ? (
           <p>Chỉ phân công sau khi đã chấp nhận và hoàn tất ghi phí (nếu có).</p>

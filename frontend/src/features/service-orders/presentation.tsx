@@ -89,7 +89,7 @@ export function OrderReceipt({
           {order.service.name}
         </h2>
         <OrderBusinessState order={order} />
-        {order.reviewStatus === 'REJECTED' && (
+        {(order.reviewStatus === 'REJECTED' || order.reviewStatus === 'ABANDONED') && (
           <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
             Lý do từ chối: {order.reviewReason?.trim() || 'Không có lý do từ chối.'}
           </p>
@@ -122,9 +122,11 @@ export function OrderReceipt({
                 : 'Đang xử lý phân công; chưa xác nhận đã phân công.'
               : order.reviewStatus === 'PENDING_REVIEW'
                 ? 'Yêu cầu đang chờ duyệt, chưa được chấp nhận và chưa ghi thu phí.'
-                : order.reviewStatus === 'REJECTED'
-                  ? 'Yêu cầu đã bị từ chối.'
-                  : 'Yêu cầu đã được chấp nhận. Trạng thái này không xác nhận đã thanh toán.'}
+                : order.reviewStatus === 'ABANDONED'
+                  ? 'Yêu cầu đã dừng kỹ thuật do lịch dịch vụ đã qua, không ghi phí và không tạo công việc. Không phải từ chối thông thường.'
+                  : order.reviewStatus === 'REJECTED'
+                    ? 'Yêu cầu đã bị từ chối.'
+                    : 'Yêu cầu đã được chấp nhận. Trạng thái này không xác nhận đã thanh toán.'}
         </p>
       </div>
     </Container>

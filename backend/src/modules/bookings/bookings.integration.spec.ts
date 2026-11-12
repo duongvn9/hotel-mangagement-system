@@ -42,7 +42,11 @@ const setup = (
     save: vi.fn(),
   };
   const hold = { expiresAt: new Date(now.getTime() + 60000) };
-  const bookings = { findById: vi.fn().mockResolvedValue(booking) };
+  const bookings = {
+    findById: vi.fn().mockResolvedValue(booking),
+    updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+    exists: vi.fn().mockResolvedValue({ _id: booking._id }),
+  };
   // findOne dùng được cả hai cách: `await findOne()` (update) và `findOne().sort()` (getBooking).
   const heldValue = live ? hold : null;
   const holdQuery = Object.assign(Promise.resolve(heldValue), {

@@ -10,7 +10,37 @@ import { StaffServiceOrderDetailPage } from './pages/StaffServiceOrderDetailPage
 
 import { ServiceHistoryPage, ServiceHistoryDetailPage } from './pages/ServiceHistoryPage'
 
+import { ServiceIntakePage } from './pages/ServiceIntakePage'
+import { ServiceReportsPage, ServiceReportDetailPage } from './pages/ServiceReportsPage'
+
 export const serviceOrderRoutes: RouteObject[] = [
+  {
+    path: '/staff/service-history/reports',
+    element: (
+      <RequireAuth roles={['SERVICE_STAFF']}>
+        <ServiceReportsPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/staff/service-history/reports/:id',
+    element: (
+      <RequireAuth roles={['SERVICE_STAFF']}>
+        <ServiceReportDetailPage />
+      </RequireAuth>
+    ),
+  },
+  ...[
+    { path: '/staff/service-orders/intake', role: 'RECEPTIONIST' },
+    { path: '/staff/service-history/intake', role: 'SERVICE_STAFF' },
+  ].map(({ path, role }) => ({
+    path,
+    element: (
+      <RequireAuth roles={[role]}>
+        <ServiceIntakePage />
+      </RequireAuth>
+    ),
+  })),
   {
     path: '/staff/service-history',
     element: (

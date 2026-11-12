@@ -187,6 +187,66 @@ describe('BookingSummaryService', () => {
     expect(serviceOrders.find).toHaveBeenCalledWith({ booking: bookingId });
   });
 
+  it('shows an abandoned acceptance as cancelled without changing charges or pending orders', async () => {
+    const abandoned = {
+      ...order(
+        ServiceOrderReviewStatus.Abandoned,
+        ServiceOrderExecutionStatus.NotStarted,
+        'Giặt ủi',
+      ),
+      unitPriceVND: 0,
+      amount: 0,
+      reviewDecision: 'ACCEPT',
+      acceptanceRecovery: {
+        decision: 'REJECT',
+        action: 'ABANDON_EXPIRED',
+        reason: 'Verified no charge or work',
+        rejectionReason: 'Appointment missed',
+        actor: new Types.ObjectId(),
+        actorRole: 'RECEPTIONIST',
+        at: new Date('2026-11-11T09:00:00Z'),
+        previousReviewStatus: 'ACCEPTING',
+        resultingReviewStatus: 'ABANDONED',
+        evidence: {
+          chargeExpected: false,
+          sourceChargeAbsent: true,
+          taskAbsent: true,
+        },
+      },
+    };
+    const pending = order(
+      ServiceOrderReviewStatus.PendingReview,
+      ServiceOrderExecutionStatus.NotStarted,
+      'Ăn sáng',
+    );
+    const original = structuredClone(abandoned);
+    const { sut } = setup({ orders: [abandoned, pending] });
+
+    const summary = await sut.get(bookingId.toHexString(), ctx);
+
+    expect(summary.serviceOrders).toEqual([
+      {
+        id: abandoned._id.toHexString(),
+        serviceName: abandoned.serviceName,
+        quantity: abandoned.quantity,
+        amount: 0,
+        status: 'CANCELLED',
+        requestedTime: abandoned.requestedTime.toISOString(),
+      },
+      {
+        id: pending._id.toHexString(),
+        serviceName: pending.serviceName,
+        quantity: pending.quantity,
+        amount: pending.amount,
+        status: 'PENDING',
+        requestedTime: pending.requestedTime.toISOString(),
+      },
+    ]);
+    expect(summary.invoice).toEqual(invoice);
+    expect(summary.payments).toEqual([]);
+    expect(structuredClone(abandoned)).toEqual(original);
+  });
+
   it.each([
     [
       ServiceOrderReviewStatus.PendingReview,

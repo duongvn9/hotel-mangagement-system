@@ -31,7 +31,8 @@ function setup(guestEmail: string | undefined = 'alice@example.com') {
   const bookings = {
     findById: vi.fn(async () => booking),
     findOneAndUpdate: vi.fn(() => chain(booking)),
-    updateOne: vi.fn(),
+    updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+    exists: vi.fn().mockResolvedValue({ _id: bookingId }),
   };
   const rooms = {
     find: vi.fn(() =>
