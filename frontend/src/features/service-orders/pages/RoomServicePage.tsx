@@ -1,8 +1,8 @@
 import { Minus, Plus, Repeat } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { Button, Skeleton, StatusBadge, Textarea } from '@/components/atoms'
-import { Alert, EmptyState } from '@/components/molecules'
+import { Button, Input, Skeleton, StatusBadge, Textarea } from '@/components/atoms'
+import { Alert, EmptyState, FormField } from '@/components/molecules'
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,7 @@ import { OrderError } from '../presentation'
 
 const MAX_QUANTITY = 10
 const MAX_NOTES = 2000
+const currentTime = () => Date.now()
 
 /**
  * Màn "Dịch vụ phòng" của khách, theo prototype app.order-service: chọn dịch vụ, số lượng, ghi
@@ -37,8 +38,10 @@ export function RoomServicePage() {
   const [serviceId, setServiceId] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [notes, setNotes] = useState('')
+  const [requestedTime, setRequestedTime] = useState('')
+  const [validation, setValidation] = useState('')
   const [placed, setPlaced] = useState('')
-  const attempt = useRef<{ payload: string; requestId: string } | null>(null)
+  const [intent, setIntent] = useState<OrderInput | null>(null)
   const submitting = useRef(false)
 
   const bookings = contexts.data?.items ?? []
@@ -54,7 +57,7 @@ export function RoomServicePage() {
   const loading = contexts.isPending || catalog.isPending
 
   function changed() {
-    attempt.current = null
+    if (intent || submitting.current) return
     setPlaced('')
     create.reset()
   }
@@ -65,26 +68,44 @@ export function RoomServicePage() {
   }
 
   async function submit() {
-    if (!stay || !service || amount === null || submitting.current || create.isPending) return
+    if (submitting.current || create.isPending) return
+    if (!intent && (!stay || !service || amount === null)) return
     setPlaced('')
-    const input: OrderInput = {
-      bookingId: stay.id,
-      serviceId: service.id,
+    const time = requestedTime ? new Date(requestedTime) : undefined
+    if (
+      !intent &&
+      stay &&
+      ((time &&
+        (!Number.isFinite(time.getTime()) ||
+          time.getTime() <= currentTime() ||
+          time < new Date(stay.checkIn) ||
+          time >= new Date(stay.checkOut))) ||
+        (stay.status === 'CONFIRMED' && !time))
+    ) {
+      setValidation(
+        'Thời gian yêu cầu phải sau hiện tại và trong kỳ lưu trú; đặt phòng chưa nhận cần hẹn giờ.',
+      )
+      return
+    }
+    setValidation('')
+    const input: OrderInput = intent ?? {
+      requestId: crypto.randomUUID(),
+      bookingId: stay!.id,
+      serviceId: service!.id,
       quantity,
+      ...(time ? { requestedTime: time.toISOString() } : {}),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
     }
-    const payload = JSON.stringify(input)
+    setIntent(input)
     try {
-      if (!attempt.current || attempt.current.payload !== payload) {
-        attempt.current = { payload, requestId: crypto.randomUUID() }
-      }
       submitting.current = true
-      await create.mutateAsync({ ...input, requestId: attempt.current.requestId })
-      setPlaced(`Đã đặt ${service.name} — yêu cầu đang chờ duyệt`)
-      attempt.current = null
+      const result = await create.mutateAsync(input)
+      setPlaced(`Đã đặt ${result.service.name} — yêu cầu đang chờ duyệt`)
+      setIntent(null)
       setServiceId(null)
       setQuantity(1)
       setNotes('')
+      setRequestedTime('')
     } catch {
       // Lỗi hiển thị qua create.error; giữ nội dung để gửi lại cùng mã yêu cầu.
     } finally {
@@ -103,7 +124,12 @@ export function RoomServicePage() {
         subtitle={subtitle}
         actions={
           bookings.length > 0 ? (
-            <Button variant="outline" className="rounded-full" onClick={() => setPickerOpen(true)}>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              disabled={Boolean(intent) || create.isPending}
+              onClick={() => setPickerOpen(true)}
+            >
               <Repeat className="size-4" />
               Chọn booking
             </Button>
@@ -146,6 +172,7 @@ export function RoomServicePage() {
                     key={item.id}
                     service={item}
                     picked={item.id === serviceId}
+                    disabled={Boolean(intent) || create.isPending}
                     onPick={() => {
                       changed()
                       setServiceId(item.id)
@@ -163,7 +190,7 @@ export function RoomServicePage() {
                       variant="outline"
                       className="size-8 rounded-full"
                       aria-label="Giảm số lượng"
-                      disabled={quantity <= 1}
+                      disabled={Boolean(intent) || create.isPending || quantity <= 1}
                       onClick={() => {
                         changed()
                         setQuantity(Math.max(1, quantity - 1))
@@ -179,7 +206,7 @@ export function RoomServicePage() {
                       variant="outline"
                       className="size-8 rounded-full"
                       aria-label="Tăng số lượng"
-                      disabled={quantity >= MAX_QUANTITY}
+                      disabled={Boolean(intent) || create.isPending || quantity >= MAX_QUANTITY}
                       onClick={() => {
                         changed()
                         setQuantity(Math.min(MAX_QUANTITY, quantity + 1))
@@ -189,8 +216,31 @@ export function RoomServicePage() {
                     </Button>
                     <span className="ml-auto font-semibold tabular-nums">{vnd(amount ?? 0)}</span>
                   </div>
+                  <FormField
+                    label="Thời gian yêu cầu"
+                    htmlFor="room-service-time"
+                    hint={
+                      stay.status === 'CONFIRMED'
+                        ? 'Cần chọn thời gian trong kỳ lưu trú cho đặt phòng chưa nhận.'
+                        : 'Không bắt buộc khi đang lưu trú.'
+                    }
+                  >
+                    <Input
+                      id="room-service-time"
+                      disabled={Boolean(intent) || create.isPending}
+                      type="datetime-local"
+                      value={requestedTime}
+                      onChange={(event) => {
+                        changed()
+                        setRequestedTime(event.target.value)
+                        setValidation('')
+                      }}
+                    />
+                  </FormField>
+                  {validation && <Alert tone="danger">{validation}</Alert>}
                   <Textarea
                     aria-label="Ghi chú cho nhân viên"
+                    disabled={Boolean(intent) || create.isPending}
                     placeholder="Ghi chú cho nhân viên (không bắt buộc)"
                     maxLength={MAX_NOTES}
                     value={notes}
@@ -199,13 +249,23 @@ export function RoomServicePage() {
                       setNotes(event.target.value)
                     }}
                   />
+                  {intent && (
+                    <p role="status" className="text-sm">
+                      Yêu cầu có thể đã được tạo. Nội dung và mã yêu cầu được giữ nguyên để thử lại,
+                      kể cả khi giờ hẹn đã qua. Không tạo yêu cầu khác trước khi kiểm tra lịch sử.
+                    </p>
+                  )}
                   {create.isError && <OrderError error={create.error} presentation="workspace" />}
                   <Button
                     className="w-fit rounded-full"
-                    disabled={amount === null || create.isPending}
+                    disabled={(!intent && amount === null) || create.isPending}
                     onClick={() => void submit()}
                   >
-                    {create.isPending ? 'Đang gửi…' : 'Đặt dịch vụ'}
+                    {create.isPending
+                      ? 'Đang gửi…'
+                      : intent
+                        ? 'Thử lại cùng nội dung'
+                        : 'Đặt dịch vụ'}
                   </Button>
                 </div>
               )}
@@ -309,16 +369,19 @@ export function RoomServicePage() {
 function ServiceCard({
   service,
   picked,
+  disabled,
   onPick,
 }: {
   service: CatalogService
   picked: boolean
+  disabled: boolean
   onPick: () => void
 }) {
   return (
     <button
       type="button"
       aria-pressed={picked}
+      disabled={disabled}
       onClick={onPick}
       className={cn(
         'rounded-xl border p-4 text-left transition',

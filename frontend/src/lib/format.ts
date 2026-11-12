@@ -13,6 +13,7 @@ const vn: Record<string, string> = {
   CHECKED_OUT: 'Đã trả phòng',
   CANCELLED: 'Đã huỷ',
   EXPIRED: 'Hết hạn',
+  ABANDONED: 'Đã dừng kỹ thuật · lịch dịch vụ đã qua',
   AVAILABLE: 'Trống',
   OCCUPIED: 'Có khách',
   CLEANING: 'Đang dọn',

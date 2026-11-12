@@ -4,12 +4,19 @@ export const money = (value: number) =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)
 export const dateTime = (value: string) => new Date(value).toLocaleString('vi-VN')
 
-export const reviewStatuses = ['PENDING_REVIEW', 'ACCEPTING', 'ACCEPTED', 'REJECTED'] as const
+export const reviewStatuses = [
+  'PENDING_REVIEW',
+  'ACCEPTING',
+  'ACCEPTED',
+  'REJECTED',
+  'ABANDONED',
+] as const
 export const reviewLabels: Record<(typeof reviewStatuses)[number], string> = {
   PENDING_REVIEW: 'Chờ duyệt',
   ACCEPTING: 'Đang chấp nhận · chờ hoàn tất ghi phí',
   ACCEPTED: 'Đã chấp nhận',
   REJECTED: 'Đã từ chối',
+  ABANDONED: 'Đã dừng kỹ thuật · lịch dịch vụ đã qua',
 }
 export const executionStatuses = [
   'NOT_STARTED',
@@ -28,6 +35,7 @@ export const executionLabels: Record<(typeof executionStatuses)[number], string>
 const businessStates = {
   PENDING_REVIEW: { label: 'Chờ duyệt', tone: 'neutral' },
   REJECTED: { label: 'Đã từ chối', tone: 'neutral' },
+  ABANDONED: { label: reviewLabels.ABANDONED, tone: 'neutral' },
   ACCEPTED: { label: 'Đã chấp nhận', tone: 'success' },
   ASSIGNED: { label: 'Đã phân công', tone: 'success' },
   IN_PROGRESS: { label: 'Đang thực hiện', tone: 'neutral' },
@@ -40,7 +48,12 @@ export function serviceOrderState(order: Pick<ServiceOrder, 'reviewStatus' | 'ex
   const { reviewStatus, executionStatus } = order
   let state: keyof typeof businessStates = 'UNKNOWN'
   if (executionStatus === 'NOT_STARTED') {
-    if (reviewStatus === 'PENDING_REVIEW' || reviewStatus === 'REJECTED') state = reviewStatus
+    if (
+      reviewStatus === 'PENDING_REVIEW' ||
+      reviewStatus === 'REJECTED' ||
+      reviewStatus === 'ABANDONED'
+    )
+      state = reviewStatus
     if (reviewStatus === 'ACCEPTING') state = 'PROCESSING'
     if (reviewStatus === 'ACCEPTED') state = 'ACCEPTED'
   } else if (reviewStatus === 'ACCEPTED') {

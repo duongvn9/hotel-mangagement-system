@@ -14,6 +14,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import {
   AssignServiceOrderDto,
+  IntakeServiceOrderDto,
+  ReassignServiceOrderDto,
   ServiceHistoryQuery,
   CreateServiceOrderDto,
   ListServiceOrdersQuery,
@@ -30,6 +32,55 @@ export class ServiceOrdersController {
   @Post()
   create(@Body() dto: CreateServiceOrderDto, @CurrentUser() user: AuthUser) {
     return this.orders.create(dto, user);
+  }
+
+  @Post('intake')
+  @Roles(Role.ServiceStaff, Role.Receptionist)
+  intake(@Body() dto: IntakeServiceOrderDto, @CurrentUser() user: AuthUser) {
+    return this.orders.intake(dto, user);
+  }
+
+  @Get('intake/contexts')
+  @Roles(Role.ServiceStaff, Role.Receptionist)
+  intakeContexts(@CurrentUser() user: AuthUser) {
+    return this.orders.intakeContexts(user);
+  }
+
+  @Get('intake/performers')
+  @Roles(Role.ServiceStaff)
+  intakePerformers(@CurrentUser() user: AuthUser) {
+    return this.orders.intakePerformers(user);
+  }
+
+  @Get('intake/catalog')
+  @Roles(Role.ServiceStaff, Role.Receptionist)
+  intakeCatalog(@CurrentUser() user: AuthUser) {
+    return this.orders.intakeCatalog(user);
+  }
+
+  @Get('reports/me')
+  @Roles(Role.ServiceStaff)
+  reports(
+    @Query() query: ListServiceOrdersQuery,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.orders.reports(query, user);
+  }
+
+  @Get('reports/:id')
+  @Roles(Role.ServiceStaff)
+  reportDetail(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.orders.reports(new ListServiceOrdersQuery(), user, id);
+  }
+
+  @Post(':id/reassignment')
+  @Roles(Role.Receptionist)
+  reassign(
+    @Param('id') id: string,
+    @Body() dto: ReassignServiceOrderDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.orders.reassign(id, dto, user);
   }
 
   @Get('me')
