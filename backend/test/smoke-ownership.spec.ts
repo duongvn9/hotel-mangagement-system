@@ -39,6 +39,10 @@ const container = (
           ]
         : [],
   },
+  HostConfig: {
+    Tmpfs: service === 'mongo' ? { '/data/db': '', '/data/configdb': '' } : {},
+    Binds: [] as string[],
+  },
   Mounts:
     service === 'mongo'
       ? ['/data/db', '/data/configdb'].map((Destination) => ({
@@ -83,6 +87,36 @@ describe('standalone smoke admission', () => {
     expect(
       steps.split('      - run: npm test\n')[1].split('      - ')[0].trim(),
     ).toBe('');
+  });
+  it('accepts Docker HostConfig tmpfs with empty Mounts', () => {
+    const data = evidence();
+    data[0].Mounts = [];
+    expect(() => assertSmokeEvidence(env, data)).not.toThrow();
+  });
+  it.each([
+    'empty',
+    'missing',
+    'extra',
+    'bind',
+    'volume',
+    'duplicate',
+    'partial',
+  ])('rejects invalid smoke storage %s', (field) => {
+    const data = evidence();
+    if (field === 'empty') {
+      data[0].Mounts = [];
+      data[0].HostConfig.Tmpfs = {};
+    }
+    if (field === 'missing')
+      delete (data[0].HostConfig.Tmpfs as Record<string, string>)['/data/db'];
+    if (field === 'extra')
+      (data[0].HostConfig.Tmpfs as Record<string, string>)['/extra'] = '';
+    if (field === 'bind') data[0].HostConfig.Binds = ['/shared:/extra'];
+    if (field === 'volume')
+      data[0].Mounts.push({ Type: 'volume', Destination: '/extra' });
+    if (field === 'duplicate') data[0].Mounts[1].Destination = '/data/db';
+    if (field === 'partial') data[0].Mounts.pop();
+    expect(() => assertSmokeEvidence(env, data)).toThrow();
   });
   it('accepts the fresh exact Mongo and API pair', () =>
     expect(() => assertSmokeEvidence(env, evidence())).not.toThrow());

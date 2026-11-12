@@ -1,6 +1,25 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 
+export function hasDisposableTmpfsStorage(container) {
+  const targets = ['/data/configdb', '/data/db'];
+  const config = container?.HostConfig;
+  const mounts = container?.Mounts;
+  return (
+    config?.Tmpfs != null &&
+    JSON.stringify(Object.keys(config.Tmpfs).sort()) ===
+      JSON.stringify(targets) &&
+    (config.Binds == null ||
+      (Array.isArray(config.Binds) && config.Binds.length === 0)) &&
+    Array.isArray(mounts) &&
+    (mounts.length === 0 ||
+      (mounts.length === 2 &&
+        mounts.every((mount) => mount.Type === 'tmpfs') &&
+        JSON.stringify(mounts.map((mount) => mount.Destination).sort()) ===
+          JSON.stringify(targets)))
+  );
+}
+
 function identity(env) {
   assert.equal(env.CI, 'true');
   assert.equal(env.GITHUB_ACTIONS, 'true');
@@ -69,12 +88,10 @@ export function assertSmokeEvidence(env, containers) {
     ]);
   }
   assert.equal(containers[0].Config.Image, 'mongo:8');
-  assert.equal(containers[0].Mounts.length, 2);
-  assert.deepEqual(containers[0].Mounts.map((m) => m.Destination).sort(), [
-    '/data/configdb',
-    '/data/db',
-  ]);
-  assert.ok(containers[0].Mounts.every((m) => m.Type === 'tmpfs'));
+  assert.ok(
+    hasDisposableTmpfsStorage(containers[0]),
+    'Mongo storage must be exclusively the two disposable tmpfs targets',
+  );
   assert.equal(containers[1].Mounts.length, 0);
   const configuration = Object.fromEntries(
     containers[1].Config.Env.map((value) => {

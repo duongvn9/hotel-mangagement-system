@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { assertDisposableTestEnvironment } from './test-database.js';
+import { hasDisposableTmpfsStorage } from './smoke-ownership.mjs';
 
 export function verifyTestDatabaseOwner(
   env: NodeJS.ProcessEnv,
@@ -22,14 +23,7 @@ export function verifyTestDatabaseOwner(
         container?.Config?.Labels?.['hms.test.attempt'] ===
         env.GITHUB_RUN_ATTEMPT,
       job: container?.Config?.Labels?.['hms.test.job'] === 'backend',
-      mountCount: container?.Mounts?.length === 2,
-      mountTargets:
-        Array.isArray(container?.Mounts) &&
-        container.Mounts.every(
-          (mount: { Type: string; Destination: string }) =>
-            mount.Type === 'tmpfs' &&
-            ['/data/db', '/data/configdb'].includes(mount.Destination),
-        ),
+      disposableStorage: hasDisposableTmpfsStorage(container),
       running: Boolean(container?.State?.Running),
       healthy: container?.State?.Health?.Status === 'healthy',
       binding: Boolean(

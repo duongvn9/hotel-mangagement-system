@@ -104,6 +104,10 @@ describe('disposable database admission', () => {
         'hms.test.job': 'backend',
       },
     },
+    HostConfig: {
+      Tmpfs: { '/data/db': '', '/data/configdb': '' },
+      Binds: [] as string[],
+    },
     State: { Running: true, Health: { Status: 'healthy' } },
     Mounts: ['/data/db', '/data/configdb'].map((Destination) => ({
       Type: 'tmpfs',
@@ -116,6 +120,44 @@ describe('disposable database admission', () => {
         ],
       },
     },
+  });
+
+  it('accepts the observed Docker tmpfs metadata with empty Mounts', () => {
+    vi.mocked(execFileSync).mockReturnValue(
+      JSON.stringify([{ ...container(), Mounts: [] }]),
+    );
+    expect(() =>
+      verifyTestDatabaseOwner(ci, new URL(ci.MONGODB_URI)),
+    ).not.toThrow();
+  });
+
+  it.each([
+    'empty',
+    'missing',
+    'extra',
+    'bind',
+    'volume',
+    'duplicate',
+    'partial',
+  ])('rejects invalid authoritative storage proof %s', (field) => {
+    const value = container();
+    if (field === 'empty') {
+      value.HostConfig.Tmpfs = {} as typeof value.HostConfig.Tmpfs;
+      value.Mounts = [];
+    }
+    if (field === 'missing')
+      delete (value.HostConfig.Tmpfs as Record<string, string>)['/data/db'];
+    if (field === 'extra')
+      (value.HostConfig.Tmpfs as Record<string, string>)['/extra'] = '';
+    if (field === 'bind') value.HostConfig.Binds = ['/shared:/extra'];
+    if (field === 'volume')
+      value.Mounts.push({ Type: 'volume', Destination: '/extra' });
+    if (field === 'duplicate') value.Mounts[1].Destination = '/data/db';
+    if (field === 'partial') value.Mounts.pop();
+    vi.mocked(execFileSync).mockReturnValue(JSON.stringify([value]));
+    expect(() =>
+      verifyTestDatabaseOwner(ci, new URL(ci.MONGODB_URI)),
+    ).toThrow();
   });
 
   it('verifies the exact job service through Docker inspection', () => {
@@ -134,6 +176,7 @@ describe('disposable database admission', () => {
     const value = {
       ...container(),
       Mounts: [],
+      State: { Running: false, Health: { Status: 'healthy' } },
       HostConfig: {
         Tmpfs: { '/data/db': '', '/data/configdb': '' },
         Binds: null,
@@ -151,7 +194,7 @@ describe('disposable database admission', () => {
     } catch (error) {
       message = (error as Error).message;
     }
-    expect(message).toContain('"mountCount":false');
+    expect(message).toContain('"running":false');
     expect(message).toContain('"tmpfsTargets":["/data/configdb","/data/db"]');
     expect(message).toContain('"mounts":[]');
     expect(message).not.toContain('sentinel-secret');
