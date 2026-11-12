@@ -65,9 +65,13 @@ describe('disposable database admission', () => {
     expect(execFileSync).not.toHaveBeenCalled();
   });
 
-  it.runIf(process.platform === 'win32')(
-    'checks the memory child PID, parent, path and listener',
-    () => {
+  it('checks the memory child PID, parent, path and listener on every test host', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    try {
+      Object.defineProperty(process, 'platform', {
+        ...descriptor,
+        value: 'win32',
+      });
       const identity = {
         pid: 1234,
         parent: 1233,
@@ -91,8 +95,35 @@ describe('disposable database admission', () => {
           verifyTestDatabaseOwner(memory, new URL(memory.MONGODB_URI)),
         ).toThrow();
       }
-    },
-  );
+    } finally {
+      Object.defineProperty(process, 'platform', descriptor);
+    }
+    expect(Object.getOwnPropertyDescriptor(process, 'platform')).toEqual(
+      descriptor,
+    );
+  });
+
+  it('rejects unsupported memory ownership platforms before any subprocess', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    vi.mocked(execFileSync).mockClear();
+    try {
+      Object.defineProperty(process, 'platform', {
+        ...descriptor,
+        value: 'linux',
+      });
+      expect(() =>
+        verifyTestDatabaseOwner(memory, new URL(memory.MONGODB_URI)),
+      ).toThrow(
+        'Memory ownership verification is not implemented on this platform',
+      );
+      expect(execFileSync).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process, 'platform', descriptor);
+    }
+    expect(Object.getOwnPropertyDescriptor(process, 'platform')).toEqual(
+      descriptor,
+    );
+  });
 
   const container = () => ({
     Id: ci.HMS_TEST_SERVICE_ID,
