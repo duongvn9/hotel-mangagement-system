@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
-import { Button, NativeSelect, Skeleton, Textarea } from '@/components/atoms'
+import { Button, NativeSelect, Skeleton, StatusBadge, Textarea } from '@/components/atoms'
 import { FormField } from '@/components/molecules'
 import { ConfirmationDialog, PageContainer, PageHeader, Panel } from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
@@ -104,11 +104,7 @@ function ReviewForm({ order, refreshing }: { order: StaffServiceOrder; refreshin
           type="submit"
           disabled={disabled || Boolean(confirmation) || (accepting && !persisted)}
         >
-          {mutation.isPending
-            ? 'Đang xử lý…'
-            : locked
-              ? 'Thử lại cùng nội dung'
-              : 'Xem lại quyết định'}
+          {mutation.isPending ? 'Đang xử lý…' : locked ? 'Thử lại cùng nội dung' : 'Gửi đơn'}
         </Button>
         {confirmation && (
           <ConfirmationDialog
@@ -194,14 +190,13 @@ export function StaffServiceOrderDetailPage() {
         <>
           <Panel title="Khách hàng và đặt phòng" className="min-w-0 break-words">
             <div className="space-y-2 text-sm">
-              <p>
-                Khách hàng: {order.data.customer.fullName ?? 'Không có tên'} ·{' '}
-                {order.data.customer.id}
-              </p>
+              <p>Khách hàng: {order.data.customer.fullName?.trim() || 'Chưa có tên khách hàng'}</p>
               {order.data.booking ? (
                 <>
                   <p>Mã đặt phòng: {order.data.booking.code}</p>
-                  <p>Trạng thái đặt phòng: {order.data.booking.status}</p>
+                  <p>
+                    Trạng thái đặt phòng: <StatusBadge status={order.data.booking.status} />
+                  </p>
                   <p>Nhận phòng: {dateTime(order.data.booking.checkIn)}</p>
                   <p>Trả phòng: {dateTime(order.data.booking.checkOut)}</p>
                 </>
@@ -223,11 +218,17 @@ export function StaffServiceOrderDetailPage() {
               {order.data.billedAt && <p>Thời điểm ghi phí: {dateTime(order.data.billedAt)}</p>}
               {order.data.review && (
                 <>
-                  <p>Quyết định đã lưu: {order.data.review.decision}</p>
+                  <p>
+                    Quyết định đã lưu:{' '}
+                    {order.data.review.decision === 'ACCEPT' ? 'Chấp nhận' : 'Từ chối'}
+                  </p>
                   <p className="whitespace-pre-wrap">
                     Lý do đã lưu: {order.data.review.reason || 'Không có'}
                   </p>
-                  <p>Người duyệt: {order.data.review.reviewedBy}</p>
+                  <p>
+                    Người duyệt:{' '}
+                    {order.data.review.reviewedByName?.trim() || 'Chưa có tên người duyệt'}
+                  </p>
                   <p>Thời điểm duyệt: {dateTime(order.data.review.reviewedAt)}</p>
                 </>
               )}

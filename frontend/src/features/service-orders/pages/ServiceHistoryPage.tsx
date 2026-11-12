@@ -35,7 +35,6 @@ function HistoryResult({ order }: { order: ServiceHistory }) {
   return (
     <Panel className="min-w-0 break-words">
       <div className="space-y-3 text-sm">
-        <p>Mã yêu cầu: {order.id}</p>
         <p>Dịch vụ: {order.service.name}</p>
         <p>
           Số lượng: {order.quantity} {order.service.unit}
@@ -179,7 +178,6 @@ export function ServiceHistoryPage() {
                       >
                         {order.service.name}
                       </Link>
-                      <p>Mã yêu cầu: {order.id}</p>
                       <p>Hoàn thành: {dateTime(order.task.completedAt)}</p>
                       <p className="whitespace-pre-wrap">{order.task.workResult}</p>
                     </li>

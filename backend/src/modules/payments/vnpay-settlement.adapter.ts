@@ -8,6 +8,7 @@ import {
   UNCONFIRMED_BOOKING_STATUSES,
 } from '../../common/constants/booking-status.enum.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { bookingConfirmationEmail } from '../bookings/booking-email.js';
 import { Booking } from '../bookings/schemas/booking.schema.js';
 import { withBookingFinancialOperation } from '../bookings/booking-financial-operation.js';
 import { RoomHold } from '../bookings/schemas/room-hold.schema.js';
@@ -24,6 +25,7 @@ import {
 import {
   VnpaySettlementPort,
   type ExpectedVnpayPayment,
+  type VerifiedVnpayResult,
   type VnpayIpnPlan,
 } from './vnpay.service.js';
 
@@ -133,24 +135,25 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
         // Booking vừa CONFIRMED: tự sinh ServiceOrder từ dịch vụ khách chọn khi đặt.
         await this.generateServiceOrders(expected.booking.id);
         // Gửi email xác nhận booking cho khách (best-effort).
-        if (!duplicate)
-          void this.emailDepositPaid(
-            expected.booking.id,
-            expected.payment.amount,
-            result.transactionRef,
-            result.paidAt ?? new Date(),
-            String(settled._id),
-          );
-      }
-      await this.reconcileInvoice(expected);
-      if (expected.payment.purpose === PaymentPurpose.Final && !duplicate) {
-        // Gửi email biên nhận thanh toán cuối cho khách (best-effort).
-        void this.emailPaymentSuccess(
+        await this.emailBookingConfirmed(expected.booking.id);
+        // Biên nhận cho khoản đặt cọc vừa thu (best-effort).
+        await this.emailPaymentSuccess(
           expected.booking.id,
           expected.payment.amount,
+          PaymentPurpose.Deposit,
           result.transactionRef,
           result.paidAt ?? new Date(),
-          String(settled._id),
+        );
+      }
+      await this.reconcileInvoice(expected);
+      if (expected.payment.purpose === PaymentPurpose.Final) {
+        // Gửi email biên nhận thanh toán cuối cho khách (best-effort).
+        await this.emailPaymentSuccess(
+          expected.booking.id,
+          expected.payment.amount,
+          PaymentPurpose.Final,
+          result.transactionRef,
+          result.paidAt ?? new Date(),
         );
       }
     }
@@ -158,78 +161,108 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
     return duplicate ? 'duplicate' : 'committed';
   }
 
+  async recordSupersededSuccess(
+    result: VerifiedVnpayResult,
+  ): Promise<'committed' | 'duplicate' | 'conflict'> {
+    try {
+      const recorded = await this.payments.findOneAndUpdate(
+        {
+          transactionRef: result.transactionRef,
+          status: PaymentStatus.Cancelled,
+          supersededAt: { $exists: true },
+          providerTransactionRef: { $exists: false },
+          isActive: true,
+        },
+        {
+          $set: {
+            providerTransactionRef: result.providerTransactionRef,
+            needsReconciliation: true,
+            ...(result.paidAt === undefined ? {} : { paidAt: result.paidAt }),
+          },
+        },
+      );
+      if (recorded) {
+        this.logger.warn(
+          `Payment ${result.transactionRef} was paid through a superseded link; flagged for reconciliation`,
+        );
+        return 'committed';
+      }
+    } catch (error) {
+      // Unique index (method, providerTransactionRef): mã VNPay đã gắn vào payment khác.
+      if ((error as { code?: number }).code === 11000) return 'conflict';
+      throw error;
+    }
+    const current = await this.payments.findOne({
+      transactionRef: result.transactionRef,
+    });
+    return current?.providerTransactionRef === result.providerTransactionRef
+      ? 'duplicate'
+      : 'conflict';
+  }
+
   /** Email "booking đã xác nhận" sau khi cọc thành công; lỗi không ảnh hưởng settlement. */
-  private async emailDepositPaid(
-    bookingId: string,
-    amount: number,
-    transactionRef: string,
-    paidAt: Date,
-    paymentId: string,
-  ): Promise<void> {
+  private async emailBookingConfirmed(bookingId: string): Promise<void> {
     try {
       const booking = await this.bookings
         .findById(bookingId)
-        .select('code guestName guestEmail status')
+        .select(
+          'code guestName guestEmail checkIn checkOut rooms roomTotal depositAmount',
+        )
         .lean();
       if (!booking?.guestEmail) return;
-      void this.notifications.send({
-        to: booking.guestEmail,
-        type: 'deposit-paid',
-        relatedBookingId: bookingId,
-        relatedPaymentId: paymentId,
-        data: {
-          bookingCode: booking.code,
-          guestName: booking.guestName ?? '',
-          amount,
-          paidAt,
-          transactionRef,
-          bookingState: booking.status,
-        },
+      const input = bookingConfirmationEmail({
+        code: booking.code,
+        guestName: booking.guestName,
+        guestEmail: booking.guestEmail,
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        roomCount: booking.rooms.length,
+        roomTotal: booking.roomTotal,
+        depositAmount: booking.depositAmount,
+        status: BookingStatus.Confirmed,
       });
-    } catch {
-      this.logger.warn(`Deposit email preparation failed for ${bookingId}`);
+      if (input) await this.notifications.send(input);
+    } catch (error) {
+      this.logger.warn(
+        `Booking confirmation email failed for ${bookingId}: ${
+          (error as Error).message
+        }`,
+      );
     }
   }
 
-  /** Email biên nhận thanh toán cuối (PAYMENT_SUCCESS); best-effort. */
+  /** Email biên nhận thanh toán (cọc hoặc cuối) qua hệ thống (PAYMENT_SUCCESS); best-effort. */
   private async emailPaymentSuccess(
     bookingId: string,
     amount: number,
+    purpose: PaymentPurpose,
     transactionRef: string,
     paidAt: Date,
-    paymentId: string,
   ): Promise<void> {
     try {
       const booking = await this.bookings
         .findById(bookingId)
-        .select('code guestName guestEmail status')
+        .select('code guestName guestEmail')
         .lean();
       if (!booking?.guestEmail) return;
-      const invoice = await this.invoices.findOne({
-        booking: new Types.ObjectId(bookingId),
-      });
-      void this.notifications.send({
+      await this.notifications.send({
         to: booking.guestEmail,
-        type: 'final-payment-paid',
-        relatedBookingId: bookingId,
-        relatedPaymentId: paymentId,
+        template: 'PAYMENT_SUCCESS',
         data: {
           bookingCode: booking.code,
           guestName: booking.guestName ?? '',
           amount,
+          purpose,
           paidAt,
           transactionRef,
-          bookingState: booking.status,
-          outstandingBalance: invoice?.balanceDue ?? 0,
-          roomCharges: invoice?.roomTotal ?? 0,
-          serviceCharges: invoice?.serviceTotal ?? 0,
-          additionalCharges: invoice?.additionalTotal ?? 0,
-          discounts: invoice?.discountTotal ?? 0,
-          total: invoice?.totalAmount ?? amount,
         },
       });
-    } catch {
-      this.logger.warn(`Payment email preparation failed for ${bookingId}`);
+    } catch (error) {
+      this.logger.warn(
+        `Payment success email failed for ${bookingId}: ${
+          (error as Error).message
+        }`,
+      );
     }
   }
 

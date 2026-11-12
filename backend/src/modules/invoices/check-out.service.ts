@@ -9,11 +9,15 @@ import { Model, Types } from 'mongoose';
 import type { InvoiceDocument } from './schemas/invoice.schema.js';
 import { withBookingFinancialOperation } from '../bookings/booking-financial-operation.js';
 import { RoomStatus } from '../../common/constants/room-status.enum.js';
+import { checkOutReceiptEmail } from '../bookings/booking-email.js';
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema.js';
 import {
   PaymentStatus,
   PaymentTransaction,
 } from '../payments/schemas/payment-transaction.schema.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { TaskSourceType, TaskStatus } from '../tasks/task-contract.js';
+import { TasksService } from '../tasks/tasks.service.js';
 import { Room } from '../rooms/schemas/room.schema.js';
 import { checkOutStatusError, unpaidBalanceMessage } from './check-out.core.js';
 import type { CheckOutResult } from './dto/check-out.dto.js';
@@ -28,10 +32,13 @@ export class CheckOutService {
     @InjectModel(PaymentTransaction.name)
     private readonly payments: Model<PaymentTransaction>,
     private readonly invoices: InvoicesService,
+    private readonly notifications: NotificationsService,
+    private readonly tasks: TasksService,
   ) {}
 
   /**
-   * UC18: lễ tân trả phòng cho khách đã thanh toán đủ hóa đơn. Booking CHECKED_IN chuyển sang
+   * UC18: lễ tân trả phòng cho khách đã thanh toán đủ hóa đơn và đã được nhân viên dịch vụ xác nhận
+   * kiểm tra phòng (lần kiểm tra gần nhất phải COMPLETED). Booking CHECKED_IN chuyển sang
    * CHECKED_OUT (ghi checkedOutAt) và các phòng đang OCCUPIED sang CLEANING; phòng ở trạng thái
    * khác giữ nguyên. Hóa đơn được tính lại trước và sau khi đóng để không bỏ lọt khoản nợ mới.
    */
@@ -69,6 +76,7 @@ export class CheckOutService {
       );
     const statusError = checkOutStatusError(booking.status);
     if (statusError) throw new ConflictException(statusError);
+    await this.requireInspectionConfirmed(bookingId);
 
     if (
       await this.payments.exists({
@@ -106,7 +114,32 @@ export class CheckOutService {
       );
     }
 
-    return this.finishCheckOut(booking, now, before, true);
+    const result = await this.finishCheckOut(booking, now, before, true);
+    // Email hóa đơn là best-effort: gửi lỗi không làm hỏng việc trả phòng.
+    const email = checkOutReceiptEmail(booking, before, now);
+    if (email) void this.notifications.send(email).catch(() => undefined);
+    return result;
+  }
+
+  /**
+   * Chỉ trả phòng khi nhân viên dịch vụ đã xác nhận kiểm tra phòng: lần kiểm tra gần nhất của
+   * booking phải COMPLETED (đã ghi kết quả). Chưa yêu cầu, đang chờ hoặc đã huỷ đều chặn.
+   */
+  private async requireInspectionConfirmed(bookingId: string): Promise<void> {
+    const inspection = await this.tasks.latestForSource(
+      TaskSourceType.CheckoutInspection,
+      bookingId,
+    );
+    if (!inspection) {
+      throw new ConflictException(
+        'The room has not been inspected; ask service staff to inspect it before check-out',
+      );
+    }
+    if (inspection.status !== TaskStatus.Completed) {
+      throw new ConflictException(
+        'Service staff has not confirmed the room inspection yet',
+      );
+    }
   }
 
   private async finishCheckOut(

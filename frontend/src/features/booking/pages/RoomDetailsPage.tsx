@@ -7,7 +7,7 @@ import { getErrorMessage } from '@/lib/api-client'
 import { assetUrl } from '@/lib/asset-url'
 import { vnd } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { useRoomTypeOverview } from '../hooks'
+import { useAvailability, useRoomTypeOverview } from '../hooks'
 import { nightsBetween } from '../utils'
 
 /**
@@ -45,6 +45,20 @@ export function RoomDetailsPage() {
   const backToSearch = hasStay
     ? `/search?${new URLSearchParams({ checkIn, checkOut, guests: guests || '2' }).toString()}`
     : '/search'
+
+  // Có ngày ở hợp lệ: tra phòng trống của đúng loại này để "Đặt ngay" vào thẳng trang đặt.
+  const availability = useAvailability(
+    hasStay ? { checkIn, checkOut, guests: Number(guests) || 2, roomTypeId: id } : null,
+  )
+  const firstFreeRoomId = (availability.data ?? []).find((r) => r.roomTypeId === id)?.id
+  const bookNow = firstFreeRoomId
+    ? `/booking/new?${new URLSearchParams({
+        checkIn,
+        checkOut,
+        guests: guests || '2',
+        rooms: firstFreeRoomId,
+      }).toString()}`
+    : null
 
   const room = overview.data
 
@@ -152,6 +166,25 @@ export function RoomDetailsPage() {
                 </div>
               )}
 
+              <h2 className="mt-8 text-lg font-semibold">Cấu hình giường</h2>
+              {room.beds?.length ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {room.beds.map((bed) => (
+                    <span
+                      key={bed.bedTypeId}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-surface px-4 py-2 text-sm text-foreground"
+                    >
+                      <BedDouble className="size-3.5 text-primary" />
+                      {bed.quantity} {bed.bedTypeName}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Chưa cập nhật cấu hình giường cho loại phòng này.
+                </p>
+              )}
+
               <h2 className="mt-8 text-lg font-semibold">Chính sách</h2>
               <ul className="mt-2 space-y-1.5 text-sm text-muted-foreground">
                 <li>Nhận phòng từ 14:00 · Trả phòng trước 12:00</li>
@@ -187,13 +220,34 @@ export function RoomDetailsPage() {
                 )}
               </div>
 
-              <Button asChild size="lg" className="w-full rounded-full">
-                <Link to={backToSearch}>
-                  {hasStay ? 'Chọn phòng này & đặt' : 'Chọn ngày để đặt'}
-                </Link>
-              </Button>
+              {!hasStay ? (
+                <Button asChild size="lg" className="w-full rounded-full">
+                  <Link to={backToSearch}>Chọn ngày để đặt</Link>
+                </Button>
+              ) : bookNow ? (
+                <Button asChild size="lg" className="w-full rounded-full">
+                  <Link to={bookNow}>Đặt ngay</Link>
+                </Button>
+              ) : availability.isPending ? (
+                <Button size="lg" className="w-full rounded-full" disabled>
+                  Đang kiểm tra phòng trống…
+                </Button>
+              ) : (
+                <div className="space-y-2">
+                  <Button size="lg" className="w-full rounded-full" disabled>
+                    Hết phòng cho ngày đã chọn
+                  </Button>
+                  <Link
+                    to={backToSearch}
+                    className="block text-center text-sm font-semibold text-primary underline"
+                  >
+                    Xem loại phòng khác còn trống
+                  </Link>
+                </div>
+              )}
               <p className="text-center text-xs text-muted-foreground">
-                Tình trạng phòng trống và tổng tiền chính thức do hệ thống xác nhận khi đặt.
+                Tình trạng phòng trống và tổng tiền chính thức do hệ thống xác nhận khi đặt. Bạn có
+                thể chỉnh số lượng phòng ở bước đặt.
               </p>
             </aside>
           </div>

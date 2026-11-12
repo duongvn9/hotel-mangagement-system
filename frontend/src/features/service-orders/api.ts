@@ -58,6 +58,10 @@ export function serviceOrderState(order: Pick<ServiceOrder, 'reviewStatus' | 'ex
 export interface OrderContext {
   id: string
   code: string
+  /** Trạng thái booking: CONFIRMED (chưa nhận phòng) hoặc CHECKED_IN (đang lưu trú). */
+  status: string
+  /** Số phòng đầu tiên; thiếu khi phòng không còn tồn tại. */
+  roomNumber?: string
   checkIn: string
   checkOut: string
 }
@@ -80,11 +84,14 @@ export interface OrderInput {
 }
 export interface ServiceOrder extends OrderInput {
   id: string
+  bookingCode?: string | null
+  roomNumbers?: string[]
   service: { name: string; unit: string }
   unitPriceVND: number
   amount: number
   requestedTime: string
   reviewStatus: (typeof reviewStatuses)[number]
+  reviewReason?: string
   executionStatus: (typeof executionStatuses)[number]
   createdAt: string
 }

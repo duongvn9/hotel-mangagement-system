@@ -36,6 +36,7 @@ const NAV_BY_ROLE: Record<string, NavGroup[]> = {
         { to: '/customer/service-orders', label: 'Dịch vụ phòng' },
         { to: '/my-feedback', label: 'Đánh giá' },
         { to: '/customer/issues/report', label: 'Báo sự cố' },
+        { to: '/customer/issues', label: 'Danh sách sự cố' },
       ],
     },
     ACCOUNT_GROUP,
@@ -100,6 +101,7 @@ const NAV_BY_ROLE: Record<string, NavGroup[]> = {
         { to: '/manager/rooms', label: 'Phòng' },
         { to: '/manager/room-types', label: 'Loại phòng' },
         { to: '/manager/amenities', label: 'Tiện nghi' },
+        { to: '/manager/bed-types', label: 'Loại giường' },
         { to: '/manager/services', label: 'Dịch vụ' },
       ],
     },
@@ -137,6 +139,29 @@ const ROLE_HOME: Record<string, string> = {
 }
 
 export const roleHome = (role: string): string => ROLE_HOME[role] ?? '/'
+
+/**
+ * Khu làm việc chỉ dành cho một số role có sẵn (khớp RequireAuth của các route trong khu đó).
+ * Role tự tạo không nằm ở đây vì được vào bằng permission.
+ */
+const AREA_ROLES: Record<string, string[]> = {
+  reception: ['RECEPTIONIST', 'MANAGER'],
+  manager: ['MANAGER'],
+  customer: ['CUSTOMER'],
+}
+
+/**
+ * Nơi đưa người dùng tới sau khi đăng nhập: trang đang xem dở nếu role được vào, ngược lại là
+ * trang chủ của role (vd khách đăng nhập từ link /reception/... sẽ không rơi vào trang 403).
+ */
+export function postLoginPath(me: Pick<Me, 'role'>, from: string | undefined): string {
+  if (!from || from === '/') return roleHome(me.role)
+  const allowedRoles = AREA_ROLES[firstSegment(from) ?? '']
+  if (allowedRoles && me.role in ROLE_HOME && !allowedRoles.includes(me.role)) {
+    return roleHome(me.role)
+  }
+  return from
+}
 
 export const isStaffRole = (role: string): boolean => STAFF_ROLES.includes(role)
 

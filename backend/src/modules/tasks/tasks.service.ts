@@ -35,6 +35,7 @@ export const TASK_SOURCE_COLLECTIONS: Readonly<Record<TaskSourceType, string>> =
     [TaskSourceType.ServiceOrder]: 'serviceorders',
     [TaskSourceType.Issue]: 'issues',
     [TaskSourceType.Maintenance]: 'maintenances',
+    [TaskSourceType.CheckoutInspection]: 'bookings',
   });
 
 @Injectable()
@@ -113,7 +114,114 @@ export class TasksService {
       .select(this.assignedProjection)
       .lean();
     if (!task) throw new NotFoundException('Task not found');
-    return this.assignedResponse(task);
+    return {
+      ...this.assignedResponse(task),
+      sourceSummary:
+        task.sourceType === TaskSourceType.Issue
+          ? await this.issueSummary(task)
+          : await this.serviceOrderSummary(task),
+    };
+  }
+
+  private async issueSummary(task: Task & { _id: Types.ObjectId }) {
+    if (task.taskType !== 'ISSUE_RESOLUTION') return null;
+    const issue = await this.connection.collection('issues').findOne(
+      {
+        _id: task.sourceId,
+        linkedTask: task._id,
+        pendingReassignment: { $exists: false },
+      },
+      { projection: { title: 1, booking: 1, room: 1 } },
+    );
+    if (!issue) return null;
+    const parts: string[] = [];
+    if (typeof issue.title === 'string' && issue.title.trim())
+      parts.push(issue.title);
+    const booking =
+      issue.booking && Types.ObjectId.isValid(String(issue.booking))
+        ? await this.connection
+            .collection('bookings')
+            .findOne(
+              { _id: new Types.ObjectId(String(issue.booking)) },
+              { projection: { code: 1, rooms: 1 } },
+            )
+        : null;
+    if (typeof booking?.code === 'string' && booking.code.trim())
+      parts.push(booking.code);
+    const ids = (
+      issue.room
+        ? [issue.room]
+        : Array.isArray(booking?.rooms)
+          ? booking.rooms
+          : []
+    )
+      .filter((id: unknown) => Types.ObjectId.isValid(String(id)))
+      .map((id: unknown) => new Types.ObjectId(String(id)));
+    if (ids.length) {
+      const rooms = await this.connection
+        .collection('rooms')
+        .find({ _id: { $in: ids } }, { projection: { roomNumber: 1 } })
+        .toArray();
+      const numbers = new Map(
+        rooms.map((room) => [String(room._id), room.roomNumber]),
+      );
+      const labels = ids.flatMap((id: Types.ObjectId) => {
+        const number = numbers.get(String(id));
+        return typeof number === 'string' && number.trim() ? [number] : [];
+      });
+      if (labels.length) parts.push(labels.join(', '));
+    }
+    return parts.join(' · ') || null;
+  }
+
+  private async serviceOrderSummary(task: Task & { _id: Types.ObjectId }) {
+    if (
+      task.sourceType !== TaskSourceType.ServiceOrder ||
+      task.taskType !== SERVICE_ORDER_EXECUTION_TASK_TYPE
+    )
+      return null;
+    const order = await this.connection
+      .collection(TASK_SOURCE_COLLECTIONS[TaskSourceType.ServiceOrder])
+      .findOne(
+        { _id: task.sourceId, linkedTask: task._id, reviewStatus: 'ACCEPTED' },
+        { projection: { serviceName: 1, booking: 1 } },
+      );
+    if (!order) return null;
+    const parts: string[] = [];
+    if (typeof order.serviceName === 'string' && order.serviceName.trim())
+      parts.push(order.serviceName);
+    if (!order.booking || !Types.ObjectId.isValid(String(order.booking)))
+      return parts.join(' · ') || null;
+    const booking = await this.connection
+      .collection('bookings')
+      .findOne(
+        { _id: new Types.ObjectId(String(order.booking)) },
+        { projection: { code: 1, rooms: 1 } },
+      );
+    if (booking) {
+      if (typeof booking.code === 'string' && booking.code.trim())
+        parts.push(booking.code);
+      const roomIds = Array.isArray(booking.rooms)
+        ? booking.rooms
+            .filter((id: unknown) => Types.ObjectId.isValid(String(id)))
+            .map((id: unknown) => new Types.ObjectId(String(id)))
+        : [];
+      if (roomIds.length) {
+        const rooms = await this.connection
+          .collection('rooms')
+          .find({ _id: { $in: roomIds } }, { projection: { roomNumber: 1 } })
+          .toArray();
+        const byId = new Map(
+          rooms.map((room) => [String(room._id), room.roomNumber]),
+        );
+        const numbers = roomIds.flatMap((id: Types.ObjectId) => {
+          const number = byId.get(String(id));
+          return typeof number === 'string' && number.trim() ? [number] : [];
+        });
+        if (numbers.length) parts.push(numbers.join(', '));
+      }
+    }
+    return parts.join(' · ') || null;
   }
 
   private assignedActorId(id: string): Types.ObjectId {
@@ -396,6 +504,12 @@ export class TasksService {
       throw new ConflictException('Task must be blocked or overdue');
     if (
       dueAt !== undefined &&
+      (!Number.isFinite(new Date(dueAt).getTime()) ||
+        new Date(dueAt).getTime() <= Date.now())
+    )
+      throw new BadRequestException('Deadline must be in the future');
+    if (
+      dueAt !== undefined &&
       task.dueAt &&
       new Date(dueAt).getTime() < task.dueAt.getTime()
     )
@@ -619,6 +733,14 @@ export class TasksService {
     }
   }
 
+  /** Task mới nhất của một nguồn việc (ví dụ lần kiểm tra phòng của một booking). */
+  async latestForSource(sourceType: TaskSourceType, sourceId: string) {
+    return this.tasks
+      .findOne({ sourceType, sourceId: new Types.ObjectId(sourceId) })
+      .sort({ assignedAt: -1, _id: -1 })
+      .lean();
+  }
+
   private workIndex?: Promise<unknown>;
 
   private ensureWorkIndex() {
@@ -662,7 +784,9 @@ export class TasksService {
           ? [StaffRole.OperationsStaff]
           : source === TaskSourceType.Issue
             ? [StaffRole.ServiceStaff, StaffRole.OperationsStaff]
-            : [];
+            : source === TaskSourceType.CheckoutInspection
+              ? [StaffRole.ServiceStaff]
+              : [];
     if (
       assignee.isActive !== true ||
       !allowed.some((role) => role === assignee.role)

@@ -15,21 +15,54 @@ import {
   validChildCapacity,
 } from './schemas/room-type.schema.js';
 import { AmenitiesService } from '../amenities/amenities.service.js';
+import { BedTypesService } from '../bed-types/bed-types.service.js';
 import {
   CreateRoomTypeDto,
+  RoomTypeBedDto,
   UpdateRoomTypeDto,
 } from './dto/write-room-type.dto.js';
+
+/** Một phần tử giường sau khi populate BedType để dựng response. */
+type PopulatedBed = {
+  bedType: { _id: Types.ObjectId; name: string; isActive?: boolean } | null;
+  quantity: number;
+};
 
 @Injectable()
 export class RoomTypesService {
   constructor(
     @InjectModel(RoomType.name) private readonly roomTypes: Model<RoomType>,
     private readonly amenities: AmenitiesService,
+    private readonly bedTypes: BedTypesService,
   ) {}
 
   private validateId(id: string) {
     if (!/^[0-9a-f]{24}$/.test(id))
       throw new BadRequestException('Room type id không hợp lệ');
+  }
+
+  /** Ánh xạ DTO giường (bedTypeId) sang shape lưu trữ (bedType ObjectId). */
+  private toStoredBeds(beds: RoomTypeBedDto[]) {
+    return beds.map((bed) => ({
+      bedType: new Types.ObjectId(bed.bedTypeId),
+      quantity: bed.quantity,
+    }));
+  }
+
+  private mapBeds(beds?: PopulatedBed[]) {
+    return (beds ?? [])
+      .filter(
+        (
+          bed,
+        ): bed is PopulatedBed & {
+          bedType: NonNullable<PopulatedBed['bedType']>;
+        } => Boolean(bed?.bedType),
+      )
+      .map((bed) => ({
+        bedTypeId: String(bed.bedType._id),
+        bedTypeName: bed.bedType.name,
+        quantity: bed.quantity,
+      }));
   }
 
   async options() {
@@ -90,6 +123,7 @@ export class RoomTypesService {
           isActive: boolean;
         }[];
       }>('amenities', 'name isActive iconUrl')
+      .populate<{ beds: PopulatedBed[] }>('beds.bedType', 'name isActive')
       .lean()
       .exec();
     if (!row) throw new NotFoundException('Không tìm thấy loại phòng');
@@ -111,6 +145,7 @@ export class RoomTypesService {
       iconUrl?: string;
       isActive?: boolean;
     }[];
+    beds?: PopulatedBed[];
   }) {
     return {
       id: String(row._id),
@@ -127,6 +162,7 @@ export class RoomTypesService {
         iconUrl: a.iconUrl,
         isActive: a.isActive,
       })),
+      beds: this.mapBeds(row.beds),
       availableForBooking:
         row.isActive === true &&
         validAdultCapacity(row.adultCapacity) &&
@@ -136,14 +172,17 @@ export class RoomTypesService {
   }
 
   async create(dto: CreateRoomTypeDto) {
+    const beds = dto.beds ?? [];
     const value = {
       ...dto,
       amenities: dto.amenities ?? [],
+      beds: this.toStoredBeds(beds),
       isActive: dto.isActive ?? true,
     };
     this.validBookingFields(value);
     await this.uniqueName(value.name);
     await this.amenities.validateNew(value.amenities);
+    await this.bedTypes.validateNew(beds.map((bed) => bed.bedTypeId));
     try {
       const created = await this.roomTypes.create(value);
       return await this.detail(String(created._id));
@@ -157,6 +196,10 @@ export class RoomTypesService {
     if (!Object.keys(dto).length)
       throw new BadRequestException('Cần ít nhất một trường cập nhật');
     if (dto.name !== undefined) await this.uniqueName(dto.name, id);
+    // Store shape differs from the DTO (bedTypeId -> bedType ObjectId).
+    const { beds, ...rest } = dto;
+    const payload =
+      beds === undefined ? rest : { ...rest, beds: this.toStoredBeds(beds) };
     // Compare the validated snapshot in the atomic write, retrying if another writer changed it.
     for (let attempt = 0; attempt < 5; attempt++) {
       const current = await this.roomTypes.findById(id).lean().exec();
@@ -166,6 +209,11 @@ export class RoomTypesService {
         await this.amenities.validateNew(
           dto.amenities,
           current.amenities.map(String),
+        );
+      if (beds !== undefined)
+        await this.bedTypes.validateNew(
+          beds.map((bed) => bed.bedTypeId),
+          (current.beds ?? []).map((bed) => String(bed.bedType)),
         );
       try {
         const updated = await this.roomTypes
@@ -178,7 +226,7 @@ export class RoomTypesService {
               isActive: current.isActive,
               amenities: current.amenities,
             },
-            { $set: dto },
+            { $set: payload },
             { new: true, runValidators: true },
           )
           .populate<{
@@ -188,6 +236,7 @@ export class RoomTypesService {
               isActive: boolean;
             }[];
           }>('amenities', 'name isActive iconUrl')
+          .populate<{ beds: PopulatedBed[] }>('beds.bedType', 'name isActive')
           .lean()
           .exec();
         if (updated) return this.response(updated);
@@ -220,6 +269,7 @@ export class RoomTypesService {
         .populate<{
           amenities: { _id: Types.ObjectId; name: string; iconUrl?: string }[];
         }>('amenities', 'name iconUrl')
+        .populate<{ beds: PopulatedBed[] }>('beds.bedType', 'name isActive')
         .lean()
         .exec(),
       this.roomTypes.countDocuments(filter).exec(),
@@ -238,6 +288,7 @@ export class RoomTypesService {
           name: amenity.name,
           iconUrl: amenity.iconUrl,
         })),
+        beds: this.mapBeds(row.beds),
         isActive: row.isActive,
         availableForBooking:
           row.isActive === true &&

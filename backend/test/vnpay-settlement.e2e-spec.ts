@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
-import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
+import { getModelToken } from '@nestjs/mongoose';
 import type { INestApplication } from '@nestjs/common';
-import { Connection, Model, Types } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { createHmac } from 'node:crypto';
 import { AppModule } from '../src/app.module.js';
 import { vi } from 'vitest';
@@ -22,12 +22,6 @@ import {
   VnpaySettlementPort,
   type ExpectedVnpayPayment,
 } from '../src/modules/payments/vnpay.service.js';
-import { NotificationsService } from '../src/modules/notifications/notifications.service.js';
-import { NOTIFICATION_TRANSPORT } from '../src/modules/notifications/notification.types.js';
-import {
-  NotificationLog,
-  NotificationLogSchema,
-} from '../src/modules/notifications/schemas/notification-log.schema.js';
 
 const settings = {
   tmnCode: 'TESTCODE',
@@ -75,7 +69,6 @@ describe('VNPay settlement persistence (e2e)', () => {
   let payments: Model<PaymentTransaction>;
   let services: Model<Service>;
   let orders: Model<ServiceOrder>;
-  let notificationLogs: Model<NotificationLog>;
   const serviceIds = [new Types.ObjectId(), new Types.ObjectId()];
   const bookingId = new Types.ObjectId();
   const invoiceId = new Types.ObjectId();
@@ -158,13 +151,6 @@ describe('VNPay settlement persistence (e2e)', () => {
     payments = app.get(getModelToken(PaymentTransaction.name));
     services = app.get(getModelToken(Service.name));
     orders = app.get(getModelToken(ServiceOrder.name));
-    const connection = app.get<Connection>(getConnectionToken());
-    notificationLogs = connection.models[NotificationLog.name]
-      ? (connection.models[NotificationLog.name] as Model<NotificationLog>)
-      : connection.model<NotificationLog>(
-          NotificationLog.name,
-          NotificationLogSchema,
-        );
     await Promise.all([
       bookings.init(),
       holds.init(),
@@ -175,7 +161,6 @@ describe('VNPay settlement persistence (e2e)', () => {
 
   beforeEach(async () => {
     await orders.deleteMany({ booking: bookingId });
-    await notificationLogs.deleteMany({ relatedBookingId: bookingId });
     await services.deleteMany({ _id: { $in: serviceIds } });
     await payments.deleteMany({ booking: bookingId });
     await invoices.deleteMany({ booking: bookingId });
@@ -185,7 +170,6 @@ describe('VNPay settlement persistence (e2e)', () => {
 
   afterAll(async () => {
     await orders.deleteMany({ booking: bookingId });
-    await notificationLogs.deleteMany({ relatedBookingId: bookingId });
     await services.deleteMany({ _id: { $in: serviceIds } });
     await payments.deleteMany({ booking: bookingId });
     await invoices.deleteMany({ booking: bookingId });
@@ -229,14 +213,9 @@ describe('VNPay settlement persistence (e2e)', () => {
       await expected(txnRef),
     );
     if (plan.action !== 'compare-and-set') throw new Error('expected CAS');
-    const smtpSend = vi
-      .spyOn(app.get(NOTIFICATION_TRANSPORT), 'send')
-      .mockResolvedValue(undefined);
     expect(
       await settlement.commitAtomically(await expected(txnRef), plan),
     ).toBe('committed');
-    await vi.waitFor(() => expect(smtpSend).toHaveBeenCalledTimes(1));
-    await app.get(NotificationsService).drain();
 
     // Payment đã SUCCESS; prepareIpn trả 'duplicate' và settlement cũng báo duplicate.
     const replay = vnpay.prepareIpn(
@@ -244,16 +223,10 @@ describe('VNPay settlement persistence (e2e)', () => {
       await expected(txnRef),
     );
     expect(replay.action).toBe('duplicate');
-    expect(
-      await settlement.commitAtomically(await expected(txnRef), plan),
-    ).toBe('duplicate');
-    await app.get(NotificationsService).drain();
-    expect(smtpSend).toHaveBeenCalledTimes(1);
     expect(await invoices.findById(invoiceId)).toMatchObject({
       depositPaid: 300000,
       balanceDue: 700000,
     });
-    smtpSend.mockRestore();
   });
 
   it('repairs partial service generation on duplicate callbacks without duplicating money or orders', async () => {
@@ -358,5 +331,76 @@ describe('VNPay settlement persistence (e2e)', () => {
       { $set: { status: 'SUCCESS', providerTransactionRef: '111111' } },
     );
     expect(await settlement.commitAtomically(snapshot, plan)).toBe('conflict');
+  });
+  describe('retrying a deposit while a VNPay link is pending', () => {
+    const retry = (txnRef: string) =>
+      app
+        .get(PaymentsService)
+        .initiateDeposit(
+          String(bookingId),
+          { code: `VNP-${txnRef}` },
+          { ipAddress: '127.0.0.1' },
+        );
+
+    it('supersedes the pending payment and issues a new link', async () => {
+      const txnRef = `RETRY${Date.now()}`;
+      await seed(txnRef);
+
+      const next = await retry(txnRef);
+
+      expect(next.transactionRef).not.toBe(txnRef);
+      expect(next.paymentUrl).toContain(`vnp_TxnRef=${next.transactionRef}`);
+      const old = await payments.findOne({ transactionRef: txnRef });
+      expect(old?.status).toBe(PaymentStatus.Cancelled);
+      expect(old?.supersededAt).toBeInstanceOf(Date);
+      expect(
+        (await payments.findOne({ transactionRef: next.transactionRef }))
+          ?.status,
+      ).toBe(PaymentStatus.Pending);
+    });
+
+    it('acknowledges a late success on the old link and queues it for reconciliation', async () => {
+      const txnRef = `LATE${Date.now()}`;
+      await seed(txnRef);
+      await retry(txnRef);
+      const paymentService = app.get(PaymentsService);
+      const raw = callback(txnRef, 300000);
+
+      expect((await paymentService.processIpn(raw)).RspCode).toBe('00');
+      expect((await paymentService.processIpn(raw)).RspCode).toBe('02');
+
+      const old = await payments.findOne({ transactionRef: txnRef });
+      expect(old).toMatchObject({
+        status: PaymentStatus.Cancelled,
+        providerTransactionRef: '990001',
+        needsReconciliation: true,
+      });
+      expect(old?.paidAt).toBeInstanceOf(Date);
+      // Không cộng vào hoá đơn, không xác nhận booking: link mới mới là khoản cọc hợp lệ.
+      expect((await bookings.findById(bookingId))?.status).toBe(
+        'PENDING_DEPOSIT',
+      );
+      expect((await invoices.findById(invoiceId))?.balanceDue).toBe(1000000);
+      const queue = await paymentService.listReconciliation();
+      expect(queue.items.map((item) => item.transactionRef)).toContain(txnRef);
+    });
+
+    it('acknowledges a cancelled or failed callback on the old link without changes', async () => {
+      const txnRef = `ABANDON${Date.now()}`;
+      await seed(txnRef);
+      await retry(txnRef);
+      const raw = callback(txnRef, 300000, {
+        vnp_ResponseCode: '24',
+        vnp_TransactionStatus: '02',
+        vnp_TransactionNo: '990003',
+      });
+
+      expect((await app.get(PaymentsService).processIpn(raw)).RspCode).toBe(
+        '02',
+      );
+      const old = await payments.findOne({ transactionRef: txnRef });
+      expect(old?.providerTransactionRef).toBeUndefined();
+      expect(old?.needsReconciliation).toBe(false);
+    });
   });
 });

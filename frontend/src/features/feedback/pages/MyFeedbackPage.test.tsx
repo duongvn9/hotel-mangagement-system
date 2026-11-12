@@ -49,12 +49,13 @@ function renderPage(role = customer) {
   })
 }
 
-const stay = (code: string) => within(screen.getByRole('article', { name: code }))
-
 const conflict = (message: string) => ({
   isAxiosError: true,
   response: { status: 409, data: { message } },
 })
+
+const panel = (name: string) =>
+  within(screen.getByRole('heading', { name }).closest('section') as HTMLElement)
 
 describe('MyFeedbackPage', () => {
   it('blocks roles other than customers', () => {
@@ -62,28 +63,49 @@ describe('MyFeedbackPage', () => {
     expect(screen.getByText('Không có quyền truy cập')).toBeInTheDocument()
   })
 
-  it('lists completed stays with a form, or the feedback already sent and its reply', async () => {
+  it('lays out the write panel next to the reviews already sent, like the prototype', async () => {
     const get = vi.spyOn(api, 'get').mockResolvedValue({ data: stays() })
     renderPage()
 
-    expect(await screen.findByRole('article', { name: 'BKNEW' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Đánh giá' })).toBeInTheDocument()
+    expect(
+      screen.getByText('Hãy kể về kỳ nghỉ của bạn — ban quản lý đọc mọi đánh giá.'),
+    ).toBeInTheDocument()
     expect(get).toHaveBeenCalledWith('/feedback/mine')
-    expect(stay('BKNEW').getByRole('button', { name: 'Gửi phản hồi' })).toBeInTheDocument()
-
-    const replied = stay('BKREPLIED')
-    expect(replied.getByText('Tuyệt vời')).toBeInTheDocument()
-    expect(replied.getByRole('img', { name: '5 trên 5 sao' })).toBeInTheDocument()
-    expect(replied.getByText('Cảm ơn anh/chị')).toBeInTheDocument()
-    expect(replied.queryByRole('button', { name: 'Gửi phản hồi' })).not.toBeInTheDocument()
-
-    const sent = stay('BKSENT')
-    expect(sent.getByText('Ổn')).toBeInTheDocument()
-    expect(sent.queryByRole('img')).not.toBeInTheDocument()
-    expect(sent.getByText('Chưa có câu trả lời.')).toBeInTheDocument()
-    expect(sent.queryByRole('button', { name: 'Gửi phản hồi' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Viết đánh giá' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Đánh giá của tôi' })).toBeInTheDocument()
   })
 
-  it('sends the rating and trimmed content, then reloads the stays', async () => {
+  it('offers only the stays that have no review yet', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: stays() })
+    renderPage()
+
+    const select = await screen.findByLabelText('Kỳ lưu trú')
+    const options = within(select as HTMLElement)
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(options).toEqual(['Chọn kỳ lưu trú đã hoàn thành', expect.stringContaining('BKNEW')])
+  })
+
+  it('lists the reviews sent, with stars, code and date, and the hotel’s reply', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: stays() })
+    renderPage()
+    await screen.findByLabelText('Kỳ lưu trú')
+
+    const mine = panel('Đánh giá của tôi')
+    expect(mine.getByText('Tuyệt vời')).toBeInTheDocument()
+    expect(mine.getByRole('img', { name: '5 trên 5 sao' })).toBeInTheDocument()
+    expect(mine.getByText(/BKREPLIED/)).toBeInTheDocument()
+    expect(mine.getByText('Khách sạn phản hồi:')).toBeInTheDocument()
+    expect(mine.getByText('Cảm ơn anh/chị')).toBeInTheDocument()
+
+    // Đánh giá không có sao: không hiện sao; chưa có phản hồi thì không có khung phản hồi.
+    expect(mine.getByText('Ổn')).toBeInTheDocument()
+    expect(mine.getAllByRole('img')).toHaveLength(1)
+    expect(mine.getAllByText('Khách sạn phản hồi:')).toHaveLength(1)
+  })
+
+  it('sends the chosen stay, the stars and the trimmed content, then reloads', async () => {
     const reloaded = stays()
     reloaded.items[0]!.feedback = {
       id: 'f1',
@@ -97,13 +119,13 @@ describe('MyFeedbackPage', () => {
       .mockResolvedValue({ data: reloaded })
     const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { id: 'f1' } })
     renderPage()
-    await screen.findByRole('article', { name: 'BKNEW' })
 
-    fireEvent.change(stay('BKNEW').getByLabelText(/Đánh giá/), { target: { value: '4' } })
-    fireEvent.change(stay('BKNEW').getByLabelText(/Nội dung/), {
+    fireEvent.change(await screen.findByLabelText('Kỳ lưu trú'), { target: { value: 'b1' } })
+    fireEvent.click(screen.getByRole('button', { name: '4 stars' }))
+    fireEvent.change(screen.getByPlaceholderText('Điều gì ấn tượng? Điều gì cần cải thiện?'), {
       target: { value: '  Phòng sạch  ' },
     })
-    fireEvent.click(stay('BKNEW').getByRole('button', { name: 'Gửi phản hồi' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }))
 
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith('/feedback', {
@@ -113,43 +135,43 @@ describe('MyFeedbackPage', () => {
       }),
     )
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2))
-    expect(
-      await within(screen.getByRole('article', { name: 'BKNEW' })).findByText('Phòng sạch'),
-    ).toBeInTheDocument()
-    expect(
-      within(screen.getByRole('article', { name: 'BKNEW' })).queryByRole('button', {
-        name: 'Gửi phản hồi',
-      }),
-    ).not.toBeInTheDocument()
+    // Lần lưu trú đã đánh giá chuyển sang "Đánh giá của tôi"; không còn gì để đánh giá.
+    expect(await panel('Đánh giá của tôi').findByText('Phòng sạch')).toBeInTheDocument()
+    expect(await screen.findByText('Chưa có gì để đánh giá')).toBeInTheDocument()
   })
 
-  it('does not need a rating', async () => {
+  it('does not need stars, and a second click on the same star clears it', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({ data: stays() })
     const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { id: 'f1' } })
     renderPage()
-    await screen.findByRole('article', { name: 'BKNEW' })
 
-    fireEvent.change(stay('BKNEW').getByLabelText(/Nội dung/), { target: { value: 'Không sao' } })
-    fireEvent.click(stay('BKNEW').getByRole('button', { name: 'Gửi phản hồi' }))
+    fireEvent.change(await screen.findByLabelText('Kỳ lưu trú'), { target: { value: 'b1' } })
+    fireEvent.click(screen.getByRole('button', { name: '3 stars' }))
+    fireEvent.click(screen.getByRole('button', { name: '3 stars' }))
+    fireEvent.change(screen.getByPlaceholderText('Điều gì ấn tượng? Điều gì cần cải thiện?'), {
+      target: { value: 'Không sao' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }))
+
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith('/feedback', { bookingId: 'b1', content: 'Không sao' }),
     )
   })
 
-  it('needs some content and shows how much is left', async () => {
+  it('needs a stay and some content before it can be sent', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({ data: stays() })
     const post = vi.spyOn(api, 'post')
     renderPage()
-    await screen.findByRole('article', { name: 'BKNEW' })
-    const send = stay('BKNEW').getByRole('button', { name: 'Gửi phản hồi' })
+    const send = await screen.findByRole('button', { name: 'Gửi đánh giá' })
+    const comment = screen.getByPlaceholderText('Điều gì ấn tượng? Điều gì cần cải thiện?')
 
     expect(send).toBeDisabled()
-    expect(stay('BKNEW').getByText('0/2000')).toBeInTheDocument()
-    fireEvent.change(stay('BKNEW').getByLabelText(/Nội dung/), { target: { value: '   ' } })
-    expect(send).toBeDisabled()
-    fireEvent.change(stay('BKNEW').getByLabelText(/Nội dung/), { target: { value: 'abc' } })
+    fireEvent.change(comment, { target: { value: 'Tốt' } })
+    expect(send).toBeDisabled() // chưa chọn kỳ lưu trú
+    fireEvent.change(screen.getByLabelText('Kỳ lưu trú'), { target: { value: 'b1' } })
     expect(send).toBeEnabled()
-    expect(stay('BKNEW').getByText('3/2000')).toBeInTheDocument()
+    fireEvent.change(comment, { target: { value: '   ' } })
+    expect(send).toBeDisabled()
     expect(post).not.toHaveBeenCalled()
   })
 
@@ -159,25 +181,33 @@ describe('MyFeedbackPage', () => {
       conflict('Feedback for this stay has already been sent'),
     )
     renderPage()
-    await screen.findByRole('article', { name: 'BKNEW' })
 
-    fireEvent.change(stay('BKNEW').getByLabelText(/Nội dung/), { target: { value: 'Tốt' } })
-    fireEvent.click(stay('BKNEW').getByRole('button', { name: 'Gửi phản hồi' }))
-    expect(await stay('BKNEW').findByRole('alert')).toHaveTextContent('already been sent')
-    expect(stay('BKNEW').getByLabelText(/Nội dung/)).toHaveValue('Tốt')
+    fireEvent.change(await screen.findByLabelText('Kỳ lưu trú'), { target: { value: 'b1' } })
+    const comment = screen.getByPlaceholderText('Điều gì ấn tượng? Điều gì cần cải thiện?')
+    fireEvent.change(comment, { target: { value: 'Tốt' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }))
+
+    expect(await panel('Viết đánh giá').findByRole('alert')).toHaveTextContent('already been sent')
+    expect(comment).toHaveValue('Tốt')
   })
 
-  it('shows an empty state and an error state', async () => {
+  it('shows the empty states when there is nothing to review and no review yet', async () => {
     vi.spyOn(api, 'get').mockResolvedValueOnce({ data: { items: [] } })
-    const empty = renderPage()
-    expect(await screen.findByText('Chưa có lần lưu trú nào để phản hồi.')).toBeInTheDocument()
-    empty.unmount()
+    renderPage()
 
+    expect(await screen.findByText('Chưa có gì để đánh giá')).toBeInTheDocument()
+    expect(
+      screen.getByText('Sau khi trả phòng, bạn có thể đánh giá kỳ nghỉ tại đây.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Bạn chưa có đánh giá nào.')).toBeInTheDocument()
+  })
+
+  it('shows an error state when the stays cannot be loaded', async () => {
     vi.spyOn(api, 'get').mockRejectedValue({
       isAxiosError: true,
       response: { status: 500, data: { message: 'Boom' } },
     })
     renderPage()
-    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Boom')
   })
 })

@@ -22,9 +22,22 @@ export const notificationConfigFields = {
   NOTIFICATIONS_ENABLED: Joi.boolean().default(false),
   GMAIL_USER: Joi.string()
     .email({ tlds: { allow: false } })
-    .allow('')
-    .optional(),
-  GMAIL_APP_PASSWORD: Joi.string().replace(/\s/g, '').allow('').optional(),
+    .when('NOTIFICATIONS_ENABLED', {
+      is: true,
+      then: Joi.required(),
+      otherwise: Joi.allow('').optional(),
+    }),
+  GMAIL_APP_PASSWORD: Joi.string()
+    .replace(/\s/g, '')
+    .when('NOTIFICATIONS_ENABLED', {
+      is: true,
+      then: Joi.when('BREVO_API_KEY', {
+        is: Joi.string().min(1).required(),
+        then: Joi.allow('').optional(),
+        otherwise: Joi.required(),
+      }),
+      otherwise: Joi.allow('').optional(),
+    }),
   BREVO_API_KEY: Joi.string().allow('').optional(),
   NOTIFICATIONS_FROM_NAME: Joi.string()
     .pattern(/^[^\r\n\u0000]+$/)

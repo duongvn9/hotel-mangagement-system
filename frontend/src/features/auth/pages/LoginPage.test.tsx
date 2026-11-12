@@ -10,6 +10,9 @@ const routes = [
   { path: '/manager/dashboard', element: <p>trang quản lý</p> },
   { path: '/reception/dashboard', element: <p>trang lễ tân</p> },
   { path: '/booking/new', element: <p>trang đặt phòng</p> },
+  { path: '/reception/front-desk', element: <p>quầy lễ tân</p> },
+  { path: '/manager/accounts', element: <p>quản lý tài khoản</p> },
+  { path: '/my-bookings', element: <p>booking của tôi</p> },
 ]
 
 describe('LoginPage', () => {
@@ -48,6 +51,31 @@ describe('LoginPage', () => {
     await waitFor(() => expect(loginAsDev).toHaveBeenCalledWith(account))
   })
 
+  it('đăng nhập bằng Google rồi vào trang của vai trò', async () => {
+    const loginWithGoogle = vi.fn().mockResolvedValue(undefined)
+    renderWithAuth(routes, { path: '/login', auth: { loginWithGoogle } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục với Google' }))
+
+    await screen.findByText('trang chủ')
+    expect(loginWithGoogle).toHaveBeenCalledOnce()
+  })
+
+  it('đăng nhập Google thất bại thì hiện lỗi', async () => {
+    const loginWithGoogle = vi.fn().mockRejectedValue(new Error('Tài khoản đã bị khoá'))
+    renderWithAuth(routes, { path: '/login', auth: { loginWithGoogle } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục với Google' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Tài khoản đã bị khoá')
+  })
+
+  it('chế độ dev không có nút Google', () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: [] })
+    renderWithAuth(routes, { path: '/login', auth: { isDevMode: true } })
+    expect(screen.queryByRole('button', { name: 'Tiếp tục với Google' })).not.toBeInTheDocument()
+  })
+
   describe('đã có phiên đăng nhập', () => {
     const signedIn = (role: string) =>
       renderWithAuth(routes, {
@@ -68,6 +96,36 @@ describe('LoginPage', () => {
     it('đưa khách vào tổng quan của khách', async () => {
       signedIn('CUSTOMER')
       expect(await screen.findByText('tổng quan khách')).toBeInTheDocument()
+    })
+
+    it.each([
+      ['CUSTOMER', '/reception/dashboard', 'tổng quan khách'],
+      ['CUSTOMER', '/manager/accounts', 'tổng quan khách'],
+      ['RECEPTIONIST', '/manager/accounts', 'trang lễ tân'],
+    ])(
+      'đưa %s về trang chủ của vai trò khi trang đang xem dở (%s) không thuộc vai trò',
+      async (role, from, expected) => {
+        renderWithAuth(routes, {
+          path: '/login',
+          auth: { me: { ...ME, role }, status: 'authenticated' },
+          state: { from },
+        })
+        expect(await screen.findByText(expected)).toBeInTheDocument()
+      },
+    )
+
+    it.each([
+      ['MANAGER', '/reception/front-desk', 'quầy lễ tân'],
+      ['RECEPTIONIST', '/reception/front-desk', 'quầy lễ tân'],
+      ['MANAGER', '/manager/accounts', 'quản lý tài khoản'],
+      ['CUSTOMER', '/my-bookings', 'booking của tôi'],
+    ])('giữ trang đang xem dở của %s khi vai trò được vào (%s)', async (role, from, expected) => {
+      renderWithAuth(routes, {
+        path: '/login',
+        auth: { me: { ...ME, role }, status: 'authenticated' },
+        state: { from },
+      })
+      expect(await screen.findByText(expected)).toBeInTheDocument()
     })
 
     it('quay lại trang đang xem dở trước khi bị yêu cầu đăng nhập', async () => {

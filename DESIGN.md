@@ -163,6 +163,7 @@ components/
 | `KeyValue` | A label–value pair in detail views |
 | `Stars` | `value`, `onChange?` (read-only without `onChange`), `label?` (read-only display: renders `role="img"` with that `aria-label`, no buttons) |
 | `DateRangeField` | `from`, `to` (`yyyy-MM-dd`), `onChange(from, to)`; the end date is always at least one day after the start |
+| `DateField` | `value` (`yyyy-MM-dd`), `onChange(value)`, `id?`; single-date picker (popover + calendar) replacing the native `<input type="date">`, no past-date restriction |
 | `SectionHeading` | `eyebrow`, `title`, `body`, `align`, `as` (`h1` or `h2`) |
 | `PhotoTile` | `src`, `alt`, `caption`, `aspect` (`square`, `4/3`, `3/4`) |
 | `Alert` | `tone`: `success`, `danger`, `info`, `warning`, `title?`, `children`. `role="alert"` when `tone="danger"`, otherwise `role="status"`. Replaces legacy `Alert` (which remains `@deprecated`) |

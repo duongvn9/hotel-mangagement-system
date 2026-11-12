@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios'
+import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router'
 import { Button } from '@/components/atoms'
 import { Alert } from '@/components/molecules'
@@ -88,19 +89,21 @@ export function OrderReceipt({
           {order.service.name}
         </h2>
         <OrderBusinessState order={order} />
+        {order.reviewStatus === 'REJECTED' && (
+          <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
+            Lý do từ chối: {order.reviewReason?.trim() || 'Không có lý do từ chối.'}
+          </p>
+        )}
         <dl className="grid gap-4 sm:grid-cols-2">
           {[
-            ['Mã yêu cầu', order.id],
-            ['Mã đặt phòng', order.bookingId],
+            ['Mã đặt phòng', order.bookingCode?.trim() || 'Không còn thông tin đặt phòng'],
+            ['Phòng', order.roomNumbers?.join(', ') || 'Chưa có thông tin phòng'],
             ['Số lượng', `${order.quantity} ${order.service.unit}`],
             ['Đơn giá ghi nhận', money(order.unitPriceVND)],
             ['Thành tiền ghi nhận từ máy chủ', money(order.amount)],
             ['Thời gian yêu cầu', dateTime(order.requestedTime)],
-            ['Trạng thái duyệt', reviewLabels[order.reviewStatus] ?? order.reviewStatus],
-            [
-              'Trạng thái thực hiện',
-              executionLabels[order.executionStatus] ?? order.executionStatus,
-            ],
+            ['Trạng thái duyệt', reviewLabels[order.reviewStatus] ?? 'Chưa xác định'],
+            ['Trạng thái thực hiện', executionLabels[order.executionStatus] ?? 'Chưa xác định'],
             ['Ngày tạo', dateTime(order.createdAt)],
             ['Ghi chú', order.notes || 'Không có'],
           ].map(([label, value]) => (
@@ -127,10 +130,26 @@ export function OrderReceipt({
     </Container>
   )
 }
-export function OrderNavigation() {
+export function OrderNavigation({ variant = 'both' }: { variant?: 'both' | 'back' } = {}) {
+  if (variant === 'back') {
+    return (
+      <nav className="mb-6">
+        <Link
+          to="/customer/service-orders/history"
+          className="inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+          Dịch vụ của tôi
+        </Link>
+      </nav>
+    )
+  }
   return (
     <nav className="mb-6 flex flex-wrap gap-4 text-primary">
-      <Link className="inline-flex min-h-11 items-center underline" to="/customer/service-orders">
+      <Link
+        className="inline-flex min-h-11 items-center underline"
+        to="/customer/service-orders/history"
+      >
         Dịch vụ của tôi
       </Link>
       <Link

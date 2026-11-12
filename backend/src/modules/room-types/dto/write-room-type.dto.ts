@@ -1,5 +1,5 @@
 import { ASSET_PATH } from '../../../common/asset-path.js';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
@@ -14,10 +14,23 @@ import {
   MaxLength,
   Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
+
+export class RoomTypeBedDto {
+  @ApiProperty({ description: 'BedType ObjectId (canonical lowercase)' })
+  @Matches(/^[0-9a-f]{24}$/)
+  bedTypeId: string;
+
+  @ApiProperty({ minimum: 1, maximum: 20 })
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  quantity: number;
+}
 
 export class CreateRoomTypeDto {
   @ApiPropertyOptional({ type: [String] })
@@ -68,6 +81,15 @@ export class CreateRoomTypeDto {
   @ArrayUnique()
   @Matches(/^[0-9a-f]{24}$/, { each: true })
   amenities?: string[];
+
+  @ApiPropertyOptional({ type: [RoomTypeBedDto], default: [] })
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ArrayUnique((bed: RoomTypeBedDto) => bed.bedTypeId)
+  @ValidateNested({ each: true })
+  @Type(() => RoomTypeBedDto)
+  beds?: RoomTypeBedDto[];
 
   @ApiPropertyOptional({ default: true })
   @ValidateIf((_object, value) => value !== undefined)

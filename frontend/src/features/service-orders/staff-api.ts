@@ -3,13 +3,20 @@ import { normalizeOrderQuery, type OrderQuery, type ServiceOrder } from './api'
 
 export interface StaffServiceOrder extends ServiceOrder {
   customer: { id: string | null; fullName: string | null }
-  booking: { code: string; status: string; checkIn: string; checkOut: string } | null
+  booking: {
+    code: string
+    status: string
+    checkIn: string
+    checkOut: string
+    roomNumbers?: string[]
+  } | null
   feeRequired: boolean
   billingStatus: 'NOT_REQUIRED' | 'PENDING' | 'BILLED'
   review?: {
     decision: 'ACCEPT' | 'REJECT'
     reason?: string
     reviewedBy: string
+    reviewedByName?: string | null
     reviewedAt: string
   }
   invoiceId?: string
@@ -19,6 +26,7 @@ export interface StaffServiceOrder extends ServiceOrder {
     id: string
     status: string
     assigneeId: string
+    assigneeName?: string | null
     assignedAt: string
     dueAt?: string
     completedAt?: string

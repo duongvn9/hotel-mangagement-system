@@ -71,6 +71,17 @@ export function RoomTypesPage() {
       ),
     },
     {
+      key: 'beds',
+      header: 'Giường',
+      render: (roomType) => (
+        <span className="block max-w-56 min-w-32 break-words text-muted-foreground">
+          {roomType.beds?.length
+            ? roomType.beds.map((bed) => `${bed.quantity} ${bed.bedTypeName}`).join(', ')
+            : 'Chưa cấu hình'}
+        </span>
+      ),
+    },
+    {
       key: 'availability',
       header: 'Trạng thái',
       render: (roomType) => (

@@ -19,6 +19,19 @@ const item = {
 describe('ReconciliationPage (manager)', () => {
   afterEach(() => vi.restoreAllMocks())
 
+  it('opens the booking in the staff booking page, not the guest page', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: { items: [item], total: 1 } })
+    renderWithAuth(bookingRoutes, {
+      path: '/manager/payments/reconciliation',
+      auth: { me: ME, status: 'authenticated' },
+    })
+
+    expect(await screen.findByRole('link', { name: 'Xem booking' })).toHaveAttribute(
+      'href',
+      '/reception/bookings/BK777',
+    )
+  })
+
   it('lists a flagged payment and clears it after the manager marks it handled', async () => {
     let resolved = false
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {

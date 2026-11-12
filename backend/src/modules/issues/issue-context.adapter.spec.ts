@@ -15,6 +15,7 @@ describe('IssueContextAdapter', () => {
     rooms: [roomId],
     isActive: true,
     status: BookingStatus.CheckedIn,
+    checkOut: new Date('3000-01-01'),
   });
   const setup = (
     value: unknown = booking(),
@@ -27,6 +28,11 @@ describe('IssueContextAdapter', () => {
         .mockReturnValue({ exec: vi.fn().mockResolvedValue(value) }),
     };
     const rooms = {
+      find: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          lean: vi.fn().mockResolvedValue(room ? [room] : []),
+        }),
+      }),
       findOne: vi
         .fn()
         .mockReturnValue({ exec: vi.fn().mockResolvedValue(room) }),
@@ -47,11 +53,45 @@ describe('IssueContextAdapter', () => {
     };
   };
 
-  it('allows owned active checked-in bookings without date restrictions', async () => {
+  it('bulk resolves distinct room numbers including inactive historical rooms', async () => {
+    const { adapter, rooms } = setup(booking(), {
+      _id: roomId,
+      roomNumber: '101',
+      isActive: false,
+    });
+    const result = await adapter.roomNumbers([roomId, roomId]);
+    expect(result.get(String(roomId))).toBe('101');
+    expect(rooms.find).toHaveBeenCalledExactlyOnceWith({
+      _id: { $in: [roomId] },
+    });
+    expect(rooms.find().select).toHaveBeenCalledWith({
+      _id: 1,
+      roomNumber: 1,
+    });
+  });
+
+  it('does not fabricate labels for missing rooms or query empty context', async () => {
+    const { adapter, rooms } = setup(booking(), null);
+    expect(await adapter.roomNumbers([])).toEqual(new Map());
+    expect(rooms.find).not.toHaveBeenCalled();
+    expect(await adapter.roomNumbers([roomId])).toEqual(new Map());
+  });
+
+  it('allows owned active checked-in bookings on or before the checkout date', async () => {
     const { adapter } = setup();
     await expect(
       adapter.resolve(String(owner), String(bookingId)),
     ).resolves.toEqual({ booking: bookingId });
+  });
+
+  it('rejects checked-in bookings whose checkout date has already passed', async () => {
+    const { adapter } = setup({
+      ...booking(),
+      checkOut: new Date('2000-01-01'),
+    });
+    await expect(
+      adapter.resolve(String(owner), String(bookingId)),
+    ).rejects.toThrow(new NotFoundException('Booking not found'));
   });
 
   it.each(

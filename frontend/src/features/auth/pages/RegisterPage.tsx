@@ -5,18 +5,20 @@ import { FormField } from '@/components/molecules'
 import { AuthLayout } from '@/components/templates'
 import { env } from '@/lib/env'
 import { useAuth } from '../auth-context'
+import { GoogleSignInButton } from '../components/GoogleSignInButton'
 
 const EMPTY = { fullName: '', email: '', phone: '', password: '', confirm: '' }
 
 /** UC01 Register Account: tạo tài khoản Customer, xác minh email rồi mới đăng nhập. */
 export function RegisterPage() {
-  const { me, isDevMode, register } = useAuth()
+  const { me, isDevMode, register, loginWithGoogle } = useAuth()
   const [form, setForm] = useState(EMPTY)
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
   const [doneEmail, setDoneEmail] = useState('')
+  const [signedIn, setSignedIn] = useState(false)
 
-  if (me) return <Navigate to="/" replace />
+  if (me || signedIn) return <Navigate to="/" replace />
 
   const set = (field: keyof typeof EMPTY) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [field]: e.target.value }))
@@ -39,6 +41,19 @@ export function RegisterPage() {
       setDoneEmail(email)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không đăng ký được')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function onGoogle() {
+    setError('')
+    setPending(true)
+    try {
+      await loginWithGoogle()
+      setSignedIn(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không đăng nhập được')
     } finally {
       setPending(false)
     }
@@ -157,6 +172,8 @@ export function RegisterPage() {
               {pending ? 'Đang đăng ký…' : 'Đăng ký'}
             </Button>
           </div>
+
+          <GoogleSignInButton pending={pending} onClick={() => void onGoogle()} />
 
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Đã có tài khoản?{' '}

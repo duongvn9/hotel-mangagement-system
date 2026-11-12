@@ -12,6 +12,7 @@ const room = {
   childCapacity: 0,
   basePrice: 850000,
   amenities: [{ id: 'a1', name: 'Wi-Fi' }],
+  beds: [{ bedTypeId: 'bed-1', bedTypeName: 'Giường đôi', quantity: 1 }],
   isActive: true,
   availableForBooking: true,
 }
@@ -30,10 +31,20 @@ describe('UC49 RoomTypesPage', () => {
     vi.spyOn(api, 'get').mockResolvedValue(response())
     renderPage()
     expect(await screen.findByRole('rowheader', { name: 'Standard' })).toBeInTheDocument()
-    for (const name of ['Tên', 'Mô tả', 'Người lớn', 'Trẻ em', 'Giá', 'Tiện nghi', 'Trạng thái'])
+    for (const name of [
+      'Tên',
+      'Mô tả',
+      'Người lớn',
+      'Trẻ em',
+      'Giá',
+      'Tiện nghi',
+      'Giường',
+      'Trạng thái',
+    ])
       expect(screen.getByRole('columnheader', { name })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: /850\.000\s*₫/ })).toBeInTheDocument()
     expect(screen.getByText('Wi-Fi')).toBeInTheDocument()
+    expect(screen.getByText('1 Giường đôi')).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: '2' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: '0' })).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)

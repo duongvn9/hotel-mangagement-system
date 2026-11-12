@@ -6,7 +6,7 @@ import { PageContainer, PageHeader, Panel } from '@/components/organisms'
 import type { TaskQuery, TaskStatus } from '../api'
 import { useAssignedTasks } from '../hooks'
 import { TaskError, TaskPriorityBadge, TaskStatusBadge } from '../TaskPresentation'
-import { taskDate, taskStatuses } from '../presentation'
+import { taskDate, taskStatuses, taskTypeLabel } from '../presentation'
 
 export function AssignedTasksPage() {
   const [keyword, setKeyword] = useState('')
@@ -112,7 +112,7 @@ export function AssignedTasksPage() {
                             {task.title}
                           </Link>
                         </h2>
-                        <p className="text-sm break-words">Loại: {task.taskType}</p>
+                        <p className="text-sm break-words">Loại: {taskTypeLabel(task.taskType)}</p>
                         <p className="text-xs text-muted-foreground">
                           Ngày giao: {taskDate(task.assignedAt)}
                         </p>

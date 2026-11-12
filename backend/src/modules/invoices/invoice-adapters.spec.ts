@@ -11,6 +11,7 @@ import {
 } from './invoice-adapters.js';
 import { InvoicesModule } from './invoices.module.js';
 import { InvoicesService } from './invoices.service.js';
+import { TasksService } from '../tasks/tasks.service.js';
 import { NOTIFICATION_OPTIONS } from '../../config/notifications.config.js';
 
 const InvoiceModel = model('H7AdapterInvoice', InvoiceSchema);
@@ -68,6 +69,8 @@ describe('invoice adapter contracts', () => {
       .useValue({})
       .overrideProvider(getModelToken('RoomHold'))
       .useValue({})
+      .overrideProvider(getModelToken('HoldPrincipalLock'))
+      .useValue({})
       .overrideProvider(getModelToken(PaymentTransaction.name))
       .useValue({})
       .overrideProvider(getModelToken('Room'))
@@ -76,7 +79,18 @@ describe('invoice adapter contracts', () => {
       .useValue({})
       .overrideProvider(getModelToken('Amenity'))
       .useValue({})
+      .overrideProvider(getModelToken('BedType'))
+      .useValue({})
       .overrideProvider(getModelToken('Service'))
+      .useValue({})
+      // TasksModule (check-out cần xác nhận kiểm tra phòng của nhân viên dịch vụ).
+      .overrideProvider(getModelToken('Task'))
+      .useValue({})
+      .overrideProvider(getModelToken('User'))
+      .useValue({})
+      .overrideProvider(getModelToken('Role'))
+      .useValue({})
+      .overrideProvider(TasksService)
       .useValue({})
       // NotificationsModule (qua BookingsModule) cần options này khi khởi tạo.
       .overrideProvider(NOTIFICATION_OPTIONS)

@@ -1,6 +1,6 @@
 import { isAxiosError } from 'axios'
 import { useRef, useState, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { CheckCircle2 } from 'lucide-react'
 import { Button, Input, NativeSelect, Skeleton, Textarea } from '@/components/atoms'
 import { Alert, EmptyState, FormField } from '@/components/molecules'
@@ -16,6 +16,7 @@ import {
   type ReportIssueInput,
 } from '../api'
 import { useIssueReportContext, useReportIssue } from '../hooks'
+import { bookingCode } from '../presentation'
 
 const categories = ['', 'Phòng và tiện nghi', 'Vệ sinh', 'Khác']
 type Mode = 'booking' | 'room' | 'service'
@@ -26,8 +27,15 @@ type Intent = {
   uncertain: boolean
 }
 
+/** Đơn hết hạn lưu trú (đã qua ngày trả phòng) không còn báo sự cố được. */
+function checkoutPassed(checkOut: string) {
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  return new Date(checkOut) < startOfToday
+}
+
 function bookingLabel(booking: IssueReportBooking) {
-  return `${booking.code} · ${new Date(booking.checkIn).toLocaleDateString('vi-VN')} – ${new Date(booking.checkOut).toLocaleDateString('vi-VN')} · ${booking.status === 'CHECKED_IN' ? 'Đang lưu trú' : booking.status} · ${booking.rooms.map((room) => room.roomNumber).join(', ')}`
+  return `${bookingCode(booking.code)} · ${new Date(booking.checkIn).toLocaleDateString('vi-VN')} – ${new Date(booking.checkOut).toLocaleDateString('vi-VN')} · ${booking.status === 'CHECKED_IN' ? 'Đang lưu trú' : booking.status} · ${booking.rooms.map((room) => room.roomNumber).join(', ')}`
 }
 
 function errorMessage(error: unknown) {
@@ -70,7 +78,9 @@ function CustomerIssueForm() {
   const [intent, setIntent] = useState<Intent>()
   const [intents, setIntents] = useState(() => new Map<string, Intent>())
   const submitting = useRef(false)
-  const bookings = (context.data?.items ?? []).filter((item) => item.status === 'CHECKED_IN')
+  const bookings = (context.data?.items ?? []).filter(
+    (item) => item.status === 'CHECKED_IN' && !checkoutPassed(item.checkOut),
+  )
   const bookingId = chosen ? input.bookingId : bookings.length === 1 ? bookings[0].id : ''
   const booking = bookings.find((item) => item.id === bookingId && item.status === 'CHECKED_IN')
   const payload = normalizeIssueInput({
@@ -171,28 +181,37 @@ function CustomerIssueForm() {
             title="Đã tiếp nhận báo cáo"
             body="Chờ xem xét. Khách sạn sẽ xem xét báo cáo trước khi giao xử lý."
             action={
-              <Button
-                className="rounded-full"
-                onClick={() => {
-                  mutation.reset()
-                  setIntent(undefined)
-                  setIntents(new Map())
-                  setInput({ title: '', category: '', description: '', bookingId: '' })
-                  setChosen(false)
-                  setMode('booking')
-                  setErrors({})
-                  setPrefillCleared(true)
-                  void context.refetch()
-                }}
-              >
-                Báo sự cố khác
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                {typeof mutation.data.id === 'string' &&
+                  /^[a-f\d]{24}$/i.test(mutation.data.id) && (
+                    <Button asChild className="rounded-full">
+                      <Link to={`/customer/issues/${mutation.data.id}`}>Xem báo cáo của tôi</Link>
+                    </Button>
+                  )}
+                <Button asChild variant="outline" className="rounded-full">
+                  <Link to="/customer/issues">Danh sách sự cố</Link>
+                </Button>
+                <Button
+                  className="rounded-full"
+                  onClick={() => {
+                    mutation.reset()
+                    setIntent(undefined)
+                    setIntents(new Map())
+                    setInput({ title: '', category: '', description: '', bookingId: '' })
+                    setChosen(false)
+                    setMode('booking')
+                    setErrors({})
+                    setPrefillCleared(true)
+                    void context.refetch()
+                  }}
+                >
+                  Báo sự cố khác
+                </Button>
+              </div>
             }
           />
           <Panel>
             <dl className="space-y-2 break-words text-sm">
-              <dt className="font-semibold">Mã báo cáo</dt>
-              <dd>{mutation.data.id}</dd>
               <dt className="font-semibold">Tiêu đề</dt>
               <dd>{mutation.data.title}</dd>
               <dt className="font-semibold">Đặt phòng</dt>
@@ -254,8 +273,8 @@ function CustomerIssueForm() {
                   aria-busy={mutation.isPending}
                 >
                   <p className="text-sm text-muted-foreground">
-                    Chọn đặt phòng đang lưu trú và ngữ cảnh xảy ra sự cố. Khách sạn sẽ xem xét báo
-                    cáo trước khi giao xử lý.
+                    Chọn đặt phòng đang lưu trú, sau đó chọn sự cố liên quan đến kỳ lưu trú, phòng
+                    hay dịch vụ. Khách sạn sẽ xem xét báo cáo trước khi giao xử lý.
                   </p>
                   {invalidPrefill && (
                     <Alert tone="danger">
@@ -290,7 +309,12 @@ function CustomerIssueForm() {
                           )}
                         </NativeSelect>
                       </FormField>
-                      <FormField htmlFor="issue-mode" label="Ngữ cảnh" required>
+                      <FormField
+                        htmlFor="issue-mode"
+                        label="Sự cố liên quan đến"
+                        hint="Chọn vấn đề chung của kỳ lưu trú, một phòng cụ thể hoặc dịch vụ đã yêu cầu."
+                        required
+                      >
                         <NativeSelect
                           id="issue-mode"
                           value={mode}
@@ -305,9 +329,9 @@ function CustomerIssueForm() {
                             mutation.reset()
                           }}
                         >
-                          <option value="booking">Đặt phòng</option>
-                          <option value="room">Phòng</option>
-                          <option value="service">Đơn dịch vụ</option>
+                          <option value="booking">Kỳ lưu trú nói chung</option>
+                          <option value="room">Một phòng cụ thể</option>
+                          <option value="service">Dịch vụ đã yêu cầu</option>
                         </NativeSelect>
                       </FormField>
                     </div>
@@ -355,11 +379,11 @@ function CustomerIssueForm() {
                               <option key={order.id} value={order.id}>
                                 {index + 1}. {order.serviceName} ·{' '}
                                 {reviewLabels[order.reviewStatus as keyof typeof reviewLabels] ??
-                                  order.reviewStatus}{' '}
+                                  'Chưa có thông tin xét duyệt'}{' '}
                                 ·{' '}
                                 {executionLabels[
                                   order.executionStatus as keyof typeof executionLabels
-                                ] ?? order.executionStatus}
+                                ] ?? 'Chưa có thông tin thực hiện'}
                               </option>
                             ),
                           )}

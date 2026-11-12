@@ -2,6 +2,7 @@
 #   docker compose up                  # tự mount volumes và hot reload khi sửa
 #   docker compose up --watch          # hoặc dùng watch của docker compose
 #   docker compose --profile tools up  # thêm mongo-express (http://localhost:8081)
+#   docker compose --profile storage up # thêm RustFS (S3 local cho ảnh phòng), xem mục S3 trong .env.example
 # Không cần file .env để chạy dev; muốn đổi giá trị thì copy .env.example thành .env.
 
 name: hms-dev
@@ -90,5 +91,51 @@ services:
       mongo:
         condition: service_healthy
 
+  # S3 local cho ảnh loại phòng (RustFS, tương thích S3). Chỉ chạy khi bật profile "storage".
+  # Để backend dùng nó, đặt trong .env: S3_ENDPOINT=http://rustfs:9000, S3_BUCKET, S3_ACCESS_KEY_ID,
+  # S3_SECRET_ACCESS_KEY (trùng RUSTFS_*) và VITE_ASSET_BASE_URL=http://localhost:9000/<bucket>.
+  rustfs:
+    image: rustfs/rustfs:latest
+    profiles: ["storage"]
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-hms_rustfs}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-hms_rustfs_secret}
+    ports:
+      - "${RUSTFS_PORT:-9000}:9000"           # API S3 (cũng là địa chỉ ảnh công khai)
+      - "${RUSTFS_CONSOLE_PORT:-9001}:9001"   # giao diện quản trị
+    volumes:
+      - rustfs-data:/data
+
+  # Tạo bucket và cho phép đọc công khai (ghi vẫn cần khóa). Chạy xong thì thoát; chạy lại an toàn.
+  rustfs-init:
+    image: curlimages/curl:latest
+    profiles: ["storage"]
+    restart: "no"
+    depends_on:
+      - rustfs
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-hms_rustfs}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-hms_rustfs_secret}
+      RUSTFS_BUCKET: ${RUSTFS_BUCKET:-hms}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        sign="aws:amz:us-east-1:s3"
+        auth="$$RUSTFS_ACCESS_KEY:$$RUSTFS_SECRET_KEY"
+        url="http://rustfs:9000/$$RUSTFS_BUCKET"
+        tries=0
+        until curl -sf -o /dev/null --aws-sigv4 "$$sign" --user "$$auth" -X PUT "$$url"; do
+          tries=$$((tries+1))
+          [ "$$tries" -ge 30 ] && echo "rustfs chua san sang" && exit 1
+          sleep 2
+        done
+        policy='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::'"$$RUSTFS_BUCKET"'/*"]}]}'
+        sha=$$(printf '%s' "$$policy" | sha256sum | cut -d' ' -f1)
+        curl -sf -o /dev/null --aws-sigv4 "$$sign" --user "$$auth" -X PUT --data "$$policy" -H "x-amz-content-sha256: $$sha" "$$url?policy"
+        echo "bucket $$RUSTFS_BUCKET san sang"
+
 volumes:
   mongo-data:
+  rustfs-data:

@@ -8,7 +8,10 @@ import { issueStatuses, issuePriorities, type IssueQuery } from '../api'
 import { useIssues } from '../hooks'
 import { IssueBadges, IssueError } from '../IssuePresentation'
 import {
+  bookingCode,
+  personName,
   issueDate,
+  issueRoomLabel,
   issueViews,
   statusLabels,
   priorityLabels,
@@ -131,6 +134,17 @@ export function IssueListPage({ role }: { role: IssueRole }) {
                     </Link>
                   </Button>
                   <IssueBadges issue={issue} />
+                  <p className="break-words text-sm text-muted-foreground">
+                    {bookingCode(issue.bookingCode)}
+                  </p>
+                  <p className="break-words text-sm text-muted-foreground">
+                    {issueRoomLabel(issue)}
+                  </p>
+                  {role !== 'CUSTOMER' && (
+                    <p className="break-words text-sm text-muted-foreground">
+                      Người báo: {personName(issue.reporterName)}
+                    </p>
+                  )}
                   <p className="break-words text-sm text-muted-foreground">
                     Nhóm sự cố: {issue.category}
                   </p>

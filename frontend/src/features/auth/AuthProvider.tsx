@@ -1,10 +1,14 @@
+import { isAxiosError } from 'axios'
 import {
   createUserWithEmailAndPassword,
   deleteUser,
+  GoogleAuthProvider,
   onAuthStateChanged,
   sendEmailVerification,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
+  type User,
 } from 'firebase/auth'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { queryClient } from '@/app/query-client'
@@ -15,6 +19,21 @@ import { AuthContext, type AuthContextValue } from './auth-context'
 import { firebaseErrorMessage } from './firebase-errors'
 
 const DEV_USER_KEY = 'hms.devUser'
+
+function clearSessionCache() {
+  // Public search data is identity-independent. Removing active queries leaves their
+  // observers showing old data until the next local render recreates and refetches them.
+  queryClient.removeQueries({
+    predicate: ({ queryKey }) => queryKey[0] !== 'availability' && queryKey[0] !== 'search-filters',
+  })
+  queryClient.getMutationCache().clear()
+}
+
+/** Họ tên cho tài khoản HMS mới (backend nhận 2–100 ký tự). */
+function googleName(user: User) {
+  const name = (user.displayName ?? user.email?.split('@')[0] ?? '').trim().slice(0, 100)
+  return name.length >= 2 ? name : 'Khách hàng'
+}
 
 /**
  * Phiên đăng nhập (UC02, UC03). Có Firebase: đăng nhập email/mật khẩu rồi gọi /auth/me để backend
@@ -29,9 +48,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Đang đăng ký: Firebase tự đăng nhập tài khoản mới, không coi đó là một phiên HMS.
   const registering = useRef(false)
+  const principal = useRef<string | null>(null)
 
   const loadMe = useCallback(async () => {
-    setMe(await getMe())
+    const nextMe = await getMe()
+    const nextPrincipal = `${nextMe.id}:${nextMe.role}`
+    if (principal.current !== nextPrincipal) clearSessionCache()
+    principal.current = nextPrincipal
+    setMe(nextMe)
     setStatus('authenticated')
   }, [])
 
@@ -39,9 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthTokenProvider(null)
     setDevUser(null)
     localStorage.removeItem(DEV_USER_KEY)
+    principal.current = null
     setMe(null)
     setStatus('anonymous')
-    queryClient.clear()
+    clearSessionCache()
   }, [])
 
   // Khôi phục phiên khi tải lại trang.
@@ -81,6 +106,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Firebase hợp lệ nhưng HMS từ chối (chưa xác minh email, bị khoá, chưa đăng ký).
           await signOut(firebaseAuth)
           throw new Error(getErrorMessage(error, 'Không đăng nhập được'))
+        }
+      },
+      async loginWithGoogle() {
+        const auth = firebaseAuth
+        if (!auth) throw new Error('Chưa cấu hình Firebase')
+        // Có thể phải tạo tài khoản HMS trước khi /auth/me thành công: tạm bỏ qua onAuthStateChanged.
+        registering.current = true
+        try {
+          const { user } = await signInWithPopup(auth, new GoogleAuthProvider()).catch((error) => {
+            throw new Error(firebaseErrorMessage(error))
+          })
+          setAuthTokenProvider(() => user.getIdToken())
+          try {
+            await loadMe()
+          } catch (error) {
+            // 401: chưa có tài khoản HMS. Email Google đã xác minh nên tạo Customer luôn (UC01).
+            if (!isAxiosError(error) || error.response?.status !== 401) throw error
+            await registerAccount(await user.getIdToken(), { fullName: googleName(user) })
+            await loadMe()
+          }
+        } catch (error) {
+          await signOut(auth).catch(() => undefined)
+          clearSession()
+          throw new Error(
+            isAxiosError(error)
+              ? getErrorMessage(error, 'Không đăng nhập được')
+              : error instanceof Error
+                ? error.message
+                : 'Không đăng nhập được',
+          )
+        } finally {
+          registering.current = false
         }
       },
       async loginAsDev(account) {

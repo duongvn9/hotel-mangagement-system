@@ -78,6 +78,25 @@ beforeEach(() => {
   vi.mocked(api.post).mockResolvedValue({ data: receipt })
 })
 
+it('shows booking codes and rooms instead of technical receipt identifiers', () => {
+  render(
+    <OrderReceipt
+      order={{ ...receipt, ...{ bookingCode: 'BK001', roomNumbers: ['201', '202'] } }}
+    />,
+  )
+  expect(screen.getByText('BK001')).toBeInTheDocument()
+  expect(screen.getByText('201, 202')).toBeInTheDocument()
+  expect(document.body).not.toHaveTextContent(bookingId)
+  expect(document.body).not.toHaveTextContent(receipt.id)
+})
+
+it('uses human fallbacks when booking context is missing', () => {
+  render(<OrderReceipt order={receipt} />)
+  expect(screen.getByText('Không còn thông tin đặt phòng')).toBeInTheDocument()
+  expect(document.body).not.toHaveTextContent(bookingId)
+  expect(document.body).not.toHaveTextContent(receipt.id)
+})
+
 describe('shared service-order business states', () => {
   it.each([
     ['PENDING_REVIEW', 'NOT_STARTED', 'PENDING_REVIEW', 'Chờ duyệt'],
@@ -161,9 +180,64 @@ describe('Customer service-order access', () => {
     },
   )
 })
+describe('public rejection reasons', () => {
+  it.each(
+    ['/customer/service-orders/history', '/customer/service-orders/order-1'].flatMap((path) =>
+      [
+        {
+          reviewStatus: 'REJECTED',
+          reviewReason: 'Không còn suất phục vụ',
+          expected: 'Không còn suất phục vụ',
+        },
+        { reviewStatus: 'REJECTED', reviewReason: undefined, expected: 'Không có lý do từ chối.' },
+        { reviewStatus: 'REJECTED', reviewReason: '   ', expected: 'Không có lý do từ chối.' },
+        {
+          reviewStatus: 'REJECTED',
+          reviewReason: 'Lý do dài '.repeat(250).trim(),
+          expected: 'Lý do dài '.repeat(250).trim(),
+        },
+        ...['PENDING_REVIEW', 'ACCEPTING', 'ACCEPTED'].map((reviewStatus) => ({
+          reviewStatus,
+          reviewReason: 'Hidden reason',
+          expected: null,
+        })),
+      ].map((test) => ({ path, ...test })),
+    ),
+  )(
+    'renders only public REJECTED reason at $path: $reviewStatus / $expected',
+    async ({ path, reviewStatus, reviewReason, expected }) => {
+      const order = {
+        ...receipt,
+        reviewStatus,
+        reviewReason,
+        review: { reason: 'private audit reason', reviewedBy: 'private reviewer' },
+        acceptanceRecovery: { reason: 'private recovery reason' },
+      }
+      vi.mocked(api.get).mockResolvedValue({
+        data:
+          path === '/customer/service-orders/history'
+            ? { items: [order], total: 1, page: 1, limit: 20 }
+            : order,
+      })
+      renderPage(path)
+      await screen.findByRole('heading', { name: 'Giặt ủi' })
+      if (expected) {
+        const reason = screen.getByText(`Lý do từ chối: ${expected}`)
+        expect(reason).toHaveClass('break-words', 'whitespace-pre-wrap')
+        expect(reason.previousElementSibling).toHaveTextContent('Trạng thái yêu cầu: Đã từ chối')
+      } else {
+        expect(screen.queryByText(/Lý do từ chối:/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Hidden reason/)).not.toBeInTheDocument()
+      }
+      expect(screen.queryByText(/private/)).not.toBeInTheDocument()
+      expect(api.post).not.toHaveBeenCalled()
+    },
+  )
+})
+
 describe('customer service-order list workspace', () => {
   it('uses atomic filters and history panels while retaining detail and create navigation', async () => {
-    renderPage('/customer/service-orders')
+    renderPage('/customer/service-orders/history')
     const link = await screen.findByRole('link', { name: 'Giặt ủi' })
     expect(screen.getByRole('heading', { level: 1, name: 'Dịch vụ của tôi' })).toHaveClass(
       'text-2xl',
@@ -191,7 +265,7 @@ describe('customer service-order list workspace', () => {
         limit: 20,
       },
     }))
-    renderPage('/customer/service-orders')
+    renderPage('/customer/service-orders/history')
     await screen.findByRole('link', { name: 'Giặt ủi' })
     fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
     await screen.findByText('Trang 2 · 41 yêu cầu')
@@ -218,7 +292,7 @@ describe('customer service-order list workspace', () => {
   })
   it('keeps loading, recoverable errors and empty feedback', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('network'))
-    renderPage('/customer/service-orders')
+    renderPage('/customer/service-orders/history')
     expect(screen.getByRole('status')).toHaveTextContent('Đang tải yêu cầu dịch vụ…')
     await screen.findByRole('alert')
     vi.mocked(api.get).mockResolvedValue({ data: { items: [], total: 0, page: 1, limit: 20 } })
@@ -235,7 +309,7 @@ describe('customer service-order list workspace', () => {
         limit: 20,
       },
     })
-    renderPage('/customer/service-orders')
+    renderPage('/customer/service-orders/history')
     expect((await screen.findByRole('link', { name })).closest('li')).toHaveClass('break-words')
     expect(screen.getByText(/2 kg/)).toHaveTextContent('52.000')
     expect(screen.getByText(/Tạo lúc:/)).toBeInTheDocument()
@@ -254,7 +328,7 @@ describe('customer service-order detail workspace', () => {
     expect(heading.closest('.card-soft')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     for (const label of [
-      'Mã yêu cầu',
+      'Phòng',
       'Mã đặt phòng',
       'Số lượng',
       'Đơn giá ghi nhận',
@@ -271,7 +345,7 @@ describe('customer service-order detail workspace', () => {
     expect(screen.getByText(/chưa ghi thu phí/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
       'href',
-      '/customer/service-orders',
+      '/customer/service-orders/history',
     )
     expect(screen.getByRole('link', { name: 'Yêu cầu dịch vụ' })).toHaveAttribute(
       'href',
@@ -324,7 +398,7 @@ describe('service-order form', () => {
     expect(screen.getByRole('button', { name: 'Gửi yêu cầu' })).toHaveClass('rounded-full')
     expect(screen.getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
       'href',
-      '/customer/service-orders',
+      '/customer/service-orders/history',
     )
     expect(screen.queryByText('Lịch sử đặt dịch vụ')).not.toBeInTheDocument()
     expect(api.get).not.toHaveBeenCalledWith('/service-orders/me', expect.anything())
@@ -353,7 +427,7 @@ describe('service-order form', () => {
     expect(screen.getByRole('button', { name: 'Tạo yêu cầu mới' })).toBeEnabled()
     expect(screen.getByRole('link', { name: 'Dịch vụ của tôi' })).toHaveAttribute(
       'href',
-      '/customer/service-orders',
+      '/customer/service-orders/history',
     )
   })
   it('loads only Customer choice endpoints, estimates locally, submits a whitelist, and shows server receipt', async () => {
@@ -478,7 +552,7 @@ describe('service-order form', () => {
 })
 describe('list and detail', () => {
   it('uses my list, literal keyword and exact enum filters', async () => {
-    renderPage('/customer/service-orders')
+    renderPage('/customer/service-orders/history')
     await screen.findByRole('link', { name: 'Giặt ủi' })
     fireEvent.change(screen.getByLabelText('Từ khóa'), { target: { value: '.*[abc]' } })
     fireEvent.change(screen.getByLabelText('Trạng thái duyệt'), {
@@ -504,7 +578,7 @@ describe('list and detail', () => {
   it.each(['ACCEPTED', 'REJECTED'] as const)(
     'filters customer reviews by %s',
     async (reviewStatus) => {
-      renderPage('/customer/service-orders')
+      renderPage('/customer/service-orders/history')
       await screen.findByRole('link', { name: 'Giặt ủi' })
       fireEvent.change(screen.getByLabelText('Trạng thái duyệt'), {
         target: { value: reviewStatus },
@@ -533,13 +607,13 @@ describe('list and detail', () => {
           limit: 20,
         },
       })
-      renderPage('/customer/service-orders')
+      renderPage('/customer/service-orders/history')
       expect(await screen.findByText(`Trạng thái yêu cầu: ${label}`)).toBeInTheDocument()
     },
   )
   it('renders empty list', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { items: [], total: 0, page: 1, limit: 20 } })
-    renderPage('/customer/service-orders')
+    renderPage('/customer/service-orders/history')
     expect(await screen.findByText('Không có yêu cầu dịch vụ phù hợp.')).toBeInTheDocument()
   })
   it('renders loading and then the owned detail without staff actions', async () => {

@@ -199,6 +199,23 @@ export class BookingResponse {
 
   @ApiProperty({ description: 'Thời điểm giữ phòng hết hạn nếu chưa đặt cọc' })
   holdExpiresAt: string;
+
+  @ApiPropertyOptional({ description: 'Tiền dịch vụ đã ghi vào hoá đơn (VND)' })
+  serviceTotal?: number;
+
+  @ApiPropertyOptional({
+    description: 'Tổng đã thanh toán thành công: cọc + phần còn lại (VND)',
+  })
+  paidAmount?: number;
+
+  @ApiPropertyOptional({ description: 'Số tiền còn phải thanh toán (VND)' })
+  balanceDue?: number;
+
+  @ApiPropertyOptional({
+    enum: ['UNPAID', 'PARTIALLY_PAID', 'PAID'],
+    description: 'Trạng thái hoá đơn',
+  })
+  invoiceStatus?: string;
 }
 
 export class WalkInBookingResponse {

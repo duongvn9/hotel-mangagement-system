@@ -89,6 +89,7 @@ function setup(detail = initial, role = 'RECEPTIONIST') {
           isDevMode: false,
           login: vi.fn(),
           loginAsDev: vi.fn(),
+          loginWithGoogle: vi.fn(),
           register: vi.fn(),
           logout: vi.fn(),
           refresh: vi.fn(),
@@ -102,6 +103,7 @@ function setup(detail = initial, role = 'RECEPTIONIST') {
 }
 beforeEach(() => {
   vi.restoreAllMocks()
+  vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-25T00:00').getTime())
   for (const name of ['showModal', 'close'] as const)
     if (!HTMLDialogElement.prototype[name])
       Object.defineProperty(HTMLDialogElement.prototype, name, { configurable: true, value() {} })
@@ -116,6 +118,66 @@ beforeEach(() => {
   ) {
     this.removeAttribute('open')
   })
+})
+
+test.each(['2026-11-10T12:00', '2026-11-11T09:00', '2026-11-11T12:00'])(
+  'rejects new assignment deadline %s',
+  async (due) => {
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-11-11T12:00').getTime())
+    const post = vi.spyOn(api, 'post')
+    setup(reviewed)
+    fireEvent.change(await assigneeField(), { target: { value: staff } })
+    fireEvent.change(screen.getByLabelText('Thời hạn xử lý'), { target: { value: due } })
+    fireEvent.click(screen.getByRole('button', { name: 'Phân công' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Thời hạn phải sau thời điểm hiện tại.')
+    expect(post).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  },
+)
+
+test('rejects a deadline that expires while confirmation is open', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-11-11T12:00').getTime())
+  const post = vi.spyOn(api, 'post')
+  setup(reviewed)
+  fireEvent.change(await assigneeField(), { target: { value: staff } })
+  fireEvent.change(screen.getByLabelText('Thời hạn xử lý'), {
+    target: { value: '2026-11-11T12:01' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Phân công' }))
+  clock.mockReturnValue(new Date('2026-11-11T12:01').getTime())
+  await confirm()
+  expect(screen.getByRole('alert')).toHaveTextContent('Thời hạn phải sau thời điểm hiện tại.')
+  expect(post).not.toHaveBeenCalled()
+})
+
+test('staff detail shows readable source and people without exposing operational IDs', async () => {
+  setup({
+    ...initial,
+    bookingCode: 'BK-2026-101',
+    roomNumbers: ['101', '102'],
+    reporterName: 'Nguyễn Minh Anh',
+    reviewedBy: staff,
+    reviewedByName: 'Trần Hải Yến',
+    assigneeId: staff,
+    assigneeName: 'Mai Phương',
+    assignmentRequestedBy: staff,
+    assignmentRequestedByName: 'Trần Hải Yến',
+  } as IssueDetail)
+  await settle()
+  expect(screen.getByText('Nguyễn Minh Anh')).toBeInTheDocument()
+  expect(screen.getByText('BK-2026-101')).toBeInTheDocument()
+  expect(screen.getByText('Phòng 101, 102')).toBeInTheDocument()
+  expect(screen.getAllByText('Trần Hải Yến')).toHaveLength(2)
+  expect(screen.getByText('Mai Phương')).toBeInTheDocument()
+  expect(document.body.textContent).not.toMatch(/[a-f\d]{24}/i)
+})
+
+test('missing display data uses honest fallbacks instead of IDs', async () => {
+  setup({ ...initial, reviewedBy: staff, assigneeId: staff })
+  await settle()
+  expect(screen.getByText('Chưa có thông tin đặt phòng')).toBeInTheDocument()
+  expect(screen.getAllByText('Chưa có thông tin người dùng').length).toBeGreaterThan(0)
+  expect(document.body.textContent).not.toMatch(/[a-f\d]{24}/i)
 })
 
 test('review confirmation traps keyboard focus and cancels without a request', async () => {
@@ -381,7 +443,7 @@ test.each(['MANAGER', 'CUSTOMER'])(
     if (role === 'CUSTOMER') {
       expect(screen.queryByText('Công việc nội bộ')).not.toBeInTheDocument()
       expect(screen.queryByText('Ghi chú nội bộ')).not.toBeInTheDocument()
-    } else expect(screen.getByText('Công việc nội bộ')).toBeInTheDocument()
+    } else expect(screen.getAllByText('Công việc nội bộ').length).toBeGreaterThan(0)
     expect(screen.queryByText('Bí mật')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Công việc nội bộ/ })).not.toBeInTheDocument()
   },

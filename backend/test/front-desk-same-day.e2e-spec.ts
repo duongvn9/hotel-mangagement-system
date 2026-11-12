@@ -8,6 +8,7 @@ import {
   Booking,
   BookingStatus,
 } from '../src/modules/bookings/schemas/booking.schema.js';
+import { PaymentTransaction } from '../src/modules/payments/schemas/payment-transaction.schema.js';
 import { Room } from '../src/modules/rooms/schemas/room.schema.js';
 import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
 import { businessDay } from '../src/modules/bookings/room-status-board.core.js';
@@ -17,6 +18,7 @@ describe('Same-day check-in/out list (e2e)', () => {
   let bookings: Model<Booking>;
   let rooms: Model<Room>;
   let roomTypes: Model<RoomType>;
+  let payments: Model<PaymentTransaction>;
   const tag = String(new Types.ObjectId()).slice(-8).toUpperCase();
   const typeId = new Types.ObjectId();
   const ids = {
@@ -75,7 +77,13 @@ describe('Same-day check-in/out list (e2e)', () => {
     bookings = app.get(getModelToken(Booking.name));
     rooms = app.get(getModelToken(Room.name));
     roomTypes = app.get(getModelToken(RoomType.name));
-    await Promise.all([bookings.init(), rooms.init(), roomTypes.init()]);
+    payments = app.get(getModelToken(PaymentTransaction.name));
+    await Promise.all([
+      bookings.init(),
+      rooms.init(),
+      roomTypes.init(),
+      payments.init(),
+    ]);
     await roomTypes.create({
       _id: typeId,
       name: `FD Deluxe ${typeId}`,
@@ -164,6 +172,7 @@ describe('Same-day check-in/out list (e2e)', () => {
   });
 
   afterAll(async () => {
+    await payments.deleteMany({ transactionRef: new RegExp(`^FD-${tag}`) });
     await bookings.deleteMany({ code: new RegExp(`^FD${tag}`) });
     await rooms.deleteMany({ _id: { $in: Object.values(ids) } });
     await roomTypes.deleteOne({ _id: typeId });
@@ -226,6 +235,46 @@ describe('Same-day check-in/out list (e2e)', () => {
         },
       ],
     });
+  });
+
+  it('tells the desk how much deposit is due and whether it has been paid', async () => {
+    const find = async (code: string) => {
+      const { body } = await sameDay().expect(200);
+      return body.arrivals.find(
+        (item: { code: string }) => item.code === `FD${tag}${code}`,
+      );
+    };
+    const arc = await bookings.findOne({ code: `FD${tag}ARC` }).orFail();
+
+    expect(await find('ARC')).toMatchObject({
+      depositAmount: 300000,
+      depositPaid: false,
+    });
+
+    // Cọc VNPay còn chờ chưa tính là đã thu.
+    await payments.create({
+      booking: arc._id,
+      invoice: new Types.ObjectId(),
+      transactionRef: `FD-${tag}-pending`,
+      method: 'VNPAY',
+      purpose: 'DEPOSIT',
+      status: 'PENDING',
+      amount: 300000,
+    });
+    expect((await find('ARC')).depositPaid).toBe(false);
+
+    await payments.create({
+      booking: arc._id,
+      invoice: new Types.ObjectId(),
+      transactionRef: `FD-${tag}-paid`,
+      method: 'CASH',
+      purpose: 'DEPOSIT',
+      status: 'SUCCESS',
+      amount: 300000,
+      paidAt: new Date(),
+    });
+    expect((await find('ARC')).depositPaid).toBe(true);
+    await payments.deleteMany({ transactionRef: new RegExp(`^FD-${tag}`) });
   });
 
   it('summarises how much is still to do', async () => {

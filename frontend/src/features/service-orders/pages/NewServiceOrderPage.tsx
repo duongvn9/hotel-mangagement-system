@@ -95,7 +95,7 @@ export function NewServiceOrderPage() {
   if (receipt)
     return (
       <PageContainer>
-        <OrderNavigation />
+        <OrderNavigation variant="back" />
         <PageHeader title="Đã gửi yêu cầu dịch vụ" />
         <OrderReceipt order={receipt} presentation="workspace" />
         <Button
@@ -114,7 +114,7 @@ export function NewServiceOrderPage() {
     )
   return (
     <PageContainer>
-      <OrderNavigation />
+      <OrderNavigation variant="back" />
       <PageHeader title="Yêu cầu dịch vụ" />
       <Panel title="Đơn mới">
         {loading && (

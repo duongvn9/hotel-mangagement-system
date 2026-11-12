@@ -63,6 +63,7 @@ function error(status: number) {
   } as AxiosResponse)
 }
 beforeEach(() => {
+  vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-25T00:00').getTime())
   for (const name of ['showModal', 'close'] as const)
     if (!HTMLDialogElement.prototype[name])
       Object.defineProperty(HTMLDialogElement.prototype, name, { configurable: true, value() {} })
@@ -80,6 +81,34 @@ beforeEach(() => {
   vi.spyOn(api, 'get').mockResolvedValue({ data: users })
 })
 afterEach(() => vi.restoreAllMocks())
+
+it.each(['Tiếp tục xử lý', 'Phân công lại'])(
+  'validates new deadlines for %s at preparation and confirmation',
+  async (action) => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-11-11T12:00').getTime())
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: issue })
+    mount()
+    await screen.findByRole('option', { name: 'Mới' })
+    fireEvent.change(screen.getByLabelText('Nhân viên thay thế'), { target: { value: 'new' } })
+    fireEvent.change(screen.getByLabelText('Lý do phân công lại (bắt buộc)'), {
+      target: { value: 'Thiếu linh kiện' },
+    })
+    const field = screen.getByLabelText('Thời hạn mới (không bắt buộc)')
+    expect(field).toHaveAttribute('min', '2026-11-11T12:00')
+    for (const due of ['2026-11-10T12:00', '2026-11-11T09:00', '2026-11-11T12:00']) {
+      fireEvent.change(field, { target: { value: due } })
+      fireEvent.click(screen.getByRole('button', { name: action }))
+      expect(screen.getByRole('alert')).toHaveTextContent('Thời hạn phải sau thời điểm hiện tại.')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    }
+    fireEvent.change(field, { target: { value: '2026-11-11T12:01' } })
+    fireEvent.click(screen.getByRole('button', { name: action }))
+    clock.mockReturnValue(new Date('2026-11-11T12:01').getTime())
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận xử lý công việc' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Thời hạn phải sau thời điểm hiện tại.')
+    expect(post).not.toHaveBeenCalled()
+  },
+)
 
 it('validates report reason, confirms trimmed input and shows success without cancelling progress', async () => {
   vi.mocked(api.get).mockResolvedValue({ data: task })
@@ -196,6 +225,48 @@ it.each([undefined, 'not-a-date', ''])(
     ).toBeInTheDocument()
   },
 )
+
+it('shows named resolution actors and Vietnamese task status without operational IDs', () => {
+  mount(
+    {
+      ...issue,
+      linkedTasks: [{ ...issue.linkedTasks[0], assigneeName: 'Mai Phương' }],
+      resolutionTasks: [
+        {
+          ...issue.resolutionTasks![0],
+          assigneeName: 'Mai Phương',
+          blockerHistory: [
+            {
+              ...task.blockerHistory![0],
+              reportedByName: 'Nguyễn Văn An',
+              resolvedByName: 'Trần Hải Yến',
+              resolvedAt: task.assignedAt,
+              resolution: 'CONTINUED',
+            },
+          ],
+          continuationHistory: [
+            { actorId: 'c'.repeat(24), actorName: 'Trần Hải Yến', at: task.assignedAt },
+          ],
+          cancellation: {
+            actorId: 'd'.repeat(24),
+            actorName: 'Lê Thanh Tâm',
+            recoveryActorId: 'e'.repeat(24),
+            recoveryActorName: 'Trịnh Minh Anh',
+            reason: 'Đổi ca',
+            at: task.assignedAt,
+            requestId: 'request',
+          },
+        },
+      ],
+    },
+    'MANAGER',
+  )
+  expect(screen.getByText(/Người báo không thể xử lý: Nguyễn Văn An/)).toBeInTheDocument()
+  expect(screen.getByText(/Người tiếp tục xử lý: Trần Hải Yến/)).toBeInTheDocument()
+  expect(screen.getByText(/Người khôi phục: Trịnh Minh Anh/)).toBeInTheDocument()
+  expect(document.body.textContent).toContain('Đang xử lý')
+  expect(document.body.textContent).not.toMatch(/[a-f\d]{24}|IN_PROGRESS|ISSUE_RESOLUTION/)
+})
 
 it('continues the same task with optional trimmed instructions and deadline', async () => {
   const post = vi.spyOn(api, 'post').mockResolvedValue({ data: issue })

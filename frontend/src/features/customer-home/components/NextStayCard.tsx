@@ -62,13 +62,15 @@ export function NextStayCard({ booking }: { booking: MyBookingItem }) {
         </div>
         <div className="mt-auto grid grid-cols-[1.15fr_1fr] gap-2 pt-6">
           <Button asChild className="w-full justify-center rounded-full px-3">
-            <Link to={`/booking/${booking.id}`}>
+            <Link to={`/my-bookings/${booking.id}`}>
               Xem đặt phòng <ArrowRight className="size-4" />
             </Link>
           </Button>
           {booking.status === 'CHECKED_IN' && (
             <Button asChild variant="outline" className="w-full justify-center rounded-full px-3">
-              <Link to="/customer/service-orders/new">Đặt dịch vụ</Link>
+              <Link to={`/customer/service-orders?bookingId=${encodeURIComponent(booking.id)}`}>
+                Đặt dịch vụ
+              </Link>
             </Button>
           )}
         </div>

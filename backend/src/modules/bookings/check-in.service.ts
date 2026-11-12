@@ -9,6 +9,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { BookingStatus } from '../../common/constants/booking-status.enum.js';
 import { RoomStatus } from '../../common/constants/room-status.enum.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import {
+  PaymentPurpose,
+  PaymentStatus,
+  PaymentTransaction,
+} from '../payments/schemas/payment-transaction.schema.js';
 import { Room } from '../rooms/schemas/room.schema.js';
 import { AvailabilityClock } from './availability.adapters.js';
 import { AvailabilityService } from './availability.service.js';
@@ -26,6 +32,7 @@ import type {
   CheckInOptionsResponse,
   CheckInResult,
 } from './dto/check-in.dto.js';
+import { checkInConfirmationEmail } from './booking-email.js';
 import { businessDay } from './room-status-board.core.js';
 import { Booking } from './schemas/booking.schema.js';
 
@@ -47,16 +54,20 @@ export class CheckInService {
     @InjectModel(Room.name) private readonly rooms: Model<Room>,
     private readonly availability: AvailabilityService,
     @Inject(AvailabilityClock) private readonly clock: AvailabilityClock,
+    private readonly notifications: NotificationsService,
+    @InjectModel(PaymentTransaction.name)
+    private readonly payments: Model<PaymentTransaction>,
   ) {}
 
   /**
-   * UC16: lễ tân nhận phòng cho khách. Booking CONFIRMED chuyển sang CHECKED_IN và các phòng
+   * UC16: lễ tân nhận phòng cho khách đã đóng cọc. Booking CONFIRMED chuyển sang CHECKED_IN và các phòng
    * sang OCCUPIED. Phòng chưa sẵn sàng có thể đổi ngay sang phòng khác cùng loại (tiền phòng
    * không đổi). Mongo không có transaction ở đây nên mọi bước ghi đều có điều kiện, và nếu
    * một phòng bị người khác lấy mất thì hoàn tác phần đã làm rồi trả 409.
    */
   async checkIn(bookingId: string, dto: CheckInDto): Promise<CheckInResult> {
     const booking = await this.confirmedBooking(bookingId);
+    await this.requireDepositPaid(booking);
     const windowError = checkInWindowError(
       businessDay(this.clock.now()),
       booking.checkIn,
@@ -138,6 +149,12 @@ export class CheckInService {
     }
 
     const byId = new Map(finalRooms.map((room) => [String(room._id), room]));
+    // Email xác nhận là best-effort: gửi lỗi không làm hỏng việc nhận phòng.
+    const email = checkInConfirmationEmail(
+      booking,
+      finalIds.map((id) => byId.get(id)?.roomNumber ?? ''),
+    );
+    if (email) void this.notifications.send(email).catch(() => undefined);
     return {
       id: String(booking._id),
       code: booking.code,
@@ -220,6 +237,28 @@ export class CheckInService {
         };
       }),
     };
+  }
+
+  /**
+   * Chỉ nhận phòng khi đã thu tiền cọc (có khoản DEPOSIT thành công), trừ booking không có tiền
+   * cọc. Booking tại quầy vào thẳng CONFIRMED nên cần kiểm tra này; cọc VNPay còn chờ chưa tính.
+   */
+  private async requireDepositPaid(booking: {
+    _id: Types.ObjectId;
+    depositAmount: number;
+  }): Promise<void> {
+    if (!(booking.depositAmount > 0)) return;
+    const paid = await this.payments.exists({
+      booking: booking._id,
+      purpose: PaymentPurpose.Deposit,
+      status: PaymentStatus.Success,
+      isActive: true,
+    });
+    if (!paid) {
+      throw new ConflictException(
+        'The deposit has not been paid yet; take the deposit before check-in',
+      );
+    }
   }
 
   private async confirmedBooking(bookingId: string) {

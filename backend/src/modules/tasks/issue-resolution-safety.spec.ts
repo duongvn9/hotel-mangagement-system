@@ -68,6 +68,28 @@ describe('Issue resolution task safety', () => {
     };
   });
 
+  it.each([-86400000, -60000, 0])(
+    'rejects new continuation deadline offset %s',
+    async (offset) => {
+      task.blocked = true;
+      await expect(
+        service.continueIssueTask(
+          task,
+          actor,
+          new Date(Date.now() + offset).toISOString(),
+        ),
+      ).rejects.toThrow('future');
+      expect(tasks.findOneAndUpdate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('allows a future same-day continuation deadline', async () => {
+    task.blocked = true;
+    const dueAt = new Date(Date.now() + 60000).toISOString();
+    await service.continueIssueTask(task, actor, dueAt);
+    expect(task.dueAt.toISOString()).toBe(dueAt);
+  });
+
   it.each([TaskStatus.Assigned, TaskStatus.InProgress])(
     'reports inability at %s without progress changes',
     async (status) => {

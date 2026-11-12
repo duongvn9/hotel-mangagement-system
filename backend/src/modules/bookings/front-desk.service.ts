@@ -12,6 +12,11 @@ import {
 import type { BookingListItem } from './dto/list-bookings.dto.js';
 import type { SameDayQuery, SameDayResponse } from './dto/same-day.dto.js';
 import { businessDay } from './room-status-board.core.js';
+import {
+  PaymentPurpose,
+  PaymentStatus,
+  PaymentTransaction,
+} from '../payments/schemas/payment-transaction.schema.js';
 import { Booking } from './schemas/booking.schema.js';
 import { RoomHold } from './schemas/room-hold.schema.js';
 
@@ -30,6 +35,8 @@ export class FrontDeskService {
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
     @Inject(AvailabilityClock) private readonly clock: AvailabilityClock,
     @InjectModel(RoomHold.name) private readonly holds: Model<RoomHold>,
+    @InjectModel(PaymentTransaction.name)
+    private readonly payments: Model<PaymentTransaction>,
   ) {}
 
   /**
@@ -73,13 +80,31 @@ export class FrontDeskService {
             .exec()
         : [];
       const liveIds = new Set(live.map((hold) => String(hold.booking)));
-      return rows
-        .filter(
-          (row) =>
-            row.status !== BookingStatus.RoomHeld ||
-            liveIds.has(String(row._id)),
-        )
-        .map(toBookingListItem)
+      const shown = rows.filter(
+        (row) =>
+          row.status !== BookingStatus.RoomHeld || liveIds.has(String(row._id)),
+      );
+      // Đã thu cọc chưa: có khoản DEPOSIT thành công; để lễ tân biết ai cần thu cọc trước khi nhận phòng.
+      const paidIds = new Set(
+        (
+          await this.payments
+            .find({
+              booking: { $in: shown.map((row) => row._id) },
+              purpose: PaymentPurpose.Deposit,
+              status: PaymentStatus.Success,
+              isActive: true,
+            })
+            .select('booking')
+            .lean()
+            .exec()
+        ).map((payment) => String(payment.booking)),
+      );
+      return shown
+        .map((row) => ({
+          ...toBookingListItem(row),
+          depositAmount: row.depositAmount,
+          depositPaid: paidIds.has(String(row._id)),
+        }))
         .sort(byRoomThenCode);
     };
     const [arrivals, departures] = await Promise.all([

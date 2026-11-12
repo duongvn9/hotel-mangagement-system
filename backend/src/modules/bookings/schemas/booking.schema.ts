@@ -144,6 +144,10 @@ export class Booking {
   @Prop()
   checkedOutAt?: Date;
 
+  /** Lúc khách xác nhận các khoản phí lúc trả phòng; xóa khi lễ tân ghi thêm khoản phí mới. */
+  @Prop()
+  checkoutFeesConfirmedAt?: Date;
+
   @Prop()
   checkoutRoomProjectionCompletedAt?: Date;
 

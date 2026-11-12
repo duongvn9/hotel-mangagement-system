@@ -24,16 +24,27 @@ export function SearchBar({
   compact,
   initial,
   onSearch,
+  onChange,
   ariaLabel = 'Tìm phòng trống',
 }: {
   compact?: boolean
   initial?: SearchValue
   onSearch: (value: SearchValue) => void
+  /** Báo mỗi khi khách đổi ngày hoặc số khách, kể cả khi chưa bấm tìm. */
+  onChange?: (value: SearchValue) => void
   ariaLabel?: string
 }) {
   const [from, setFrom] = useState(() => initial?.from ?? dayFromToday(3))
   const [to, setTo] = useState(() => initial?.to ?? dayFromToday(6))
   const [guests, setGuests] = useState(() => String(initial?.guests ?? 2))
+
+  const change = (next: { from?: string; to?: string; guests?: string }) => {
+    const value = { from, to, guests, ...next }
+    if (next.from !== undefined) setFrom(next.from)
+    if (next.to !== undefined) setTo(next.to)
+    if (next.guests !== undefined) setGuests(next.guests)
+    onChange?.({ from: value.from, to: value.to, guests: Number(value.guests) })
+  }
 
   const handleSubmit = (e?: FormEvent) => {
     e?.preventDefault()
@@ -60,10 +71,7 @@ export function SearchBar({
       <DateRangeField
         from={from}
         to={to}
-        onChange={(a, b) => {
-          setFrom(a)
-          setTo(b)
-        }}
+        onChange={(a, b) => change({ from: a, to: b })}
         className="flex-1 rounded-xl px-2 py-1.5 md:px-0"
       />
       <div className="hidden h-10 w-px bg-border md:block" />
@@ -71,7 +79,7 @@ export function SearchBar({
         <Users className="size-4 text-primary" />
         <div className="flex-1">
           <div className="text-[11px] tracking-wider text-muted-foreground uppercase">Số khách</div>
-          <Select value={guests} onValueChange={setGuests}>
+          <Select value={guests} onValueChange={(next) => change({ guests: next })}>
             <SelectTrigger className="h-6 border-0 p-0 text-sm font-medium shadow-none focus:ring-0">
               <SelectValue />
             </SelectTrigger>

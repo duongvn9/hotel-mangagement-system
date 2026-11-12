@@ -16,6 +16,7 @@ import {
   authorizeBookingAccess,
   type BookingActor,
 } from '../../common/auth/booking-access.js';
+import { Role } from '../../common/constants/role.enum.js';
 import {
   Booking,
   type BookingDocument,
@@ -67,6 +68,22 @@ export class PaymentsService {
     options: InitiateOptions,
   ) {
     const booking = await this.authorizedBooking(bookingId, actor);
+    // Booking tại quầy vào thẳng CONFIRMED (không có hold): lễ tân thu cọc qua VNPay ngay tại quầy.
+    // `initiate` vẫn từ chối khi cọc đã thu, và thay link cũ nếu còn giao dịch đang chờ.
+    if (
+      booking.status === BookingStatus.Confirmed &&
+      actor.user !== undefined &&
+      actor.user.role !== Role.Customer
+    ) {
+      return withBookingFinancialOperation(this.bookings, bookingId, () =>
+        this.initiate(
+          booking,
+          PaymentPurpose.Deposit,
+          booking.depositAmount,
+          options,
+        ),
+      );
+    }
     if (booking.status !== BookingStatus.PendingDeposit) {
       throw new ConflictException('Booking is not awaiting a deposit');
     }
@@ -137,6 +154,17 @@ export class PaymentsService {
     }
     // Dư nợ lấy từ H7 tại thời điểm khởi tạo, không nhận tổng tiền từ frontend.
     const invoice = await this.invoices.recalculate(bookingId);
+    // Lễ tân thu hộ tại quầy chỉ sau khi khách xác nhận các khoản phí; khách tự thanh toán thì không cần.
+    if (
+      booking.status === BookingStatus.CheckedIn &&
+      actor.user !== undefined &&
+      actor.user.role !== Role.Customer &&
+      !booking.checkoutFeesConfirmedAt
+    ) {
+      throw new ConflictException(
+        'The guest has not confirmed the fees yet; record the confirmation first',
+      );
+    }
     return this.initiate(
       booking,
       PaymentPurpose.Final,
@@ -170,16 +198,19 @@ export class PaymentsService {
     ) {
       throw new ConflictException('This payment has already been settled');
     }
-    if (
-      await this.payments.exists({
+    // Khách rời trang VNPay rồi bấm thanh toán lại: thay link cũ thay vì chặn. Link cũ không
+    // huỷ được phía VNPay, nên nếu vẫn được trả thì IPN đưa khoản đó vào hàng đợi đối soát.
+    await this.payments.updateMany(
+      {
         booking: booking._id,
         purpose,
         status: PaymentStatus.Pending,
         isActive: true,
-      })
-    ) {
-      throw new ConflictException('A pending payment already exists');
-    }
+      },
+      {
+        $set: { status: PaymentStatus.Cancelled, supersededAt: new Date() },
+      },
+    );
 
     await this.payments.collection.createIndex(
       { booking: 1, purpose: 1 },
@@ -231,6 +262,8 @@ export class PaymentsService {
         // Trả bookingId từ server để trang Return đọc lại trạng thái booking mà không
         // cần localStorage (dùng được khi khách thanh toán trên thiết bị khác).
         bookingId: expected.booking.id,
+        // Đặt cọc hay thanh toán phần còn lại, để trang Return hiện đúng thông báo.
+        purpose: expected.payment.purpose,
       };
     } catch (error) {
       if (error instanceof VnpayValidationError) {
@@ -262,6 +295,17 @@ export class PaymentsService {
       }
       if (plan.action === 'review') {
         return { RspCode: '99', Message: 'Unknown error' };
+      }
+      if (plan.action === 'superseded') {
+        const outcome =
+          plan.result.status === PaymentStatus.Success
+            ? await this.settlement.recordSupersededSuccess(plan.result)
+            : 'duplicate';
+        return outcome === 'committed'
+          ? { RspCode: '00', Message: 'Confirm Success' }
+          : outcome === 'duplicate'
+            ? { RspCode: '02', Message: 'Order already confirmed' }
+            : { RspCode: '99', Message: 'Unknown error' };
       }
       const outcome = await this.settlement.commitAtomically(expected, plan);
       return outcome === 'committed'

@@ -17,6 +17,7 @@ export enum PaymentPurpose {
 export enum PaymentMethod {
   Vnpay = 'VNPAY',
   Cash = 'CASH',
+  Card = 'CARD',
 }
 
 export type PaymentTransactionDocument = HydratedDocument<PaymentTransaction>;
@@ -61,6 +62,13 @@ export class PaymentTransaction {
    */
   @Prop({ default: false })
   needsReconciliation: boolean;
+
+  /**
+   * Khách bấm thanh toán lại khi link cũ còn PENDING: link cũ chuyển CANCELLED và gắn mốc này.
+   * Nếu link cũ vẫn được trả, IPN ghi nhận khoản đó để đối soát, không cộng vào hoá đơn.
+   */
+  @Prop()
+  supersededAt?: Date;
 
   /** Ai đã đối soát khoản tiền về muộn (Manager); gắn khi tắt cờ needsReconciliation. */
   @Prop({ type: Types.ObjectId, ref: 'User' })

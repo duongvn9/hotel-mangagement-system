@@ -82,7 +82,14 @@ describe('Report issue HTTP', () => {
           useValue: { issueTaskHistory: async () => [] },
         },
         { provide: getModelToken(Role.name), useValue: {} },
-        { provide: IssueContextAdapter, useValue: { resolve, reportContext } },
+        {
+          provide: IssueContextAdapter,
+          useValue: {
+            resolve,
+            reportContext,
+            roomNumbers: vi.fn(async () => new Map([[String(room), '101']])),
+          },
+        },
         {
           provide: getModelToken(Issue.name),
           useValue: { create, find, findOne, countDocuments },
@@ -94,6 +101,7 @@ describe('Report issue HTTP', () => {
         {
           provide: getModelToken(User.name),
           useValue: {
+            find: () => chain([]),
             findOne: vi
               .fn()
               .mockImplementation(
@@ -172,6 +180,9 @@ describe('Report issue HTTP', () => {
           reportedAt: '2026-10-01T00:00:00.000Z',
           bookingId: String(booking),
           roomId: String(room),
+          roomNumber: '101',
+          bookingCode: null,
+          roomNumbers: [],
         },
       ],
       total: 1,
@@ -193,7 +204,11 @@ describe('Report issue HTTP', () => {
     async (role) => {
       await get('', role).expect(200);
       await get(`/${issueId}`, role).expect(200);
-      expect(findBookings).not.toHaveBeenCalled();
+      expect(findBookings).toHaveBeenCalledWith({ _id: { $in: [booking] } });
+      expect(findBookings).not.toHaveBeenCalledWith({
+        customer: owner,
+        isActive: true,
+      });
       expect(find).toHaveBeenCalledWith({});
     },
   );

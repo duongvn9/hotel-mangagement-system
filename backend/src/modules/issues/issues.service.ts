@@ -52,6 +52,15 @@ export interface IssueResponse {
 
 export interface IssueRead extends Omit<IssueResponse, 'reportedAt'> {
   reportedAt: string;
+  roomNumber?: string | null;
+  bookingCode?: string | null;
+  roomNumbers?: string[];
+  reporterId?: string;
+  reporterName?: string | null;
+  reviewedByName?: string | null;
+  assigneeName?: string | null;
+  assignmentRequestedByName?: string | null;
+  closedByName?: string | null;
   closedAt?: string;
   closedBy?: string;
   closureConclusion?: string;
@@ -76,7 +85,20 @@ export interface IssuesPage {
   limit: number;
 }
 
+export interface CustomerIssueHistoryEvent {
+  type:
+    | 'REPORTED'
+    | 'REVIEWED'
+    | 'ASSIGNED'
+    | 'TASK_COMPLETED'
+    | 'CONTINUED'
+    | 'REASSIGNED'
+    | 'CLOSED';
+  at: string;
+}
+
 export interface IssueDetail extends IssueRead {
+  customerHistory?: CustomerIssueHistoryEvent[];
   linkedTasks: {
     id: string;
     title: string;
@@ -84,6 +106,7 @@ export interface IssueDetail extends IssueRead {
     priority: string;
     status: string;
     assigneeId: string;
+    assigneeName: string | null;
     assignedAt: string;
     dueAt?: string;
     completedAt?: string;
@@ -116,6 +139,7 @@ export class IssuesService {
     closedBy: 1,
     closureConclusion: 1,
     booking: 1,
+    reporter: 1,
     room: 1,
     serviceOrder: 1,
     sourceTask: 1,
@@ -197,6 +221,11 @@ export class IssuesService {
         .lean(),
       this.issues.countDocuments(filter),
     ]);
+    const roomIds = items.flatMap((issue) => (issue.room ? [issue.room] : []));
+    const roomNumbers = roomIds.length
+      ? await this.contexts.roomNumbers(roomIds)
+      : new Map<string, string>();
+    const display = await this.displayContext(items, user);
     return {
       items: await Promise.all(
         items.map(async (issue) => {
@@ -207,10 +236,14 @@ export class IssuesService {
                   String(issue.linkedTask),
                 )
               : null;
-          return this.readResponse(
-            task ? { ...issue, assignmentDueAt: task.dueAt } : issue,
-            user,
-          );
+          return {
+            ...this.readResponse(
+              task ? { ...issue, assignmentDueAt: task.dueAt } : issue,
+              user,
+            ),
+            ...display(issue),
+            roomNumber: roomNumbers.get(String(issue.room)) ?? null,
+          };
         }),
       ),
       total,
@@ -229,16 +262,27 @@ export class IssuesService {
       .select(this.readProjection)
       .lean();
     if (!issue) throw new NotFoundException('Issue not found');
+    const roomNumbers = issue.room
+      ? await this.contexts.roomNumbers([issue.room])
+      : new Map<string, string>();
     const staff = user.role !== Role.Customer;
     const task =
       staff && issue.linkedTask
         ? await this.tasks.issueTask(id, String(issue.linkedTask))
         : null;
+    const history = staff ? await this.tasks.issueTaskHistory(id) : [];
+    const display = await this.displayContext([issue], user);
+    const names = staff
+      ? await this.actorNames([issue, task, ...history])
+      : new Map<string, string>();
     return {
       ...this.readResponse(
         task ? { ...issue, assignmentDueAt: task.dueAt } : issue,
         user,
       ),
+      ...display(issue),
+      ...(staff ? this.staffNames(issue, names) : {}),
+      roomNumber: roomNumbers.get(String(issue.room)) ?? null,
       linkedTasks:
         task && String(task._id) === String(issue.linkedTask)
           ? [
@@ -249,6 +293,7 @@ export class IssuesService {
                 priority: task.priority,
                 status: task.status,
                 assigneeId: String(task.assignedTo),
+                assigneeName: names.get(String(task.assignedTo)) ?? null,
                 assignedAt: task.assignedAt.toISOString(),
                 ...(task.dueAt ? { dueAt: task.dueAt.toISOString() } : {}),
                 ...(task.completedAt
@@ -260,36 +305,220 @@ export class IssuesService {
       linkedTasksAvailable: staff && Boolean(issue.linkedTask),
       ...(staff
         ? {
-            resolutionTasks: (await this.tasks.issueTaskHistory(id)).map(
-              (entry) => ({
-                id: String(entry._id),
-                title: entry.title,
-                taskType: entry.taskType,
-                priority: entry.priority,
-                status: entry.status,
-                assigneeId: String(entry.assignedTo),
-                assignedAt: entry.assignedAt.toISOString(),
-                dueAt: entry.dueAt?.toISOString(),
-                completedAt: entry.completedAt?.toISOString(),
-                workResult: entry.workResult,
-                blocked: entry.blocked === true,
-                overdue:
-                  [TaskStatus.Assigned, TaskStatus.InProgress].includes(
-                    entry.status,
-                  ) &&
-                  !!entry.dueAt &&
-                  entry.dueAt.getTime() < Date.now(),
-                blockerHistory: entry.blockerHistory ?? [],
-                instructions: entry.instructions,
-                continuationHistory: entry.continuationHistory ?? [],
-                cancellation: entry.cancellation,
-              }),
+            resolutionTasks: history.map((entry) => ({
+              id: String(entry._id),
+              title: entry.title,
+              taskType: entry.taskType,
+              priority: entry.priority,
+              status: entry.status,
+              assigneeId: String(entry.assignedTo),
+              assigneeName: names.get(String(entry.assignedTo)) ?? null,
+              assignedAt: entry.assignedAt.toISOString(),
+              dueAt: entry.dueAt?.toISOString(),
+              completedAt: entry.completedAt?.toISOString(),
+              workResult: entry.workResult,
+              blocked: entry.blocked === true,
+              overdue:
+                [TaskStatus.Assigned, TaskStatus.InProgress].includes(
+                  entry.status,
+                ) &&
+                !!entry.dueAt &&
+                entry.dueAt.getTime() < Date.now(),
+              blockerHistory: (entry.blockerHistory ?? []).map((report) => ({
+                ...report,
+                reportedByName: names.get(String(report.reportedBy)) ?? null,
+                resolvedByName: names.get(String(report.resolvedBy)) ?? null,
+              })),
+              instructions: entry.instructions,
+              continuationHistory: (entry.continuationHistory ?? []).map(
+                (event) => ({
+                  ...event,
+                  actorName: names.get(String(event.actorId)) ?? null,
+                }),
+              ),
+              cancellation: entry.cancellation
+                ? {
+                    ...entry.cancellation,
+                    actorName:
+                      names.get(String(entry.cancellation.actorId)) ?? null,
+                    recoveryActorName:
+                      names.get(String(entry.cancellation.recoveryActorId)) ??
+                      null,
+                  }
+                : undefined,
+            })),
+            pendingReassignment: issue.pendingReassignment
+              ? this.reassignmentNames(issue.pendingReassignment, names)
+              : undefined,
+            reassignmentHistory: (issue.reassignmentHistory ?? []).map(
+              (event) => this.reassignmentNames(event, names),
             ),
-            pendingReassignment: issue.pendingReassignment,
-            reassignmentHistory: issue.reassignmentHistory ?? [],
           }
-        : {}),
+        : { customerHistory: await this.customerHistory(issue) }),
     };
+  }
+
+  private async actorNames(values: unknown[]): Promise<Map<string, string>> {
+    const ids = new Set<string>();
+    const keys = new Set([
+      'reporter',
+      'reviewedBy',
+      'closedBy',
+      'assignmentAssignee',
+      'assignmentRequestedBy',
+      'assignedTo',
+      'reportedBy',
+      'resolvedBy',
+      'actorId',
+      'recoveryActorId',
+      'assigneeId',
+      'recoveryActors',
+    ]);
+    const visit = (value: unknown, actor = false) => {
+      if (actor && /^[a-fA-F0-9]{24}$/.test(String(value)))
+        ids.add(String(value));
+      else if (Array.isArray(value))
+        value.forEach((item) => visit(item, actor));
+      else if (
+        value &&
+        typeof value === 'object' &&
+        !(value instanceof Types.ObjectId) &&
+        !(value instanceof Date)
+      )
+        Object.entries(value).forEach(([key, item]) =>
+          visit(item, keys.has(key)),
+        );
+    };
+    values.forEach((value) => visit(value));
+    if (!ids.size) return new Map();
+    const users = await this.users
+      .find({ _id: { $in: [...ids].map((id) => new Types.ObjectId(id)) } })
+      .select({ _id: 1, fullName: 1 })
+      .lean();
+    return new Map(users.map((user) => [String(user._id), user.fullName]));
+  }
+
+  private staffNames(issue: Issue, names: Map<string, string>) {
+    return {
+      ...(issue.reporter ? { reporterId: String(issue.reporter) } : {}),
+      reporterName: names.get(String(issue.reporter)) ?? null,
+      reviewedByName: names.get(String(issue.reviewedBy)) ?? null,
+      assigneeName: names.get(String(issue.assignmentAssignee)) ?? null,
+      assignmentRequestedByName:
+        names.get(String(issue.assignmentRequestedBy)) ?? null,
+      closedByName: names.get(String(issue.closedBy)) ?? null,
+    };
+  }
+
+  private reassignmentNames<T extends ReassignmentIntent>(
+    event: T,
+    names: Map<string, string>,
+  ) {
+    return {
+      ...event,
+      actorName: names.get(String(event.actorId)) ?? null,
+      assigneeName: names.get(String(event.assigneeId)) ?? null,
+      recoveryActorNames: (event.recoveryActors ?? []).map(
+        (id) => names.get(String(id)) ?? null,
+      ),
+    };
+  }
+
+  private async displayContext(issues: Issue[], user: AuthUser) {
+    const ids = [...new Set(issues.map((issue) => String(issue.booking)))].map(
+      (id) => new Types.ObjectId(id),
+    );
+    const bookings = ids.length
+      ? await this.bookings
+          .find({ _id: { $in: ids } })
+          .select({ _id: 1, code: 1, rooms: 1 })
+          .lean()
+      : [];
+    const rooms = bookings.flatMap((booking) => booking.rooms ?? []);
+    const numbers = rooms.length
+      ? await this.contexts.roomNumbers(rooms)
+      : new Map<string, string>();
+    const names =
+      user.role !== Role.Customer
+        ? await this.actorNames(issues)
+        : new Map<string, string>();
+    return (issue: Issue) => {
+      const booking = bookings.find(
+        (entry) => String(entry._id) === String(issue.booking),
+      );
+      return {
+        bookingCode: booking?.code ?? null,
+        roomNumbers: (booking?.rooms ?? []).flatMap((id) =>
+          numbers.has(String(id)) ? [numbers.get(String(id))!] : [],
+        ),
+        ...(user.role !== Role.Customer ? this.staffNames(issue, names) : {}),
+      };
+    };
+  }
+
+  private async customerHistory(
+    issue: Issue & { _id: Types.ObjectId },
+  ): Promise<CustomerIssueHistoryEvent[]> {
+    const events: CustomerIssueHistoryEvent[] = [];
+    const validDate = (value: unknown): value is Date | string =>
+      (value instanceof Date || typeof value === 'string') &&
+      Number.isFinite(new Date(value).getTime());
+    const add = (
+      type: CustomerIssueHistoryEvent['type'],
+      value: Date | string | undefined,
+    ) => {
+      if (validDate(value))
+        events.push({ type, at: new Date(value).toISOString() });
+    };
+    add('REPORTED', issue.reportedAt);
+    add('REVIEWED', issue.reviewedAt);
+    const reassignments = (
+      Array.isArray(issue.reassignmentHistory) ? issue.reassignmentHistory : []
+    ).filter(
+      (entry) =>
+        entry !== null &&
+        typeof entry === 'object' &&
+        !Array.isArray(entry) &&
+        typeof entry.taskId === 'string' &&
+        /^[a-fA-F0-9]{24}$/.test(entry.taskId) &&
+        typeof entry.targetTaskId === 'string' &&
+        /^[a-fA-F0-9]{24}$/.test(entry.targetTaskId) &&
+        validDate(entry.completedAt),
+    );
+    const finalizedTasks = new Set(
+      reassignments.flatMap((entry) => [entry.taskId, entry.targetTaskId]),
+    );
+    if (issue.linkedTask) finalizedTasks.add(String(issue.linkedTask));
+    const replacementTasks = new Set(
+      reassignments.map((entry) => entry.targetTaskId),
+    );
+    const history = issue.linkedTask
+      ? await this.tasks.issueTaskHistory(String(issue._id))
+      : [];
+    for (const task of history) {
+      if (!finalizedTasks.has(String(task._id))) continue;
+      if (!replacementTasks.has(String(task._id)))
+        add('ASSIGNED', task.assignedAt);
+      for (const continuation of Array.isArray(task.continuationHistory)
+        ? task.continuationHistory
+        : [])
+        if (
+          continuation !== null &&
+          typeof continuation === 'object' &&
+          !Array.isArray(continuation)
+        )
+          add('CONTINUED', continuation.at);
+      if (task.status === TaskStatus.Completed)
+        add('TASK_COMPLETED', task.completedAt);
+    }
+    if (
+      !replacementTasks.has(String(issue.linkedTask)) &&
+      !events.some((event) => event.type === 'ASSIGNED')
+    )
+      add('ASSIGNED', issue.assignedAt);
+    for (const entry of reassignments) add('REASSIGNED', entry.completedAt);
+    add('CLOSED', issue.closedAt);
+    return events.sort((left, right) => left.at.localeCompare(right.at));
   }
 
   private readResponse(
@@ -474,6 +703,8 @@ export class IssuesService {
       issue.status === IssueStatus.Reviewed &&
       issue.needsStaffAction === true
     ) {
+      if (dueAt && dueAt.getTime() <= Date.now())
+        throw new BadRequestException('Deadline must be in the future');
       const staff = await this.users
         .findOne({
           _id: new Types.ObjectId(dto.assigneeId),
@@ -643,6 +874,11 @@ export class IssuesService {
     if (issue.status !== IssueStatus.Assigned)
       throw new ConflictException('Issue is not assigned');
     if (!issue.pendingReassignment) {
+      if (
+        dto.dueAt !== undefined &&
+        new Date(dto.dueAt).getTime() <= Date.now()
+      )
+        throw new BadRequestException('Deadline must be in the future');
       if (String(issue.linkedTask) !== dto.taskId)
         throw new ConflictException('Not the current assignment');
       const task = await this.tasks.issueTask(id, dto.taskId);

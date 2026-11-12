@@ -124,6 +124,38 @@ describe('Issue resolution reassignment recovery', () => {
     tasks as unknown as TasksService,
   );
 
+  it.each([-86400000, -60000, 0])(
+    'rejects new reassignment deadline offset %s',
+    async (offset) => {
+      await expect(
+        service.reassign(
+          id,
+          { ...input, dueAt: new Date(Date.now() + offset).toISOString() },
+          actor,
+        ),
+      ).rejects.toThrow('future');
+      expect(tasks.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('replays pending and completed reassignment after deadline expiry', async () => {
+    const now = Date.now();
+    const supplied = { ...input, dueAt: new Date(now + 60000).toISOString() };
+    failCreate = true;
+    await expect(service.reassign(id, supplied, actor)).rejects.toThrow(
+      'create failed',
+    );
+    vi.spyOn(Date, 'now').mockReturnValue(now + 120000);
+    failCreate = false;
+    try {
+      await service.reassign(id, supplied, actor);
+      await service.reassign(id, supplied, actor);
+      expect(issue.reassignmentHistory[0].dueAt).toBe(supplied.dueAt);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     issue = {
@@ -395,6 +427,32 @@ describe('Issue resolution reassignment recovery', () => {
     expect(model.findOneAndUpdate).not.toHaveBeenCalled();
     expect(tasks.cancelIssueTask).not.toHaveBeenCalled();
   });
+
+  it.each([false, true])(
+    'rejects forged same-assignee Reassign without any state changes (uppercase: %s)',
+    async (uppercase) => {
+      const beforeIssue = structuredClone(issue);
+      const beforeTasks = structuredClone([...records.entries()]);
+      await expect(
+        service.reassign(
+          id,
+          {
+            ...input,
+            assigneeId: uppercase ? oldStaff.toUpperCase() : oldStaff,
+          },
+          actor,
+        ),
+      ).rejects.toThrow('different assignee');
+      expect(issue).toEqual(beforeIssue);
+      expect([...records.entries()]).toEqual(beforeTasks);
+      expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(model.updateOne).not.toHaveBeenCalled();
+      expect(users.findOne).not.toHaveBeenCalled();
+      expect(tasks.cancelIssueTask).not.toHaveBeenCalled();
+      expect(tasks.create).not.toHaveBeenCalled();
+      expect(tasks.fenceUnusedIssueTarget).not.toHaveBeenCalled();
+    },
+  );
 
   it('refuses uppercase original assignee during inactive-target recovery', async () => {
     failCreate = true;

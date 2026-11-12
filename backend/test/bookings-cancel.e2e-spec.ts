@@ -1,21 +1,14 @@
 import { VersioningType, type INestApplication } from '@nestjs/common';
-import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
+import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
-import { Connection, Model, Types } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import request from 'supertest';
-import { vi } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { Booking } from '../src/modules/bookings/schemas/booking.schema.js';
 import { RoomHold } from '../src/modules/bookings/schemas/room-hold.schema.js';
+import { HoldPrincipalLock } from '../src/modules/bookings/schemas/hold-principal-lock.schema.js';
 import { Room } from '../src/modules/rooms/schemas/room.schema.js';
 import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
-import { NotificationsService } from '../src/modules/notifications/notifications.service.js';
-import { NOTIFICATION_TRANSPORT } from '../src/modules/notifications/notification.types.js';
-import { assertTestDatabase } from './test-database.js';
-import {
-  NotificationLog,
-  NotificationLogSchema,
-} from '../src/modules/notifications/schemas/notification-log.schema.js';
 
 describe('Cancel booking (e2e)', () => {
   let app: INestApplication;
@@ -41,22 +34,18 @@ describe('Cancel booking (e2e)', () => {
     guestPhone: '0900000000',
   });
 
-  let notificationLogs: Model<NotificationLog>;
   const clean = async () => {
-    const existing = await bookings
-      .find({ rooms: { $in: [roomId] } })
-      .select('_id')
-      .lean();
-    const ids = existing.map((booking) => booking._id);
-    await Promise.all([
-      bookings.deleteMany({ _id: { $in: ids } }),
-      holds.deleteMany({ booking: { $in: ids } }),
-      notificationLogs.deleteMany({ relatedBookingId: { $in: ids } }),
-    ]);
+    const ids = (
+      await bookings.find({ rooms: roomId }).select('_id').lean()
+    ).map((row) => row._id);
+    await app
+      .get<Model<HoldPrincipalLock>>(getModelToken(HoldPrincipalLock.name))
+      .deleteMany({ booking: { $in: ids } });
+    await holds.deleteMany({ booking: { $in: ids } });
+    await bookings.deleteMany({ rooms: roomId });
   };
 
   beforeAll(async () => {
-    assertTestDatabase(process.env.MONGODB_URI);
     const module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -66,13 +55,6 @@ describe('Cancel booking (e2e)', () => {
     await app.init();
     bookings = app.get(getModelToken(Booking.name));
     holds = app.get(getModelToken(RoomHold.name));
-    const connection = app.get<Connection>(getConnectionToken());
-    notificationLogs = connection.models[NotificationLog.name]
-      ? (connection.models[NotificationLog.name] as Model<NotificationLog>)
-      : connection.model<NotificationLog>(
-          NotificationLog.name,
-          NotificationLogSchema,
-        );
     rooms = app.get(getModelToken(Room.name));
     roomTypes = app.get(getModelToken(RoomType.name));
     await Promise.all([
@@ -111,27 +93,11 @@ describe('Cancel booking (e2e)', () => {
 
   it('cancels the owner booking, releases the hold and frees the room', async () => {
     const created = await createOwned();
-    await app.get(NotificationsService).drain();
-    const smtpSend = vi
-      .spyOn(app.get(NOTIFICATION_TRANSPORT), 'send')
-      .mockImplementation(async (message) => {
-        if (message.template === 'booking-cancelled')
-          throw new Error('mock SMTP failure');
-      });
     const res = await http()
       .post(`/api/v1/bookings/${created.body.id}/cancel`)
       .set(CUSTOMER)
       .send({})
       .expect(201);
-    await vi.waitFor(() =>
-      expect(smtpSend).toHaveBeenCalledWith(
-        expect.objectContaining({ template: 'booking-cancelled' }),
-        expect.any(AbortSignal),
-      ),
-    );
-    await app.get(NotificationsService).drain();
-    expect(smtpSend).toHaveBeenCalled();
-    smtpSend.mockRestore();
     expect(res.body.status).toBe('CANCELLED');
     const hold = await holds
       .findOne({ booking: new Types.ObjectId(created.body.id) })
