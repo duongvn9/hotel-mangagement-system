@@ -52,12 +52,6 @@ jobs:
           --tmpfs /data/configdb
           --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1})'"
           --health-interval 10s --health-timeout 5s --health-retries 5
-    env:
-      MONGODB_URI: mongodb://127.0.0.1:${{ job.services.mongo.ports['27017'] }}/hms_ci_test
-      HMS_TEST_URI: mongodb://127.0.0.1:${{ job.services.mongo.ports['27017'] }}/hms_ci_test
-      HMS_TEST_HARNESS: github-service
-      HMS_TEST_SERVICE_ID: ${{ job.services.mongo.id }}
-      HMS_TEST_SERVICE_PORT: ${{ job.services.mongo.ports['27017'] }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -71,6 +65,12 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:e2e
+        env:
+          MONGODB_URI: mongodb://127.0.0.1:${{ job.services.mongo.ports['27017'] }}/hms_ci_test
+          HMS_TEST_URI: mongodb://127.0.0.1:${{ job.services.mongo.ports['27017'] }}/hms_ci_test
+          HMS_TEST_HARNESS: github-service
+          HMS_TEST_SERVICE_ID: ${{ job.services.mongo.id }}
+          HMS_TEST_SERVICE_PORT: ${{ job.services.mongo.ports['27017'] }}
       - run: npm run build
 
   frontend:

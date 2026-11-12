@@ -57,6 +57,33 @@ const evidence = () => [
 ];
 
 describe('standalone smoke admission', () => {
+  it('scopes service-derived ownership environment to the backend E2E step', () => {
+    const workflow = readFileSync(
+      new URL('../../.github/workflows/ci.yml', import.meta.url),
+      'utf8',
+    );
+    const backend = workflow.split('  backend:\n')[1].split('  frontend:\n')[0];
+    const [job, steps] = backend.split('    steps:\n');
+    expect(job).not.toContain('job.services');
+    const e2e = steps
+      .split('      - run: npm run test:e2e\n')[1]
+      ?.split('      - ')[0];
+    expect(e2e).toBeDefined();
+    expect(e2e).toContain('        env:\n');
+    for (const key of [
+      'MONGODB_URI',
+      'HMS_TEST_URI',
+      'HMS_TEST_HARNESS',
+      'HMS_TEST_SERVICE_ID',
+      'HMS_TEST_SERVICE_PORT',
+    ])
+      expect(e2e).toContain(`          ${key}:`);
+    expect(e2e).toContain("${{ job.services.mongo.ports['27017'] }}");
+    expect(e2e).toContain('${{ job.services.mongo.id }}');
+    expect(
+      steps.split('      - run: npm test\n')[1].split('      - ')[0].trim(),
+    ).toBe('');
+  });
   it('accepts the fresh exact Mongo and API pair', () =>
     expect(() => assertSmokeEvidence(env, evidence())).not.toThrow());
   it.each([
