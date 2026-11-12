@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { Alert, FormField } from '@/components/molecules'
-import { Button, Input, Label, Textarea } from '@/components/atoms'
+import { Button, Input, Label, NativeSelect, Textarea } from '@/components/atoms'
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,7 @@ import { assetUrl } from '@/lib/asset-url'
 import {
   createRoomType,
   getAmenityOptions,
+  getBedTypeOptions,
   getRoomType,
   updateRoomType,
   uploadRoomTypeImage,
@@ -118,6 +119,7 @@ export function RoomTypeForm({
   const locked = useRef(false)
   const client = useQueryClient()
   const options = useQuery({ queryKey: ['amenity-options'], queryFn: getAmenityOptions })
+  const bedOptions = useQuery({ queryKey: ['bed-type-options'], queryFn: getBedTypeOptions })
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [adultCapacity, setAdultCapacity] = useState(String(initial?.adultCapacity ?? ''))
@@ -126,6 +128,9 @@ export function RoomTypeForm({
     initial ? new Intl.NumberFormat('vi-VN').format(initial.basePrice) : '',
   )
   const [selected, setSelected] = useState(initial?.amenities.map((a) => a.id) ?? [])
+  const [beds, setBeds] = useState<{ bedTypeId: string; quantity: number }[]>(
+    initial?.beds.map((bed) => ({ bedTypeId: bed.bedTypeId, quantity: bed.quantity })) ?? [],
+  )
   const [active, setActive] = useState(initial?.isActive ?? true)
   const [images, setImages] = useState<string[]>(initial?.images ?? [])
   const [files, setFiles] = useState<File[]>([])
@@ -170,6 +175,7 @@ export function RoomTypeForm({
       if (axios.isAxiosError(error) && error.response?.status === 409 && /tên/i.test(message))
         setErrors({ name: message })
       else if (/amenit|tiện nghi/i.test(message)) setErrors({ amenities: message })
+      else if (/giường/i.test(message)) setErrors({ beds: message })
       else {
         const raw = axios.isAxiosError(error) ? error.response?.data?.message : undefined
         const messages: string[] = Array.isArray(raw) ? raw : [message]
@@ -219,6 +225,15 @@ export function RoomTypeForm({
       next.childCapacity = 'Số trẻ em phải là số nguyên từ 0.'
     if (!/^\d{1,3}(\.\d{3})*$|^\d+$/.test(price) || !Number.isSafeInteger(amount) || amount <= 0)
       next.basePrice = 'Giá phải là số nguyên VND lớn hơn 0.'
+    if (beds.some((bed) => !bed.bedTypeId)) next.beds = 'Chọn loại giường cho mỗi dòng đã thêm.'
+    else if (
+      beds.some(
+        (bed) => !Number.isSafeInteger(bed.quantity) || bed.quantity < 1 || bed.quantity > 20,
+      )
+    )
+      next.beds = 'Số lượng mỗi loại giường phải từ 1 đến 20.'
+    else if (new Set(beds.map((bed) => bed.bedTypeId)).size !== beds.length)
+      next.beds = 'Mỗi loại giường chỉ chọn một lần.'
     setErrors(next)
     if (Object.keys(next).length) {
       focusError()
@@ -237,6 +252,7 @@ export function RoomTypeForm({
       childCapacity: Number(childCapacity),
       basePrice: amount,
       amenities: selected,
+      beds,
       isActive,
     }
     const changes: Partial<RoomTypeInput> = initial
@@ -247,7 +263,12 @@ export function RoomTypeForm({
               JSON.stringify(
                 key === 'amenities'
                   ? initial.amenities.map((a) => a.id)
-                  : initial[key as keyof RoomType],
+                  : key === 'beds'
+                    ? initial.beds.map((bed) => ({
+                        bedTypeId: bed.bedTypeId,
+                        quantity: bed.quantity,
+                      }))
+                    : initial[key as keyof RoomType],
               ),
           ),
         )
@@ -266,6 +287,26 @@ export function RoomTypeForm({
       (a) => ({ ...a, name: a.isActive === false ? `${a.name} (ngừng)` : a.name }),
     ),
   ]
+  // Active bed types, plus any already-attached type that has since been deactivated.
+  const bedList = Array.isArray(bedOptions.data) ? bedOptions.data : []
+  const bedChoices = [
+    ...bedList,
+    ...(initial?.beds ?? [])
+      .filter((bed) => !bedList.some((option) => option.id === bed.bedTypeId))
+      .map((bed) => ({ id: bed.bedTypeId, name: `${bed.bedTypeName} (ngừng)` })),
+  ]
+  const usedBedIds = new Set(beds.map((bed) => bed.bedTypeId))
+  const addableBed = bedChoices.find((choice) => !usedBedIds.has(choice.id))
+  const addBed = () => {
+    if (addableBed) setBeds((previous) => [...previous, { bedTypeId: addableBed.id, quantity: 1 }])
+  }
+  const removeBed = (index: number) => setBeds((previous) => previous.filter((_, i) => i !== index))
+  const changeBedType = (index: number, bedTypeId: string) =>
+    setBeds((previous) => previous.map((bed, i) => (i === index ? { ...bed, bedTypeId } : bed)))
+  const changeBedQty = (index: number, value: string) =>
+    setBeds((previous) =>
+      previous.map((bed, i) => (i === index ? { ...bed, quantity: Number(value) } : bed)),
+    )
   return (
     <form
       ref={form}
@@ -522,6 +563,90 @@ export function RoomTypeForm({
           {errors.amenities && (
             <p id="amenities-error" className="text-sm text-danger">
               {errors.amenities}
+            </p>
+          )}
+        </fieldset>
+        <fieldset
+          tabIndex={-1}
+          aria-invalid={errors.beds ? true : undefined}
+          aria-describedby={errors.beds ? 'beds-error' : undefined}
+          className="min-w-0 space-y-3 rounded-xl border border-border p-4"
+        >
+          <legend className="text-sm font-semibold">Cấu hình giường</legend>
+          {bedOptions.isPending && <p role="status">Đang tải loại giường…</p>}
+          {bedOptions.isError && (
+            <>
+              <Alert tone="danger">{getErrorMessage(bedOptions.error)}</Alert>
+              <Button
+                type="button"
+                disabled={bedOptions.isFetching}
+                onClick={() => void bedOptions.refetch()}
+              >
+                Thử lại loại giường
+              </Button>
+            </>
+          )}
+          {beds.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              Chưa thêm giường nào cho loại phòng này.
+            </p>
+          )}
+          {beds.map((bed, index) => {
+            const taken = new Set(
+              beds.filter((_, i) => i !== index).map((other) => other.bedTypeId),
+            )
+            return (
+              <div key={index} className="flex flex-wrap items-end gap-3">
+                <div className="min-w-40 flex-1">
+                  <Label htmlFor={`room-type-bed-${index}`} className="text-sm">
+                    Loại giường
+                  </Label>
+                  <NativeSelect
+                    id={`room-type-bed-${index}`}
+                    value={bed.bedTypeId}
+                    onChange={(event) => changeBedType(index, event.target.value)}
+                  >
+                    <option value="">— Chọn loại giường —</option>
+                    {bedChoices
+                      .filter((choice) => choice.id === bed.bedTypeId || !taken.has(choice.id))
+                      .map((choice) => (
+                        <option key={choice.id} value={choice.id}>
+                          {choice.name}
+                        </option>
+                      ))}
+                  </NativeSelect>
+                </div>
+                <div className="w-24">
+                  <Label htmlFor={`room-type-bed-qty-${index}`} className="text-sm">
+                    Số lượng
+                  </Label>
+                  <Input
+                    id={`room-type-bed-qty-${index}`}
+                    type="number"
+                    min={1}
+                    max={20}
+                    step={1}
+                    value={bed.quantity}
+                    onChange={(event) => changeBedQty(index, event.target.value)}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label={`Bỏ giường ${index + 1}`}
+                  onClick={() => removeBed(index)}
+                >
+                  Bỏ
+                </Button>
+              </div>
+            )
+          })}
+          <Button type="button" variant="outline" disabled={!addableBed} onClick={addBed}>
+            Thêm giường
+          </Button>
+          {errors.beds && (
+            <p id="beds-error" role="alert" className="text-sm text-danger">
+              {errors.beds}
             </p>
           )}
         </fieldset>

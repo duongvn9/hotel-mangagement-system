@@ -35,6 +35,7 @@ import {
   HoldBookingDto,
   HoldResponse,
   SubmitBookingDetailsDto,
+  UpdateHoldRoomsDto,
 } from './dto/hold-booking.dto.js';
 import {
   GuestSession,
@@ -105,6 +106,21 @@ export class BookingsController {
     return this.bookings.submitDetails(dto);
   }
 
+  @Post('hold/rooms')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Adjust the rooms of a held booking in place (ROOM_HELD), re-checking availability',
+  })
+  @ApiOkResponse({ type: HoldResponse })
+  @ApiConflictResponse({
+    description: 'Hold expired, not editable, or rooms unavailable',
+  })
+  updateHoldRooms(@Body() dto: UpdateHoldRoomsDto) {
+    return this.bookings.updateHoldRooms(dto);
+  }
+
   @Post()
   @Public()
   @ApiOperation({
@@ -159,6 +175,16 @@ export class BookingsController {
   @ApiConflictResponse({ description: 'Rooms are unavailable or just taken' })
   createWalkIn(@Body() dto: CreateBookingDto, @CurrentUser() user: AuthUser) {
     return this.bookings.createWalkIn(dto, user);
+  }
+
+  @Get('by-code/:code')
+  @Public()
+  @ApiOperation({
+    summary: 'Resolve a booking id from its booking code (for guest lookup)',
+  })
+  @ApiOkResponse({ description: 'The booking id for this code' })
+  resolveByCode(@Param('code') code: string) {
+    return this.bookings.resolveByCode(code);
   }
 
   @Get(':id')

@@ -50,6 +50,7 @@ import {
 import {
   HoldBookingDto,
   SubmitBookingDetailsDto,
+  UpdateHoldRoomsDto,
 } from './dto/hold-booking.dto.js';
 import type { GuestSessionContext } from './guest-session.decorator.js';
 import {
@@ -944,22 +945,23 @@ export class BookingsService {
     }
     const now = this.clock.now();
 
-    // Một hold/phiên: nếu phiên đang giữ một hold còn hạn thì trả lại chính nó.
+    // Reuse only this principal's hold; a browser session can outlive sign-in changes.
     if (ctx.sessionId) {
-      const existing = await this.holds
-        .findOne({
+      const existingHolds = await this.holds
+        .find({
           sessionId: ctx.sessionId,
           isActive: true,
           expiresAt: { $gt: now },
         })
         .sort({ createdAt: -1 });
-      if (existing) {
+      for (const existing of existingHolds) {
         const current = await this.bookings.findById(existing.booking);
+        if (!current || !this.isHoldPrincipal(current, user)) continue;
         if (
-          current?.isActive &&
+          current.isActive &&
           UNCONFIRMED_BOOKING_STATUSES.includes(current.status)
         ) {
-          return this.holdResponse(current, existing);
+          return await this.holdResponse(current, existing);
         }
         await this.holds.updateOne(
           { _id: existing._id },
@@ -982,8 +984,10 @@ export class BookingsService {
         : BookingSource.Online;
 
     const booking = await this.insertBooking({
-      ...(user?.role === Role.Customer
-        ? { customer: new Types.ObjectId(user.id) }
+      ...(user
+        ? user.role === Role.Customer
+          ? { customer: new Types.ObjectId(user.id) }
+          : { createdBy: new Types.ObjectId(user.id) }
         : {}),
       rooms: roomIds,
       checkIn: stay.checkIn,
@@ -1022,7 +1026,7 @@ export class BookingsService {
         'One or more rooms were just taken; please choose again',
       );
     }
-    return this.holdResponse(booking, hold);
+    return await this.holdResponse(booking, hold);
   }
 
   /**
@@ -1044,7 +1048,7 @@ export class BookingsService {
       throw new ConflictException('Hold has expired; please start again');
     }
     if (booking.status === BookingStatus.PendingDeposit) {
-      return this.holdResponse(booking, hold); // idempotent
+      return await this.holdResponse(booking, hold); // idempotent
     }
     if (booking.status !== BookingStatus.RoomHeld) {
       throw new ConflictException('Booking is not awaiting contact details');
@@ -1069,7 +1073,87 @@ export class BookingsService {
     booking.status = BookingStatus.PendingDeposit;
     await booking.save();
     // Không gửi email ở bước chờ đặt cọc: chỉ gửi khi cọc thành công (settlement).
-    return this.holdResponse(booking, hold);
+    return await this.holdResponse(booking, hold);
+  }
+
+  /**
+   * Chỉnh số lượng/loại phòng của một hold còn hạn (ROOM_HELD), ngay trong trang đặt: kiểm tra
+   * lại phòng trống (trừ chính hold này), tính lại tiền phòng/cọc và cập nhật tại chỗ. KHÔNG tạo
+   * hold mới nên không đụng rate-limit, và KHÔNG gia hạn thời hạn giữ phòng.
+   */
+  async updateHoldRooms(dto: UpdateHoldRoomsDto) {
+    if (new Set(dto.rooms).size !== dto.rooms.length) {
+      throw new BadRequestException('Duplicate rooms in request');
+    }
+    const hold = await this.holds.findOne({ holdToken: dto.holdToken });
+    if (!hold || !hold.isActive) {
+      throw new NotFoundException('Hold not found or no longer active');
+    }
+    const now = this.clock.now();
+    const booking = await this.bookings.findById(hold.booking);
+    if (!booking || !booking.isActive) {
+      throw new NotFoundException('Booking not found');
+    }
+    if (!(hold.expiresAt > now)) {
+      await this.lazyExpire(booking, hold, now);
+      throw new ConflictException('Hold has expired; please start again');
+    }
+    if (booking.status !== BookingStatus.RoomHeld) {
+      throw new ConflictException('Booking is not awaiting room selection');
+    }
+
+    const roomIds = dto.rooms.map((id) => new Types.ObjectId(id));
+    const stay: StayInterval = {
+      checkIn: booking.checkIn,
+      checkOut: booking.checkOut,
+    };
+    const { roomTotal, rates } = await this.priceRooms(
+      roomIds,
+      { adultCount: booking.adultCount, childCount: booking.childCount },
+      stay,
+    );
+    // Phòng mới phải trống, bỏ qua chính hold/booking này (phòng đang giữ không tính là kẹt).
+    if (
+      await this.hasConflict(
+        roomIds,
+        stay,
+        now,
+        hold._id,
+        undefined,
+        booking._id,
+      )
+    ) {
+      throw new ConflictException(
+        'One or more rooms are not available for the selected dates',
+      );
+    }
+
+    hold.rooms = roomIds;
+    await hold.save();
+    booking.rooms = roomIds;
+    booking.roomTotal = roomTotal;
+    booking.depositAmount = Math.round(roomTotal * DEPOSIT_RATE);
+    booking.rateSnapshot = rates;
+    await booking.save();
+    return await this.holdResponse(booking, hold);
+  }
+
+  /**
+   * Tra ObjectId của một booking theo mã booking (vé) khách nhận qua email — để khách vãng lai
+   * mở đơn mà không cần biết ObjectId. Có mã hợp lệ là đủ; quyền đọc/thao tác vẫn kiểm ở bước sau.
+   */
+  async resolveByCode(code: string) {
+    const trimmed = (code ?? '').trim().toUpperCase();
+    if (!/^[A-Z0-9-]{4,40}$/.test(trimmed)) {
+      throw new BadRequestException('Invalid booking code');
+    }
+    const booking = await this.bookings
+      .findOne({ code: trimmed, isActive: true })
+      .select('_id');
+    if (!booking) {
+      throw new NotFoundException('Booking not found for this code');
+    }
+    return { id: String(booking._id) };
   }
 
   /** Đọc authoritative một booking + deadline thật từ server (thay localStorage). */
@@ -1117,6 +1201,20 @@ export class BookingsService {
     return expired;
   }
 
+  private isHoldPrincipal(booking: BookingDocument, user?: AuthUser): boolean {
+    if (user) {
+      const principal =
+        user.role === Role.Customer ? booking.customer : booking.createdBy;
+      return principal?.toString() === user.id;
+    }
+    // Legacy staff holds without createdBy cannot safely be treated as anonymous.
+    return (
+      booking.source === BookingSource.Online &&
+      !booking.customer &&
+      !booking.createdBy
+    );
+  }
+
   private async enforceHoldRate(
     ctx: GuestSessionContext,
     now: Date,
@@ -1132,7 +1230,7 @@ export class BookingsService {
     });
     if (recent >= HOLD_RATE_MAX) {
       throw new HttpException(
-        'Too many booking holds from this session; please wait a few minutes',
+        'Bạn đã đạt giới hạn 3 lượt giữ phòng trong 30 phút cho phiên hoặc địa chỉ mạng này. Vui lòng chờ các lượt giữ phòng cũ ra khỏi khoảng 30 phút rồi thử lại.',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
@@ -1143,7 +1241,12 @@ export class BookingsService {
     hold: RoomHoldDocument | null,
     ctx: { code?: string; user?: AuthUser; sessionId?: string },
   ): void {
-    if (ctx.sessionId && hold?.sessionId && ctx.sessionId === hold.sessionId) {
+    if (
+      ctx.sessionId &&
+      hold?.sessionId &&
+      ctx.sessionId === hold.sessionId &&
+      this.isHoldPrincipal(booking, ctx.user)
+    ) {
       return;
     }
     authorizeBookingAccess(booking, {
@@ -1168,12 +1271,14 @@ export class BookingsService {
     }
   }
 
-  private holdResponse(booking: BookingDocument, hold: RoomHoldDocument) {
+  private async holdResponse(booking: BookingDocument, hold: RoomHoldDocument) {
     return {
       bookingId: String(booking._id),
+      code: booking.code,
       holdToken: hold.holdToken,
       status: booking.status,
       rooms: booking.rooms.map(String),
+      roomTypes: await this.summarizeHeldRoomTypes(booking.rooms),
       checkIn: booking.checkIn.toISOString(),
       checkOut: booking.checkOut.toISOString(),
       adultCount: booking.adultCount,
@@ -1183,6 +1288,47 @@ export class BookingsService {
       depositAmount: booking.depositAmount,
       holdExpiresAt: hold.expiresAt.toISOString(),
     };
+  }
+
+  /**
+   * Gom phòng đang giữ theo loại, kèm id từng phòng và đơn giá — để client dựng bộ chỉnh số
+   * lượng từng loại ngay trong trang đặt (và biết id nào thuộc loại nào khi cập nhật).
+   */
+  private async summarizeHeldRoomTypes(roomIds: Types.ObjectId[]) {
+    const rows = await this.rooms
+      .find({ _id: { $in: roomIds } })
+      .populate<{
+        roomType: {
+          _id: Types.ObjectId;
+          name: string;
+          basePrice: number;
+        } | null;
+      }>('roomType', 'name basePrice')
+      .lean()
+      .exec();
+    const byType = new Map<
+      string,
+      {
+        roomTypeId: string;
+        roomTypeName: string;
+        pricePerNight: number;
+        roomIds: string[];
+      }
+    >();
+    for (const room of rows) {
+      const type = room.roomType;
+      if (!type) continue;
+      const key = String(type._id);
+      const group = byType.get(key) ?? {
+        roomTypeId: key,
+        roomTypeName: type.name,
+        pricePerNight: type.basePrice,
+        roomIds: [],
+      };
+      group.roomIds.push(String(room._id));
+      byType.set(key, group);
+    }
+    return [...byType.values()];
   }
 
   private async readResponse(

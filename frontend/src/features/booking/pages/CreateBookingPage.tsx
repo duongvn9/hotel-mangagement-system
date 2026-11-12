@@ -1,17 +1,36 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router'
-import { Clock } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { Link, useBlocker, useNavigate, useSearchParams } from 'react-router'
+import { Clock, CreditCard, Minus, Plus, XCircle } from 'lucide-react'
 import { AssetImage } from '@/components/AssetImage'
-import { Button, Checkbox, Input } from '@/components/atoms'
+import { Button, Checkbox, Input, Label, RadioGroup, RadioGroupItem } from '@/components/atoms'
 import { FormField, KeyValue } from '@/components/molecules'
-import { Panel } from '@/components/organisms'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Panel,
+} from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
 import { getErrorMessage } from '@/lib/api-client'
 import { fdate, vnd } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { HeldBooking, ServiceSelectionInput } from '../api'
-import { useHoldBooking, useServiceCatalog, useSubmitBookingDetails } from '../hooks'
+import { cancelBooking, type HeldBooking, type ServiceSelectionInput } from '../api'
+import {
+  useAvailability,
+  useCancelBooking,
+  useHoldBooking,
+  useInitiateDeposit,
+  useServiceCatalog,
+  useSubmitBookingDetails,
+  useUpdateHoldRooms,
+} from '../hooks'
 import { nightsBetween } from '../utils'
+import { rememberPaymentRef } from '../storage'
 import { formatRemaining, useHoldCountdown } from './useHoldCountdown'
 
 /**
@@ -22,7 +41,7 @@ import { formatRemaining, useHoldCountdown } from './useHoldCountdown'
 export function CreateBookingPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const { me } = useAuth()
+  const { me, status } = useAuth()
 
   const checkIn = params.get('checkIn') ?? ''
   const checkOut = params.get('checkOut') ?? ''
@@ -34,10 +53,116 @@ export function CreateBookingPage() {
 
   const hold = useHoldBooking()
   const submit = useSubmitBookingDetails()
+  const deposit = useInitiateDeposit()
+  const cancel = useCancelBooking()
   const { mutate: holdMutate } = hold
 
   const [held, setHeld] = useState<HeldBooking | undefined>()
   const requested = useRef(false)
+  // Refs để cleanup lúc unmount đọc được giá trị mới nhất mà không phụ thuộc dependency.
+  const heldRef = useRef<HeldBooking | undefined>(undefined)
+  const submittedRef = useRef(false)
+  const doneRef = useRef(false)
+  const meRef = useRef(me)
+  useEffect(() => {
+    meRef.current = me
+  }, [me])
+
+  // Chỉnh số lượng phòng từng loại ngay trong trang đặt: lấy phòng trống để nới pool, chỉnh rồi
+  // gọi cập nhật hold (không tạo hold mới nên không đụng rate-limit, không gia hạn giữ phòng).
+  const availability = useAvailability(
+    invalid ? null : { checkIn, checkOut, guests: Math.max(1, guests) },
+  )
+  const updateRooms = useUpdateHoldRooms()
+  const [qty, setQty] = useState<Record<string, number>>({})
+  const [qtySig, setQtySig] = useState('')
+
+  // Phòng trống theo loại (backend đã loại phòng đang giữ của phiên này).
+  const freeByType = useMemo(() => {
+    const map = new Map<string, { name: string; price: number; ids: string[] }>()
+    const rooms = Array.isArray(availability.data) ? availability.data : []
+    for (const room of rooms) {
+      const group = map.get(room.roomTypeId) ?? {
+        name: room.roomTypeName ?? 'Phòng',
+        price: room.pricePerNight ?? 0,
+        ids: [],
+      }
+      group.ids.push(room.id)
+      map.set(room.roomTypeId, group)
+    }
+    return map
+  }, [availability.data])
+
+  // Gộp loại đang giữ + loại còn trống; pool mỗi loại = phòng đang giữ + phòng còn trống.
+  const editorTypes = useMemo(() => {
+    if (!held) return []
+    const types = new Map<
+      string,
+      { roomTypeId: string; name: string; price: number; pool: string[] }
+    >()
+    for (const group of held.roomTypes) {
+      types.set(group.roomTypeId, {
+        roomTypeId: group.roomTypeId,
+        name: group.roomTypeName,
+        price: group.pricePerNight,
+        pool: [...group.roomIds],
+      })
+    }
+    for (const [id, group] of freeByType) {
+      const existing = types.get(id)
+      if (existing) existing.pool = [...new Set([...existing.pool, ...group.ids])]
+      else {
+        types.set(id, {
+          roomTypeId: id,
+          name: group.name,
+          price: group.price,
+          pool: [...group.ids],
+        })
+      }
+    }
+    return [...types.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }, [held, freeByType])
+
+  // Đồng bộ số lượng đang chọn theo hold hiện tại, ngay trong render (reset khi hold đổi, ví dụ
+  // sau khi cập nhật) — tránh setState trong effect gây render thừa.
+  const heldSignature = held ? `${held.holdToken}:${held.rooms.join(',')}` : ''
+  if (held && qtySig !== heldSignature) {
+    setQtySig(heldSignature)
+    const next: Record<string, number> = {}
+    for (const group of held.roomTypes) next[group.roomTypeId] = group.roomIds.length
+    setQty(next)
+  }
+
+  const nextRoomIds = useMemo(
+    () => editorTypes.flatMap((type) => type.pool.slice(0, qty[type.roomTypeId] ?? 0)),
+    [editorTypes, qty],
+  )
+  const roomsChanged =
+    held != null &&
+    !(
+      nextRoomIds.length === held.rooms.length && nextRoomIds.every((id) => held.rooms.includes(id))
+    )
+
+  function changeRoomQty(roomTypeId: string, delta: number, max: number) {
+    setQty((prev) => ({
+      ...prev,
+      [roomTypeId]: Math.max(0, Math.min(max, (prev[roomTypeId] ?? 0) + delta)),
+    }))
+  }
+
+  async function applyRooms() {
+    if (!held || !roomsChanged || nextRoomIds.length < 1) return
+    try {
+      const data = await updateRooms.mutateAsync({
+        holdToken: held.holdToken,
+        rooms: nextRoomIds,
+      })
+      setHeld(data)
+      heldRef.current = data
+    } catch {
+      // Lỗi hiển thị qua updateRooms.isError (vd: phòng vừa bị giữ, hoặc ít hơn số khách).
+    }
+  }
 
   const [guestName, setGuestName] = useState(me?.fullName ?? '')
   const [guestEmail, setGuestEmail] = useState(me?.email ?? '')
@@ -74,7 +199,7 @@ export function CreateBookingPage() {
   )
 
   useEffect(() => {
-    if (invalid || requested.current) return
+    if (invalid || status === 'loading' || requested.current) return
     requested.current = true
     holdMutate(
       {
@@ -84,12 +209,71 @@ export function CreateBookingPage() {
         adultCount: Math.max(1, guests),
         childCount: 0,
       },
-      { onSuccess: (data) => setHeld(data) },
+      {
+        onSuccess: (data) => {
+          if (data.status === 'PENDING_DEPOSIT') {
+            submittedRef.current = true
+            doneRef.current = true
+          }
+          setHeld(data)
+          heldRef.current = data
+        },
+      },
     )
-  }, [invalid, roomsParam, checkIn, checkOut, guests, holdMutate])
+  }, [invalid, status, roomsParam, checkIn, checkOut, guests, holdMutate])
+
+  // Rời trang khi vẫn đang giữ phòng (chưa đặt cọc) => nhả hold + huỷ đơn nháp, và cảnh báo
+  // trước khi đóng/refresh tab. Fallback khi đóng tab là hold tự hết hạn sau 15 phút.
+  useEffect(() => {
+    // Còn đang giữ phòng, chưa đặt cọc và chưa chủ động huỷ, và hold vẫn còn hạn.
+    const stillHolding = () => {
+      const current = heldRef.current
+      return Boolean(
+        current &&
+        !submittedRef.current &&
+        !doneRef.current &&
+        Date.parse(current.holdExpiresAt) > Date.now(),
+      )
+    }
+    const warn = (event: BeforeUnloadEvent) => {
+      if (stillHolding()) {
+        event.preventDefault()
+        event.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => {
+      window.removeEventListener('beforeunload', warn)
+      const current = heldRef.current
+      if (current && stillHolding()) {
+        void cancelBooking(current.bookingId, meRef.current ? {} : { code: current.code }).catch(
+          () => undefined,
+        )
+      }
+    }
+  }, [])
 
   const remaining = useHoldCountdown(held?.holdExpiresAt)
   const holdExpired = remaining !== null && remaining <= 0
+
+  // Chặn Back / điều hướng trong app khi đang giữ phòng (chưa đặt cọc): hỏi xác nhận trước khi
+  // rời; nếu đồng ý rời thì huỷ giữ phòng rồi đi tiếp. Đóng/refresh tab vẫn do beforeunload lo.
+  const blocker = useBlocker(
+    () => Boolean(held) && !submittedRef.current && !doneRef.current && !holdExpired,
+  )
+
+  async function confirmLeave() {
+    doneRef.current = true
+    const current = heldRef.current
+    if (current) {
+      try {
+        await cancelBooking(current.bookingId, me ? {} : { code: current.code })
+      } catch {
+        // Vẫn rời trang; nếu huỷ lỗi thì hold tự hết hạn sau 15 phút.
+      }
+    }
+    blocker.proceed?.()
+  }
 
   if (invalid) {
     return (
@@ -107,7 +291,7 @@ export function CreateBookingPage() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
-    if (!held) return
+    if (!held || held.status !== 'ROOM_HELD' || holdExpired || submit.isPending) return
     try {
       const updated = await submit.mutateAsync({
         holdToken: held.holdToken,
@@ -116,9 +300,40 @@ export function CreateBookingPage() {
         guestPhone: guestPhone.trim(),
         ...(serviceSelections.length ? { serviceSelections } : {}),
       })
-      navigate(`/booking/${updated.bookingId}`, { replace: true })
+      // Đã chuyển sang PENDING_DEPOSIT: không auto-huỷ hold khi rời trang nữa.
+      submittedRef.current = true
+      doneRef.current = true
+      setHeld(updated)
+      heldRef.current = updated
     } catch {
       // Lỗi hiển thị qua submit.isError bên dưới.
+    }
+  }
+
+  async function payDeposit() {
+    if (!held || held.status !== 'PENDING_DEPOSIT' || holdExpired || deposit.isPending) return
+    try {
+      const result = await deposit.mutateAsync({
+        bookingId: held.bookingId,
+        ...(me ? {} : { code: held.code }),
+      })
+      rememberPaymentRef(result.transactionRef, held.bookingId)
+      window.location.href = result.paymentUrl
+    } catch {
+      // Giữ bước thanh toán để thử lại mà không gửi lại thông tin liên hệ hoặc tạo hold mới.
+    }
+  }
+
+  // Khách chủ động huỷ khi đang giữ phòng (ROOM_HELD): nhả hold + huỷ đơn, về trang tìm phòng.
+  async function cancelHold() {
+    if (!held) return
+    doneRef.current = true
+    try {
+      await cancel.mutateAsync({ id: held.bookingId, ...(me ? {} : { code: held.code }) })
+      navigate('/search', { replace: true })
+    } catch {
+      // Cho phép thử lại nếu huỷ thất bại; lỗi hiển thị qua cancel.isError.
+      doneRef.current = false
     }
   }
 
@@ -191,114 +406,272 @@ export function CreateBookingPage() {
               )
             )}
 
-            <Panel title="Thông tin liên hệ">
-              {me && (
-                <p className="mb-4 text-sm text-muted-foreground">
-                  Đặt với tài khoản {me.email}. Bạn có thể sửa tên và số điện thoại nếu cần.
-                </p>
-              )}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Họ tên" htmlFor="guestName" required>
-                  <Input
-                    id="guestName"
-                    required
-                    maxLength={120}
-                    value={guestName}
-                    onChange={(e) => setGuestName(e.target.value)}
-                  />
-                </FormField>
-                <FormField label="Email" htmlFor="guestEmail" required>
-                  <Input
-                    id="guestEmail"
-                    type="email"
-                    required
-                    maxLength={160}
-                    value={guestEmail}
-                    onChange={(e) => setGuestEmail(e.target.value)}
-                  />
-                </FormField>
-                <div className="sm:col-span-2">
-                  <FormField label="Số điện thoại" htmlFor="guestPhone" required>
-                    <Input
-                      id="guestPhone"
-                      type="tel"
-                      required
-                      placeholder="0900000000"
-                      value={guestPhone}
-                      onChange={(e) => setGuestPhone(e.target.value)}
-                    />
-                  </FormField>
+            {held.status === 'PENDING_DEPOSIT' ? (
+              <Panel className="p-1">
+                <h2 className="text-lg font-semibold">Thanh toán cọc</h2>
+                <KeyValue k="Mã đặt phòng" v={held.code} />
+                <RadioGroup
+                  value="VNPAY"
+                  aria-label="Phương thức thanh toán"
+                  className="mt-4 grid gap-3"
+                >
+                  <Label
+                    htmlFor="checkout-vnpay"
+                    className="flex cursor-pointer items-center gap-3 rounded-xl border border-primary bg-primary/5 p-4"
+                  >
+                    <RadioGroupItem value="VNPAY" id="checkout-vnpay" />
+                    <CreditCard className="size-4 text-primary" />
+                    <span>
+                      <span className="block font-medium">VNPay</span>
+                      <span className="text-xs font-normal text-muted-foreground">
+                        Ứng dụng ngân hàng, QR hoặc thẻ nội địa
+                      </span>
+                    </span>
+                  </Label>
+                </RadioGroup>
+                {deposit.isError && (
+                  <div
+                    role="alert"
+                    className="mt-6 rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive"
+                  >
+                    {getErrorMessage(deposit.error)}
+                  </div>
+                )}
+                <div className="mt-6 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    className="rounded-full"
+                    disabled={holdExpired || deposit.isPending}
+                    aria-busy={deposit.isPending}
+                    onClick={() => void payDeposit()}
+                  >
+                    {deposit.isPending
+                      ? 'Đang chuyển sang VNPay…'
+                      : `Thanh toán ${vnd(held.depositAmount)}`}
+                  </Button>
                 </div>
-              </div>
-              <p className="mt-4 text-xs text-muted-foreground">
-                Chúng tôi gửi mã đặt phòng (vé) tới email này để bạn thanh toán và quản lý đơn.
-              </p>
-            </Panel>
-
-            {catalog.data && catalog.data.length > 0 && (
-              <Panel title="Dịch vụ thêm (tuỳ chọn)">
-                <p className="mb-4 text-sm text-muted-foreground">
-                  Chọn trước, hệ thống tạo yêu cầu dịch vụ khi đặt phòng được xác nhận. Phí dịch vụ
-                  thanh toán trong thời gian lưu trú.
-                </p>
-                <ul className="divide-y divide-border">
-                  {catalog.data.map((svc) => {
-                    const on = svc.id in selectedServices
-                    return (
-                      <li
-                        key={svc.id}
-                        className="flex flex-wrap items-center justify-between gap-4 py-3"
-                      >
-                        <label className="flex cursor-pointer items-center gap-3 text-sm">
-                          <Checkbox
-                            checked={on}
-                            onCheckedChange={(checked) => toggleService(svc.id, Boolean(checked))}
-                          />
-                          <AssetImage decorative path={svc.imageUrl} name={svc.name} />
-                          <div>
-                            <span className="font-medium text-foreground">{svc.name}</span>
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              {svc.unitPriceVND
-                                ? `${vnd(svc.unitPriceVND)} / ${svc.unit || 'lần'}`
-                                : 'Miễn phí'}
-                            </span>
-                          </div>
-                        </label>
-                        {on && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">SL:</span>
-                            <Input
-                              type="number"
-                              min={1}
-                              aria-label={`Số lượng ${svc.name}`}
-                              value={selectedServices[svc.id]}
-                              onChange={(e) => setServiceQuantity(svc.id, Number(e.target.value))}
-                              className="h-9 w-20 text-center text-sm"
-                            />
-                          </div>
-                        )}
-                      </li>
-                    )
-                  })}
-                </ul>
               </Panel>
-            )}
+            ) : (
+              <>
+                {!holdExpired && editorTypes.length > 0 && (
+                  <Panel title="Số lượng phòng">
+                    <p className="mb-4 text-sm text-muted-foreground">
+                      Chọn số phòng cho mỗi loại rồi bấm cập nhật. Hệ thống giữ đúng số phòng bạn
+                      chọn, không vượt quá số phòng còn trống.
+                    </p>
+                    <ul className="divide-y divide-border">
+                      {editorTypes.map((type) => {
+                        const count = qty[type.roomTypeId] ?? 0
+                        const max = type.pool.length
+                        return (
+                          <li
+                            key={type.roomTypeId}
+                            className="flex flex-wrap items-center justify-between gap-4 py-3"
+                          >
+                            <div>
+                              <span className="font-medium text-foreground">{type.name}</span>
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                {vnd(type.price)} / đêm · còn {max} phòng
+                              </span>
+                            </div>
+                            <div
+                              className="flex items-center gap-1"
+                              role="group"
+                              aria-label={`Số phòng ${type.name}`}
+                            >
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="size-9 rounded-full p-0"
+                                aria-label={`Bớt phòng ${type.name}`}
+                                disabled={count === 0}
+                                onClick={() => changeRoomQty(type.roomTypeId, -1, max)}
+                              >
+                                <Minus className="size-4" />
+                              </Button>
+                              <span
+                                className="w-8 text-center font-medium tabular-nums"
+                                aria-live="polite"
+                                aria-label={`${count} phòng ${type.name}`}
+                              >
+                                {count}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="size-9 rounded-full p-0"
+                                aria-label={`Thêm phòng ${type.name}`}
+                                disabled={count >= max}
+                                onClick={() => changeRoomQty(type.roomTypeId, 1, max)}
+                              >
+                                <Plus className="size-4" />
+                              </Button>
+                            </div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                    {updateRooms.isError && (
+                      <div
+                        role="alert"
+                        className="mt-3 rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive"
+                      >
+                        {getErrorMessage(
+                          updateRooms.error,
+                          'Không cập nhật được số phòng. Vui lòng thử lại.',
+                        )}
+                      </div>
+                    )}
+                    <div className="mt-4 flex justify-end">
+                      <Button
+                        type="button"
+                        className="rounded-full"
+                        onClick={() => void applyRooms()}
+                        disabled={!roomsChanged || nextRoomIds.length < 1 || updateRooms.isPending}
+                        aria-busy={updateRooms.isPending}
+                      >
+                        {updateRooms.isPending ? 'Đang cập nhật…' : 'Cập nhật số phòng'}
+                      </Button>
+                    </div>
+                  </Panel>
+                )}
 
-            {submit.isError && (
-              <div
-                role="alert"
-                className="rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
-              >
-                {getErrorMessage(submit.error)}
-              </div>
-            )}
+                <Panel title="Thông tin liên hệ">
+                  {me && (
+                    <p className="mb-4 text-sm text-muted-foreground">
+                      Đặt với tài khoản {me.email}. Bạn có thể sửa tên và số điện thoại nếu cần.
+                    </p>
+                  )}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormField label="Họ tên" htmlFor="guestName" required>
+                      <Input
+                        id="guestName"
+                        required
+                        maxLength={120}
+                        value={guestName}
+                        onChange={(e) => setGuestName(e.target.value)}
+                      />
+                    </FormField>
+                    <FormField label="Email" htmlFor="guestEmail" required>
+                      <Input
+                        id="guestEmail"
+                        type="email"
+                        required
+                        maxLength={160}
+                        value={guestEmail}
+                        onChange={(e) => setGuestEmail(e.target.value)}
+                      />
+                    </FormField>
+                    <div className="sm:col-span-2">
+                      <FormField label="Số điện thoại" htmlFor="guestPhone" required>
+                        <Input
+                          id="guestPhone"
+                          type="tel"
+                          required
+                          placeholder="0900000000"
+                          value={guestPhone}
+                          onChange={(e) => setGuestPhone(e.target.value)}
+                        />
+                      </FormField>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    Chúng tôi gửi mã đặt phòng (vé) tới email này để bạn thanh toán và quản lý đơn.
+                  </p>
+                </Panel>
 
-            <Link
-              to="/search"
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-foreground"
-            >
-              ← Chọn lại phòng
-            </Link>
+                {catalog.data && catalog.data.length > 0 && (
+                  <Panel title="Dịch vụ thêm (tuỳ chọn)">
+                    <p className="mb-4 text-sm text-muted-foreground">
+                      Chọn trước, hệ thống tạo yêu cầu dịch vụ khi đặt phòng được xác nhận. Phí dịch
+                      vụ thanh toán trong thời gian lưu trú.
+                    </p>
+                    <ul className="divide-y divide-border">
+                      {catalog.data.map((svc) => {
+                        const on = svc.id in selectedServices
+                        return (
+                          <li
+                            key={svc.id}
+                            className="flex flex-wrap items-center justify-between gap-4 py-3"
+                          >
+                            <label className="flex cursor-pointer items-center gap-3 text-sm">
+                              <Checkbox
+                                checked={on}
+                                onCheckedChange={(checked) =>
+                                  toggleService(svc.id, Boolean(checked))
+                                }
+                              />
+                              <AssetImage decorative path={svc.imageUrl} name={svc.name} />
+                              <div>
+                                <span className="font-medium text-foreground">{svc.name}</span>
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  {svc.unitPriceVND
+                                    ? `${vnd(svc.unitPriceVND)} / ${svc.unit || 'lần'}`
+                                    : 'Miễn phí'}
+                                </span>
+                              </div>
+                            </label>
+                            {on && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">SL:</span>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  aria-label={`Số lượng ${svc.name}`}
+                                  value={selectedServices[svc.id]}
+                                  onChange={(e) =>
+                                    setServiceQuantity(svc.id, Number(e.target.value))
+                                  }
+                                  className="h-9 w-20 text-center text-sm"
+                                />
+                              </div>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </Panel>
+                )}
+
+                {submit.isError && (
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
+                  >
+                    {getErrorMessage(submit.error)}
+                  </div>
+                )}
+
+                {cancel.isError && (
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
+                  >
+                    {getErrorMessage(cancel.error, 'Không huỷ được giữ phòng. Vui lòng thử lại.')}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <Link
+                    to="/search"
+                    className="inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-foreground"
+                  >
+                    ← Chọn lại phòng
+                  </Link>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="rounded-full text-destructive hover:bg-destructive/10"
+                    onClick={() => void cancelHold()}
+                    disabled={cancel.isPending}
+                    aria-busy={cancel.isPending}
+                  >
+                    <XCircle className="size-4" />
+                    {cancel.isPending ? 'Đang huỷ…' : 'Huỷ giữ phòng'}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Cột phải: tóm tắt đặt phòng */}
@@ -338,17 +711,46 @@ export function CreateBookingPage() {
               Số tiền do hệ thống xác nhận tại thời điểm giữ phòng. Bạn chưa bị trừ tiền ở bước này.
             </p>
 
-            <Button
-              type="submit"
-              className="w-full rounded-full"
-              disabled={holdExpired || submit.isPending}
-              aria-busy={submit.isPending}
-            >
-              {submit.isPending ? 'Đang chuyển sang thanh toán…' : 'Tiếp tục đặt cọc'}
-            </Button>
+            {held.status === 'ROOM_HELD' && (
+              <Button
+                type="submit"
+                className="w-full rounded-full"
+                disabled={holdExpired || submit.isPending}
+                aria-busy={submit.isPending}
+              >
+                {submit.isPending ? 'Đang chuyển sang thanh toán…' : 'Tiếp tục đặt cọc'}
+              </Button>
+            )}
           </aside>
         </form>
       )}
+
+      <AlertDialog
+        open={blocker.state === 'blocked'}
+        onOpenChange={(open) => {
+          // Đóng dialog mà chưa xác nhận rời (Esc/nút Ở lại) -> huỷ chặn, ở lại trang.
+          if (!open && !doneRef.current) blocker.reset?.()
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rời trang khi đang giữ phòng?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn chưa đặt cọc. Nếu rời trang, phần giữ phòng và đơn đặt hiện tại sẽ bị huỷ và phòng
+              được mở lại cho khách khác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Ở lại trang này</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void confirmLeave()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Rời &amp; huỷ giữ phòng
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

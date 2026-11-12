@@ -89,10 +89,50 @@ export class SubmitBookingDetailsDto {
   serviceSelections?: ServiceSelectionDto[];
 }
 
+/** Chỉnh lại danh sách phòng của một hold còn hạn (ROOM_HELD) ngay trong trang đặt. */
+export class UpdateHoldRoomsDto {
+  @ApiProperty({ description: 'Mã giữ phòng nhận khi cấp hold' })
+  @Matches(/^[A-Za-z0-9_-]{10,80}$/, { message: 'Invalid holdToken' })
+  holdToken: string;
+
+  @ApiProperty({
+    type: [String],
+    description: 'Danh sách ObjectId phòng muốn giữ sau khi chỉnh',
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(20)
+  @IsMongoId({ each: true })
+  rooms: string[];
+}
+
+/** Một nhóm phòng cùng loại trong hold, kèm id từng phòng để client chỉnh số lượng. */
+export class HoldRoomTypeGroup {
+  @ApiProperty()
+  roomTypeId: string;
+
+  @ApiProperty()
+  roomTypeName: string;
+
+  @ApiProperty({ description: 'Đơn giá mỗi đêm của loại phòng (VND)' })
+  pricePerNight: number;
+
+  @ApiProperty({
+    type: [String],
+    description: 'Id các phòng đang giữ của loại này',
+  })
+  roomIds: string[];
+}
+
 /** Trả về cho client sau khi cấp hold. */
 export class HoldResponse {
   @ApiProperty()
   bookingId: string;
+
+  @ApiProperty({
+    description: 'Mã booking (vé) để huỷ/tra cứu khi chưa đăng nhập',
+  })
+  code: string;
 
   @ApiProperty()
   holdToken: string;
@@ -102,6 +142,9 @@ export class HoldResponse {
 
   @ApiProperty({ type: [String] })
   rooms: string[];
+
+  @ApiProperty({ type: [HoldRoomTypeGroup] })
+  roomTypes: HoldRoomTypeGroup[];
 
   @ApiProperty()
   checkIn: string;
