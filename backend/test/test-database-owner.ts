@@ -13,29 +13,55 @@ export function verifyTestDatabaseOwner(
         encoding: 'utf8',
       }),
     );
-    const bindings = container.NetworkSettings.Ports['27017/tcp'];
-    if (
-      container.Id !== env.HMS_TEST_SERVICE_ID ||
-      container.Config.Image !== 'mongo:8' ||
-      container.Config.Labels?.['hms.test.run'] !== env.GITHUB_RUN_ID ||
-      container.Config.Labels?.['hms.test.attempt'] !==
-        env.GITHUB_RUN_ATTEMPT ||
-      container.Config.Labels?.['hms.test.job'] !== 'backend' ||
-      container.Mounts?.length !== 2 ||
-      !container.Mounts.every(
-        (mount: { Type: string; Destination: string }) =>
-          mount.Type === 'tmpfs' &&
-          ['/data/db', '/data/configdb'].includes(mount.Destination),
-      ) ||
-      !container.State.Running ||
-      container.State.Health?.Status !== 'healthy' ||
-      !bindings?.some(
-        (binding: { HostIp: string; HostPort: string }) =>
-          binding.HostPort === uri.port &&
-          ['127.0.0.1', '0.0.0.0'].includes(binding.HostIp),
-      )
-    )
-      throw new Error('Disposable job container ownership verification failed');
+    const bindings = container?.NetworkSettings?.Ports?.['27017/tcp'];
+    const checks = {
+      id: container?.Id === env.HMS_TEST_SERVICE_ID,
+      image: container?.Config?.Image === 'mongo:8',
+      run: container?.Config?.Labels?.['hms.test.run'] === env.GITHUB_RUN_ID,
+      attempt:
+        container?.Config?.Labels?.['hms.test.attempt'] ===
+        env.GITHUB_RUN_ATTEMPT,
+      job: container?.Config?.Labels?.['hms.test.job'] === 'backend',
+      mountCount: container?.Mounts?.length === 2,
+      mountTargets:
+        Array.isArray(container?.Mounts) &&
+        container.Mounts.every(
+          (mount: { Type: string; Destination: string }) =>
+            mount.Type === 'tmpfs' &&
+            ['/data/db', '/data/configdb'].includes(mount.Destination),
+        ),
+      running: Boolean(container?.State?.Running),
+      healthy: container?.State?.Health?.Status === 'healthy',
+      binding: Boolean(
+        bindings?.some(
+          (binding: { HostIp: string; HostPort: string }) =>
+            binding.HostPort === uri.port &&
+            ['127.0.0.1', '0.0.0.0'].includes(binding.HostIp),
+        ),
+      ),
+    };
+    if (!Object.values(checks).every(Boolean)) {
+      const facts = {
+        mounts: container?.Mounts?.map(
+          (mount: { Type: string; Destination: string }) => ({
+            type: mount.Type,
+            destination: mount.Destination,
+          }),
+        ),
+        tmpfsTargets: Object.keys(container?.HostConfig?.Tmpfs ?? {}).sort(),
+        bindCount: container?.HostConfig?.Binds?.length ?? 0,
+        bindings: bindings?.map(
+          (binding: { HostIp: string; HostPort: string }) => ({
+            address: binding.HostIp,
+            port: binding.HostPort,
+          }),
+        ),
+        expectedPort: uri.port,
+      };
+      throw new Error(
+        `Disposable job container ownership verification failed: ${JSON.stringify({ checks, facts })}`,
+      );
+    }
     return;
   }
   const pid = Number(env.HMS_TEST_OWNER_PID);

@@ -130,6 +130,34 @@ describe('disposable database admission', () => {
     );
   });
 
+  it('reports failed predicates without disclosing Docker environment or arbitrary labels', () => {
+    const value = {
+      ...container(),
+      Mounts: [],
+      HostConfig: {
+        Tmpfs: { '/data/db': '', '/data/configdb': '' },
+        Binds: null,
+      },
+      Config: {
+        ...container().Config,
+        Env: ['PRIVATE_KEY=sentinel-secret'],
+        Labels: { ...container().Config.Labels, private: 'sentinel-secret' },
+      },
+    };
+    vi.mocked(execFileSync).mockReturnValue(JSON.stringify([value]));
+    let message = '';
+    try {
+      verifyTestDatabaseOwner(ci, new URL(ci.MONGODB_URI));
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain('"mountCount":false');
+    expect(message).toContain('"tmpfsTargets":["/data/configdb","/data/db"]');
+    expect(message).toContain('"mounts":[]');
+    expect(message).not.toContain('sentinel-secret');
+    expect(message).not.toContain('PRIVATE_KEY');
+  });
+
   it.each(['id', 'port', 'run', 'attempt', 'mount', 'health'])(
     'rejects a mismatched service %s',
     (field) => {
