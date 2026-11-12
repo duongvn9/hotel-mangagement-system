@@ -69,6 +69,8 @@ describe('invoice adapter contracts', () => {
       .useValue({})
       .overrideProvider(getModelToken('RoomHold'))
       .useValue({})
+      .overrideProvider(getModelToken('HoldPrincipalLock'))
+      .useValue({})
       .overrideProvider(getModelToken(PaymentTransaction.name))
       .useValue({})
       .overrideProvider(getModelToken('Room'))

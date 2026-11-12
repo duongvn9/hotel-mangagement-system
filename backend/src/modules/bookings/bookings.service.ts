@@ -35,6 +35,7 @@ import {
   UNCONFIRMED_BOOKING_STATUSES,
 } from '../../common/constants/booking-status.enum.js';
 import { RoomHold, type RoomHoldDocument } from './schemas/room-hold.schema.js';
+import { HoldPrincipalLock } from './schemas/hold-principal-lock.schema.js';
 import { AvailabilityClock } from './availability.adapters.js';
 import {
   businessBoundary,
@@ -121,6 +122,8 @@ export class BookingsService {
     @InjectModel(Invoice.name)
     private readonly invoices: Model<Invoice>,
     private readonly notifications: NotificationsService,
+    @InjectModel(HoldPrincipalLock.name)
+    private readonly principalLocks: Model<HoldPrincipalLock>,
   ) {}
 
   /** Gửi email booking (best-effort): không bao giờ làm hỏng luồng nghiệp vụ. */
@@ -144,83 +147,31 @@ export class BookingsService {
     void this.notifications.send(input).catch(() => undefined);
   }
 
-  async create(dto: CreateBookingDto, user?: AuthUser) {
-    // Public: Guest (không đăng nhập) đặt được; Customer đăng nhập gắn booking vào tài
-    // khoản; vai trò khác coi như đặt hộ tại quầy (không gắn customer).
-    const roomIds = dto.rooms.map((id) => new Types.ObjectId(id));
-    if (new Set(dto.rooms).size !== dto.rooms.length) {
-      throw new BadRequestException('Duplicate rooms in request');
-    }
-    let stay: StayInterval;
-    try {
-      stay = normalizeStay(dto);
-    } catch (error) {
-      throw new BadRequestException(
-        error instanceof Error ? error.message : 'Invalid stay dates',
-      );
-    }
-
-    const { roomTotal, rates } = await this.priceRooms(
-      roomIds,
-      { adultCount: dto.adultCount, childCount: dto.childCount },
-      stay,
-    );
-    const now = this.clock.now();
-    await this.assertRoomsFree(roomIds, stay, now);
-
-    // Guest/Customer đặt online; vai trò nhân viên coi như đặt hộ tại quầy.
-    const source =
-      user && user.role !== Role.Customer
-        ? BookingSource.FrontDesk
-        : BookingSource.Online;
-    const booking = await this.createBookingDocument(dto, roomIds, stay, {
-      roomTotal,
-      rates,
-      source,
-      customer:
-        user?.role === Role.Customer ? new Types.ObjectId(user.id) : undefined,
+  async create(
+    dto: CreateBookingDto,
+    user?: AuthUser,
+    ctx: GuestSessionContext = {},
+  ) {
+    const held = await this.hold(dto, ctx, user, false);
+    const pending = await this.submitDetails({
+      holdToken: held.holdToken,
+      guestName: dto.guestName,
+      guestEmail: dto.guestEmail,
+      guestPhone: dto.guestPhone,
     });
-
-    let hold: RoomHoldDocument;
-    try {
-      hold = await this.holds.create({
-        booking: booking._id,
-        holdToken: this.newHoldToken(),
-        rooms: roomIds,
-        checkIn: stay.checkIn,
-        checkOut: stay.checkOut,
-        expiresAt: new Date(now.getTime() + HOLD_WINDOW_MS),
-        isActive: true,
-      });
-    } catch (error) {
-      // Giữ nhất quán: không để lại booking không có hold.
-      await this.bookings.deleteOne({ _id: booking._id });
-      throw error;
-    }
-
-    if (!(await this.wonTheRace(hold._id, roomIds, stay, now))) {
-      await this.holds.deleteOne({ _id: hold._id });
-      await this.bookings.deleteOne({ _id: booking._id });
-      throw new ConflictException(
-        'One or more rooms were just taken; please choose again',
-      );
-    }
-
-    // Chưa gửi email ở bước này: booking mới chỉ chờ đặt cọc, chưa thanh toán. Email xác
-    // nhận gửi khi cọc thành công (settlement) hoặc khi lễ tân tạo booking tại quầy.
     return {
-      id: String(booking._id),
-      code: booking.code,
-      status: booking.status,
-      rooms: dto.rooms,
-      checkIn: stay.checkIn.toISOString(),
-      checkOut: stay.checkOut.toISOString(),
-      adultCount: booking.adultCount,
-      childCount: booking.childCount,
-      source: booking.source,
-      roomTotal: booking.roomTotal,
-      depositAmount: booking.depositAmount,
-      holdExpiresAt: hold.expiresAt.toISOString(),
+      id: pending.bookingId,
+      code: pending.code,
+      status: pending.status,
+      rooms: pending.rooms,
+      checkIn: pending.checkIn,
+      checkOut: pending.checkOut,
+      adultCount: pending.adultCount,
+      childCount: pending.childCount,
+      source: pending.source,
+      roomTotal: pending.roomTotal,
+      depositAmount: pending.depositAmount,
+      holdExpiresAt: pending.holdExpiresAt,
     };
   }
 
@@ -917,7 +868,12 @@ export class BookingsService {
    * tạo Booking nháp ROOM_HELD + RoomHold, khóa phòng một cửa sổ 15 phút.
    * Một phiên chỉ giữ 1 hold; bấm lại trả hold cũ, KHÔNG gia hạn.
    */
-  async hold(dto: HoldBookingDto, ctx: GuestSessionContext, user?: AuthUser) {
+  async hold(
+    dto: HoldBookingDto,
+    ctx: GuestSessionContext,
+    user?: AuthUser,
+    rateLimited = true,
+  ) {
     const roomIds = dto.rooms.map((id) => new Types.ObjectId(id));
     if (new Set(dto.rooms).size !== dto.rooms.length) {
       throw new BadRequestException('Duplicate rooms in request');
@@ -932,88 +888,198 @@ export class BookingsService {
     }
     const now = this.clock.now();
 
-    // Reuse only this principal's hold; a browser session can outlive sign-in changes.
-    if (ctx.sessionId) {
-      const existingHolds = await this.holds
-        .find({
-          sessionId: ctx.sessionId,
-          isActive: true,
-          expiresAt: { $gt: now },
-        })
-        .sort({ createdAt: -1 });
-      for (const existing of existingHolds) {
-        const current = await this.bookings.findById(existing.booking);
-        if (!current || !this.isHoldPrincipal(current, user)) continue;
+    const active = await this.findActiveHold(ctx, user);
+    if (active) return this.resumeOrConflict(active, dto, stay);
+    const principal = user
+      ? `user:${user.id}`
+      : ctx.sessionId
+        ? `guest:${ctx.sessionId}`
+        : undefined;
+    const bookingId = new Types.ObjectId();
+    const expiresAt = new Date(now.getTime() + HOLD_WINDOW_MS);
+    if (principal) {
+      await this.principalLocks.deleteOne({
+        _id: principal,
+        expiresAt: { $lte: now },
+      });
+      // Terminal bookings release their slot even when settlement ran in another module.
+      const previous = await this.principalLocks.findById(principal);
+      if (previous?.booking) {
+        const parent = await this.bookings.findById(previous.booking);
+        const previousHold = await this.holds.findOne({
+          booking: previous.booking,
+        });
         if (
-          current.isActive &&
-          UNCONFIRMED_BOOKING_STATUSES.includes(current.status)
+          (parent &&
+            (!parent.isActive ||
+              !UNCONFIRMED_BOOKING_STATUSES.includes(parent.status))) ||
+          (previousHold &&
+            (!previousHold.isActive || previousHold.expiresAt <= now))
         ) {
-          return await this.holdResponse(current, existing);
+          await this.principalLocks.deleteOne({
+            _id: principal,
+            booking: previous.booking,
+          });
         }
-        await this.holds.updateOne(
-          { _id: existing._id },
-          { $set: { isActive: false } },
+      }
+      try {
+        await this.principalLocks.create({
+          _id: principal,
+          booking: bookingId,
+          expiresAt,
+        });
+      } catch (error) {
+        if ((error as { code?: number }).code !== 11000) throw error;
+        // The winner may still be inserting its booking/hold; never create a second one.
+        for (let attempt = 0; attempt < 100; attempt++) {
+          const winner = await this.findActiveHold(ctx, user);
+          if (winner) return this.resumeOrConflict(winner, dto, stay);
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        throw new ConflictException(
+          'A booking is being created; please retry shortly',
         );
       }
     }
-
-    await this.enforceHoldRate(ctx, now);
-
-    const { roomTotal, rates } = await this.priceRooms(
-      roomIds,
-      { adultCount: dto.adultCount, childCount: dto.childCount },
-      stay,
-    );
-    await this.assertRoomsFree(roomIds, stay, now);
-    const source =
-      user && user.role !== Role.Customer
-        ? BookingSource.FrontDesk
-        : BookingSource.Online;
-
-    const booking = await this.insertBooking({
-      ...(user
-        ? user.role === Role.Customer
-          ? { customer: new Types.ObjectId(user.id) }
-          : { createdBy: new Types.ObjectId(user.id) }
-        : {}),
-      rooms: roomIds,
-      checkIn: stay.checkIn,
-      checkOut: stay.checkOut,
-      adultCount: dto.adultCount,
-      childCount: dto.childCount,
-      source,
-      status: BookingStatus.RoomHeld,
-      roomTotal,
-      depositAmount: Math.round(roomTotal * DEPOSIT_RATE),
-      rateSnapshot: rates,
-    });
-
-    let hold: RoomHoldDocument;
     try {
-      hold = await this.holds.create({
-        booking: booking._id,
-        holdToken: this.newHoldToken(),
-        ...(ctx.sessionId ? { sessionId: ctx.sessionId } : {}),
-        ...(ctx.clientIp ? { clientIp: ctx.clientIp } : {}),
+      if (rateLimited) await this.enforceHoldRate(ctx, now);
+
+      const { roomTotal, rates } = await this.priceRooms(
+        roomIds,
+        { adultCount: dto.adultCount, childCount: dto.childCount },
+        stay,
+      );
+      await this.assertRoomsFree(roomIds, stay, now);
+      const source =
+        user && user.role !== Role.Customer
+          ? BookingSource.FrontDesk
+          : BookingSource.Online;
+
+      const booking = await this.insertBooking({
+        _id: bookingId,
+        ...(user
+          ? user.role === Role.Customer
+            ? { customer: new Types.ObjectId(user.id) }
+            : { createdBy: new Types.ObjectId(user.id) }
+          : {}),
         rooms: roomIds,
         checkIn: stay.checkIn,
         checkOut: stay.checkOut,
-        expiresAt: new Date(now.getTime() + HOLD_WINDOW_MS),
-        isActive: true,
+        adultCount: dto.adultCount,
+        childCount: dto.childCount,
+        source,
+        status: BookingStatus.RoomHeld,
+        roomTotal,
+        depositAmount: Math.round(roomTotal * DEPOSIT_RATE),
+        rateSnapshot: rates,
       });
+
+      let hold: RoomHoldDocument;
+      try {
+        hold = await this.holds.create({
+          booking: booking._id,
+          holdToken: this.newHoldToken(),
+          ...(ctx.sessionId ? { sessionId: ctx.sessionId } : {}),
+          ...(ctx.clientIp ? { clientIp: ctx.clientIp } : {}),
+          rooms: roomIds,
+          checkIn: stay.checkIn,
+          checkOut: stay.checkOut,
+          expiresAt: new Date(now.getTime() + HOLD_WINDOW_MS),
+          isActive: true,
+        });
+      } catch (error) {
+        await this.bookings.deleteOne({ _id: booking._id });
+        throw error;
+      }
+
+      if (!(await this.wonTheRace(hold._id, roomIds, stay, now))) {
+        await this.holds.deleteOne({ _id: hold._id });
+        await this.bookings.deleteOne({ _id: booking._id });
+        throw new ConflictException(
+          'One or more rooms were just taken; please choose again',
+        );
+      }
+      return await this.holdResponse(booking, hold);
     } catch (error) {
-      await this.bookings.deleteOne({ _id: booking._id });
+      // A response/read failure after persistence must not unlock a live booking.
+      if (principal && !(await this.bookings.exists({ _id: bookingId })))
+        await this.principalLocks.deleteOne({
+          _id: principal,
+          booking: bookingId,
+        });
       throw error;
     }
+  }
 
-    if (!(await this.wonTheRace(hold._id, roomIds, stay, now))) {
-      await this.holds.deleteOne({ _id: hold._id });
-      await this.bookings.deleteOne({ _id: booking._id });
-      throw new ConflictException(
-        'One or more rooms were just taken; please choose again',
-      );
+  async activeHold(ctx: GuestSessionContext, user?: AuthUser) {
+    const active = await this.findActiveHold(ctx, user);
+    return { activeBooking: active ? this.activeSummary(active) : null };
+  }
+
+  private activeSummary({
+    booking,
+    hold,
+  }: {
+    booking: BookingDocument;
+    hold: RoomHoldDocument;
+  }) {
+    return {
+      id: String(booking._id),
+      code: booking.code,
+      status: booking.status,
+      holdExpiresAt: hold.expiresAt.toISOString(),
+    };
+  }
+
+  private async findActiveHold(ctx: GuestSessionContext, user?: AuthUser) {
+    const principalFilter = user
+      ? {
+          $or: [
+            { customer: new Types.ObjectId(user.id) },
+            { createdBy: new Types.ObjectId(user.id) },
+          ],
+        }
+      : { source: BookingSource.Online, customer: null, createdBy: null };
+    const candidates = await this.bookings
+      .find({
+        ...principalFilter,
+        isActive: true,
+        status: { $in: UNCONFIRMED_BOOKING_STATUSES },
+      })
+      .sort({ _id: 1 });
+    for (const booking of candidates) {
+      const hold = await this.holds.findOne({
+        booking: booking._id,
+        isActive: true,
+        expiresAt: { $gt: this.clock.now() },
+        ...(!user ? { sessionId: ctx.sessionId ?? '' } : {}),
+      });
+      if (hold) return { booking, hold };
     }
-    return await this.holdResponse(booking, hold);
+    return null;
+  }
+
+  private async resumeOrConflict(
+    active: { booking: BookingDocument; hold: RoomHoldDocument },
+    dto: HoldBookingDto,
+    stay: StayInterval,
+  ) {
+    const { booking, hold } = active;
+    const exact =
+      booking.rooms.length === dto.rooms.length &&
+      booking.rooms.every((room) => dto.rooms.includes(String(room))) &&
+      booking.checkIn.getTime() === stay.checkIn.getTime() &&
+      booking.checkOut.getTime() === stay.checkOut.getTime() &&
+      booking.adultCount === dto.adultCount &&
+      booking.childCount === (dto.childCount ?? 0);
+    if (exact) return this.holdResponse(booking, hold);
+    throw new ConflictException({
+      message:
+        'Bạn đang có một đơn đặt phòng chưa xác nhận. Vui lòng xem hoặc hủy đơn hiện tại trước khi đặt mới.',
+      error: 'Conflict',
+      code: 'ACTIVE_BOOKING_EXISTS',
+      existingBooking: this.activeSummary(active),
+    });
   }
 
   /**
