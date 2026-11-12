@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { Booking } from '../src/modules/bookings/schemas/booking.schema.js';
 import { RoomHold } from '../src/modules/bookings/schemas/room-hold.schema.js';
+import { HoldPrincipalLock } from '../src/modules/bookings/schemas/hold-principal-lock.schema.js';
 import { Room } from '../src/modules/rooms/schemas/room.schema.js';
 import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
 
@@ -33,7 +34,16 @@ describe('Cancel booking (e2e)', () => {
     guestPhone: '0900000000',
   });
 
-  const clean = () => bookings.deleteMany({ rooms: { $in: [roomId] } });
+  const clean = async () => {
+    const ids = (
+      await bookings.find({ rooms: roomId }).select('_id').lean()
+    ).map((row) => row._id);
+    await app
+      .get<Model<HoldPrincipalLock>>(getModelToken(HoldPrincipalLock.name))
+      .deleteMany({ booking: { $in: ids } });
+    await holds.deleteMany({ booking: { $in: ids } });
+    await bookings.deleteMany({ rooms: roomId });
+  };
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
