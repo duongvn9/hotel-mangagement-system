@@ -182,7 +182,7 @@ describe('Check out guest (e2e)', () => {
     await http().post(`/api/v1/bookings/${booking.id}/check-out`).expect(401);
   });
 
-  it('checks out a guest whose invoice is paid and sends the room to cleaning', async () => {
+  it('checks out a guest whose invoice is paid and makes the room available', async () => {
     const { booking } = await prepare();
     await payCash(booking.id);
     const { body } = await checkOut(booking.id).expect(201);
@@ -191,7 +191,7 @@ describe('Check out guest (e2e)', () => {
       code: booking.code,
       status: 'CHECKED_OUT',
       rooms: [
-        { id: String(r1), roomNumber: `OU-1-${tag}`, status: 'CLEANING' },
+        { id: String(r1), roomNumber: `OU-1-${tag}`, status: 'AVAILABLE' },
       ],
       invoice: {
         invoiceStatus: 'PAID',
@@ -205,7 +205,7 @@ describe('Check out guest (e2e)', () => {
     expect(saved?.status).toBe(BookingStatus.CheckedOut);
     expect(saved?.checkedOutAt).toBeDefined();
     expect(saved?.checkoutRoomProjectionCompletedAt).toBeInstanceOf(Date);
-    expect(await roomStatus(r1)).toBe('CLEANING');
+    expect(await roomStatus(r1)).toBe('AVAILABLE');
   });
 
   it('checks out straight away when the deposit already covers the invoice', async () => {
@@ -297,10 +297,10 @@ describe('Check out guest (e2e)', () => {
     const { booking } = await prepare({ roomIds: [r1, r2], deposit: 2000000 });
     const { body } = await checkOut(booking.id).expect(201);
     expect(body.rooms.map((room: { status: string }) => room.status)).toEqual([
-      'CLEANING',
+      'AVAILABLE',
       'MAINTENANCE',
     ]);
-    expect(await roomStatus(r1)).toBe('CLEANING');
+    expect(await roomStatus(r1)).toBe('AVAILABLE');
     expect(await roomStatus(r2)).toBe('MAINTENANCE');
   });
 
@@ -315,7 +315,7 @@ describe('Check out guest (e2e)', () => {
     expect((await bookings.findById(booking.id).lean())?.status).toBe(
       BookingStatus.CheckedOut,
     );
-    expect(await roomStatus(r1)).toBe('CLEANING');
+    expect(await roomStatus(r1)).toBe('AVAILABLE');
   });
 
   it('never projects a completed historical checkout onto a later occupied stay', async () => {
@@ -392,7 +392,7 @@ describe('Check out guest (e2e)', () => {
     );
     const later = await rooms.findById(r2).lean();
     await checkOut(booking.id).expect(201);
-    expect(await roomStatus(r1)).toBe('CLEANING');
+    expect(await roomStatus(r1)).toBe('AVAILABLE');
     expect(await rooms.findById(r2).lean()).toEqual(later);
     expect(
       (await bookings.findById(booking.id).orFail())
@@ -419,7 +419,7 @@ describe('Check out guest (e2e)', () => {
     const { booking } = await prepare({ deposit: 1000000 });
     await rooms.collection.updateOne({ _id: r1 }, { $unset: { updatedAt: 1 } });
     await checkOut(booking.id).expect(201);
-    expect(await roomStatus(r1)).toBe('CLEANING');
+    expect(await roomStatus(r1)).toBe('AVAILABLE');
   });
 
   it('repairs failed room updates on retry without rerunning checkout gates or changing its timestamp', async () => {
@@ -453,7 +453,7 @@ describe('Check out guest (e2e)', () => {
     expect(results.map((result) => result.status)).toEqual([201, 201]);
     for (const result of results)
       expect(result.body.checkedOutAt).toBe(closed.checkedOutAt!.toISOString());
-    expect(await roomStatus(r1)).toBe('CLEANING');
+    expect(await roomStatus(r1)).toBe('AVAILABLE');
     expect(await roomStatus(r2)).toBe('MAINTENANCE');
     expect((await bookings.findById(booking.id).orFail()).checkedOutAt).toEqual(
       closed.checkedOutAt,
@@ -470,7 +470,7 @@ describe('Check out guest (e2e)', () => {
     const closed = await bookings.findById(booking.id).orFail();
     const result = await checkOut(booking.id).expect(201);
     expect(result.body.checkedOutAt).toBe(closed.checkedOutAt!.toISOString());
-    expect(await roomStatus(r1)).toBe('CLEANING');
+    expect(await roomStatus(r1)).toBe('AVAILABLE');
   });
 
   it('closes the stay: no more charges or cash afterwards', async () => {

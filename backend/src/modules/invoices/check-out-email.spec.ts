@@ -52,7 +52,7 @@ function setup(options: { alreadyCheckedOut?: boolean } = {}) {
   const rooms = {
     updateMany: vi.fn(),
     find: vi.fn(() =>
-      chain([{ _id: roomId, roomNumber: '102', status: 'CLEANING' }]),
+      chain([{ _id: roomId, roomNumber: '102', status: 'AVAILABLE' }]),
     ),
   };
   const payments = { exists: vi.fn(async () => null) };
