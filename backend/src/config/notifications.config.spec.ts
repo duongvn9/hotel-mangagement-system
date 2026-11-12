@@ -3,11 +3,11 @@ import { notificationConfiguration } from './notifications.config.js';
 
 const base = { MONGODB_URI: 'mongodb://localhost/hms_test' };
 describe('H9 conditional configuration', () => {
-  it('defaults disabled, with optional empty Gmail fields', () => {
+  it('defaults disabled, with optional empty Brevo fields', () => {
     const result = envValidationSchema.validate({
       ...base,
       GMAIL_USER: '',
-      GMAIL_APP_PASSWORD: '',
+      BREVO_API_KEY: '',
     });
     expect(result.error).toBeUndefined();
     expect(result.value.NOTIFICATIONS_ENABLED).toBe(false);
@@ -18,14 +18,14 @@ describe('H9 conditional configuration', () => {
       sendTimeoutMs: 10000,
     });
   });
-  it.each(['GMAIL_USER', 'GMAIL_APP_PASSWORD'])(
+  it.each(['GMAIL_USER', 'BREVO_API_KEY'])(
     'requires %s when enabled',
     (missing) => {
       const input: Record<string, unknown> = {
         ...base,
         NOTIFICATIONS_ENABLED: true,
         GMAIL_USER: 'sender@example.com',
-        GMAIL_APP_PASSWORD: 'abcdefghijklmnop',
+        BREVO_API_KEY: 'xkeysib-test',
       };
       delete input[missing];
       expect(envValidationSchema.validate(input).error?.message).toContain(
@@ -37,7 +37,7 @@ describe('H9 conditional configuration', () => {
       );
     },
   );
-  it('does not require the Gmail App Password when Brevo sends the mail', () => {
+  it('requires a sender address and Brevo API key when enabled', () => {
     const input = {
       ...base,
       NOTIFICATIONS_ENABLED: 'true',
@@ -50,20 +50,6 @@ describe('H9 conditional configuration', () => {
       envValidationSchema.validate({ ...input, GMAIL_USER: '' }).error?.message,
     ).toContain('GMAIL_USER');
   });
-  it('accepts spaced App Password and normalizes both Joi and configuration output', () => {
-    const input = {
-      ...base,
-      NOTIFICATIONS_ENABLED: 'true',
-      GMAIL_USER: 'sender@example.com',
-      GMAIL_APP_PASSWORD: 'abcd efgh ijkl mnop',
-    };
-    const result = envValidationSchema.validate(input);
-    expect(result.error).toBeUndefined();
-    expect(result.value.GMAIL_APP_PASSWORD).toBe('abcdefghijklmnop');
-    expect(notificationConfiguration(input).appPassword).toBe(
-      'abcdefghijklmnop',
-    );
-  });
   it.each([
     { NOTIFICATIONS_ENABLED: 'yes' },
     { NOTIFICATIONS_MAX_ATTEMPTS: 0 },
@@ -74,10 +60,11 @@ describe('H9 conditional configuration', () => {
     { NOTIFICATIONS_SHUTDOWN_TIMEOUT_MS: 9999999 },
     { NOTIFICATIONS_FROM_NAME: 'x\r\nBcc: y' },
     { GMAIL_USER: 'not-an-email' },
+    { NOTIFICATIONS_ENABLED: true, GMAIL_USER: 'sender@example.com' },
     {
       NOTIFICATIONS_ENABLED: true,
       GMAIL_USER: 'sender@example.com',
-      GMAIL_APP_PASSWORD: '    ',
+      BREVO_API_KEY: '   ',
     },
   ])('rejects invalid configuration %j', (extra) =>
     expect(

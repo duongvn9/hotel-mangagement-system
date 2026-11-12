@@ -85,7 +85,7 @@ describe('CheckInService email', () => {
 
   it('still checks in when the email cannot be sent', async () => {
     const { sut, send } = setup();
-    send.mockRejectedValueOnce(new Error('smtp down'));
+    send.mockRejectedValueOnce(new Error('notification provider unavailable'));
 
     await expect(
       sut.checkIn(bookingId.toHexString(), {}),

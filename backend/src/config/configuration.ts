@@ -29,11 +29,6 @@ export const configuration = () => ({
     returnUrl: process.env.VNPAY_RETURN_URL ?? '',
     ipnUrl: process.env.VNPAY_IPN_URL ?? '',
   },
-  mail: {
-    user: process.env.MAIL_USER ?? '',
-    appPassword: process.env.MAIL_APP_PASSWORD ?? '',
-    from: process.env.MAIL_FROM ?? '',
-  },
 });
 
 export type AppConfig = ReturnType<typeof configuration>;

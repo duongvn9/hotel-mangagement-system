@@ -19,10 +19,11 @@ export const sample: NotificationInput = {
   },
 };
 describe('H9 background queue', () => {
-  it('treats temporary SMTP auth unavailability as 4xx rather than permanent bad credentials', () => {
-    expect(classifyFailure({ code: 'EAUTH', responseCode: 454 })).toEqual({
-      category: 'transient',
-      code: 'SMTP_454',
+  it('classifies Brevo authentication failures without exposing provider details', () => {
+    expect(classifyFailure({ code: 'EAUTH' })).toEqual({
+      category: 'auth',
+      code: 'BREVO_AUTH',
+      hint: 'Check BREVO_API_KEY and the verified GMAIL_USER sender address',
     });
   });
   let send: ReturnType<typeof vi.fn>;
@@ -97,7 +98,7 @@ describe('H9 background queue', () => {
       { _id: log._id },
       { $set: expect.objectContaining({ status: 'SENT' }) },
     );
-    send.mockRejectedValue(new Error('smtp failure'));
+    send.mockRejectedValue(new Error('Brevo request failed'));
     await service.send({
       ...input,
       relatedBookingId: '507f1f77bcf86cd799439013',
@@ -163,7 +164,7 @@ describe('H9 background queue', () => {
   });
   it('retries after exactly 1000 then 2000ms and resolves drain only after all retries', async () => {
     send
-      .mockRejectedValueOnce({ responseCode: 421 })
+      .mockRejectedValueOnce({ code: 'ECONNECTION' })
       .mockRejectedValueOnce({ code: 'ECONNRESET' })
       .mockResolvedValue(undefined);
     await service.send(sample);
@@ -215,23 +216,30 @@ describe('H9 background queue', () => {
   it.each([
     [550, 'permanent'],
     [535, 'auth'],
-  ])('does not retry SMTP %s', async (responseCode, category) => {
-    send.mockRejectedValue({ responseCode });
-    await service.send(sample);
-    await vi.runAllTimersAsync();
-    await service.drain();
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(error).toHaveBeenCalledWith(
-      expect.objectContaining({ category, final: true }),
-    );
-    if (responseCode === 535)
-      expect(error).toHaveBeenCalledWith(
-        expect.objectContaining({
-          hint: expect.stringContaining('App Password'),
+  ])(
+    'does not retry Brevo permanent failure %s',
+    async (responseCode, category) => {
+      send.mockRejectedValue(
+        Object.assign(new Error('Brevo rejected the request'), {
+          code: responseCode === 535 ? 'EAUTH' : 'SEND_FAILED',
         }),
       );
-  });
+      await service.send(sample);
+      await vi.runAllTimersAsync();
+      await service.drain();
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(error).toHaveBeenCalledWith(
+        expect.objectContaining({ category, final: true }),
+      );
+      if (responseCode === 535)
+        expect(error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            hint: expect.stringContaining('BREVO_API_KEY'),
+          }),
+        );
+    },
+  );
   it('retries timeouts and aborts the expired attempt', async () => {
     send
       .mockImplementationOnce(() => new Promise(() => {}))
@@ -285,7 +293,7 @@ describe('H9 background queue', () => {
   });
   it('shutdown waits for drain, including retry, then rejects new messages', async () => {
     send
-      .mockRejectedValueOnce({ responseCode: 450 })
+      .mockRejectedValueOnce({ code: 'ECONNECTION' })
       .mockResolvedValue(undefined);
     await service.send(sample);
     const closed = vi.fn();

@@ -4,13 +4,6 @@ import Joi from 'joi';
 /* eslint-disable unicorn/no-thenable, no-control-regex */
 
 export const notificationConfigFields = {
-  MAIL_HOST: Joi.string().hostname().default('smtp.gmail.com'),
-  MAIL_PORT: Joi.number().port().default(465),
-  MAIL_USER: Joi.string()
-    .email({ tlds: { allow: false } })
-    .allow('')
-    .default(''),
-  MAIL_PASS: Joi.string().allow('').default(''),
   MAIL_FROM_NAME: Joi.string()
     .pattern(/^[^\r\n\u0000]+$/)
     .max(200)
@@ -27,18 +20,13 @@ export const notificationConfigFields = {
       then: Joi.required(),
       otherwise: Joi.allow('').optional(),
     }),
-  GMAIL_APP_PASSWORD: Joi.string()
-    .replace(/\s/g, '')
+  BREVO_API_KEY: Joi.string()
+    .trim()
     .when('NOTIFICATIONS_ENABLED', {
       is: true,
-      then: Joi.when('BREVO_API_KEY', {
-        is: Joi.string().min(1).required(),
-        then: Joi.allow('').optional(),
-        otherwise: Joi.required(),
-      }),
+      then: Joi.string().min(1).required(),
       otherwise: Joi.allow('').optional(),
     }),
-  BREVO_API_KEY: Joi.string().allow('').optional(),
   NOTIFICATIONS_FROM_NAME: Joi.string()
     .pattern(/^[^\r\n\u0000]+$/)
     .max(200)
@@ -68,15 +56,7 @@ export const notificationConfigFields = {
 
 export const notificationConfiguration = (env: NodeJS.ProcessEnv) => ({
   enabled: env.NOTIFICATIONS_ENABLED?.toLowerCase() === 'true',
-  host: env.MAIL_HOST ?? 'smtp.gmail.com',
-  port: Number(env.MAIL_PORT ?? 465),
-  user: env.MAIL_USER || env.GMAIL_USER || '',
-  appPassword: (
-    env.MAIL_PASS ||
-    env.GMAIL_APP_PASSWORD ||
-    env.MAIL_APP_PASSWORD ||
-    ''
-  ).replace(/\s/g, ''),
+  user: env.GMAIL_USER ?? '',
   brevoApiKey: env.BREVO_API_KEY ?? '',
   fromName:
     env.MAIL_FROM_NAME ?? env.NOTIFICATIONS_FROM_NAME ?? 'Grand Emily Hotel',

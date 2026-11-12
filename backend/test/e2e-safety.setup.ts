@@ -12,8 +12,8 @@ Object.assign(process.env, {
   FIREBASE_CLIENT_EMAIL: '',
   FIREBASE_PRIVATE_KEY: '',
   NOTIFICATIONS_ENABLED: 'false',
-  MAIL_USER: '',
-  MAIL_APP_PASSWORD: '',
+  GMAIL_USER: '',
+  BREVO_API_KEY: '',
   VNPAY_TMN_CODE: '',
   VNPAY_HASH_SECRET: '',
 });

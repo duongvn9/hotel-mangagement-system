@@ -39,22 +39,12 @@ export function classifyFailure(error: unknown): Failure {
     error && typeof error === 'object'
       ? (error as { responseCode?: unknown; code?: unknown })
       : {};
-  const smtp =
-    typeof e.responseCode === 'number' && Number.isInteger(e.responseCode)
-      ? e.responseCode
-      : 0;
-  // SMTP 4xx (including a temporarily unavailable authentication service) wins
-  // over Nodemailer's broader EAUTH classification.
-  if (smtp >= 400 && smtp <= 499)
-    return { category: 'transient', code: `SMTP_${smtp}` };
-  if (smtp === 535 || e.code === 'EAUTH')
+  if (e.code === 'EAUTH')
     return {
       category: 'auth',
-      code: 'SMTP_AUTH',
-      hint: 'Check GMAIL_USER and Google App Password / 2-Step Verification',
+      code: 'BREVO_AUTH',
+      hint: 'Check BREVO_API_KEY and the verified GMAIL_USER sender address',
     };
-  if (smtp >= 500 && smtp <= 599)
-    return { category: 'permanent', code: `SMTP_${smtp}` };
   if (e.code === 'ETIMEDOUT') return { category: 'timeout', code: 'ETIMEDOUT' };
   const network = [
     'ECONNECTION',

@@ -26,7 +26,7 @@ Planned modules (per the SRS and the Sprint 1 assignment):
 | `feedback` | UC39–41 | Dương (UC40–41), Khoa (UC39) |
 | `rooms`, `room-types`, `amenities`, `services` | UC47–54 | Trần Bảo Lâm |
 | `equipment`, `maintenance` | UC35–36 | Trần Bảo Lâm |
-| `notifications` (Gmail) | BR-NOTI | Trần Bảo Lâm |
+| `notifications` (Brevo) | BR-NOTI | Trần Bảo Lâm |
 | `reports` | UC55–57, Manager Dashboard | Trần Bảo Lâm |
 | `bookings`, `room-holds` | UC05–07, UC09, UC12, My Bookings | Nguyễn Công Hiếu |
 | `invoices`, `payments` (VNPay) | UC19–21 | Nguyễn Công Hiếu |
