@@ -2,6 +2,19 @@ import { api } from '@/lib/api-client'
 import { normalizeOrderQuery, type OrderQuery, type ServiceOrder } from './api'
 
 export interface StaffServiceOrder extends ServiceOrder {
+  intakeMode?: 'UNPERFORMED' | 'COMPLETED_ON_SITE'
+  intakeRole?: string
+  reportedByName?: string | null
+  createdByName?: string | null
+  actualPerformerName?: string | null
+  roomNumber?: string | null
+  createdBy?: string
+  reportedBy?: string
+  requesterName?: string | null
+  roomId?: string | null
+  actualPerformerId?: string | null
+  actualCompletedAt?: string | null
+  completionDetails?: string | null
   customer: { id: string | null; fullName: string | null }
   booking: {
     code: string
@@ -19,6 +32,33 @@ export interface StaffServiceOrder extends ServiceOrder {
     reviewedByName?: string | null
     reviewedAt: string
   }
+  acceptanceRecovery?: {
+    decision: 'REJECT'
+    action?: 'ABANDON_EXPIRED'
+    actorRole?: 'RECEPTIONIST'
+    previousReviewStatus?: 'ACCEPTING'
+    resultingReviewStatus?: 'ABANDONED'
+    reason: string
+    rejectionReason: string
+    actor: string
+    at: string
+    evidence?: {
+      chargeExpected: boolean
+      sourceChargeAbsent: boolean
+      taskAbsent: boolean
+      bookingStatus?: string
+      checkIn?: string
+      checkOut?: string
+      requestedTime?: string
+      reviewedBy?: string
+      reviewedAt?: string
+      reviewDecision?: string
+      reviewReason?: string
+      quantity?: number
+      unitPriceVND?: number
+      amount?: number
+    }
+  }
   invoiceId?: string
   billedAt?: string
   assignmentIntent?: AssignmentInput
@@ -30,6 +70,14 @@ export interface StaffServiceOrder extends ServiceOrder {
     assignedAt: string
     dueAt?: string
     completedAt?: string
+    reassignments?: {
+      requestId: string
+      actorId: string
+      previousAssigneeId: string
+      assigneeId: string
+      reason: string
+      at: string
+    }[]
   } | null
 }
 export interface AssignmentInput {
@@ -61,6 +109,7 @@ export async function assignServiceOrder(id: string, input: AssignmentInput) {
 }
 export function billingLabel(order: StaffServiceOrder) {
   if (order.billingStatus === 'BILLED') return 'Đã ghi vào hóa đơn · không xác nhận thanh toán'
+  if (order.reviewStatus === 'ABANDONED') return 'Không ghi phí · đã dừng kỹ thuật'
   if (order.reviewStatus === 'REJECTED') return 'Không ghi phí · đã từ chối'
   if (!order.feeRequired) return 'Không tính phí'
   if (order.billingStatus === 'PENDING') return 'Chờ ghi phí vào hóa đơn'
@@ -69,6 +118,8 @@ export function billingLabel(order: StaffServiceOrder) {
 export interface ReviewInput {
   decision: 'ACCEPT' | 'REJECT'
   reason?: string
+  recoveryAction?: 'ABANDON_EXPIRED'
+  recoveryReason?: string
 }
 export interface StaffOrderPage {
   items: StaffServiceOrder[]
@@ -95,9 +146,22 @@ export async function reviewStaffOrder(id: string, input: ReviewInput) {
     (input.decision === 'REJECT' && !reason)
   )
     throw new Error('Lý do từ chối là bắt buộc và lý do tối đa 2000 ký tự.')
+  const recoveryReason = input.recoveryReason?.trim()
+  if (input.recoveryAction !== undefined || input.recoveryReason !== undefined) {
+    if (
+      input.recoveryAction !== 'ABANDON_EXPIRED' ||
+      input.decision !== 'REJECT' ||
+      !recoveryReason ||
+      recoveryReason.length > 2000
+    )
+      throw new Error(
+        'Nhập lý do công khai và lý do khôi phục nội bộ (tối đa 2000 ký tự mỗi lý do).',
+      )
+  }
   const body: ReviewInput = {
     decision: input.decision,
     ...(input.reason !== undefined ? { reason } : {}),
+    ...(input.recoveryAction ? { recoveryAction: input.recoveryAction, recoveryReason } : {}),
   }
   return (
     await api.patch<StaffServiceOrder>(`/service-orders/${encodeURIComponent(id)}/review`, body)

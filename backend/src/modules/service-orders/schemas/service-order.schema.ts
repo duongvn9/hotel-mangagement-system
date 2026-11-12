@@ -95,6 +95,30 @@ export class ServiceOrder {
     type: {
       _id: false,
       decision: { type: String, enum: ['REJECT'], required: true },
+      action: { type: String, enum: ['ABANDON_EXPIRED'] },
+      actorRole: { type: String, enum: ['RECEPTIONIST'] },
+      previousReviewStatus: { type: String, enum: ['ACCEPTING'] },
+      resultingReviewStatus: { type: String, enum: ['ABANDONED'] },
+      evidence: {
+        type: {
+          _id: false,
+          chargeExpected: { type: Boolean, required: true },
+          sourceChargeAbsent: { type: Boolean, required: true },
+          taskAbsent: { type: Boolean, required: true },
+          bookingStatus: String,
+          checkIn: Date,
+          checkOut: Date,
+          requestedTime: Date,
+          reviewedBy: Types.ObjectId,
+          reviewedAt: Date,
+          reviewDecision: String,
+          reviewReason: String,
+          quantity: Number,
+          unitPriceVND: Number,
+          amount: Number,
+        },
+        default: undefined,
+      },
       reason: { type: String, required: true },
       rejectionReason: { type: String, required: true },
       actor: { type: Types.ObjectId, ref: 'User', required: true },
@@ -105,6 +129,26 @@ export class ServiceOrder {
   })
   acceptanceRecovery?: {
     decision: 'REJECT';
+    action?: 'ABANDON_EXPIRED';
+    actorRole?: 'RECEPTIONIST';
+    previousReviewStatus?: 'ACCEPTING';
+    resultingReviewStatus?: 'ABANDONED';
+    evidence?: {
+      chargeExpected: boolean;
+      sourceChargeAbsent: boolean;
+      taskAbsent: boolean;
+      bookingStatus?: string;
+      checkIn?: Date;
+      checkOut?: Date;
+      requestedTime?: Date;
+      reviewedBy?: Types.ObjectId;
+      reviewedAt?: Date;
+      reviewDecision?: string;
+      reviewReason?: string;
+      quantity?: number;
+      unitPriceVND?: number;
+      amount?: number;
+    };
     reason: string;
     rejectionReason: string;
     actor: Types.ObjectId;
@@ -160,6 +204,39 @@ export class ServiceOrder {
   @Prop({ type: Types.ObjectId, ref: 'Task' })
   linkedTask?: Types.ObjectId;
 
+  @Prop({ immutable: true })
+  intakeMode?: string;
+
+  @Prop({ immutable: true, select: false })
+  intakeKey?: string;
+
+  @Prop({ immutable: true, select: false })
+  intakeFingerprint?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', immutable: true })
+  createdBy?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', immutable: true })
+  reportedBy?: Types.ObjectId;
+
+  @Prop({ immutable: true })
+  intakeRole?: string;
+
+  @Prop({ immutable: true })
+  requesterName?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Room', immutable: true })
+  room?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', immutable: true })
+  actualPerformer?: Types.ObjectId;
+
+  @Prop({ immutable: true })
+  actualCompletedAt?: Date;
+
+  @Prop({ immutable: true })
+  completionDetails?: string;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -169,5 +246,10 @@ ServiceOrderSchema.index(
   { customer: 1, requestId: 1 },
   { unique: true, partialFilterExpression: { requestId: { $exists: true } } },
 );
+ServiceOrderSchema.index(
+  { intakeKey: 1 },
+  { unique: true, partialFilterExpression: { intakeKey: { $exists: true } } },
+);
+ServiceOrderSchema.index({ reportedBy: 1, createdAt: -1 });
 ServiceOrderSchema.index({ customer: 1, booking: 1, createdAt: -1 });
 ServiceOrderSchema.index({ reviewStatus: 1, createdAt: -1, _id: -1 });

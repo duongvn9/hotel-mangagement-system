@@ -17,6 +17,7 @@ import {
 } from '../payments/schemas/payment-transaction.schema.js';
 import { Room } from '../rooms/schemas/room.schema.js';
 import { AvailabilityClock } from './availability.adapters.js';
+import { withBookingFinancialOperation } from './booking-financial-operation.js';
 import { AvailabilityService } from './availability.service.js';
 import {
   applyReplacements,
@@ -66,6 +67,15 @@ export class CheckInService {
    * một phòng bị người khác lấy mất thì hoàn tác phần đã làm rồi trả 409.
    */
   async checkIn(bookingId: string, dto: CheckInDto): Promise<CheckInResult> {
+    return withBookingFinancialOperation(this.bookings, bookingId, () =>
+      this.checkInLocked(bookingId, dto),
+    );
+  }
+
+  private async checkInLocked(
+    bookingId: string,
+    dto: CheckInDto,
+  ): Promise<CheckInResult> {
     const booking = await this.confirmedBooking(bookingId);
     await this.requireDepositPaid(booking);
     const windowError = checkInWindowError(
