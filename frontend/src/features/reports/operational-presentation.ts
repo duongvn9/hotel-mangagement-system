@@ -32,6 +32,7 @@ export const REVIEW_LABELS = {
   ACCEPTING: 'Đang tiếp nhận',
   ACCEPTED: 'Đã tiếp nhận',
   REJECTED: 'Đã từ chối',
+  ABANDONED: 'Đã dừng kỹ thuật · lịch dịch vụ đã qua',
 }
 export const EXECUTION_LABELS = {
   NOT_STARTED: 'Chưa bắt đầu',

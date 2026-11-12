@@ -7,7 +7,10 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.e2e-spec.ts'],
-    setupFiles: ['./test/setup-notifications.ts'],
+    setupFiles: [
+      './test/e2e-safety.setup.ts',
+      './test/setup-notifications.ts',
+    ],
     // Các file e2e dùng chung một database nên chạy lần lượt.
     fileParallelism: false,
   },

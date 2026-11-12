@@ -101,7 +101,53 @@ beforeEach(() => {
   vi.mocked(api.post).mockResolvedValue({ data: order({ id: 'order-2' }) })
 })
 
+afterEach(() => vi.restoreAllMocks())
+
 describe('RoomServicePage (prototype order-service)', () => {
+  it('replays the frozen request after its scheduled time passes and prevents edits after an uncertain response', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-12-21T11:59').getTime())
+    mockApi({ contexts: [upcoming] })
+    vi.mocked(api.post)
+      .mockRejectedValueOnce(new Error('response lost'))
+      .mockResolvedValue({ data: order() })
+    renderPage()
+    fireEvent.click(await card(/Giặt ủi/))
+    fireEvent.change(screen.getByLabelText('Thời gian yêu cầu'), {
+      target: { value: '2026-12-21T12:00' },
+    })
+    fireEvent.change(screen.getByLabelText('Ghi chú cho nhân viên'), {
+      target: { value: 'Giữ nguyên' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Đặt dịch vụ' }))
+    await screen.findByRole('alert')
+    expect(screen.getByLabelText('Thời gian yêu cầu')).toBeDisabled()
+    expect(screen.getByLabelText('Ghi chú cho nhân viên')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Chọn booking' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Tăng số lượng' })).toBeDisabled()
+    expect(await card(/Bữa sáng tại phòng/)).toBeDisabled()
+    const original = vi.mocked(api.post).mock.calls[0][1]
+    clock.mockReturnValue(new Date('2026-12-21T12:01').getTime())
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại cùng nội dung' }))
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(api.post).mock.calls[1][1]).toEqual(original)
+    expect(await screen.findByText(/Đã đặt Giặt ủi/)).toBeInTheDocument()
+  })
+  it('requires a future stay time for confirmed bookings and sends the chosen requestedTime', async () => {
+    mockApi({ contexts: [upcoming] })
+    renderPage()
+    fireEvent.click(await card(/Giặt ủi/))
+    fireEvent.click(screen.getByRole('button', { name: 'Đặt dịch vụ' }))
+    expect(api.post).not.toHaveBeenCalled()
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Thời gian/)
+    fireEvent.change(screen.getByLabelText('Thời gian yêu cầu'), {
+      target: { value: '2026-12-21T12:00' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Đặt dịch vụ' }))
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(api.post).mock.calls[0][1]).toMatchObject({
+      requestedTime: new Date('2026-12-21T12:00').toISOString(),
+    })
+  })
   it('titles the page and says which room the order is for, preferring the in-house stay', async () => {
     renderPage()
 
@@ -198,7 +244,7 @@ describe('RoomServicePage (prototype order-service)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Đặt dịch vụ' }))
     expect(await screen.findByRole('alert')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Đặt dịch vụ' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại cùng nội dung' }))
 
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2))
     const [first, second] = vi

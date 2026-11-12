@@ -192,7 +192,7 @@ describe('service order task detail context', () => {
         linkedTask: f.task._id,
         reviewStatus: 'ACCEPTED',
       },
-      { projection: { serviceName: 1, booking: 1 } },
+      { projection: { serviceName: 1, booking: 1, room: 1 } },
     );
     expect(f.booking).toHaveBeenCalledWith(
       { _id: f.order.booking },
@@ -776,6 +776,42 @@ describe('H8 task contract', () => {
       );
       expect(tasks.findOneAndUpdate).not.toHaveBeenCalled();
     });
+
+    it.each([undefined, 0, 4])(
+      'fences stale progress across A-B-A reassignment at revision %s',
+      async (revision) => {
+        const { service, tasks } = setup();
+        tasks.findOne.mockReturnValue({
+          lean: async () => ({
+            ...executionTask,
+            assignedTo: new Types.ObjectId(ID),
+            ...(revision === undefined ? {} : { revision }),
+          }),
+        });
+        tasks.findOneAndUpdate.mockImplementation(
+          async (filter: Record<string, unknown>) => {
+            const currentRevision = (revision ?? 0) + 2;
+            return filter.revision === undefined ||
+              filter.revision === currentRevision
+              ? { ...executionTask, status: to }
+              : null;
+          },
+        );
+        await expect(
+          service.transitionAssignedTask(
+            ID,
+            ID,
+            from,
+            to,
+            to === TaskStatus.Completed ? 'Done' : undefined,
+          ),
+        ).rejects.toThrow('changed');
+        expect(tasks.findOneAndUpdate.mock.calls[0][0]).toHaveProperty(
+          'revision',
+          revision === undefined ? { $exists: false } : revision,
+        );
+      },
+    );
 
     it('allows finalized canonical work even when its progress projection lags', async () => {
       const { service, tasks, findOne } = setup();

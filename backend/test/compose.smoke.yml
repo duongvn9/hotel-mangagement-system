@@ -1,0 +1,70 @@
+networks:
+  default:
+    labels:
+      hms.smoke.token: ${HMS_SMOKE_TOKEN:?Required}
+
+services:
+  mongo:
+    image: mongo:8
+    labels:
+      hms.smoke.token: ${HMS_SMOKE_TOKEN:?Required}
+    ports:
+      - '127.0.0.1::27017'
+    tmpfs:
+      - /data/db
+      - /data/configdb
+    healthcheck:
+      test:
+        ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  backend:
+    build:
+      context: ..
+      target: dev
+    labels:
+      hms.smoke.token: ${HMS_SMOKE_TOKEN:?Required}
+    command: ['sh', '-c', 'npm run build && node dist/main.js']
+    environment:
+      NODE_ENV: test
+      PORT: '3000'
+      MONGODB_URI: mongodb://mongo:27017/hms_reporting_smoke_test
+      SWAGGER_ENABLED: 'true'
+      NOTIFICATIONS_ENABLED: 'false'
+      FIREBASE_PROJECT_ID: ''
+      FIREBASE_CLIENT_EMAIL: ''
+      FIREBASE_PRIVATE_KEY: ''
+      GOOGLE_APPLICATION_CREDENTIALS: ''
+      GMAIL_USER: ''
+      GMAIL_APP_PASSWORD: ''
+      MAIL_USER: ''
+      MAIL_APP_PASSWORD: ''
+      MAIL_FROM: ''
+      BREVO_API_KEY: ''
+      VNPAY_TMN_CODE: ''
+      VNPAY_HASH_SECRET: ''
+      VNPAY_PAYMENT_URL: ''
+      VNPAY_RETURN_URL: ''
+      VNPAY_IPN_URL: ''
+      S3_ENDPOINT: ''
+      S3_ACCESS_KEY_ID: ''
+      S3_SECRET_ACCESS_KEY: ''
+    ports:
+      - '127.0.0.1::3000'
+    depends_on:
+      mongo:
+        condition: service_healthy
+  frontend:
+    build:
+      context: ../..
+      dockerfile: frontend/Dockerfile
+      target: dev
+    labels:
+      hms.smoke.token: ${HMS_SMOKE_TOKEN:?Required}
+    environment:
+      VITE_PROXY_TARGET: http://backend:3000
+    ports:
+      - '127.0.0.1::5173'
+    depends_on:
+      - backend

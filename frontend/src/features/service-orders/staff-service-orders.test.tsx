@@ -151,6 +151,149 @@ it('never falls back to reviewer or assignee IDs when names are missing', async 
   }
 })
 
+describe('expired acceptance abandonment', () => {
+  function acceptingOrder() {
+    current = {
+      ...receipt,
+      booking: { ...receipt.booking!, status: 'CONFIRMED' },
+      reviewStatus: 'ACCEPTING',
+      billingStatus: 'PENDING',
+      review: {
+        decision: 'ACCEPT',
+        reason: 'Original acceptance',
+        reviewedBy: 'reviewer-id',
+        reviewedByName: 'Trần Bình',
+        reviewedAt: receipt.createdAt,
+      },
+    }
+  }
+  it('keeps abandoned detail terminal with public reason and separate recovery audit', async () => {
+    acceptingOrder()
+    current = {
+      ...current,
+      reviewStatus: 'ABANDONED',
+      billingStatus: 'NOT_REQUIRED',
+      reviewReason: 'Lịch dịch vụ đã qua',
+      acceptanceRecovery: {
+        decision: 'REJECT',
+        action: 'ABANDON_EXPIRED',
+        reason: 'Đã kiểm tra nguồn phí và công việc',
+        rejectionReason: 'Lịch dịch vụ đã qua',
+        actor: 'recovery-actor',
+        actorRole: 'RECEPTIONIST',
+        at: receipt.requestedTime,
+        previousReviewStatus: 'ACCEPTING',
+        resultingReviewStatus: 'ABANDONED',
+        evidence: {
+          chargeExpected: true,
+          sourceChargeAbsent: true,
+          taskAbsent: true,
+          reviewedBy: 'reviewer-id',
+          reviewedAt: receipt.createdAt,
+          reviewDecision: 'ACCEPT',
+          reviewReason: 'Original acceptance',
+        },
+      },
+    }
+    page()
+    expect(await screen.findByText('Kết quả duyệt đã hoàn tất, chỉ xem.')).toBeInTheDocument()
+    expect(screen.getByText('Lý do từ chối: Lịch dịch vụ đã qua')).toBeInTheDocument()
+    expect(screen.getByText('Người duyệt: Trần Bình')).toBeInTheDocument()
+    expect(screen.getByText('Lý do đã lưu: Original acceptance')).toBeInTheDocument()
+    expect(
+      screen.getByText('Lý do khôi phục nội bộ: Đã kiểm tra nguồn phí và công việc'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Vai trò thực hiện: Lễ tân')).toBeInTheDocument()
+    expect(screen.getByText('Không ghi phí · đã dừng kỹ thuật')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Quyết định')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Phân công|Gửi đơn/ })).not.toBeInTheDocument()
+    expect(api.patch).not.toHaveBeenCalled()
+    expect(api.get).not.toHaveBeenCalledWith(expect.stringContaining('/assignees'))
+  })
+  it('requires explicit recovery, both reasons and confirmation, and freezes the identical payload on unknown outcome', async () => {
+    acceptingOrder()
+    vi.mocked(api.patch).mockRejectedValue(httpError(503))
+    page()
+    await screen.findByLabelText('Quyết định')
+    expect(screen.getByLabelText('Quyết định')).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Dừng kỹ thuật lịch dịch vụ đã qua' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đơn' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Nhập lý do công khai và lý do khôi phục nội bộ',
+    )
+    fireEvent.change(screen.getByLabelText(/Lý do \(bắt buộc/), {
+      target: { value: ' Lịch đã qua ' },
+    })
+    fireEvent.change(
+      screen.getByLabelText('Lý do khôi phục nội bộ (bắt buộc, tối đa 2000 ký tự)'),
+      { target: { value: ' Kiểm tra không có phí hoặc công việc ' } },
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đơn' }))
+    expect(api.patch).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toHaveTextContent('Máy chủ xác minh')
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận gửi' }))
+    const payload = {
+      decision: 'REJECT',
+      reason: 'Lịch đã qua',
+      recoveryReason: 'Kiểm tra không có phí hoặc công việc',
+      recoveryAction: 'ABANDON_EXPIRED',
+    }
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith('/service-orders/order-1/review', payload),
+    )
+    await screen.findByRole('alert')
+    expect(screen.getByLabelText('Quyết định')).toBeDisabled()
+    expect(screen.getByLabelText(/Lý do \(bắt buộc/)).toBeDisabled()
+    expect(
+      screen.getByLabelText('Lý do khôi phục nội bộ (bắt buộc, tối đa 2000 ký tự)'),
+    ).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại cùng nội dung' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận gửi' }))
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(api.patch).mock.calls[1]).toEqual(vi.mocked(api.patch).mock.calls[0])
+  })
+  it('filters the staff list by abandoned without losing the terminal label', async () => {
+    current = { ...receipt, reviewStatus: 'ABANDONED' }
+    page('/staff/service-orders')
+    await screen.findByRole('link', { name: 'Giặt ủi' })
+    const option = screen.getByRole('option', { name: 'Đã dừng kỹ thuật · lịch dịch vụ đã qua' })
+    fireEvent.change(option.closest('select')!, { target: { value: 'ABANDONED' } })
+    await waitFor(() =>
+      expect(api.get).toHaveBeenLastCalledWith('/service-orders/requests', {
+        params: { page: 1, limit: 20, reviewStatus: 'ABANDONED' },
+      }),
+    )
+    expect(document.body).not.toHaveTextContent('Chưa xác định')
+  })
+  it.each(['', ' ', 'x'.repeat(2001)])(
+    'rejects invalid private recovery reason before PATCH: %s',
+    async (recoveryReason) => {
+      await expect(
+        reviewStaffOrder('order-1', {
+          decision: 'REJECT',
+          reason: 'Public reason',
+          recoveryAction: 'ABANDON_EXPIRED',
+          recoveryReason,
+        }),
+      ).rejects.toThrow()
+      expect(api.patch).not.toHaveBeenCalled()
+    },
+  )
+  it.each(['CHECKED_IN', 'CHECKED_OUT'])(
+    'does not offer expired recovery for %s',
+    async (status) => {
+      acceptingOrder()
+      current.booking!.status = status
+      page()
+      await screen.findByLabelText('Quyết định')
+      expect(
+        screen.queryByRole('button', { name: 'Dừng kỹ thuật lịch dịch vụ đã qua' }),
+      ).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Quyết định')).toBeDisabled()
+    },
+  )
+})
+
 describe('Receptionist service-order access', () => {
   it.each([
     'MANAGER',
