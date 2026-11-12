@@ -12,9 +12,11 @@ import {
 } from './notification.transport.js';
 import { NOTIFICATION_TRANSPORT } from './notification.types.js';
 import { NotificationsService } from './notifications.service.js';
+import { NotificationsPreviewController } from './notifications-preview.controller.js';
 
 @Module({
   imports: [ConfigModule],
+  controllers: [NotificationsPreviewController],
   providers: [
     NotificationScheduler,
     NotificationsService,
