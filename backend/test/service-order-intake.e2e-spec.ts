@@ -19,6 +19,7 @@ import { addInspection } from './inspection-fixture.js';
 import { CheckInService } from '../src/modules/bookings/check-in.service.js';
 import { BookingsService } from '../src/modules/bookings/bookings.service.js';
 import { CheckOutService } from '../src/modules/invoices/check-out.service.js';
+import { assertServiceOrderTestDatabase } from './test-database.js';
 
 describe('isolated ServiceOrder intake API', () => {
   let app: INestApplication;
@@ -54,14 +55,7 @@ describe('isolated ServiceOrder intake API', () => {
       .send({ decision: 'ACCEPT' });
 
   beforeAll(async () => {
-    const uri = new URL(process.env.MONGODB_URI ?? 'http://invalid');
-    if (
-      process.env.SERVICE_ORDER_MEMORY_TEST !== '1' ||
-      uri.protocol !== 'mongodb:' ||
-      !['127.0.0.1', 'localhost'].includes(uri.hostname) ||
-      uri.pathname !== '/hms_intake_memory_test'
-    )
-      throw new Error('Run only through isolated in-memory runner');
+    assertServiceOrderTestDatabase(process.env);
     const module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
