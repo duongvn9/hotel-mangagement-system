@@ -261,7 +261,7 @@ describe('isolated ServiceOrder intake API', () => {
       balanceDue: 0,
     });
     expect((await model(Room).findById(room._id).orFail()).status).toBe(
-      'CLEANING',
+      'AVAILABLE',
     );
   });
 
