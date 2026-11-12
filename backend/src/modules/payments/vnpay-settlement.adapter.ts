@@ -8,7 +8,6 @@ import {
   UNCONFIRMED_BOOKING_STATUSES,
 } from '../../common/constants/booking-status.enum.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { bookingConfirmationEmail } from '../bookings/booking-email.js';
 import { Booking } from '../bookings/schemas/booking.schema.js';
 import { withBookingFinancialOperation } from '../bookings/booking-financial-operation.js';
 import { RoomHold } from '../bookings/schemas/room-hold.schema.js';
@@ -134,16 +133,24 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
         // Booking vừa CONFIRMED: tự sinh ServiceOrder từ dịch vụ khách chọn khi đặt.
         await this.generateServiceOrders(expected.booking.id);
         // Gửi email xác nhận booking cho khách (best-effort).
-        await this.emailBookingConfirmed(expected.booking.id);
+        if (!duplicate)
+          void this.emailDepositPaid(
+            expected.booking.id,
+            expected.payment.amount,
+            result.transactionRef,
+            result.paidAt ?? new Date(),
+            String(settled._id),
+          );
       }
       await this.reconcileInvoice(expected);
-      if (expected.payment.purpose === PaymentPurpose.Final) {
+      if (expected.payment.purpose === PaymentPurpose.Final && !duplicate) {
         // Gửi email biên nhận thanh toán cuối cho khách (best-effort).
-        await this.emailPaymentSuccess(
+        void this.emailPaymentSuccess(
           expected.booking.id,
           expected.payment.amount,
           result.transactionRef,
           result.paidAt ?? new Date(),
+          String(settled._id),
         );
       }
     }
@@ -152,33 +159,35 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
   }
 
   /** Email "booking đã xác nhận" sau khi cọc thành công; lỗi không ảnh hưởng settlement. */
-  private async emailBookingConfirmed(bookingId: string): Promise<void> {
+  private async emailDepositPaid(
+    bookingId: string,
+    amount: number,
+    transactionRef: string,
+    paidAt: Date,
+    paymentId: string,
+  ): Promise<void> {
     try {
       const booking = await this.bookings
         .findById(bookingId)
-        .select(
-          'code guestName guestEmail checkIn checkOut rooms roomTotal depositAmount',
-        )
+        .select('code guestName guestEmail status')
         .lean();
       if (!booking?.guestEmail) return;
-      const input = bookingConfirmationEmail({
-        code: booking.code,
-        guestName: booking.guestName,
-        guestEmail: booking.guestEmail,
-        checkIn: booking.checkIn,
-        checkOut: booking.checkOut,
-        roomCount: booking.rooms.length,
-        roomTotal: booking.roomTotal,
-        depositAmount: booking.depositAmount,
-        status: BookingStatus.Confirmed,
+      void this.notifications.send({
+        to: booking.guestEmail,
+        type: 'deposit-paid',
+        relatedBookingId: bookingId,
+        relatedPaymentId: paymentId,
+        data: {
+          bookingCode: booking.code,
+          guestName: booking.guestName ?? '',
+          amount,
+          paidAt,
+          transactionRef,
+          bookingState: booking.status,
+        },
       });
-      if (input) await this.notifications.send(input);
-    } catch (error) {
-      this.logger.warn(
-        `Booking confirmation email failed for ${bookingId}: ${
-          (error as Error).message
-        }`,
-      );
+    } catch {
+      this.logger.warn(`Deposit email preparation failed for ${bookingId}`);
     }
   }
 
@@ -188,31 +197,39 @@ export class MongoVnpaySettlementPort extends VnpaySettlementPort {
     amount: number,
     transactionRef: string,
     paidAt: Date,
+    paymentId: string,
   ): Promise<void> {
     try {
       const booking = await this.bookings
         .findById(bookingId)
-        .select('code guestName guestEmail')
+        .select('code guestName guestEmail status')
         .lean();
       if (!booking?.guestEmail) return;
-      await this.notifications.send({
+      const invoice = await this.invoices.findOne({
+        booking: new Types.ObjectId(bookingId),
+      });
+      void this.notifications.send({
         to: booking.guestEmail,
-        template: 'PAYMENT_SUCCESS',
+        type: 'final-payment-paid',
+        relatedBookingId: bookingId,
+        relatedPaymentId: paymentId,
         data: {
           bookingCode: booking.code,
           guestName: booking.guestName ?? '',
           amount,
-          purpose: PaymentPurpose.Final,
           paidAt,
           transactionRef,
+          bookingState: booking.status,
+          outstandingBalance: invoice?.balanceDue ?? 0,
+          roomCharges: invoice?.roomTotal ?? 0,
+          serviceCharges: invoice?.serviceTotal ?? 0,
+          additionalCharges: invoice?.additionalTotal ?? 0,
+          discounts: invoice?.discountTotal ?? 0,
+          total: invoice?.totalAmount ?? amount,
         },
       });
-    } catch (error) {
-      this.logger.warn(
-        `Payment success email failed for ${bookingId}: ${
-          (error as Error).message
-        }`,
-      );
+    } catch {
+      this.logger.warn(`Payment email preparation failed for ${bookingId}`);
     }
   }
 

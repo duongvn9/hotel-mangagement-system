@@ -33,8 +33,28 @@ export const envValidationSchema = Joi.object({
   VNPAY_RETURN_URL: vnpayConfigFields.returnUrl.allow('').optional(),
   VNPAY_IPN_URL: vnpayConfigFields.ipnUrl.allow('').optional(),
 
-  // Gmail notification (BR-NOTI)
-  MAIL_USER: Joi.string().allow('').optional(),
+  // Legacy Gmail configuration aliases (BR-NOTI)
   MAIL_APP_PASSWORD: Joi.string().allow('').optional(),
   MAIL_FROM: Joi.string().allow('').optional(),
-});
+})
+  .custom((values, helpers) => {
+    if (values.NOTIFICATIONS_ENABLED) {
+      if (!(values.MAIL_USER || values.GMAIL_USER))
+        return helpers.error('any.custom', {
+          message: 'MAIL_USER is required when notifications are enabled',
+        });
+      if (!(
+        values.MAIL_PASS ||
+        values.GMAIL_APP_PASSWORD ||
+        values.MAIL_APP_PASSWORD
+      ))
+        return helpers.error('any.custom', {
+          message: 'MAIL_PASS is required when notifications are enabled',
+        });
+    }
+    return values;
+  })
+  .messages({
+    'any.custom':
+      'GMAIL_USER (or MAIL_USER) and GMAIL_APP_PASSWORD (or MAIL_PASS) are required when notifications are enabled',
+  });

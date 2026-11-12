@@ -22,7 +22,10 @@ export interface SampleBooking {
   /** Ngày nhận phòng `YYYY-MM-DD`; CHECKED_IN tính từ ngày chạy seed. */
   checkInDay: string;
   nights: number;
-  status: BookingStatus.CheckedIn | BookingStatus.CheckedOut;
+  status:
+    | BookingStatus.Confirmed
+    | BookingStatus.CheckedIn
+    | BookingStatus.CheckedOut;
 }
 
 /**
@@ -32,6 +35,13 @@ export interface SampleBooking {
  * - `SEED-CHECKED-OUT-00x` đã trả phòng: là lần lưu trú mà phản hồi mẫu (UC40, UC41) gắn vào.
  */
 export const sampleBookings = (today = toBusinessDate()): SampleBooking[] => [
+  {
+    code: 'SEED-CONFIRMED-001',
+    roomNumber: '102',
+    checkInDay: today,
+    nights: 2,
+    status: BookingStatus.Confirmed,
+  },
   {
     code: 'SEED-CHECKED-IN-001',
     roomNumber: '101',
@@ -101,7 +111,8 @@ export const seedBookings: Seed = async (app) => {
       rateSnapshot: [{ room: room._id, ratePerNight }],
       checkIn,
       checkOut,
-      checkedInAt: checkIn,
+      checkedInAt:
+        sample.status === BookingStatus.Confirmed ? undefined : checkIn,
       checkedOutAt:
         sample.status === BookingStatus.CheckedOut ? checkOut : undefined,
       adultCount: 1,

@@ -25,8 +25,8 @@ export class GmailNotificationTransport implements NotificationTransport {
     private readonly options: NotificationOptions,
     private readonly create: (signal: AbortSignal) => Transporter = (signal) =>
       nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 465,
+        host: options.host,
+        port: options.port,
         secure: true,
         auth: { user: options.user, pass: options.appPassword },
         connectionTimeout: options.sendTimeoutMs,
@@ -40,9 +40,9 @@ export class GmailNotificationTransport implements NotificationTransport {
         // Own the TLS socket so attempt timeout/shutdown can actually abort it.
         getSocket: (_options, callback) => {
           const socket = tls.connect({
-            host: 'smtp.gmail.com',
-            port: 465,
-            servername: 'smtp.gmail.com',
+            host: options.host,
+            port: options.port,
+            servername: options.host,
             rejectUnauthorized: true,
           });
           const abort = () =>
@@ -88,5 +88,52 @@ export class GmailNotificationTransport implements NotificationTransport {
       signal.removeEventListener('abort', abort);
       transport.close();
     }
+  }
+}
+
+/**
+ * Brevo transactional API over HTTPS. Render's free plan blocks outbound SMTP
+ * ports, so Gmail SMTP times out there. Errors carry only a code (never the body).
+ */
+export class BrevoNotificationTransport implements NotificationTransport {
+  constructor(
+    private readonly options: NotificationOptions,
+    private readonly request: typeof fetch = fetch,
+  ) {}
+
+  async send(message: NotificationMessage, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) return;
+    let response: Response;
+    try {
+      response = await this.request('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': this.options.brevoApiKey,
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify({
+          sender: { name: this.options.fromName, email: this.options.user },
+          to: [{ email: message.to }],
+          subject: message.subject,
+          htmlContent: message.html,
+          textContent: message.text,
+        }),
+        signal,
+      });
+    } catch {
+      throw Object.assign(new Error('Brevo request failed'), {
+        code: 'ECONNECTION',
+      });
+    }
+    if (response.ok) return;
+    const { status } = response;
+    const code =
+      status === 401 || status === 403
+        ? 'EAUTH'
+        : status === 429 || status >= 500
+          ? 'ECONNECTION'
+          : undefined;
+    throw Object.assign(new Error(`Brevo responded ${status}`), { code });
   }
 }

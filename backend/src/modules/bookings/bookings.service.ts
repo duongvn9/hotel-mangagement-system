@@ -109,9 +109,29 @@ export class BookingsService {
 
   /** Gửi email booking (best-effort): không bao giờ làm hỏng luồng nghiệp vụ. */
   private emailBooking(data: BookingEmailData): void {
-    const input = bookingConfirmationEmail(data);
-    if (!input) return;
-    void this.notifications.send(input).catch(() => undefined);
+    void this.deliverBookingEmail(data).catch(() => undefined);
+  }
+
+  private async deliverBookingEmail(data: BookingEmailData): Promise<void> {
+    let resolved = data;
+    if (data.rooms?.length) {
+      try {
+        const rooms = await this.rooms
+          .find({ _id: { $in: data.rooms } })
+          .populate<{ roomType: { name: string } }>('roomType', 'name')
+          .select('roomNumber roomType')
+          .lean()
+          .exec();
+        const summary = rooms
+          .map((room) => `${room.roomNumber} (${room.roomType.name})`)
+          .join(', ');
+        if (summary) resolved = { ...data, room: summary };
+      } catch {
+        // Email delivery remains best-effort if room details cannot be read.
+      }
+    }
+    const input = bookingConfirmationEmail(resolved);
+    if (input) void this.notifications.send(input).catch(() => undefined);
   }
 
   async create(dto: CreateBookingDto, user?: AuthUser) {
@@ -178,12 +198,15 @@ export class BookingsService {
 
     // Gửi mã đặt phòng qua email để khách thanh toán và quản lý đơn.
     this.emailBooking({
+      bookingId: String(booking._id),
+      rooms: roomIds.map(String),
       code: booking.code,
       guestName: booking.guestName,
       guestEmail: booking.guestEmail,
       checkIn: stay.checkIn,
       checkOut: stay.checkOut,
       roomCount: roomIds.length,
+      guests: booking.adultCount + booking.childCount,
       roomTotal: booking.roomTotal,
       depositAmount: booking.depositAmount,
       status: booking.status,
@@ -249,12 +272,15 @@ export class BookingsService {
 
     // Booking tại quầy vào thẳng CONFIRMED: gửi email xác nhận cho khách.
     this.emailBooking({
+      bookingId: String(booking._id),
+      rooms: roomIds.map(String),
       code: booking.code,
       guestName: booking.guestName,
       guestEmail: booking.guestEmail,
       checkIn: stay.checkIn,
       checkOut: stay.checkOut,
       roomCount: roomIds.length,
+      guests: booking.adultCount + booking.childCount,
       roomTotal: booking.roomTotal,
       depositAmount: booking.depositAmount,
       status: booking.status,
@@ -364,6 +390,7 @@ export class BookingsService {
       adultCount: booking.adultCount,
       childCount: booking.childCount,
       roomCount: booking.rooms.length,
+      guests: booking.adultCount + booking.childCount,
       roomTotal: booking.roomTotal,
       depositAmount: booking.depositAmount,
       paidAmount: paidByBooking.get(String(booking._id)) ?? 0,
@@ -599,6 +626,22 @@ export class BookingsService {
       { booking: booking._id, isActive: true },
       { $set: { isActive: false } },
     );
+    if (booking.guestEmail) {
+      void this.notifications
+        .send({
+          to: booking.guestEmail,
+          template: 'booking-cancelled',
+          relatedBookingId: String(booking._id),
+          data: {
+            bookingCode: booking.code,
+            guestName: booking.guestName ?? '',
+            checkIn: booking.checkIn,
+            checkOut: booking.checkOut,
+            cancelledAt: booking.cancelledAt,
+          },
+        })
+        .catch(() => undefined);
+    }
     return {
       id: String(booking._id),
       code: booking.code,
@@ -988,6 +1031,8 @@ export class BookingsService {
     await booking.save();
     // Gửi mã đặt phòng qua email ngay khi chuyển sang chờ đặt cọc.
     this.emailBooking({
+      bookingId: String(booking._id),
+      rooms: booking.rooms.map(String),
       code: booking.code,
       guestName: booking.guestName,
       guestEmail: booking.guestEmail,

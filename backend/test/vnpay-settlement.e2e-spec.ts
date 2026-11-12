@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
-import { getModelToken } from '@nestjs/mongoose';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import type { INestApplication } from '@nestjs/common';
-import { Model, Types } from 'mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import { createHmac } from 'node:crypto';
 import { AppModule } from '../src/app.module.js';
 import { vi } from 'vitest';
@@ -22,6 +22,12 @@ import {
   VnpaySettlementPort,
   type ExpectedVnpayPayment,
 } from '../src/modules/payments/vnpay.service.js';
+import { NotificationsService } from '../src/modules/notifications/notifications.service.js';
+import { NOTIFICATION_TRANSPORT } from '../src/modules/notifications/notification.types.js';
+import {
+  NotificationLog,
+  NotificationLogSchema,
+} from '../src/modules/notifications/schemas/notification-log.schema.js';
 
 const settings = {
   tmnCode: 'TESTCODE',
@@ -69,6 +75,7 @@ describe('VNPay settlement persistence (e2e)', () => {
   let payments: Model<PaymentTransaction>;
   let services: Model<Service>;
   let orders: Model<ServiceOrder>;
+  let notificationLogs: Model<NotificationLog>;
   const serviceIds = [new Types.ObjectId(), new Types.ObjectId()];
   const bookingId = new Types.ObjectId();
   const invoiceId = new Types.ObjectId();
@@ -151,6 +158,13 @@ describe('VNPay settlement persistence (e2e)', () => {
     payments = app.get(getModelToken(PaymentTransaction.name));
     services = app.get(getModelToken(Service.name));
     orders = app.get(getModelToken(ServiceOrder.name));
+    const connection = app.get<Connection>(getConnectionToken());
+    notificationLogs = connection.models[NotificationLog.name]
+      ? (connection.models[NotificationLog.name] as Model<NotificationLog>)
+      : connection.model<NotificationLog>(
+          NotificationLog.name,
+          NotificationLogSchema,
+        );
     await Promise.all([
       bookings.init(),
       holds.init(),
@@ -161,6 +175,7 @@ describe('VNPay settlement persistence (e2e)', () => {
 
   beforeEach(async () => {
     await orders.deleteMany({ booking: bookingId });
+    await notificationLogs.deleteMany({ relatedBookingId: bookingId });
     await services.deleteMany({ _id: { $in: serviceIds } });
     await payments.deleteMany({ booking: bookingId });
     await invoices.deleteMany({ booking: bookingId });
@@ -170,6 +185,7 @@ describe('VNPay settlement persistence (e2e)', () => {
 
   afterAll(async () => {
     await orders.deleteMany({ booking: bookingId });
+    await notificationLogs.deleteMany({ relatedBookingId: bookingId });
     await services.deleteMany({ _id: { $in: serviceIds } });
     await payments.deleteMany({ booking: bookingId });
     await invoices.deleteMany({ booking: bookingId });
@@ -213,9 +229,14 @@ describe('VNPay settlement persistence (e2e)', () => {
       await expected(txnRef),
     );
     if (plan.action !== 'compare-and-set') throw new Error('expected CAS');
+    const smtpSend = vi
+      .spyOn(app.get(NOTIFICATION_TRANSPORT), 'send')
+      .mockResolvedValue(undefined);
     expect(
       await settlement.commitAtomically(await expected(txnRef), plan),
     ).toBe('committed');
+    await vi.waitFor(() => expect(smtpSend).toHaveBeenCalledTimes(1));
+    await app.get(NotificationsService).drain();
 
     // Payment đã SUCCESS; prepareIpn trả 'duplicate' và settlement cũng báo duplicate.
     const replay = vnpay.prepareIpn(
@@ -223,10 +244,16 @@ describe('VNPay settlement persistence (e2e)', () => {
       await expected(txnRef),
     );
     expect(replay.action).toBe('duplicate');
+    expect(
+      await settlement.commitAtomically(await expected(txnRef), plan),
+    ).toBe('duplicate');
+    await app.get(NotificationsService).drain();
+    expect(smtpSend).toHaveBeenCalledTimes(1);
     expect(await invoices.findById(invoiceId)).toMatchObject({
       depositPaid: 300000,
       balanceDue: 700000,
     });
+    smtpSend.mockRestore();
   });
 
   it('repairs partial service generation on duplicate callbacks without duplicating money or orders', async () => {

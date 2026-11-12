@@ -14,6 +14,11 @@ export default defineConfig(({ mode }) => {
   const isDocker = fs.existsSync('/.dockerenv') || process.env.CHOKIDAR_USEPOLLING === 'true'
 
   return {
+    // Keep Vite's cache separate from the locked node_modules/.vite directory on Windows.
+    cacheDir: '.vite',
+    build: {
+      emptyOutDir: false,
+    },
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
