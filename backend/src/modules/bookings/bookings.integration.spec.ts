@@ -74,6 +74,7 @@ const setup = (
     payments as unknown as Model<PaymentTransaction>,
     invoices as never,
     notifications as never,
+    {} as never,
   );
   return {
     service,
@@ -297,6 +298,7 @@ describe('updateHoldRooms', () => {
       {} as Model<PaymentTransaction>,
       {} as never,
       { send: vi.fn() } as never,
+      {} as never,
     );
     return { service, booking, hold, roomA, roomB };
   };
@@ -408,6 +410,7 @@ describe('resolveByCode', () => {
       {} as Model<Room>,
       { now: () => new Date() } as AvailabilityClock,
       {} as Model<PaymentTransaction>,
+      {} as never,
       {} as never,
       {} as never,
     );

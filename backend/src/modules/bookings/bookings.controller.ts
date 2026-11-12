@@ -74,6 +74,16 @@ export class BookingsController {
     return this.services.publicCatalog();
   }
 
+  @Get('active-hold')
+  @Public()
+  @ApiOperation({ summary: 'Find this principal’s live unconfirmed booking' })
+  activeHold(
+    @GuestSession() session: GuestSessionContext,
+    @CurrentUser() user?: AuthUser,
+  ) {
+    return this.bookings.activeHold(session, user);
+  }
+
   @Post('hold')
   @Public()
   @ApiOperation({
@@ -128,8 +138,12 @@ export class BookingsController {
   })
   @ApiCreatedResponse({ type: BookingResponse })
   @ApiConflictResponse({ description: 'Rooms are unavailable or just taken' })
-  create(@Body() dto: CreateBookingDto, @CurrentUser() user?: AuthUser) {
-    return this.bookings.create(dto, user);
+  create(
+    @Body() dto: CreateBookingDto,
+    @CurrentUser() user?: AuthUser,
+    @GuestSession() session?: GuestSessionContext,
+  ) {
+    return this.bookings.create(dto, user, session);
   }
 
   @Get()

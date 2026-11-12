@@ -3,7 +3,7 @@ import { Link, useBlocker, useNavigate, useSearchParams } from 'react-router'
 import { Clock, CreditCard, Minus, Plus, XCircle } from 'lucide-react'
 import { AssetImage } from '@/components/AssetImage'
 import { Button, Checkbox, Input, Label, RadioGroup, RadioGroupItem } from '@/components/atoms'
-import { FormField, KeyValue } from '@/components/molecules'
+import { Alert, FormField, KeyValue } from '@/components/molecules'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,7 +19,13 @@ import { useAuth } from '@/features/auth/auth-context'
 import { getErrorMessage } from '@/lib/api-client'
 import { fdate, vnd } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { cancelBooking, type HeldBooking, type ServiceSelectionInput } from '../api'
+import {
+  cancelBooking,
+  getActiveBookingConflict,
+  type ActiveBooking,
+  type HeldBooking,
+  type ServiceSelectionInput,
+} from '../api'
 import {
   useAvailability,
   useCancelBooking,
@@ -58,7 +64,12 @@ export function CreateBookingPage() {
   const { mutate: holdMutate } = hold
 
   const [held, setHeld] = useState<HeldBooking | undefined>()
+  const [activeBooking, setActiveBooking] = useState<ActiveBooking>()
+  const [activeResolved, setActiveResolved] = useState(false)
+  const [holdAttempt, setHoldAttempt] = useState(0)
   const requested = useRef(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
+  const cancellingRef = useRef(false)
   // Refs để cleanup lúc unmount đọc được giá trị mới nhất mà không phụ thuộc dependency.
   const heldRef = useRef<HeldBooking | undefined>(undefined)
   const submittedRef = useRef(false)
@@ -213,17 +224,53 @@ export function CreateBookingPage() {
         onSuccess: (data) => {
           if (data.status === 'PENDING_DEPOSIT') {
             submittedRef.current = true
-            doneRef.current = true
           }
+          setActiveBooking(undefined)
+          setActiveResolved(false)
           setHeld(data)
           heldRef.current = data
         },
+        onError: (error) => {
+          setActiveBooking(getActiveBookingConflict(error))
+          setActiveResolved(false)
+        },
       },
     )
-  }, [invalid, status, roomsParam, checkIn, checkOut, guests, holdMutate])
+  }, [invalid, status, roomsParam, checkIn, checkOut, guests, holdMutate, holdAttempt])
 
-  // Rời trang khi vẫn đang giữ phòng (chưa đặt cọc) => nhả hold + huỷ đơn nháp, và cảnh báo
-  // trước khi đóng/refresh tab. Fallback khi đóng tab là hold tự hết hạn sau 15 phút.
+  function retryHold() {
+    if (hold.isPending || cancellingRef.current) return
+    requested.current = false
+    setActiveBooking(undefined)
+    setActiveResolved(false)
+    setHoldAttempt((attempt) => attempt + 1)
+  }
+
+  async function cancelActiveBooking() {
+    if (
+      !activeBooking ||
+      activeResolved ||
+      Date.parse(activeBooking.holdExpiresAt) <= Date.now() ||
+      cancellingRef.current
+    )
+      return
+    cancellingRef.current = true
+    try {
+      await cancel.mutateAsync({
+        id: activeBooking.id,
+        ...(me ? {} : { code: activeBooking.code }),
+      })
+      setActiveResolved(true)
+      setConfirmCancel(false)
+    } catch {
+      // Keep the confirmation open for a deliberate retry.
+    } finally {
+      cancellingRef.current = false
+    }
+  }
+
+  // Warn on refresh for either active checkout step. Unmount only releases ROOM_HELD;
+  // a pending deposit must never be cancelled merely because the page was left.
   useEffect(() => {
     // Còn đang giữ phòng, chưa đặt cọc và chưa chủ động huỷ, và hold vẫn còn hạn.
     const stillHolding = () => {
@@ -236,7 +283,8 @@ export function CreateBookingPage() {
       )
     }
     const warn = (event: BeforeUnloadEvent) => {
-      if (stillHolding()) {
+      const current = heldRef.current
+      if (current && !doneRef.current && Date.parse(current.holdExpiresAt) > Date.now()) {
         event.preventDefault()
         event.returnValue = ''
       }
@@ -253,16 +301,28 @@ export function CreateBookingPage() {
     }
   }, [])
 
+  const activeRemaining = useHoldCountdown(activeBooking?.holdExpiresAt)
+  const activeExpired = activeRemaining !== null && activeRemaining <= 0
+  const existingBookingTo = activeBooking
+    ? me?.role === 'CUSTOMER'
+      ? `/my-bookings/${encodeURIComponent(activeBooking.id)}`
+      : me?.role === 'MANAGER' || me?.role === 'RECEPTIONIST'
+        ? `/reception/bookings/${encodeURIComponent(activeBooking.code)}`
+        : `/booking/${encodeURIComponent(activeBooking.id)}?code=${encodeURIComponent(activeBooking.code)}`
+    : '/search'
   const remaining = useHoldCountdown(held?.holdExpiresAt)
   const holdExpired = remaining !== null && remaining <= 0
 
-  // Chặn Back / điều hướng trong app khi đang giữ phòng (chưa đặt cọc): hỏi xác nhận trước khi
-  // rời; nếu đồng ý rời thì huỷ giữ phòng rồi đi tiếp. Đóng/refresh tab vẫn do beforeunload lo.
-  const blocker = useBlocker(
-    () => Boolean(held) && !submittedRef.current && !doneRef.current && !holdExpired,
-  )
+  // Warn before leaving either active checkout step. Only ROOM_HELD is released on leave;
+  // PENDING_DEPOSIT stays available until explicit cancellation or backend expiry.
+  const blocker = useBlocker(() => Boolean(held) && !doneRef.current && !holdExpired)
 
   async function confirmLeave() {
+    if (heldRef.current?.status === 'PENDING_DEPOSIT') {
+      doneRef.current = true
+      blocker.proceed?.()
+      return
+    }
     doneRef.current = true
     const current = heldRef.current
     if (current) {
@@ -302,7 +362,6 @@ export function CreateBookingPage() {
       })
       // Đã chuyển sang PENDING_DEPOSIT: không auto-huỷ hold khi rời trang nữa.
       submittedRef.current = true
-      doneRef.current = true
       setHeld(updated)
       heldRef.current = updated
     } catch {
@@ -311,7 +370,14 @@ export function CreateBookingPage() {
   }
 
   async function payDeposit() {
-    if (!held || held.status !== 'PENDING_DEPOSIT' || holdExpired || deposit.isPending) return
+    if (
+      !held ||
+      held.status !== 'PENDING_DEPOSIT' ||
+      holdExpired ||
+      deposit.isPending ||
+      cancellingRef.current
+    )
+      return
     try {
       const result = await deposit.mutateAsync({
         bookingId: held.bookingId,
@@ -326,14 +392,17 @@ export function CreateBookingPage() {
 
   // Khách chủ động huỷ khi đang giữ phòng (ROOM_HELD): nhả hold + huỷ đơn, về trang tìm phòng.
   async function cancelHold() {
-    if (!held) return
-    doneRef.current = true
+    if (!held || cancellingRef.current || deposit.isPending || holdExpired) return
+    cancellingRef.current = true
     try {
       await cancel.mutateAsync({ id: held.bookingId, ...(me ? {} : { code: held.code }) })
+      doneRef.current = true
+      setConfirmCancel(false)
       navigate('/search', { replace: true })
     } catch {
-      // Cho phép thử lại nếu huỷ thất bại; lỗi hiển thị qua cancel.isError.
-      doneRef.current = false
+      // Keep the booking and confirmation available for retry after failure.
+    } finally {
+      cancellingRef.current = false
     }
   }
 
@@ -365,7 +434,54 @@ export function CreateBookingPage() {
         </div>
       )}
 
-      {hold.isError && (
+      {activeBooking && (
+        <div className="mt-6 space-y-4">
+          <Alert tone={activeResolved ? 'success' : 'danger'}>
+            {activeResolved
+              ? `Booking ${activeBooking.code} đã được huỷ. Bạn có thể tiếp tục đặt phòng mới.`
+              : getErrorMessage(
+                  hold.error,
+                  'Bạn đang có booking chưa hoàn tất. Vui lòng xem hoặc huỷ booking hiện tại trước khi đặt phòng mới.',
+                )}
+            {!activeResolved && activeRemaining !== null && (
+              <p className="mt-2">
+                {activeExpired
+                  ? 'Đã hết hạn giữ phòng. Bạn có thể thử tiếp tục; hệ thống sẽ kiểm tra lại trạng thái booking.'
+                  : `Hạn giữ phòng còn ${formatRemaining(activeRemaining)}.`}
+              </p>
+            )}
+          </Alert>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild variant="outline" className="rounded-full">
+              <Link to={existingBookingTo}>Xem booking hiện tại</Link>
+            </Button>
+            {!activeResolved && (
+              <Button
+                variant="destructive"
+                className="rounded-full"
+                disabled={activeExpired || cancel.isPending}
+                onClick={() => {
+                  cancel.reset()
+                  setConfirmCancel(true)
+                }}
+              >
+                Huỷ booking hiện tại
+              </Button>
+            )}
+            {(activeResolved || activeExpired) && (
+              <Button
+                className="rounded-full"
+                disabled={hold.isPending || cancel.isPending}
+                onClick={retryHold}
+              >
+                Tiếp tục đặt phòng mới
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {hold.isError && !activeBooking && (
         <div
           role="alert"
           className="mt-6 rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
@@ -441,13 +557,23 @@ export function CreateBookingPage() {
                   <Button
                     type="button"
                     className="rounded-full"
-                    disabled={holdExpired || deposit.isPending}
+                    disabled={holdExpired || deposit.isPending || cancel.isPending}
                     aria-busy={deposit.isPending}
                     onClick={() => void payDeposit()}
                   >
                     {deposit.isPending
                       ? 'Đang chuyển sang VNPay…'
                       : `Thanh toán ${vnd(held.depositAmount)}`}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="rounded-full text-destructive hover:bg-destructive/10"
+                    disabled={holdExpired || cancel.isPending || deposit.isPending}
+                    onClick={() => setConfirmCancel(true)}
+                  >
+                    <XCircle className="size-4" />
+                    Huỷ booking
                   </Button>
                 </div>
               </Panel>
@@ -726,6 +852,41 @@ export function CreateBookingPage() {
       )}
 
       <AlertDialog
+        open={confirmCancel}
+        onOpenChange={(open) => {
+          if (!cancellingRef.current) setConfirmCancel(open)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận huỷ booking</AlertDialogTitle>
+            <AlertDialogDescription>
+              Huỷ booking {activeBooking?.code ?? held?.code}? Phòng đang giữ sẽ được mở lại. Thao
+              tác không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {cancel.isError && (
+            <div role="alert" className="text-sm text-destructive">
+              {getErrorMessage(cancel.error, 'Không huỷ được booking. Vui lòng thử lại.')}
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancel.isPending}>Giữ lại</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={cancel.isPending || (activeBooking ? activeExpired : holdExpired)}
+              onClick={(event) => {
+                event.preventDefault()
+                void (activeBooking ? cancelActiveBooking() : cancelHold())
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {cancel.isPending ? 'Đang huỷ…' : 'Xác nhận huỷ'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
         open={blocker.state === 'blocked'}
         onOpenChange={(open) => {
           // Đóng dialog mà chưa xác nhận rời (Esc/nút Ở lại) -> huỷ chặn, ở lại trang.
@@ -736,8 +897,9 @@ export function CreateBookingPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Rời trang khi đang giữ phòng?</AlertDialogTitle>
             <AlertDialogDescription>
-              Bạn chưa đặt cọc. Nếu rời trang, phần giữ phòng và đơn đặt hiện tại sẽ bị huỷ và phòng
-              được mở lại cho khách khác.
+              {held?.status === 'PENDING_DEPOSIT'
+                ? 'Bạn chưa thanh toán cọc. Rời trang không tự động huỷ booking. Bạn có thể quay lại thanh toán trước khi hết hạn giữ phòng.'
+                : 'Bạn chưa đặt cọc. Nếu rời trang, phần giữ phòng và đơn đặt hiện tại sẽ bị huỷ và phòng được mở lại cho khách khác.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -746,7 +908,7 @@ export function CreateBookingPage() {
               onClick={() => void confirmLeave()}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Rời &amp; huỷ giữ phòng
+              {held?.status === 'PENDING_DEPOSIT' ? 'Rời trang' : 'Rời & huỷ giữ phòng'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

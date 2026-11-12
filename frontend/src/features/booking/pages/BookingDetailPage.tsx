@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { CreditCard, XCircle } from 'lucide-react'
 import { Navigate, useLocation, useParams, useSearchParams } from 'react-router'
 import { Button, Input } from '@/components/atoms'
@@ -53,6 +53,7 @@ export function BookingDetailPage() {
 
   const [typedCode, setTypedCode] = useState(params.get('code') ?? '')
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const cancellingRef = useRef(false)
 
   const deposit = useInitiateDeposit()
   const final = useInitiateFinal()
@@ -94,12 +95,16 @@ export function BookingDetailPage() {
   }
 
   async function doCancel() {
+    if (cancellingRef.current || holdExpired || deposit.isPending || final.isPending) return
+    cancellingRef.current = true
     try {
       await cancel.mutateAsync({ id, ...(me ? {} : { code: guestCode }) })
       setConfirmCancel(false)
       await Promise.all([query.refetch(), summary.refetch()])
     } catch {
       // Lỗi hiển thị qua cancel.isError.
+    } finally {
+      cancellingRef.current = false
     }
   }
 
@@ -185,7 +190,7 @@ export function BookingDetailPage() {
         {status === 'PENDING_DEPOSIT' && (
           <Button
             className="rounded-full"
-            disabled={holdExpired || deposit.isPending}
+            disabled={holdExpired || deposit.isPending || cancel.isPending}
             aria-busy={deposit.isPending}
             onClick={() => void pay('deposit')}
           >
@@ -211,11 +216,15 @@ export function BookingDetailPage() {
                 : `Thanh toán phần còn lại (${vnd(booking.balanceDue)})`}
             </Button>
           )}
-        {status !== 'CHECKED_IN' && status !== 'CHECKED_OUT' && status !== 'ROOM_HELD' && (
+        {status !== 'CHECKED_IN' && status !== 'CHECKED_OUT' && (
           <Button
             variant="ghost"
             className="rounded-full text-destructive hover:bg-destructive/10"
-            onClick={() => setConfirmCancel(true)}
+            disabled={holdExpired || deposit.isPending || cancel.isPending}
+            onClick={() => {
+              cancel.reset()
+              setConfirmCancel(true)
+            }}
           >
             <XCircle className="size-4" />
             Huỷ booking
@@ -271,7 +280,12 @@ export function BookingDetailPage() {
         </div>
       )}
 
-      <AlertDialog open={confirmCancel} onOpenChange={setConfirmCancel}>
+      <AlertDialog
+        open={confirmCancel}
+        onOpenChange={(open) => {
+          if (!cancellingRef.current) setConfirmCancel(open)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xác nhận huỷ booking</AlertDialogTitle>
@@ -279,11 +293,19 @@ export function BookingDetailPage() {
               Huỷ booking này? Phòng đang giữ sẽ được mở lại. Thao tác không thể hoàn tác.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {cancel.isError && (
+            <div role="alert" className="text-sm text-destructive">
+              {getErrorMessage(cancel.error)}
+            </div>
+          )}
           <AlertDialogFooter>
-            <AlertDialogCancel>Giữ lại</AlertDialogCancel>
+            <AlertDialogCancel disabled={cancel.isPending}>Giữ lại</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => void doCancel()}
-              disabled={cancel.isPending}
+              onClick={(event) => {
+                event.preventDefault()
+                void doCancel()
+              }}
+              disabled={cancel.isPending || holdExpired || deposit.isPending || final.isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Xác nhận huỷ

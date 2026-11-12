@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { addDays, format } from 'date-fns'
@@ -61,6 +61,52 @@ const summaryFor = (value: Booking, overrides: Partial<BookingSummary> = {}): Bo
   payments: [],
   serviceOrders: [],
   ...overrides,
+})
+
+describe('staff active booking detail cancellation', () => {
+  it.each(
+    ['MANAGER', 'RECEPTIONIST'].flatMap((role) =>
+      ['ROOM_HELD', 'PENDING_DEPOSIT'].map((status) => ({ role, status })),
+    ),
+  )('confirms and retries $status cancellation for $role', async ({ role, status }) => {
+    let cancelled = false
+    let resolveCancel: (value: unknown) => void = () => undefined
+    let attempts = 0
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      const value = { ...booking, status: cancelled ? 'CANCELLED' : status }
+      if (url === '/bookings') return { data: { items: [value], total: 1, page: 1, limit: 20 } }
+      if (url === '/bookings/b1') return { data: value }
+      if (url === '/bookings/b1/summary') return { data: summaryFor(value) }
+      throw new Error(`unexpected GET ${url}`)
+    })
+    const post = vi.spyOn(api, 'post').mockImplementation(async () => {
+      attempts += 1
+      if (attempts === 1) throw new Error('Cancel failed')
+      const result = await new Promise((resolve) => {
+        resolveCancel = resolve
+      })
+      cancelled = true
+      return result
+    })
+    renderWithAuth(bookingRoutes, {
+      path: '/reception/bookings/BK123',
+      auth: { me: { ...ME, role }, status: 'authenticated' },
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ booking' }))
+    expect(attempts).toBe(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }))
+    expect(await within(screen.getByRole('alertdialog')).findByRole('alert')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }))
+    await waitFor(() => expect(attempts).toBe(2))
+    expect(screen.getByRole('button', { name: 'Đang huỷ…' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Đang huỷ…' }))
+    expect(attempts).toBe(2)
+    resolveCancel({ data: { ...booking, status: 'CANCELLED' } })
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Huỷ booking' })).not.toBeInTheDocument(),
+    )
+    expect(post).toHaveBeenLastCalledWith('/bookings/b1/cancel', {})
+  })
 })
 
 describe('booking utils', () => {
@@ -931,6 +977,233 @@ describe('CreateBookingPage (hold-first flow)', () => {
     },
   )
 
+  it.each(
+    ['GUEST', 'CUSTOMER', 'MANAGER'].flatMap((role) =>
+      ['ROOM_HELD', 'PENDING_DEPOSIT'].map((status) => ({ role, status })),
+    ),
+  )(
+    'blocks a conflicting $status for $role until explicit cancellation and continuation',
+    async ({ role, status }) => {
+      let holdAttempts = 0
+      let cancelAttempts = 0
+      let resolveCancel: (value: unknown) => void = () => undefined
+      const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+        if (url === '/bookings/hold') {
+          holdAttempts += 1
+          if (holdAttempts === 1)
+            throw {
+              isAxiosError: true,
+              response: {
+                status: 409,
+                data: {
+                  code: 'ACTIVE_BOOKING_EXISTS',
+                  message: 'Bạn đang có booking chưa hoàn tất.',
+                  existingBooking: {
+                    id: 'active-1',
+                    code: 'BK ACTIVE',
+                    status,
+                    holdExpiresAt: '2099-01-10T00:00:00.000Z',
+                  },
+                },
+              },
+            }
+          return { data: { ...held, status: 'PENDING_DEPOSIT' } }
+        }
+        if (url === '/bookings/active-1/cancel') {
+          cancelAttempts += 1
+          if (cancelAttempts === 1) throw new Error('Cancel failed')
+          return await new Promise((resolve) => {
+            resolveCancel = resolve
+          })
+        }
+        throw new Error(`unexpected POST ${url}`)
+      })
+      vi.spyOn(api, 'get').mockImplementation(async (url: string) => ({
+        data: url === '/bookings/service-catalog' ? { items: [] } : [],
+      }))
+      renderWithAuth(bookingRoutes, {
+        path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+        auth: role === 'GUEST' ? {} : { me: { ...ME, role }, status: 'authenticated' },
+      })
+      const link = await screen.findByRole('link', { name: 'Xem booking hiện tại' })
+      expect(link).toHaveAttribute(
+        'href',
+        role === 'GUEST'
+          ? '/booking/active-1?code=BK%20ACTIVE'
+          : role === 'CUSTOMER'
+            ? '/my-bookings/active-1'
+            : '/reception/bookings/BK%20ACTIVE',
+      )
+      expect(screen.getByRole('alert')).toHaveTextContent('Bạn đang có booking chưa hoàn tất.')
+      fireEvent.click(screen.getByRole('button', { name: 'Huỷ booking hiện tại' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Giữ lại' }))
+      expect(cancelAttempts).toBe(0)
+      fireEvent.click(screen.getByRole('button', { name: 'Huỷ booking hiện tại' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }))
+      await waitFor(() => expect(cancelAttempts).toBe(1))
+      expect(within(screen.getByRole('alertdialog')).getByRole('alert')).toBeInTheDocument()
+      expect(holdAttempts).toBe(1)
+      fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }))
+      await waitFor(() => expect(cancelAttempts).toBe(2))
+      expect(screen.getByRole('button', { name: 'Đang huỷ…' })).toBeDisabled()
+      fireEvent.click(screen.getByRole('button', { name: 'Đang huỷ…' }))
+      expect(cancelAttempts).toBe(2)
+      resolveCancel({ data: { id: 'active-1', status: 'CANCELLED' } })
+      const proceed = await screen.findByRole('button', { name: 'Tiếp tục đặt phòng mới' })
+      expect(holdAttempts).toBe(1)
+      expect(post).toHaveBeenCalledWith(
+        '/bookings/active-1/cancel',
+        role === 'GUEST' ? { code: 'BK ACTIVE' } : {},
+      )
+      fireEvent.click(proceed)
+      await screen.findByRole('heading', { name: 'Thanh toán cọc' })
+      expect(holdAttempts).toBe(2)
+      expect(post).toHaveBeenLastCalledWith('/bookings/hold', {
+        rooms: ['r1'],
+        checkIn: '2099-01-10',
+        checkOut: '2099-01-12',
+        adultCount: 2,
+        childCount: 0,
+      })
+    },
+  )
+
+  it('allows an explicit retry after conflict expiry without cancelling or auto-creating', async () => {
+    const post = vi.spyOn(api, 'post').mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        status: 409,
+        data: {
+          code: 'ACTIVE_BOOKING_EXISTS',
+          existingBooking: {
+            id: 'old',
+            code: 'OLD',
+            status: 'ROOM_HELD',
+            holdExpiresAt: new Date(Date.now() - 1000).toISOString(),
+          },
+        },
+      },
+    })
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => ({
+      data: url === '/bookings/service-catalog' ? { items: [] } : [],
+    }))
+    const { unmount } = renderWithAuth(bookingRoutes, {
+      path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+    })
+    expect(await screen.findByRole('button', { name: 'Huỷ booking hiện tại' })).toBeDisabled()
+    const proceed = screen.getByRole('button', { name: 'Tiếp tục đặt phòng mới' })
+    expect(post).toHaveBeenCalledTimes(1)
+    fireEvent.click(proceed)
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2))
+    unmount()
+    expect(post.mock.calls.every(([url]) => url === '/bookings/hold')).toBe(true)
+  })
+
+  it.each(['GUEST', 'CUSTOMER', 'MANAGER'])(
+    'confirms pending cancellation for %s, stays on failure and prevents repeated requests',
+    async (role) => {
+      let resolveCancel: (value: unknown) => void = () => undefined
+      let attempts = 0
+      const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+        if (url === '/bookings/hold') return { data: { ...held, status: 'PENDING_DEPOSIT' } }
+        if (url === '/bookings/b9/cancel') {
+          attempts += 1
+          if (attempts === 1) throw new Error('Cancel failed')
+          return await new Promise((resolve) => {
+            resolveCancel = resolve
+          })
+        }
+        throw new Error(`unexpected POST ${url}`)
+      })
+      vi.spyOn(api, 'get').mockImplementation(async (url: string) => ({
+        data: url === '/bookings/service-catalog' ? { items: [] } : [],
+      }))
+      const { router } = renderWithAuth(bookingRoutes, {
+        path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+        auth: role === 'GUEST' ? {} : { me: { ...ME, role }, status: 'authenticated' },
+      })
+      fireEvent.click(await screen.findByRole('button', { name: 'Huỷ booking' }))
+      expect(attempts).toBe(0)
+      fireEvent.click(screen.getByRole('button', { name: 'Giữ lại' }))
+      expect(attempts).toBe(0)
+      fireEvent.click(screen.getByRole('button', { name: 'Huỷ booking' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }))
+      expect(await screen.findByRole('alert')).toBeInTheDocument()
+      expect(router.state.location.pathname).toBe('/booking/new')
+      expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }))
+      await waitFor(() => expect(attempts).toBe(2))
+      expect(screen.getByRole('button', { name: 'Đang huỷ…' })).toBeDisabled()
+      fireEvent.click(screen.getByRole('button', { name: 'Đang huỷ…' }))
+      expect(attempts).toBe(2)
+      resolveCancel({ data: { id: 'b9', status: 'CANCELLED' } })
+      await waitFor(() => expect(router.state.location.pathname).toBe('/search'))
+      expect(post).toHaveBeenCalledWith(
+        '/bookings/b9/cancel',
+        role === 'GUEST' ? { code: 'BK900' } : {},
+      )
+    },
+  )
+
+  it.each([false, true])(
+    'guards pending refresh and Back without auto-cancel (expired: %s)',
+    async (expired) => {
+      const post = vi.spyOn(api, 'post').mockResolvedValue({
+        data: {
+          ...held,
+          status: 'PENDING_DEPOSIT',
+          holdExpiresAt: new Date(Date.now() + (expired ? -1000 : 60_000)).toISOString(),
+        },
+      })
+      vi.spyOn(api, 'get').mockImplementation(async (url: string) => ({
+        data: url === '/bookings/service-catalog' ? { items: [] } : [],
+      }))
+      const { router, unmount } = renderWithAuth(bookingRoutes, {
+        path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+      })
+      await screen.findByRole('heading', { name: 'Thanh toán cọc' })
+      const refresh = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(refresh)
+      expect(refresh.defaultPrevented).toBe(!expired)
+      expect(screen.getByRole('button', { name: 'Huỷ booking' })).toHaveProperty(
+        'disabled',
+        expired,
+      )
+      await act(async () => {
+        void router.navigate('/search')
+      })
+      if (!expired) {
+        expect(await screen.findByRole('alertdialog')).toHaveTextContent('không tự động huỷ')
+        fireEvent.click(screen.getByRole('button', { name: 'Ở lại trang này' }))
+        expect(router.state.location.pathname).toBe('/booking/new')
+        await act(async () => {
+          void router.navigate('/search')
+        })
+        fireEvent.click(await screen.findByRole('button', { name: 'Rời trang' }))
+      }
+      await waitFor(() => expect(router.state.location.pathname).toBe('/search'))
+      if (!expired) {
+        await act(async () => {
+          await router.navigate(
+            '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+          )
+        })
+        await screen.findByRole('heading', { name: 'Thanh toán cọc' })
+        await act(async () => {
+          void router.navigate(-1)
+        })
+        expect(await screen.findByRole('alertdialog')).toHaveTextContent('không tự động huỷ')
+        fireEvent.click(screen.getByRole('button', { name: 'Rời trang' }))
+        await waitFor(() => expect(router.state.location.pathname).toBe('/search'))
+      }
+      unmount()
+      expect(post.mock.calls.filter(([url]) => url === '/bookings/hold')).toHaveLength(
+        expired ? 1 : 2,
+      )
+      expect(post.mock.calls.some(([url]) => url.endsWith('/cancel'))).toBe(false)
+    },
+  )
+
   it('lets the guest pick add-on services sent with the contact details', async () => {
     const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
       if (url === '/bookings/hold') return { data: held }
@@ -1144,6 +1417,46 @@ describe('CreateBookingPage (hold-first flow)', () => {
 describe('BookingDetailPage (server-authoritative)', () => {
   beforeEach(() => localStorage.clear())
   afterEach(() => vi.restoreAllMocks())
+
+  it.each(
+    ['GUEST', 'CUSTOMER'].flatMap((role) =>
+      ['ROOM_HELD', 'PENDING_DEPOSIT'].map((status) => ({ role, status })),
+    ),
+  )(
+    'keeps $status detail cancellation retryable for $role and refreshes after success',
+    async ({ role, status }) => {
+      let cancelled = false
+      vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+        const value = { ...booking, status: cancelled ? 'CANCELLED' : status } as Booking
+        if (url === '/bookings/b1') return { data: value }
+        if (url === '/bookings/b1/summary') return { data: summaryFor(value) }
+        throw new Error(`unexpected GET ${url}`)
+      })
+      const post = vi
+        .spyOn(api, 'post')
+        .mockRejectedValueOnce(new Error('Cancel failed'))
+        .mockImplementation(async () => {
+          cancelled = true
+          return { data: { ...booking, status: 'CANCELLED' } }
+        })
+      renderWithAuth(bookingRoutes, {
+        path: role === 'GUEST' ? '/booking/b1' : '/my-bookings/b1',
+        auth: role === 'GUEST' ? {} : { me: { ...ME, role }, status: 'authenticated' },
+      })
+      fireEvent.click(await screen.findByRole('button', { name: 'Huỷ booking' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }))
+      await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+      expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+      expect(within(screen.getByRole('alertdialog')).getByRole('alert')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }))
+      await screen.findByText('Booking đã được huỷ và phòng đã được mở lại.')
+      expect(screen.queryByRole('button', { name: 'Huỷ booking' })).not.toBeInTheDocument()
+      expect(post).toHaveBeenLastCalledWith(
+        '/bookings/b1/cancel',
+        role === 'GUEST' ? { code: 'BK123' } : {},
+      )
+    },
+  )
 
   it('reads authoritative booking state and starts a VNPay deposit', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (url: string) => {

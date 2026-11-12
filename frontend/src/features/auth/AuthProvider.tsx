@@ -20,6 +20,15 @@ import { firebaseErrorMessage } from './firebase-errors'
 
 const DEV_USER_KEY = 'hms.devUser'
 
+function clearSessionCache() {
+  // Public search data is identity-independent. Removing active queries leaves their
+  // observers showing old data until the next local render recreates and refetches them.
+  queryClient.removeQueries({
+    predicate: ({ queryKey }) => queryKey[0] !== 'availability' && queryKey[0] !== 'search-filters',
+  })
+  queryClient.getMutationCache().clear()
+}
+
 /** Họ tên cho tài khoản HMS mới (backend nhận 2–100 ký tự). */
 function googleName(user: User) {
   const name = (user.displayName ?? user.email?.split('@')[0] ?? '').trim().slice(0, 100)
@@ -44,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadMe = useCallback(async () => {
     const nextMe = await getMe()
     const nextPrincipal = `${nextMe.id}:${nextMe.role}`
-    if (principal.current !== nextPrincipal) queryClient.clear()
+    if (principal.current !== nextPrincipal) clearSessionCache()
     principal.current = nextPrincipal
     setMe(nextMe)
     setStatus('authenticated')
@@ -57,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     principal.current = null
     setMe(null)
     setStatus('anonymous')
-    queryClient.clear()
+    clearSessionCache()
   }, [])
 
   // Khôi phục phiên khi tải lại trang.

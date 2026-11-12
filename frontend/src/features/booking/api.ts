@@ -1,3 +1,4 @@
+import { isAxiosError } from 'axios'
 import { api } from '@/lib/api-client'
 
 /**
@@ -178,6 +179,31 @@ export interface HoldBookingInput {
   checkOut: string
   adultCount: number
   childCount?: number
+}
+
+/** Minimal active-booking metadata; never a resumable hold token. */
+export interface ActiveBooking {
+  id: string
+  code: string
+  status: 'ROOM_HELD' | 'PENDING_DEPOSIT'
+  holdExpiresAt: string
+}
+
+export function getActiveBookingConflict(error: unknown): ActiveBooking | undefined {
+  if (!isAxiosError(error) || error.response?.status !== 409) return
+  const data = error.response.data
+  if (data?.code !== 'ACTIVE_BOOKING_EXISTS') return
+  const existing = data.existingBooking
+  if (
+    !existing ||
+    typeof existing.id !== 'string' ||
+    typeof existing.code !== 'string' ||
+    !['ROOM_HELD', 'PENDING_DEPOSIT'].includes(existing.status) ||
+    typeof existing.holdExpiresAt !== 'string' ||
+    !Number.isFinite(Date.parse(existing.holdExpiresAt))
+  )
+    return
+  return existing
 }
 
 /** Một nhóm phòng cùng loại trong hold, kèm id từng phòng để client chỉnh số lượng. */
