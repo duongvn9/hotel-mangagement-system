@@ -29,6 +29,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let message: string | string[] = 'Internal server error';
     let error = 'Internal Server Error';
+    let conflictDetails: Record<string, unknown> = {};
     if (isHttp) {
       const body = exception.getResponse();
       if (typeof body === 'string') {
@@ -38,6 +39,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
         const b = body as { message?: string | string[]; error?: string };
         message = b.message ?? exception.message;
         error = b.error ?? exception.name;
+        const details = body as { code?: string; existingBooking?: unknown };
+        if (
+          statusCode === HttpStatus.CONFLICT &&
+          details.code === 'ACTIVE_BOOKING_EXISTS'
+        ) {
+          conflictDetails = {
+            code: details.code,
+            existingBooking: details.existingBooking,
+          };
+        }
       }
     } else {
       this.logger.error(
@@ -47,6 +58,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     res.status(statusCode).json({
+      ...conflictDetails,
       statusCode,
       message,
       error,

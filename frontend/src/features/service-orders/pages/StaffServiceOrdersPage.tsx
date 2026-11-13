@@ -31,7 +31,15 @@ export function StaffServiceOrdersPage() {
   }
   return (
     <PageContainer>
-      <PageHeader title="Yêu cầu dịch vụ" subtitle="Nhận, giao và hoàn tất yêu cầu của khách." />
+      <PageHeader
+        title="Yêu cầu dịch vụ"
+        subtitle="Nhận, giao và hoàn tất yêu cầu của khách."
+        actions={
+          <Button asChild className="rounded-full">
+            <Link to="/staff/service-orders/intake">Ghi nhận yêu cầu</Link>
+          </Button>
+        }
+      />
       <Panel>
         <form onSubmit={search} className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <FormField label="Từ khóa dịch vụ" htmlFor="staff-order-keyword">

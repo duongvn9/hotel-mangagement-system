@@ -3,7 +3,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { RoomStatus } from '../../common/constants/room-status.enum.js';
 import { Room } from '../rooms/schemas/room.schema.js';
+import { RoomType } from '../room-types/schemas/room-type.schema.js';
 import { AvailabilityRoomSource } from './availability.adapters.js';
+import { publicBeds, type PopulatedBed } from './room-type-overview.service.js';
+import { hasRoomTypeFilter, roomTypeFilter } from './room-type-filter.js';
 import type {
   AvailabilityQuery,
   AvailabilityRoom,
@@ -14,6 +17,7 @@ type PopulatedRoomType = {
   _id: Types.ObjectId;
   name: string;
   images?: string[];
+  beds?: PopulatedBed[];
   basePrice: number;
   adultCapacity: number;
   childCapacity: number;
@@ -32,7 +36,10 @@ type PopulatedRoomType = {
  */
 @Injectable()
 export class MongoAvailabilityRoomSource extends AvailabilityRoomSource {
-  constructor(@InjectModel(Room.name) private readonly rooms: Model<Room>) {
+  constructor(
+    @InjectModel(Room.name) private readonly rooms: Model<Room>,
+    @InjectModel(RoomType.name) private readonly roomTypes: Model<RoomType>,
+  ) {
     super();
   }
 
@@ -40,16 +47,33 @@ export class MongoAvailabilityRoomSource extends AvailabilityRoomSource {
     query: AvailabilityQuery & StayInterval,
   ): Promise<readonly AvailabilityRoom[]> {
     const filter: Record<string, unknown> = { isActive: true };
-    if (query.roomTypeId) {
+    // Lọc theo loại giường/tiện nghi/giá/sức chứa: thu hẹp về các loại phòng khớp (AND).
+    if (hasRoomTypeFilter(query)) {
+      const matches = await this.roomTypes
+        .find({
+          isActive: true,
+          ...roomTypeFilter(query),
+          ...(query.roomTypeId
+            ? { _id: new Types.ObjectId(query.roomTypeId) }
+            : {}),
+        })
+        .select('_id')
+        .lean()
+        .exec();
+      if (!matches.length) return [];
+      filter.roomType = { $in: matches.map((match) => match._id) };
+    } else if (query.roomTypeId) {
       filter.roomType = new Types.ObjectId(query.roomTypeId);
     }
     const rows = await this.rooms
       .find(filter)
       .select('roomType status isActive')
-      .populate<{ roomType: PopulatedRoomType }>(
-        'roomType',
-        'name images basePrice adultCapacity childCapacity isActive',
-      )
+      .populate<{ roomType: PopulatedRoomType }>({
+        path: 'roomType',
+        select:
+          'name images basePrice adultCapacity childCapacity isActive beds',
+        populate: { path: 'beds.bedType', select: 'name isActive' },
+      })
       .lean()
       .exec();
 
@@ -62,6 +86,7 @@ export class MongoAvailabilityRoomSource extends AvailabilityRoomSource {
           roomTypeId: String(roomType._id),
           roomTypeName: roomType.name,
           images: roomType.images ?? [],
+          beds: publicBeds(roomType.beds),
           pricePerNight: roomType.basePrice,
           capacity: roomType.adultCapacity + roomType.childCapacity,
           isActive: row.isActive,

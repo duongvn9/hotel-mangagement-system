@@ -25,6 +25,7 @@ export function PaymentReturnPage() {
   const bookingDisplay = booking ? BOOKING_STATUS_DISPLAY[booking.status] : undefined
 
   const isSuccess = verify.data?.status === 'SUCCESS'
+  const isFinal = verify.data?.purpose === 'FINAL'
 
   return (
     <div className="mx-auto max-w-xl px-5 py-16">
@@ -43,7 +44,9 @@ export function PaymentReturnPage() {
         <h1 className="mt-2 font-display text-4xl font-semibold">
           {verify.data
             ? isSuccess
-              ? 'Đặt phòng thành công.'
+              ? isFinal
+                ? 'Thanh toán thành công.'
+                : 'Đặt phòng thành công.'
               : 'Thanh toán chưa thành công'
             : 'Kết quả thanh toán'}
         </h1>
@@ -91,19 +94,26 @@ export function PaymentReturnPage() {
               )}
             </div>
 
+            {isSuccess && isFinal && (
+              <p className="text-center text-sm font-medium text-success">
+                Chúng tôi đã nhận khoản thanh toán còn lại của booking.
+              </p>
+            )}
             {verify.data.status === 'SUCCESS' &&
+              !isFinal &&
               (booking?.status === 'PENDING_DEPOSIT' || booking?.status === 'ROOM_HELD') && (
                 <p className="text-center text-sm text-muted-foreground" role="status">
                   Hệ thống đang hoàn tất xác nhận booking từ cổng thanh toán. Trạng thái sẽ tự cập
                   nhật trong giây lát.
                 </p>
               )}
-            {booking?.status === 'CONFIRMED' && (
+            {!isFinal && booking?.status === 'CONFIRMED' && (
               <p className="text-center text-sm font-medium text-success">
                 Đặt phòng của bạn đã được xác nhận.
               </p>
             )}
             {verify.data.status === 'SUCCESS' &&
+              !isFinal &&
               (booking?.status === 'EXPIRED' || booking?.status === 'CANCELLED') && (
                 <div
                   role="alert"
@@ -116,8 +126,9 @@ export function PaymentReturnPage() {
               )}
             {(verify.data.status === 'FAILED' || verify.data.status === 'CANCELLED') && (
               <p className="text-center text-sm text-muted-foreground">
-                Thanh toán chưa hoàn tất. Nếu phòng vẫn đang được giữ, bạn có thể thử lại từ trang
-                chi tiết booking.
+                {isFinal
+                  ? 'Thanh toán chưa hoàn tất. Bạn có thể thử lại từ trang chi tiết booking.'
+                  : 'Thanh toán chưa hoàn tất. Nếu phòng vẫn đang được giữ, bạn có thể thử lại từ trang chi tiết booking.'}
               </p>
             )}
           </div>

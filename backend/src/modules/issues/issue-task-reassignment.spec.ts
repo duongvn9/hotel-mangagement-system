@@ -124,6 +124,38 @@ describe('Issue resolution reassignment recovery', () => {
     tasks as unknown as TasksService,
   );
 
+  it.each([-86400000, -60000, 0])(
+    'rejects new reassignment deadline offset %s',
+    async (offset) => {
+      await expect(
+        service.reassign(
+          id,
+          { ...input, dueAt: new Date(Date.now() + offset).toISOString() },
+          actor,
+        ),
+      ).rejects.toThrow('future');
+      expect(tasks.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('replays pending and completed reassignment after deadline expiry', async () => {
+    const now = Date.now();
+    const supplied = { ...input, dueAt: new Date(now + 60000).toISOString() };
+    failCreate = true;
+    await expect(service.reassign(id, supplied, actor)).rejects.toThrow(
+      'create failed',
+    );
+    vi.spyOn(Date, 'now').mockReturnValue(now + 120000);
+    failCreate = false;
+    try {
+      await service.reassign(id, supplied, actor);
+      await service.reassign(id, supplied, actor);
+      expect(issue.reassignmentHistory[0].dueAt).toBe(supplied.dueAt);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     issue = {

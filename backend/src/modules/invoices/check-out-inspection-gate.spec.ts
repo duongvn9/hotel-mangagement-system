@@ -1,5 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import { Types } from 'mongoose';
+import { RoomStatus } from '../../common/constants/room-status.enum.js';
 import { BookingStatus } from '../bookings/schemas/booking.schema.js';
 import { TaskSourceType, TaskStatus } from '../tasks/task-contract.js';
 import { CheckOutService } from './check-out.service.js';
@@ -45,7 +46,9 @@ function setup(
       ? BookingStatus.CheckedOut
       : BookingStatus.CheckedIn,
     checkedOutAt: options.checkedOut ? checkedOutAt : undefined,
-    checkoutRoomProjectionCompletedAt: new Date(),
+    checkoutRoomProjectionCompletedAt: options.checkedOut
+      ? new Date()
+      : undefined,
     rooms: [roomId],
     acceptanceReservations: [],
   };
@@ -77,12 +80,12 @@ function setup(
     { send: vi.fn(async () => ({ accepted: true })) } as never,
     tasks as never,
   );
-  return { sut, bookings, tasks };
+  return { sut, bookings, tasks, rooms };
 }
 
 describe('CheckOutService inspection gate', () => {
   it('checks the guest out once service staff has completed the room inspection', async () => {
-    const { sut, bookings, tasks } = setup({
+    const { sut, bookings, tasks, rooms } = setup({
       inspection: { status: TaskStatus.Completed },
     });
 
@@ -93,6 +96,12 @@ describe('CheckOutService inspection gate', () => {
       bookingId.toHexString(),
     );
     expect(bookings.findOneAndUpdate).toHaveBeenCalled();
+    expect(rooms.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: { $in: [RoomStatus.Occupied, RoomStatus.Cleaning] },
+      }),
+      { $set: { status: RoomStatus.Available } },
+    );
   });
 
   it('refuses when no inspection was ever requested', async () => {

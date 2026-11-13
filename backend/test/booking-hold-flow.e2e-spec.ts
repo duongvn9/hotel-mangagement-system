@@ -103,12 +103,262 @@ describe('Booking hold flow (e2e)', () => {
       .expect(201);
     const second = await agent
       .post('/api/v1/bookings/hold')
-      .send(holdBody(roomA, '2093-03-10', '2093-03-12'))
+      .send(holdBody(roomA, '2093-03-05', '2093-03-07'))
       .expect(201);
     expect(second.body.bookingId).toBe(first.body.bookingId);
     expect(second.body.holdToken).toBe(first.body.holdToken);
     expect(second.body.holdExpiresAt).toBe(first.body.holdExpiresAt);
     expect(await bookings.countDocuments({ rooms: roomA })).toBe(1);
+  });
+
+  it('does not reuse or transfer a manager hold after switching to a customer', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const managerId = String(new Types.ObjectId());
+    const customerId = String(new Types.ObjectId());
+    const first = await agent
+      .post('/api/v1/bookings/hold')
+      .set('x-dev-role', 'MANAGER')
+      .set('x-dev-user-id', managerId)
+      .send(holdBody(roomA, '2093-03-01', '2093-03-03'))
+      .expect(201);
+    const second = await agent
+      .post('/api/v1/bookings/hold')
+      .set('x-dev-role', 'CUSTOMER')
+      .set('x-dev-user-id', customerId)
+      .send(holdBody(roomA, '2093-03-10', '2093-03-12'))
+      .expect(201);
+    expect(second.body.bookingId).not.toBe(first.body.bookingId);
+    expect(
+      String((await bookings.findById(second.body.bookingId))?.customer),
+    ).toBe(customerId);
+    expect(
+      (await bookings.findById(first.body.bookingId))?.customer,
+    ).toBeUndefined();
+    await agent
+      .get(`/api/v1/bookings/${first.body.bookingId}`)
+      .set('x-dev-role', 'CUSTOMER')
+      .set('x-dev-user-id', customerId)
+      .expect(403);
+    await agent
+      .get(`/api/v1/bookings/${second.body.bookingId}`)
+      .set('x-dev-role', 'CUSTOMER')
+      .set('x-dev-user-id', customerId)
+      .expect(200);
+  });
+
+  it.each([
+    ['MANAGER', 'CUSTOMER'],
+    ['CUSTOMER', 'CUSTOMER'],
+    [undefined, 'CUSTOMER'],
+    ['CUSTOMER', undefined],
+  ])(
+    'does not resume or transfer a %s hold after switching to %s',
+    async (firstRole, secondRole) => {
+      const agent = request.agent(app.getHttpServer());
+      const firstUser = new Types.ObjectId();
+      const secondUser = new Types.ObjectId();
+      const firstHeaders = firstRole
+        ? { 'x-dev-role': firstRole, 'x-dev-user-id': String(firstUser) }
+        : {};
+      const secondHeaders = secondRole
+        ? { 'x-dev-role': secondRole, 'x-dev-user-id': String(secondUser) }
+        : {};
+      const first = await agent
+        .post('/api/v1/bookings/hold')
+        .set(firstHeaders)
+        .send(holdBody(roomA, '2093-03-15', '2093-03-17'))
+        .expect(201);
+      const original = await bookings.findById(first.body.bookingId).lean();
+      const second = await agent
+        .post('/api/v1/bookings/hold')
+        .set(secondHeaders)
+        .send(holdBody(roomA, '2093-03-20', '2093-03-22'))
+        .expect(201);
+      expect(second.body.bookingId).not.toBe(first.body.bookingId);
+      expect(second.body.holdToken).not.toBe(first.body.holdToken);
+      expect(await bookings.findById(first.body.bookingId).lean()).toEqual(
+        original,
+      );
+      expect(
+        await holds
+          .findOne({ booking: new Types.ObjectId(first.body.bookingId) })
+          .lean(),
+      ).toMatchObject({ isActive: true });
+      const fresh = await bookings.findById(second.body.bookingId).lean();
+      expect(fresh?.customer?.toString()).toBe(
+        secondRole ? String(secondUser) : undefined,
+      );
+      if (firstRole === 'MANAGER') {
+        expect(original?.createdBy?.toString()).toBe(String(firstUser));
+        expect(original?.customer).toBeUndefined();
+      }
+      // Returning to the first principal resumes its original hold, not the latest account's.
+      const resumed = await agent
+        .post('/api/v1/bookings/hold')
+        .set(firstHeaders)
+        .send(holdBody(roomA, '2093-03-15', '2093-03-17'))
+        .expect(201);
+      expect(resumed.body.bookingId).toBe(first.body.bookingId);
+      expect(resumed.body.holdExpiresAt).toBe(first.body.holdExpiresAt);
+    },
+  );
+
+  it("does not release another account's inventory when creating a new hold", async () => {
+    const agent = request.agent(app.getHttpServer());
+    const firstUser = new Types.ObjectId();
+    const first = await agent
+      .post('/api/v1/bookings/hold')
+      .set({ 'x-dev-role': 'MANAGER', 'x-dev-user-id': String(firstUser) })
+      .send(holdBody(roomA, '2093-03-15', '2093-03-17'))
+      .expect(201);
+    await agent
+      .post('/api/v1/bookings/hold')
+      .set({
+        'x-dev-role': 'CUSTOMER',
+        'x-dev-user-id': String(new Types.ObjectId()),
+      })
+      .send(holdBody(roomA, '2093-03-15', '2093-03-17'))
+      .expect(409);
+    expect(await bookings.findById(first.body.bookingId).lean()).toMatchObject({
+      status: 'ROOM_HELD',
+    });
+    expect(
+      await holds
+        .findOne({ booking: new Types.ObjectId(first.body.bookingId) })
+        .lean(),
+    ).toMatchObject({ isActive: true });
+  });
+
+  it.each(['CUSTOMER', 'MANAGER', undefined])(
+    'blocks a different checkout for %s and exposes the active booking without transferring it',
+    async (role) => {
+      const agent = request.agent(app.getHttpServer());
+      const headers = role
+        ? { 'x-dev-role': role, 'x-dev-user-id': String(new Types.ObjectId()) }
+        : {};
+      const body = holdBody(roomA, '2093-04-01', '2093-04-03');
+      const held = await agent
+        .post('/api/v1/bookings/hold')
+        .set(headers)
+        .send(body)
+        .expect(201);
+      const client = role ? http() : agent;
+      const conflict = await client
+        .post('/api/v1/bookings/hold')
+        .set(headers)
+        .send({ ...body, checkOut: '2093-04-04' })
+        .expect(409);
+      const summary = {
+        id: held.body.bookingId,
+        code: held.body.code,
+        status: 'ROOM_HELD',
+        holdExpiresAt: held.body.holdExpiresAt,
+      };
+      expect(conflict.body).toMatchObject({
+        code: 'ACTIVE_BOOKING_EXISTS',
+        existingBooking: summary,
+      });
+      const active = await client
+        .get('/api/v1/bookings/active-hold')
+        .set(headers)
+        .expect(200);
+      expect(active.body).toEqual({ activeBooking: summary });
+      await http()
+        .get('/api/v1/bookings/active-hold')
+        .expect(200)
+        .expect({ activeBooking: null });
+      const pending = await http()
+        .post('/api/v1/bookings/details')
+        .send({
+          holdToken: held.body.holdToken,
+          guestName: 'Guest',
+          guestEmail: 'guest@example.test',
+          guestPhone: '0900000000',
+        })
+        .expect(200);
+      const resumed = await client
+        .post('/api/v1/bookings/hold')
+        .set(headers)
+        .send(body)
+        .expect(201);
+      expect(resumed.body).toEqual(pending.body);
+      const pendingConflict = await client
+        .post('/api/v1/bookings/hold')
+        .set(headers)
+        .send({ ...body, adultCount: 1 })
+        .expect(409);
+      expect(pendingConflict.body).toMatchObject({
+        code: 'ACTIVE_BOOKING_EXISTS',
+        existingBooking: { ...summary, status: 'PENDING_DEPOSIT' },
+      });
+      await client
+        .post(`/api/v1/bookings/${held.body.bookingId}/cancel`)
+        .set(headers)
+        .send(role ? {} : { code: held.body.code })
+        .expect(201);
+      await client
+        .post('/api/v1/bookings/hold')
+        .set(headers)
+        .send({ ...body, checkOut: '2093-04-04' })
+        .expect(201);
+    },
+  );
+
+  it.each(['expired', 'confirmed'])(
+    'frees the principal slot after %s without waiting for a sweep',
+    async (state) => {
+      const headers = {
+        'x-dev-role': 'CUSTOMER',
+        'x-dev-user-id': String(new Types.ObjectId()),
+      };
+      const held = await http()
+        .post('/api/v1/bookings/hold')
+        .set(headers)
+        .send(holdBody(roomA, '2093-04-01', '2093-04-03'))
+        .expect(201);
+      if (state === 'expired') {
+        await holds.updateOne(
+          { booking: new Types.ObjectId(held.body.bookingId) },
+          { $set: { expiresAt: new Date(Date.now() - 1) } },
+        );
+      } else {
+        await bookings.updateOne(
+          { _id: held.body.bookingId },
+          { $set: { status: 'CONFIRMED' } },
+        );
+      }
+      await http()
+        .post('/api/v1/bookings/hold')
+        .set(headers)
+        .send(holdBody(roomA, '2093-04-10', '2093-04-12'))
+        .expect(201);
+    },
+  );
+
+  it('atomically prevents simultaneous different checkouts across signed-in sessions', async () => {
+    const headers = {
+      'x-dev-role': 'CUSTOMER',
+      'x-dev-user-id': String(new Types.ObjectId()),
+    };
+    const results = await Promise.all([
+      http()
+        .post('/api/v1/bookings/hold')
+        .set(headers)
+        .send(holdBody(roomA, '2093-04-01', '2093-04-03')),
+      http()
+        .post('/api/v1/bookings/hold')
+        .set(headers)
+        .send(holdBody(roomA, '2093-04-10', '2093-04-12')),
+    ]);
+    expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
+    expect(results.find((result) => result.status === 409)?.body.code).toBe(
+      'ACTIVE_BOOKING_EXISTS',
+    );
+    expect(
+      await bookings.countDocuments({
+        customer: new Types.ObjectId(headers['x-dev-user-id']),
+      }),
+    ).toBe(1);
   });
 
   it('submits contact details to move ROOM_HELD to PENDING_DEPOSIT', async () => {
@@ -223,10 +473,13 @@ describe('Booking hold flow (e2e)', () => {
         .expect(201);
     }
     // Lượt thứ 4 trong cửa sổ bị chặn.
-    await http()
+    const limited = await http()
       .post('/api/v1/bookings/hold')
       .set('x-forwarded-for', ip)
       .send(holdBody(roomA, '2093-10-01', '2093-10-03'))
       .expect(429);
+    expect(limited.body.message).toBe(
+      'Bạn đã đạt giới hạn 3 lượt giữ phòng trong 30 phút cho phiên hoặc địa chỉ mạng này. Vui lòng chờ các lượt giữ phòng cũ ra khỏi khoảng 30 phút rồi thử lại.',
+    );
   });
 });

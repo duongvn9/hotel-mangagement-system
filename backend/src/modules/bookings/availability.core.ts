@@ -5,11 +5,20 @@ import {
 } from '../../common/constants/booking-status.enum.js';
 import { toBusinessDate } from '../../common/database/conventions.js';
 
+import type { RoomTypeBedSummary } from './dto/room-type-overview.dto.js';
+
 export interface AvailabilityQuery {
   checkIn: Date | string;
   checkOut: Date | string;
   guests: number;
   roomTypeId?: string;
+  /** Lọc bổ sung ở tầng loại phòng (áp dụng trong nguồn phòng, không ở core). */
+  bedTypeIds?: string[];
+  amenityIds?: string[];
+  priceMin?: number;
+  priceMax?: number;
+  adults?: number;
+  children?: number;
 }
 
 export interface StayInterval {
@@ -23,6 +32,7 @@ export interface AvailableRoom {
   /** Tên loại phòng, để hiển thị cho khách (có khi nguồn phòng cung cấp). */
   roomTypeName?: string;
   images?: string[];
+  beds?: RoomTypeBedSummary[];
   /** Đơn giá mỗi đêm của loại phòng (VND). */
   pricePerNight?: number;
 }
@@ -85,6 +95,34 @@ export function validateQuery(query: AvailabilityQuery): StayInterval {
     !/^[a-f\d]{24}$/i.test(query.roomTypeId)
   )
     throw new RangeError('Invalid roomTypeId');
+  for (const [label, ids] of [
+    ['bedTypeIds', query.bedTypeIds],
+    ['amenityIds', query.amenityIds],
+  ] as const) {
+    if (ids === undefined) continue;
+    if (
+      !Array.isArray(ids) ||
+      ids.some((id) => typeof id !== 'string' || !/^[a-f\d]{24}$/i.test(id)) ||
+      new Set(ids).size !== ids.length
+    )
+      throw new RangeError(`Invalid ${label}`);
+  }
+  for (const [label, value] of [
+    ['priceMin', query.priceMin],
+    ['priceMax', query.priceMax],
+    ['adults', query.adults],
+    ['children', query.children],
+  ] as const) {
+    if (value === undefined) continue;
+    if (!Number.isSafeInteger(value) || value < 0)
+      throw new RangeError(`Invalid ${label}`);
+  }
+  if (
+    query.priceMin !== undefined &&
+    query.priceMax !== undefined &&
+    query.priceMin > query.priceMax
+  )
+    throw new RangeError('priceMin must be <= priceMax');
   return normalizeStay(query);
 }
 
@@ -145,6 +183,7 @@ export function calculateAvailability(
       roomTypeId: room.roomTypeId,
       capacity: room.capacity,
       ...(room.images !== undefined ? { images: room.images } : {}),
+      ...(room.beds !== undefined ? { beds: room.beds } : {}),
       // Chỉ kèm khi nguồn phòng cung cấp, giữ nguyên shape tối thiểu cho các stub/test.
       ...(room.roomTypeName !== undefined
         ? { roomTypeName: room.roomTypeName }

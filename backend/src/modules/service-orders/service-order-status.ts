@@ -3,6 +3,7 @@ export enum ServiceOrderReviewStatus {
   Accepting = 'ACCEPTING',
   Accepted = 'ACCEPTED',
   Rejected = 'REJECTED',
+  Abandoned = 'ABANDONED',
 }
 
 export enum ServiceOrderExecutionStatus {

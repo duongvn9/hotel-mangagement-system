@@ -39,8 +39,8 @@ export class CheckOutService {
   /**
    * UC18: lễ tân trả phòng cho khách đã thanh toán đủ hóa đơn và đã được nhân viên dịch vụ xác nhận
    * kiểm tra phòng (lần kiểm tra gần nhất phải COMPLETED). Booking CHECKED_IN chuyển sang
-   * CHECKED_OUT (ghi checkedOutAt) và các phòng đang OCCUPIED sang CLEANING; phòng ở trạng thái
-   * khác giữ nguyên. Hóa đơn được tính lại trước và sau khi đóng để không bỏ lọt khoản nợ mới.
+   * CHECKED_OUT (ghi checkedOutAt) và các phòng đang OCCUPIED/CLEANING sang AVAILABLE; phòng
+   * ở trạng thái khác giữ nguyên. Hóa đơn được tính lại trước và sau khi đóng để không bỏ lọt nợ mới.
    */
   async checkOut(bookingId: string): Promise<CheckOutResult> {
     return withBookingFinancialOperation(this.bookings, bookingId, () =>
@@ -152,13 +152,13 @@ export class CheckOutService {
       await this.rooms.updateMany(
         {
           _id: { $in: booking.rooms },
-          status: RoomStatus.Occupied,
+          status: { $in: [RoomStatus.Occupied, RoomStatus.Cleaning] },
           $or: [
             { updatedAt: { $type: 'date', $lte: checkedOutAt } },
             ...(initialProjection ? [{ updatedAt: { $exists: false } }] : []),
           ],
         },
-        { $set: { status: RoomStatus.Cleaning } },
+        { $set: { status: RoomStatus.Available } },
       );
       await this.bookings.updateOne(
         {

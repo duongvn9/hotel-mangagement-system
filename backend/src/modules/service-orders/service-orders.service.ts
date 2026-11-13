@@ -38,6 +38,8 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
   AssignServiceOrderDto,
+  IntakeServiceOrderDto,
+  ReassignServiceOrderDto,
   ServiceHistoryQuery,
   CreateServiceOrderDto,
   ListServiceOrdersQuery,
@@ -73,12 +75,244 @@ export class ServiceOrdersService implements OnModuleInit {
 
   async onModuleInit() {
     await this.orders.collection.createIndex(
+      { intakeKey: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { intakeKey: { $exists: true } },
+      },
+    );
+    await this.orders.collection.createIndex(
       { customer: 1, requestId: 1 },
       {
         unique: true,
         partialFilterExpression: { requestId: { $exists: true } },
       },
     );
+  }
+
+  private intakeActor(user: AuthUser) {
+    if (user?.role === Role.Receptionist) return this.receptionist(user);
+    this.serviceStaff(user);
+    return this.id(user.id);
+  }
+
+  private withinStay(time: Date, booking: Booking) {
+    return (
+      Number.isFinite(time.getTime()) &&
+      time >= booking.checkIn &&
+      time < booking.checkOut
+    );
+  }
+
+  private scheduledAcceptance(row: ServiceOrderDocument, booking: Booking) {
+    return (
+      booking.isActive &&
+      (booking.status === BookingStatus.CheckedIn ||
+        (booking.status === BookingStatus.Confirmed &&
+          row.intakeRole !== Role.ServiceStaff &&
+          row.requestedTime > new Date() &&
+          this.withinStay(row.requestedTime, booking)))
+    );
+  }
+
+  async intake(input: IntakeServiceOrderDto, user: AuthUser) {
+    const actor = this.intakeActor(user);
+    const dto = plainToInstance(IntakeServiceOrderDto, input);
+    if (
+      !input ||
+      (await validate(dto, { whitelist: true, forbidNonWhitelisted: true }))
+        .length ||
+      !dto.requestId
+    )
+      throw new BadRequestException('Invalid intake input');
+    const intakeKey = `service-order-intake:${user.role}:${actor}:${dto.requestId.toLowerCase()}`;
+    let row = await this.orders
+      .findOne({ intakeKey })
+      .select(`+intakeFingerprint ${this.staffSelection}`)
+      .exec();
+    const booking = await this.ownedBooking(
+      this.id(dto.bookingId),
+      undefined,
+      row ? undefined : 'orderable',
+    );
+    if (
+      !row &&
+      user.role === Role.ServiceStaff &&
+      booking.status !== BookingStatus.CheckedIn
+    )
+      throw new ConflictException('Booking must be active and CHECKED_IN');
+    if (
+      !row &&
+      dto.roomId &&
+      !booking.rooms.some(
+        (room) => String(room) === String(this.id(dto.roomId!)),
+      )
+    )
+      throw new BadRequestException('Room must belong to booking');
+    const requestedTime = dto.requestedTime
+      ? new Date(dto.requestedTime)
+      : undefined;
+    if (
+      !row &&
+      ((requestedTime &&
+        (!this.withinStay(requestedTime, booking) ||
+          requestedTime <= new Date())) ||
+        (booking.status === BookingStatus.Confirmed && !requestedTime))
+    )
+      throw new BadRequestException(
+        'requestedTime must be future and within stay',
+      );
+    const completed = dto.intakeMode === 'COMPLETED_ON_SITE';
+    if (completed) {
+      if (
+        user.role !== Role.ServiceStaff ||
+        !dto.actualPerformerId ||
+        !dto.actualCompletedAt ||
+        !dto.completionDetails?.trim()
+      )
+        throw new BadRequestException(
+          'Completed report requires performer, actual completion and details',
+        );
+      const at = new Date(dto.actualCompletedAt);
+      if (!this.withinStay(at, booking) || at > new Date())
+        throw new BadRequestException(
+          'Actual completion must be within stay and not future',
+        );
+      if (
+        !row &&
+        !(await this.users
+          .findOne({
+            _id: this.id(dto.actualPerformerId),
+            role: Role.ServiceStaff,
+            isActive: true,
+          })
+          .exec())
+      )
+        throw new ConflictException(
+          'Actual performer must be active ServiceStaff',
+        );
+    } else if (
+      dto.actualPerformerId ||
+      dto.actualCompletedAt ||
+      dto.completionDetails
+    ) {
+      throw new BadRequestException(
+        'Completion fields require COMPLETED_ON_SITE',
+      );
+    }
+    const fingerprint = createHash('sha256')
+      .update(
+        JSON.stringify({
+          bookingId: String(booking._id),
+          serviceId: String(this.id(dto.serviceId)),
+          quantity: dto.quantity,
+          intakeMode: dto.intakeMode,
+          roomId: dto.roomId?.toLowerCase() ?? null,
+          requesterName: dto.requesterName?.trim() ?? null,
+          notes: dto.notes?.trim() || null,
+          requestedTime: requestedTime?.toISOString() ?? null,
+          actualPerformerId: dto.actualPerformerId?.toLowerCase() ?? null,
+          actualCompletedAt: dto.actualCompletedAt
+            ? new Date(dto.actualCompletedAt).toISOString()
+            : null,
+          completionDetails: dto.completionDetails?.trim() ?? null,
+        }),
+      )
+      .digest('hex');
+    if (!row) {
+      const catalog = await this.services
+        .findById(this.id(dto.serviceId))
+        .exec();
+      if (!catalog || !catalog.isActive)
+        throw new ConflictException('Service is not available for ordering');
+      const price = catalog.billable === false ? 0 : catalog.price;
+      if (
+        typeof price !== 'number' ||
+        !Number.isSafeInteger(price) ||
+        price < 0 ||
+        !Number.isSafeInteger(price * dto.quantity)
+      )
+        throw new BadRequestException('Invalid integer VND amount');
+      try {
+        row = await this.orders.create({
+          booking: booking._id,
+          ...(booking.customer ? { customer: booking.customer } : {}),
+          service: this.id(dto.serviceId),
+          serviceName: catalog.name,
+          unit: catalog.unit ?? '',
+          quantity: dto.quantity,
+          unitPriceVND: price,
+          amount: price * dto.quantity,
+          requestedTime: requestedTime ?? new Date(),
+          notes: dto.notes?.trim() || undefined,
+          intakeMode: dto.intakeMode,
+          intakeRole: user.role,
+          intakeKey,
+          intakeFingerprint: fingerprint,
+          createdBy: actor,
+          reportedBy: actor,
+          requesterName: dto.requesterName?.trim(),
+          ...(dto.roomId ? { room: this.id(dto.roomId) } : {}),
+          ...(completed
+            ? {
+                actualPerformer: this.id(dto.actualPerformerId!),
+                actualCompletedAt: new Date(dto.actualCompletedAt!),
+                completionDetails: dto.completionDetails!.trim(),
+              }
+            : {}),
+        });
+      } catch (error) {
+        if ((error as { code?: number }).code !== 11000) throw error;
+        row = await this.orders
+          .findOne({ intakeKey })
+          .select(`+intakeFingerprint ${this.staffSelection}`)
+          .exec();
+        if (!row) throw error;
+      }
+    }
+    if (row.intakeFingerprint !== fingerprint)
+      throw new ConflictException(
+        'requestId already used with a different payload',
+      );
+    if (user.role === Role.Receptionist)
+      return this.review(String(row._id), { decision: 'ACCEPT' }, user);
+    return this.staffResponse(row);
+  }
+
+  private async reconcileIntake(row: ServiceOrderDocument, user: AuthUser) {
+    if (row.reviewStatus !== ServiceOrderReviewStatus.Accepted) return;
+    if (row.intakeMode === 'COMPLETED_ON_SITE') {
+      await this.orders.updateOne(
+        {
+          _id: row._id,
+          reviewStatus: ServiceOrderReviewStatus.Accepted,
+          linkedTask: { $exists: false },
+        },
+        { $set: { executionStatus: ServiceOrderExecutionStatus.Completed } },
+      );
+      row.executionStatus = ServiceOrderExecutionStatus.Completed;
+    } else if (
+      row.intakeRole === Role.ServiceStaff &&
+      row.reportedBy &&
+      [
+        ServiceOrderExecutionStatus.NotStarted,
+        ServiceOrderExecutionStatus.Assigning,
+      ].includes(row.executionStatus)
+    ) {
+      const eligible = await this.users
+        .findOne({
+          _id: row.reportedBy,
+          role: Role.ServiceStaff,
+          isActive: true,
+        })
+        .exec();
+      if (eligible)
+        await this.assign(
+          String(row._id),
+          { assigneeId: String(row.reportedBy) },
+          user,
+        );
+    }
   }
 
   private customer(user: AuthUser) {
@@ -172,7 +406,10 @@ export class ServiceOrdersService implements OnModuleInit {
       amount: row.amount,
       requestedTime: row.requestedTime,
       reviewStatus: row.reviewStatus,
-      ...(row.reviewStatus === ServiceOrderReviewStatus.Rejected
+      ...([
+        ServiceOrderReviewStatus.Rejected,
+        ServiceOrderReviewStatus.Abandoned,
+      ].includes(row.reviewStatus)
         ? {
             reviewReason:
               row.acceptanceRecovery?.rejectionReason ?? row.reviewReason ?? '',
@@ -206,7 +443,12 @@ export class ServiceOrdersService implements OnModuleInit {
     const customer = this.customer(user);
     const booking = this.id(dto.bookingId);
     const serviceId = this.id(dto.serviceId);
-    await this.ownedBooking(booking, customer, 'orderable');
+    const stay = await this.ownedBooking(booking, customer, 'orderable');
+    if (
+      dto.requestedTime !== undefined &&
+      !this.withinStay(new Date(dto.requestedTime), stay)
+    )
+      throw new BadRequestException('requestedTime must be within stay');
     if (!Number.isSafeInteger(dto.quantity) || dto.quantity < 1)
       throw new BadRequestException('quantity must be a positive safe integer');
     const requestedTime =
@@ -418,9 +660,13 @@ export class ServiceOrdersService implements OnModuleInit {
       ? [
           ...new Set(
             rows.flatMap((row) =>
-              [row.customer, row.reviewedBy].flatMap((id) =>
-                id ? [String(id)] : [],
-              ),
+              [
+                row.customer,
+                row.reviewedBy,
+                row.reportedBy,
+                row.createdBy,
+                row.actualPerformer,
+              ].flatMap((id) => (id ? [String(id)] : [])),
             ),
           ),
         ]
@@ -440,9 +686,10 @@ export class ServiceOrdersService implements OnModuleInit {
         : [],
     ]);
     const roomIds = [
-      ...new Set(
-        bookings.flatMap((booking) => (booking.rooms ?? []).map(String)),
-      ),
+      ...new Set([
+        ...bookings.flatMap((booking) => (booking.rooms ?? []).map(String)),
+        ...rows.flatMap((row) => (row.room ? [String(row.room)] : [])),
+      ]),
     ];
     const rooms = roomIds.length
       ? await this.bookings.db
@@ -457,6 +704,7 @@ export class ServiceOrdersService implements OnModuleInit {
       rooms.map((room) => [String(room._id), room.roomNumber as string]),
     );
     return {
+      roomNumbers,
       bookings: new Map(
         bookings.map((booking) => [
           String(booking._id),
@@ -489,6 +737,31 @@ export class ServiceOrdersService implements OnModuleInit {
     return {
       ...(await this.response(row, context)),
       task: await this.taskSummary(row),
+      ...(row.intakeMode
+        ? {
+            intakeMode: row.intakeMode,
+            intakeRole: row.intakeRole,
+            createdBy: String(row.createdBy),
+            reportedBy: String(row.reportedBy),
+            reportedByName:
+              context.customers.get(String(row.reportedBy))?.fullName ?? null,
+            createdByName:
+              context.customers.get(String(row.createdBy))?.fullName ?? null,
+            actualPerformerName:
+              context.customers.get(String(row.actualPerformer))?.fullName ??
+              null,
+            roomNumber: row.room
+              ? (context.roomNumbers.get(String(row.room)) ?? null)
+              : null,
+            requesterName: row.requesterName ?? null,
+            roomId: row.room ? String(row.room) : null,
+            actualPerformerId: row.actualPerformer
+              ? String(row.actualPerformer)
+              : null,
+            actualCompletedAt: row.actualCompletedAt ?? null,
+            completionDetails: row.completionDetails ?? null,
+          }
+        : {}),
       ...(row.executionStatus === ServiceOrderExecutionStatus.Assigning &&
       row.assignmentAssignee
         ? {
@@ -640,7 +913,7 @@ export class ServiceOrdersService implements OnModuleInit {
       const orderId = this.id(id);
       const order = await this.orders.findById(orderId).exec();
       if (!order) throw new NotFoundException('Service order not found');
-      return await withBookingFinancialOperation(
+      await withBookingFinancialOperation(
         this.bookings,
         String(order.booking),
         async () => {
@@ -650,22 +923,198 @@ export class ServiceOrdersService implements OnModuleInit {
             const current = await this.orders.findById(orderId).exec();
             if (
               current &&
-              current.reviewStatus !== ServiceOrderReviewStatus.Accepting
+              current.reviewStatus !== ServiceOrderReviewStatus.Accepting &&
+              (dto.recoveryAction === undefined ||
+                current.reviewStatus === ServiceOrderReviewStatus.Abandoned)
             ) {
               await this.bookings.updateOne(
                 { _id: order.booking },
-                { $pull: { acceptanceReservations: String(orderId) } },
+                {
+                  $pull: {
+                    acceptanceReservations: String(orderId),
+                    ...(current.reviewStatus ===
+                    ServiceOrderReviewStatus.Accepted
+                      ? { financialReconciliationOrderIds: String(orderId) }
+                      : {}),
+                  },
+                },
               );
             }
           }
         },
       );
+      const current = await this.assignmentOrder(id);
+      await this.reconcileIntake(current, user);
+      return this.staffResponse(await this.assignmentOrder(id));
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new ServiceUnavailableException(
         'Review temporarily unavailable; retry the same review',
       );
     }
+  }
+
+  private async abandonExpired(
+    row: ServiceOrderDocument,
+    dto: ReviewServiceOrderDto,
+    reviewer: Types.ObjectId,
+    reason: string,
+  ) {
+    if (
+      dto.decision !== 'REJECT' ||
+      typeof dto.recoveryReason !== 'string' ||
+      !dto.recoveryReason.trim() ||
+      dto.recoveryReason.trim().length > 2000
+    )
+      throw new BadRequestException(
+        'Expired abandonment requires REJECT and a nonblank recovery reason',
+      );
+    const recoveryReason = dto.recoveryReason.trim();
+    if (row.acceptanceRecovery) {
+      if (
+        row.reviewStatus !== ServiceOrderReviewStatus.Abandoned ||
+        row.acceptanceRecovery.action !== 'ABANDON_EXPIRED' ||
+        row.acceptanceRecovery.reason !== recoveryReason ||
+        row.acceptanceRecovery.rejectionReason !== reason
+      )
+        throw new ConflictException(
+          'A different acceptance recovery already exists',
+        );
+    } else {
+      const now = new Date();
+      this.validateAmount(row);
+      if (
+        row.reviewStatus !== ServiceOrderReviewStatus.Accepting ||
+        row.reviewDecision !== 'ACCEPT' ||
+        !row.reviewedBy ||
+        !Types.ObjectId.isValid(String(row.reviewedBy)) ||
+        !row.reviewedAt ||
+        !Number.isFinite(row.reviewedAt.getTime()) ||
+        row.reviewedAt > row.requestedTime ||
+        row.reviewedAt > now ||
+        row.intakeRole === Role.ServiceStaff ||
+        row.intakeMode === 'COMPLETED_ON_SITE' ||
+        row.actualPerformer ||
+        row.actualCompletedAt ||
+        row.completionDetails ||
+        row.executionStatus !== ServiceOrderExecutionStatus.NotStarted ||
+        row.billedInvoiceId ||
+        row.billedAt ||
+        row.linkedTask ||
+        row.assignmentTaskId
+      )
+        throw new ConflictException('Acceptance cannot be safely abandoned');
+      const booking = await this.ownedBooking(row.booking, row.customer).catch(
+        () => {
+          throw new ConflictException(
+            'Booking evidence could not be established',
+          );
+        },
+      );
+      if (
+        !booking.isActive ||
+        booking.status !== BookingStatus.Confirmed ||
+        !Number.isFinite(row.requestedTime?.getTime()) ||
+        !Number.isFinite(booking.checkIn?.getTime()) ||
+        !Number.isFinite(booking.checkOut?.getTime()) ||
+        row.requestedTime > now ||
+        row.requestedTime < booking.checkIn ||
+        row.requestedTime >= booking.checkOut
+      )
+        throw new ConflictException(
+          'Recovery requires an expired scheduled CONFIRMED booking',
+        );
+      try {
+        const [charge, task] = await Promise.all([
+          this.invoiceRecords.exists({ 'charges.sourceId': String(row._id) }),
+          this.orders.db.model<Task>('Task').exists({
+            sourceType: TaskSourceType.ServiceOrder,
+            sourceId: row._id,
+          }),
+        ]);
+        if (charge || task)
+          throw new ConflictException(
+            'Existing charge or task prevents acceptance recovery',
+          );
+      } catch {
+        throw new ConflictException(
+          'No-charge and no-task evidence could not be established',
+        );
+      }
+      const recovered = await this.orders
+        .findOneAndUpdate(
+          {
+            _id: row._id,
+            reviewStatus: ServiceOrderReviewStatus.Accepting,
+            reviewDecision: 'ACCEPT',
+            reviewedBy: row.reviewedBy,
+            reviewedAt: row.reviewedAt,
+            reviewReason: row.reviewReason ?? { $exists: false },
+            executionStatus: ServiceOrderExecutionStatus.NotStarted,
+            acceptanceRecovery: { $exists: false },
+            billedInvoiceId: { $exists: false },
+            billedAt: { $exists: false },
+            linkedTask: { $exists: false },
+            assignmentTaskId: { $exists: false },
+            intakeRole: row.intakeRole ?? { $exists: false },
+            intakeMode: row.intakeMode ?? { $exists: false },
+            actualPerformer: { $exists: false },
+            actualCompletedAt: { $exists: false },
+            completionDetails: { $exists: false },
+            requestedTime: row.requestedTime,
+            quantity: row.quantity,
+            unitPriceVND: row.unitPriceVND,
+            amount: row.amount,
+          },
+          {
+            $set: {
+              reviewStatus: ServiceOrderReviewStatus.Abandoned,
+              acceptanceRecovery: {
+                decision: 'REJECT',
+                action: 'ABANDON_EXPIRED',
+                reason: recoveryReason,
+                rejectionReason: reason,
+                actor: reviewer,
+                actorRole: Role.Receptionist,
+                at: now,
+                previousReviewStatus: ServiceOrderReviewStatus.Accepting,
+                resultingReviewStatus: ServiceOrderReviewStatus.Abandoned,
+                evidence: {
+                  chargeExpected: row.amount > 0,
+                  sourceChargeAbsent: true,
+                  taskAbsent: true,
+                  bookingStatus: booking.status,
+                  checkIn: booking.checkIn,
+                  checkOut: booking.checkOut,
+                  requestedTime: row.requestedTime,
+                  reviewedBy: row.reviewedBy,
+                  reviewedAt: row.reviewedAt,
+                  reviewDecision: row.reviewDecision,
+                  reviewReason: row.reviewReason,
+                  quantity: row.quantity,
+                  unitPriceVND: row.unitPriceVND,
+                  amount: row.amount,
+                },
+              },
+            },
+          },
+          { new: true, runValidators: true },
+        )
+        .select(this.staffSelection)
+        .exec();
+      if (!recovered) throw new ConflictException('Acceptance intent changed');
+      row = recovered;
+    }
+    await this.bookings.updateOne(
+      { _id: row.booking },
+      {
+        $pull: {
+          financialReconciliationOrderIds: String(row._id),
+          acceptanceReservations: String(row._id),
+        },
+      },
+    );
+    return this.staffResponse(row);
   }
 
   private async reviewOrder(
@@ -690,6 +1139,11 @@ export class ServiceOrdersService implements OnModuleInit {
       .select(this.staffSelection)
       .exec();
     if (!row) throw new NotFoundException('Service order not found');
+    if (dto.recoveryAction !== undefined) {
+      if (dto.recoveryAction !== 'ABANDON_EXPIRED')
+        throw new BadRequestException('Invalid recovery action');
+      return this.abandonExpired(row, dto, reviewer, reason);
+    }
     if (dto.recoveryReason !== undefined) {
       if (
         typeof dto.recoveryReason !== 'string' ||
@@ -792,12 +1246,19 @@ export class ServiceOrdersService implements OnModuleInit {
     if (row.reviewStatus === ServiceOrderReviewStatus.PendingReview) {
       this.validateAmount(row);
       if (dto.decision === 'ACCEPT') {
+        const booking = await this.ownedBooking(row.booking, row.customer);
+        if (!this.scheduledAcceptance(row, booking))
+          throw new ConflictException(
+            'Booking must be active and CHECKED_IN or valid future scheduled CONFIRMED',
+          );
         const reserved = await this.bookings.updateOne(
           {
             _id: row.booking,
             ...(row.customer ? { customer: row.customer } : {}),
             isActive: true,
-            status: BookingStatus.CheckedIn,
+            status: booking.status,
+            checkIn: booking.checkIn,
+            checkOut: booking.checkOut,
           },
           { $addToSet: { acceptanceReservations: String(orderId) } },
         );
@@ -844,8 +1305,9 @@ export class ServiceOrdersService implements OnModuleInit {
     if (
       row.reviewStatus === ServiceOrderReviewStatus.Rejected ||
       row.reviewStatus === ServiceOrderReviewStatus.Accepted
-    )
+    ) {
       return this.staffResponse(row);
+    }
     if (row.reviewStatus !== ServiceOrderReviewStatus.Accepting)
       throw new ConflictException('Service order is no longer pending');
     this.validateAmount(row);
@@ -855,13 +1317,28 @@ export class ServiceOrdersService implements OnModuleInit {
     );
     try {
       let invoice: InvoiceDocument | undefined;
+      if (row.amount === 0) {
+        const booking = await this.ownedBooking(row.booking, row.customer);
+        if (
+          booking.status === BookingStatus.Confirmed &&
+          !this.scheduledAcceptance(row, booking)
+        ) {
+          await this.bookings.updateOne(
+            { _id: row.booking },
+            { $addToSet: { financialReconciliationOrderIds: String(orderId) } },
+          );
+          throw new ConflictException(
+            'Expired unbilled scheduled acceptance requires explicit abandonment',
+          );
+        }
+      }
       if (row.amount > 0) {
         invoice = await this.invoices.getOrCreateForBooking(
           String(row.booking),
         );
         if (!this.matchingCharge(invoice, row)) {
           const booking = await this.ownedBooking(row.booking, row.customer);
-          if (!booking.isActive || booking.status !== BookingStatus.CheckedIn) {
+          if (!this.scheduledAcceptance(row, booking)) {
             await this.bookings.updateOne(
               { _id: row.booking },
               {
@@ -871,7 +1348,9 @@ export class ServiceOrdersService implements OnModuleInit {
               },
             );
             throw new ConflictException(
-              'Unbilled acceptance on closed booking requires reconciliation; no new charge created',
+              booking.status === BookingStatus.Confirmed
+                ? 'Expired scheduled acceptance requires reconciliation; no new charge created'
+                : 'Unbilled acceptance on closed booking requires reconciliation; no new charge created',
             );
           }
           try {
@@ -939,6 +1418,31 @@ export class ServiceOrdersService implements OnModuleInit {
   private assignmentSelection =
     '+assignmentAssignee +assignmentRequestedBy +assignmentRequestedAt +assignmentDueAt +assignmentTitle +assignmentRecoveryAudit';
 
+  async reassign(id: string, input: ReassignServiceOrderDto, user: AuthUser) {
+    const actor = this.receptionist(user);
+    const dto = plainToInstance(ReassignServiceOrderDto, input);
+    if (
+      !input ||
+      (await validate(dto, { whitelist: true, forbidNonWhitelisted: true }))
+        .length
+    )
+      throw new BadRequestException('Invalid reassignment input');
+    const row = await this.assignmentOrder(id);
+    await this.assertAssignable(row);
+    if (
+      !row.linkedTask ||
+      String(row.linkedTask) !== String(row.assignmentTaskId)
+    )
+      throw new ConflictException('Canonical task required');
+    await this.tasks.reassignServiceOrderExecution(
+      id,
+      row.linkedTask,
+      dto,
+      String(actor),
+    );
+    return this.staffResponse(await this.assignmentOrder(id));
+  }
+
   private async assignmentOrder(id: string) {
     const row = await this.orders
       .findById(this.id(id))
@@ -949,6 +1453,10 @@ export class ServiceOrdersService implements OnModuleInit {
   }
 
   private async assertAssignable(row: ServiceOrderDocument) {
+    if (row.intakeMode === 'COMPLETED_ON_SITE')
+      throw new ConflictException(
+        'Completed-on-site report cannot have a task',
+      );
     if (row.reviewStatus !== ServiceOrderReviewStatus.Accepted)
       throw new ConflictException('Service order must be ACCEPTED');
     this.validateAmount(row);
@@ -967,7 +1475,28 @@ export class ServiceOrdersService implements OnModuleInit {
     this.receptionist(user);
     const row = await this.assignmentOrder(id);
     await this.assertAssignable(row);
-    if (
+    if (row.executionStatus === ServiceOrderExecutionStatus.Assigned) {
+      if (
+        !row.linkedTask ||
+        String(row.linkedTask) !== String(row.assignmentTaskId)
+      )
+        throw new ConflictException('Canonical task required');
+      const task = await this.tasks.findServiceOrderExecutionWork(
+        String(row._id),
+        row.linkedTask,
+      );
+      this.assertAssignmentTask(row, task);
+      if (
+        !task ||
+        task.status !== 'ASSIGNED' ||
+        task.completedAt ||
+        task.workResult ||
+        task.cancellation
+      )
+        throw new ConflictException(
+          'Only unchanged ASSIGNED work can be reassigned',
+        );
+    } else if (
       ![
         ServiceOrderExecutionStatus.NotStarted,
         ServiceOrderExecutionStatus.Assigning,
@@ -1040,7 +1569,14 @@ export class ServiceOrdersService implements OnModuleInit {
     if (
       !task ||
       String(task._id) !== String(row.assignmentTaskId) ||
-      String(task.assignedTo) !== String(row.assignmentAssignee) ||
+      (String(task.assignedTo) !== String(row.assignmentAssignee) &&
+        !(
+          task.serviceOrderReassignments?.length &&
+          task.serviceOrderReassignments[0].previousAssigneeId ===
+            String(row.assignmentAssignee) &&
+          task.serviceOrderReassignments.at(-1)?.assigneeId ===
+            String(task.assignedTo)
+        )) ||
       task.dueAt?.getTime() !== row.assignmentDueAt?.getTime() ||
       task.title !== row.assignmentTitle ||
       task.priority !== 'NORMAL' ||
@@ -1206,6 +1742,8 @@ export class ServiceOrdersService implements OnModuleInit {
       );
     }
     if (row.executionStatus === ServiceOrderExecutionStatus.NotStarted) {
+      if (dueAt && dueAt.getTime() <= Date.now())
+        throw new BadRequestException('Deadline must be in the future');
       const staff = await this.users
         .findOne({ _id: assigneeId, isActive: true, role: Role.ServiceStaff })
         .lean();
@@ -1332,6 +1870,7 @@ export class ServiceOrdersService implements OnModuleInit {
       ...this.taskResponse(task),
       assigneeId: String(task.assignedTo),
       assigneeName: assignee?.fullName ?? null,
+      reassignments: task.serviceOrderReassignments ?? [],
     };
   }
 
@@ -1345,9 +1884,35 @@ export class ServiceOrdersService implements OnModuleInit {
     this.serviceStaff(user);
     if (query.from && query.to && new Date(query.from) > new Date(query.to))
       throw new BadRequestException('from must not be after to');
+    const onsiteFilter = {
+      actualPerformer: this.id(user.id),
+      intakeMode: 'COMPLETED_ON_SITE',
+      reviewStatus: ServiceOrderReviewStatus.Accepted,
+      linkedTask: { $exists: false },
+      ...(id ? { _id: this.id(id) } : {}),
+      ...(query.from || query.to
+        ? {
+            actualCompletedAt: {
+              ...(query.from ? { $gte: new Date(query.from) } : {}),
+              ...(query.to ? { $lte: new Date(query.to) } : {}),
+            },
+          }
+        : {}),
+      ...(query.keyword
+        ? {
+            serviceName: {
+              $regex: query.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+              $options: 'i',
+            },
+          }
+        : {}),
+    };
+    const onsiteTotal = await this.orders.countDocuments(onsiteFilter).exec();
     const result = await this.tasks.listCompletedServiceWork(
       user.id,
-      query,
+      onsiteTotal
+        ? { ...query, page: 1, limit: query.page * query.limit }
+        : query,
       id ? this.id(id) : undefined,
     );
     const items = await Promise.all(
@@ -1361,6 +1926,42 @@ export class ServiceOrdersService implements OnModuleInit {
         };
       }),
     );
+    if (onsiteTotal) {
+      const onsite = await this.orders
+        .find(onsiteFilter)
+        .select(this.staffSelection)
+        .sort({ actualCompletedAt: -1, _id: -1 })
+        .limit(query.page * query.limit)
+        .exec();
+      const completed = await Promise.all(
+        onsite.map(async (row) => ({
+          ...(await this.response(row)),
+          task: null,
+          intakeMode: row.intakeMode,
+          actualPerformerId: String(row.actualPerformer),
+          actualCompletedAt: row.actualCompletedAt,
+          completionDetails: row.completionDetails,
+          executionStatus: ServiceOrderExecutionStatus.Completed,
+        })),
+      );
+      const merged = [...items, ...completed].sort((a, b) => {
+        const date = (value: typeof a) =>
+          'actualCompletedAt' in value
+            ? new Date(value.actualCompletedAt as Date).getTime()
+            : new Date(value.task!.completedAt!).getTime();
+        return date(b) - date(a) || b.id.localeCompare(a.id);
+      });
+      if (id) return merged[0];
+      return {
+        items: merged.slice(
+          (query.page - 1) * query.limit,
+          query.page * query.limit,
+        ),
+        total: result.total + onsiteTotal,
+        page: query.page,
+        limit: query.limit,
+      };
+    }
     if (id) {
       if (!items[0]) throw new NotFoundException('Service history not found');
       return items[0];
@@ -1399,8 +2000,109 @@ export class ServiceOrdersService implements OnModuleInit {
     };
   }
 
+  async intakeContexts(user: AuthUser) {
+    this.intakeActor(user);
+    const rows = await this.bookings
+      .find({
+        isActive: true,
+        status:
+          user.role === Role.ServiceStaff
+            ? BookingStatus.CheckedIn
+            : { $in: ORDERABLE_BOOKING_STATUSES },
+      })
+      .select('_id code guestName guestPhone status checkIn checkOut rooms')
+      .sort({ checkIn: -1, _id: 1 })
+      .populate<{
+        rooms: ({ _id: Types.ObjectId; roomNumber?: string } | null)[];
+      }>({
+        path: 'rooms',
+        select: 'roomNumber',
+        options: { retainNullValues: true },
+      })
+      .exec();
+    return {
+      items: rows.map((row) => ({
+        id: String(row._id),
+        code: row.code,
+        guestName: row.guestName,
+        guestPhone: row.guestPhone,
+        status: row.status,
+        checkIn: row.checkIn,
+        checkOut: row.checkOut,
+        rooms: row.rooms.flatMap((room) =>
+          room
+            ? [{ id: String(room._id), roomNumber: room.roomNumber ?? null }]
+            : [],
+        ),
+      })),
+    };
+  }
+
+  async reports(query: ListServiceOrdersQuery, user: AuthUser, id?: string) {
+    this.serviceStaff(user);
+    const filter = {
+      reportedBy: this.id(user.id),
+      ...(query.keyword
+        ? {
+            serviceName: {
+              $regex: query.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+              $options: 'i',
+            },
+          }
+        : {}),
+      ...(id ? { _id: this.id(id) } : {}),
+      ...(query.reviewStatus ? { reviewStatus: query.reviewStatus } : {}),
+      ...(query.executionStatus
+        ? { executionStatus: query.executionStatus }
+        : {}),
+    };
+    const { executionStatus: _executionStatus, ...repairScope } = filter;
+    await this.repairExecutionScope(repairScope);
+    const [rows, total] = await Promise.all([
+      this.orders
+        .find(filter)
+        .select(this.staffSelection)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((query.page - 1) * query.limit)
+        .limit(query.limit)
+        .exec(),
+      this.orders.countDocuments(filter).exec(),
+    ]);
+    const items = await Promise.all(rows.map((row) => this.staffResponse(row)));
+    if (id) {
+      if (!items[0]) throw new NotFoundException('Service report not found');
+      return items[0];
+    }
+    return { items, total, page: query.page, limit: query.limit };
+  }
+
+  async intakePerformers(user: AuthUser) {
+    this.serviceStaff(user);
+    const rows = await this.users
+      .find({ role: Role.ServiceStaff, isActive: true })
+      .select('_id fullName role')
+      .sort({ fullName: 1, _id: 1 })
+      .lean();
+    return {
+      items: rows.map((row) => ({
+        id: String(row._id),
+        displayName: row.fullName,
+        role: row.role,
+      })),
+    };
+  }
+
+  async intakeCatalog(user: AuthUser) {
+    this.intakeActor(user);
+    return this.catalogRows();
+  }
+
   async catalog(user: AuthUser) {
     this.customer(user);
+    return this.catalogRows();
+  }
+
+  private async catalogRows() {
     const rows = await this.services
       .find({ isActive: true })
       .sort({ name: 1, _id: 1 })

@@ -1,5 +1,5 @@
 import { addDays, format } from 'date-fns'
-import { BedDouble, Maximize2, Users } from 'lucide-react'
+import { BedDouble, Maximize2, Minus, Plus, TriangleAlert, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Button, Skeleton, Slider } from '@/components/atoms'
@@ -9,13 +9,17 @@ import { getErrorMessage } from '@/lib/api-client'
 import { assetUrl } from '@/lib/asset-url'
 import { fshort, vnd } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { AvailableRoom, SearchAvailabilityParams } from '../api'
-import { useAvailability, useRoomTypeList } from '../hooks'
+import type {
+  AvailableRoom,
+  RoomTypeBedSummary,
+  RoomTypeSearchFilters,
+  SearchAvailabilityParams,
+} from '../api'
+import { useAvailability, useSearchFilters } from '../hooks'
 import { nightsBetween } from '../utils'
 
 interface RoomTypeMeta {
   size: number
-  bed: string
   description: string
   amenities: string[]
 }
@@ -23,27 +27,23 @@ interface RoomTypeMeta {
 const ROOM_TYPE_META: Record<string, RoomTypeMeta> = {
   standard: {
     size: 28,
-    bed: '2 giường đơn',
     description:
       'Phòng hai giường yên tĩnh, ngập ánh sáng nhìn ra khu vườn — lý tưởng cho bạn bè hoặc đồng nghiệp.',
     amenities: ['Wi-Fi', 'Điều hoà', 'Sen mưa', 'Bàn làm việc'],
   },
   deluxe: {
     size: 36,
-    bed: '1 giường King',
     description: 'Ốp gỗ sồi, chất liệu lanh và vách kính kịch trần đón trọn vịnh lúc bình minh.',
     amenities: ['Wi-Fi', 'Hướng biển', 'Minibar', 'Bồn tắm', 'TV thông minh'],
   },
   family: {
     size: 44,
-    bed: '1 giường King + ghế dài',
     description:
       'Không gian rộng rãi cho gia đình với ghế dài đọc sách và chỗ ngồi bên cửa sổ nhìn ra vườn.',
     amenities: ['Wi-Fi', 'Hướng vườn', 'Minibar', 'Tiện nghi cho trẻ em', 'Bồn tắm'],
   },
   suite: {
     size: 68,
-    bed: '1 giường King',
     description:
       'Phòng khách riêng, ban công riêng và chi tiết đồng thau — hạng phòng được yêu thích nhất.',
     amenities: [
@@ -67,8 +67,6 @@ function getRoomTypeMeta(name: string, capacity: number): RoomTypeMeta {
   }
   return {
     size: capacity >= 4 ? 44 : capacity >= 3 ? 36 : 28,
-    bed:
-      capacity >= 4 ? '1 giường King + ghế dài' : capacity >= 2 ? '1 giường King' : '1 giường đơn',
     description: 'Phòng tiện nghi, thiết kế hiện đại và ngập tràn ánh sáng tự nhiên.',
     amenities: ['Wi-Fi', 'Điều hoà', 'Sen mưa', 'Bàn làm việc'],
   }
@@ -104,44 +102,49 @@ interface TypeGroup {
   pricePerNight: number
   capacity: number
   rooms: AvailableRoom[]
+  beds?: RoomTypeBedSummary[]
   meta: RoomTypeMeta
 }
+
+const bedLabel = (beds: RoomTypeBedSummary[]): string =>
+  beds.map((bed) => `${bed.quantity} ${bed.bedTypeName}`).join(', ')
 
 /** UC05 — Search Rooms. Guest và Customer đều dùng được (màn công khai). */
 export function SearchRoomsPage() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const urlCriteria = readCriteria(params)
-  const criteria = urlCriteria ?? defaultCriteria()
-  // Ngày và số khách khách đang chọn trong ô tìm kiếm, kể cả khi chưa bấm "Kiểm tra phòng trống".
-  const [draft, setDraft] = useState<SearchAvailabilityParams | null>(null)
+  // Keep the initial dates stable across renders so the search bar and availability request agree.
+  const [initialCriteria] = useState(defaultCriteria)
+  const criteria = urlCriteria ?? initialCriteria
 
   // Số phòng đã chọn theo loại, dùng để sang bước tạo booking.
   const [selection, setSelection] = useState<Record<string, number>>({})
   const [max, setMax] = useState(5000000)
   const [sort, setSort] = useState<'price' | 'size'>('price')
 
-  // Chưa chọn ngày (URL không có tiêu chí): hiện mọi loại phòng, chỉ tìm phòng trống khi khách bấm tìm.
-  const browsing = urlCriteria === null
-  const availability = useAvailability(urlCriteria)
-  const catalog = useRoomTypeList(browsing)
-  const active = browsing ? catalog : availability
+  // Bộ lọc nâng cao (gửi lên server để thu hẹp theo loại phòng).
+  const [bedTypeIds, setBedTypeIds] = useState<string[]>([])
+  const [amenityIds, setAmenityIds] = useState<string[]>([])
+  const filterOptions = useSearchFilters()
+  const bedFilterOptions = Array.isArray(filterOptions.data?.bedTypes)
+    ? filterOptions.data.bedTypes
+    : []
+  const amenityFilterOptions = Array.isArray(filterOptions.data?.amenities)
+    ? filterOptions.data.amenities
+    : []
+  // react-query băm queryKey theo giá trị nên không cần ổn định tham chiếu ở đây.
+  const serverFilters: RoomTypeSearchFilters = {
+    ...(bedTypeIds.length ? { bedTypeIds } : {}),
+    ...(amenityIds.length ? { amenityIds } : {}),
+  }
+  const toggleId = (setList: (updater: (prev: string[]) => string[]) => void, id: string) =>
+    setList((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+
+  const availability = useAvailability({ ...criteria, ...serverFilters })
   const nights = nightsBetween(criteria.checkIn, criteria.checkOut)
 
   const groups = useMemo<TypeGroup[]>(() => {
-    if (browsing) {
-      return (catalog.data ?? [])
-        .map((type) => ({
-          roomTypeId: type.id,
-          images: type.images ?? [],
-          name: type.name,
-          pricePerNight: type.pricePerNight,
-          capacity: type.capacity,
-          rooms: [],
-          meta: getRoomTypeMeta(type.name, type.capacity),
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name))
-    }
     const byType = new Map<string, AvailableRoom[]>()
     for (const room of availability.data ?? []) {
       const list = byType.get(room.roomTypeId) ?? []
@@ -159,11 +162,12 @@ export function SearchRoomsPage() {
           pricePerNight: rooms[0]?.pricePerNight ?? 0,
           capacity,
           rooms,
+          beds: rooms[0]?.beds,
           meta: getRoomTypeMeta(name, capacity),
         }
       })
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [browsing, catalog.data, availability.data])
+  }, [availability.data])
 
   const list = useMemo(() => {
     return groups
@@ -191,6 +195,22 @@ export function SearchRoomsPage() {
     [groups, selection, nights],
   )
 
+  // Tổng sức chứa các phòng đã chọn; dùng để nhắc mềm khi chưa đủ chỗ cho số khách.
+  const selectedCapacity = useMemo(
+    () =>
+      groups.reduce((sum, group) => sum + (selection[group.roomTypeId] ?? 0) * group.capacity, 0),
+    [groups, selection],
+  )
+  const underCapacity = selectedRoomIds.length > 0 && selectedCapacity < criteria.guests
+
+  // Tăng/giảm số phòng của một loại, kẹp trong [0, số phòng còn trống].
+  function changeQty(roomTypeId: string, delta: number, free: number) {
+    setSelection((prev) => ({
+      ...prev,
+      [roomTypeId]: Math.max(0, Math.min(free, (prev[roomTypeId] ?? 0) + delta)),
+    }))
+  }
+
   const handleSearch = ({ from, to, guests }: SearchValue) => {
     setSelection({})
     setParams({
@@ -215,14 +235,8 @@ export function SearchRoomsPage() {
     <div className="mx-auto max-w-7xl px-5 py-10 lg:px-8">
       <h1 className="font-display text-5xl">Tìm phòng của bạn</h1>
       <p className="mt-2 text-muted-foreground">
-        {browsing ? (
-          'Tất cả loại phòng của khách sạn — chọn ngày để kiểm tra phòng trống.'
-        ) : (
-          <>
-            {fshort(criteria.checkIn)} — {fshort(criteria.checkOut)} · {nights} đêm ·{' '}
-            {criteria.guests} khách
-          </>
-        )}
+        {fshort(criteria.checkIn)} — {fshort(criteria.checkOut)} · {nights} đêm · {criteria.guests}{' '}
+        khách
       </p>
 
       <div className="mt-6">
@@ -234,9 +248,6 @@ export function SearchRoomsPage() {
             guests: criteria.guests,
           }}
           onSearch={handleSearch}
-          onChange={(value) =>
-            setDraft({ checkIn: value.from, checkOut: value.to, guests: value.guests })
-          }
         />
       </div>
 
@@ -275,16 +286,62 @@ export function SearchRoomsPage() {
               ))}
             </div>
           </div>
+
+          {bedFilterOptions.length ? (
+            <div>
+              <div className="mb-2 text-sm font-semibold">Loại giường</div>
+              <div className="flex flex-wrap gap-2">
+                {bedFilterOptions.map((bedType) => (
+                  <button
+                    key={bedType.id}
+                    type="button"
+                    aria-pressed={bedTypeIds.includes(bedType.id)}
+                    onClick={() => toggleId(setBedTypeIds, bedType.id)}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                      bedTypeIds.includes(bedType.id)
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {bedType.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {amenityFilterOptions.length ? (
+            <div>
+              <div className="mb-2 text-sm font-semibold">Tiện nghi</div>
+              <div className="flex flex-wrap gap-2">
+                {amenityFilterOptions.map((amenity) => (
+                  <button
+                    key={amenity.id}
+                    type="button"
+                    aria-pressed={amenityIds.includes(amenity.id)}
+                    onClick={() => toggleId(setAmenityIds, amenity.id)}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                      amenityIds.includes(amenity.id)
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {amenity.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </aside>
 
         <div className="grid gap-5">
           <p className="sr-only" aria-live="polite">
-            {browsing
-              ? `${groups.length} loại phòng`
-              : `${nights} đêm · ${availability.data?.length ?? 0} phòng phù hợp`}
+            {`${nights} đêm · ${availability.data?.length ?? 0} phòng phù hợp`}
           </p>
 
-          {active.isPending && (
+          {availability.isPending && (
             <div className="grid gap-5" aria-busy="true" aria-label="Đang tìm phòng trống">
               <p role="status" className="sr-only">
                 Đang tìm phòng trống…
@@ -306,35 +363,31 @@ export function SearchRoomsPage() {
             </div>
           )}
 
-          {active.isError && (
+          {availability.isError && (
             <div
               role="alert"
               className="rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
             >
-              {getErrorMessage(active.error)}
+              {getErrorMessage(availability.error)}
             </div>
           )}
 
-          {!active.isPending && !active.isError && (
+          {!availability.isPending && !availability.isError && (
             <>
               {list.length === 0 ? (
                 <EmptyState
-                  title={browsing ? 'Hiện chưa có loại phòng nào.' : 'Không có phòng phù hợp'}
-                  body={browsing ? undefined : 'Thử giảm số khách hoặc tăng mức giá.'}
+                  title="Không có phòng phù hợp"
+                  body="Thử giảm số khách hoặc tăng mức giá."
                 />
               ) : (
                 list.map((group) => {
                   const qty = selection[group.roomTypeId] ?? 0
                   const free = group.rooms.length
-                  // Chưa tìm phòng trống thì các nút trên thẻ dùng ngày khách vừa chọn, không phải ngày mặc định.
-                  const chosen = browsing ? (draft ?? criteria) : criteria
-                  const chosenQuery = new URLSearchParams({
-                    checkIn: chosen.checkIn,
-                    checkOut: chosen.checkOut,
-                    guests: String(chosen.guests),
-                  }).toString()
-                  const detailQuery = browsing && !draft ? '' : `?${chosenQuery}`
-                  const searchQuery = chosenQuery
+                  const detailQuery = `?${new URLSearchParams({
+                    checkIn: criteria.checkIn,
+                    checkOut: criteria.checkOut,
+                    guests: String(criteria.guests),
+                  }).toString()}`
                   return (
                     <RoomCard
                       key={group.roomTypeId}
@@ -344,20 +397,18 @@ export function SearchRoomsPage() {
                       amenities={group.meta.amenities}
                       price={group.pricePerNight}
                       priceNote="/ đêm"
-                      subPrice={browsing ? undefined : `Tổng ${vnd(group.pricePerNight * nights)}`}
+                      subPrice={`Tổng ${vnd(group.pricePerNight * nights)}`}
                       badge={
-                        browsing ? undefined : (
-                          <span
-                            className={cn(
-                              'rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap',
-                              free > 0
-                                ? 'bg-success/12 text-success'
-                                : 'bg-destructive/10 text-destructive',
-                            )}
-                          >
-                            {free > 0 ? `Còn ${free} phòng` : 'Hết phòng'}
-                          </span>
-                        )
+                        <span
+                          className={cn(
+                            'rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap',
+                            free > 0
+                              ? 'bg-success/12 text-success'
+                              : 'bg-destructive/10 text-destructive',
+                          )}
+                        >
+                          {free > 0 ? `Còn ${free} phòng` : 'Hết phòng'}
+                        </span>
                       }
                       meta={
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
@@ -365,10 +416,12 @@ export function SearchRoomsPage() {
                             <Maximize2 className="size-3.5" />
                             {group.meta.size} m²
                           </span>
-                          <span className="flex items-center gap-1">
-                            <BedDouble className="size-3.5" />
-                            {group.meta.bed}
-                          </span>
+                          {group.beds?.length ? (
+                            <span className="flex items-center gap-1">
+                              <BedDouble className="size-3.5" />
+                              {bedLabel(group.beds)}
+                            </span>
+                          ) : null}
                           <span className="flex items-center gap-1">
                             <Users className="size-3.5" />
                             Tối đa {group.capacity}
@@ -376,43 +429,54 @@ export function SearchRoomsPage() {
                         </div>
                       }
                       actions={
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2">
                           <Button asChild variant="outline" className="rounded-full">
                             <Link to={`/room-types/${group.roomTypeId}${detailQuery}`}>
                               Chi tiết
                             </Link>
                           </Button>
-                          {browsing ? (
-                            <Button asChild className="rounded-full">
-                              <Link to={`/search?${searchQuery}`}>Xem phòng trống</Link>
-                            </Button>
+                          {free > 0 ? (
+                            <div
+                              className="flex items-center gap-1"
+                              role="group"
+                              aria-label={`Số phòng ${group.name}`}
+                            >
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="size-9 rounded-full p-0"
+                                aria-label={`Bớt phòng ${group.name}`}
+                                disabled={qty === 0}
+                                onClick={() => changeQty(group.roomTypeId, -1, free)}
+                              >
+                                <Minus className="size-4" />
+                              </Button>
+                              <span
+                                className="w-8 text-center font-medium tabular-nums"
+                                aria-live="polite"
+                                aria-label={`${qty} phòng ${group.name}`}
+                              >
+                                {qty}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="size-9 rounded-full p-0"
+                                aria-label={`Thêm phòng ${group.name}`}
+                                disabled={qty >= free}
+                                onClick={() => changeQty(group.roomTypeId, 1, free)}
+                              >
+                                <Plus className="size-4" />
+                              </Button>
+                            </div>
                           ) : (
-                            <Button asChild disabled={free === 0} className="rounded-full">
-                              {free > 0 ? (
-                                <Link
-                                  to={`/booking/new?checkIn=${criteria.checkIn}&checkOut=${criteria.checkOut}&guests=${criteria.guests}&rooms=${group.rooms[0].id}`}
-                                >
-                                  Đặt ngay
-                                </Link>
-                              ) : (
-                                <span>Đặt ngay</span>
-                              )}
+                            <Button disabled className="rounded-full">
+                              Hết phòng
                             </Button>
                           )}
                         </div>
                       }
                       selected={qty > 0}
-                      onToggle={
-                        !browsing && free > 0
-                          ? () => {
-                              setSelection((prev) => ({
-                                ...prev,
-                                [group.roomTypeId]: (prev[group.roomTypeId] ?? 0) > 0 ? 0 : 1,
-                              }))
-                            }
-                          : undefined
-                      }
-                      toggleLabel={`Chọn phòng ${group.name}`}
                     />
                   )
                 })
@@ -427,14 +491,23 @@ export function SearchRoomsPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-sm text-muted-foreground">
-                Đã chọn {selectedRoomIds.length} phòng · {nights} đêm
+                Đã chọn {selectedRoomIds.length} phòng · {nights} đêm · tối đa {selectedCapacity}{' '}
+                khách
               </p>
-              <p className="font-display text-2xl font-semibold text-foreground">
+              <p className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">
                 Tạm tính {vnd(estimatedTotal)}
               </p>
-              <p className="text-xs text-muted-foreground">
-                Tiền cọc và tổng tiền chính thức do hệ thống xác nhận ở bước sau.
-              </p>
+              {underCapacity ? (
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-warning">
+                  <TriangleAlert className="size-3.5 shrink-0" />
+                  Sức chứa đã chọn ({selectedCapacity} khách) nhỏ hơn số khách ({criteria.guests}).
+                  Cân nhắc thêm phòng.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Tiền cọc và tổng tiền chính thức do hệ thống xác nhận ở bước sau.
+                </p>
+              )}
             </div>
             <Button onClick={proceed} className="rounded-full px-6">
               Tiếp tục đặt phòng

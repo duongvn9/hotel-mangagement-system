@@ -7,7 +7,9 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Role } from '../../common/constants/role.enum.js';
+import { RoomStatus } from '../../common/constants/room-status.enum.js';
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema.js';
+import { Room } from '../rooms/schemas/room.schema.js';
 import { TaskSourceType } from '../tasks/task-contract.js';
 import { TasksService } from '../tasks/tasks.service.js';
 import { User } from '../users/schemas/user.schema.js';
@@ -41,6 +43,7 @@ export class CheckoutInspectionService {
   constructor(
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
     @InjectModel(User.name) private readonly users: Model<User>,
+    @InjectModel(Room.name) private readonly rooms: Model<Room>,
     private readonly tasks: TasksService,
   ) {}
 
@@ -66,6 +69,10 @@ export class CheckoutInspectionService {
       assigneeId: dto.assigneeId,
       instructions,
     });
+    await this.rooms.updateMany(
+      { _id: { $in: booking.rooms }, status: RoomStatus.Occupied },
+      { $set: { status: RoomStatus.Cleaning } },
+    );
     return this.view(task as unknown as InspectionTask);
   }
 

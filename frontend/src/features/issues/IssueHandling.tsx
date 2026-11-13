@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { isAxiosError } from 'axios'
+import { format } from 'date-fns'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Input, NativeSelect } from '@/components/atoms'
 import { FormField } from '@/components/molecules'
@@ -45,6 +46,7 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
   const [notes, setNotes] = useState('')
   const [assigneeId, setAssigneeId] = useState('')
   const [due, setDue] = useState('')
+  const [minimumDue] = useState(() => format(new Date(Date.now()), "yyyy-MM-dd'T'HH:mm"))
   const [instructions, setInstructions] = useState('')
   const [error, setError] = useState('')
   const [confirmationTrigger, setConfirmationTrigger] = useState<HTMLElement | null>(null)
@@ -96,7 +98,6 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
       await refresh()
     },
   })
-  if (me?.role !== 'RECEPTIONIST') return null
   const review = () => {
     setError('')
     if (!category || !issuePriorities.includes(priority) || notes.trim().length > 2000) {
@@ -113,7 +114,7 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
       },
     })
   }
-  const assignment = () => {
+  const assignment = useCallback(() => {
     setError('')
     if (recovering) {
       if (!issue.assigneeId || (issue.dueAt && !Number.isFinite(new Date(issue.dueAt).getTime()))) {
@@ -140,6 +141,10 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
       setError('Vui lòng chọn nhân viên trong danh sách và thời hạn hợp lệ.')
       return
     }
+    if (due && new Date(due).getTime() <= Date.now()) {
+      setError('Thời hạn phải sau thời điểm hiện tại.')
+      return
+    }
     setConfirmation({
       kind: 'assignment',
       input: {
@@ -148,7 +153,17 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
         ...(instructions.trim() ? { instructions: instructions.trim() } : {}),
       },
     })
-  }
+  }, [
+    recovering,
+    issue.assigneeId,
+    issue.dueAt,
+    issue.assignmentInstructions,
+    users,
+    assigneeId,
+    due,
+    instructions,
+  ])
+  if (me?.role !== 'RECEPTIONIST') return null
   return (
     <section className="space-y-4" aria-label="Xử lý sự cố">
       {error && (
@@ -279,6 +294,7 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
                   <Input
                     id="handling-due"
                     type="datetime-local"
+                    min={minimumDue}
                     value={due}
                     onChange={(event) => setDue(event.target.value)}
                   />
@@ -344,7 +360,22 @@ export function IssueHandling({ issue }: { issue: IssueDetail }) {
               <p className="break-words whitespace-pre-wrap">{confirmation.input.instructions}</p>
             </>
           )}
-          <Button disabled={mutation.isPending} onClick={() => mutation.mutate(confirmation)}>
+          <Button
+            disabled={mutation.isPending}
+            onClick={() => {
+              if (
+                confirmation.kind === 'assignment' &&
+                !recovering &&
+                confirmation.input.dueAt &&
+                new Date(confirmation.input.dueAt).getTime() <= Date.now()
+              ) {
+                setError('Thời hạn phải sau thời điểm hiện tại.')
+                setConfirmation(undefined)
+                return
+              }
+              mutation.mutate(confirmation)
+            }}
+          >
             Xác nhận
           </Button>
           <Button

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { isAxiosError } from 'axios'
+import { format } from 'date-fns'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Input, NativeSelect } from '@/components/atoms'
 import { FormField } from '@/components/molecules'
@@ -27,6 +28,7 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
   const [assigneeId, setAssigneeId] = useState('')
   const [reason, setReason] = useState('')
   const [due, setDue] = useState('')
+  const [minimumDue] = useState(() => format(new Date(Date.now()), "yyyy-MM-dd'T'HH:mm"))
   const [instructions, setInstructions] = useState('')
   const [validation, setValidation] = useState('')
   const [confirmation, setConfirmation] = useState<Action>()
@@ -140,6 +142,10 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
       instructions.trim().length > 2000
     ) {
       setValidation('Thời hạn phải hợp lệ; hướng dẫn tối đa 2000 ký tự.')
+      return
+    }
+    if (due && new Date(due).getTime() <= Date.now()) {
+      setValidation('Thời hạn phải sau thời điểm hiện tại.')
       return
     }
     const deadline = due ? { dueAt: new Date(due).toISOString() } : {}
@@ -294,6 +300,7 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
                   <Input
                     id="recovery-due"
                     type="datetime-local"
+                    min={minimumDue}
                     value={due}
                     onChange={(event) => setDue(event.target.value)}
                   />
@@ -405,6 +412,15 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
             aria-busy={mutation.isPending}
             disabled={busy}
             onClick={() => {
+              if (
+                !(confirmation.kind === 'reassign' && (pending || retryIntent)) &&
+                confirmation.input.dueAt &&
+                new Date(confirmation.input.dueAt).getTime() <= Date.now()
+              ) {
+                setValidation('Thời hạn phải sau thời điểm hiện tại.')
+                setConfirmation(undefined)
+                return
+              }
               if (confirmation.kind === 'reassign') setRetryIntent(confirmation.input)
               mutation.mutate(confirmation)
             }}

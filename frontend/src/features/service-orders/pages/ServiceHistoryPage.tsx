@@ -40,16 +40,19 @@ function HistoryResult({ order }: { order: ServiceHistory }) {
           Số lượng: {order.quantity} {order.service.unit}
         </p>
         <p>Thời gian yêu cầu: {dateTime(order.requestedTime)}</p>
-        <p>Đã giao: {dateTime(order.task.assignedAt)}</p>
-        {order.task.dueAt && <p>Hạn hoàn thành: {dateTime(order.task.dueAt)}</p>}
-        <p>Hoàn thành: {dateTime(order.task.completedAt)}</p>
+        {order.task && <p>Đã giao: {dateTime(order.task.assignedAt)}</p>}
+        {order.task?.dueAt && <p>Hạn hoàn thành: {dateTime(order.task.dueAt)}</p>}
+        <p>Hoàn thành: {dateTime(order.actualCompletedAt ?? order.task?.completedAt ?? '')}</p>
+        {order.actualPerformerId && <p>Người thực hiện thực tế: {order.actualPerformerId}</p>}
         <h2 className="text-sm font-semibold">Kết quả thực hiện</h2>
         <p className="whitespace-pre-wrap">
-          {order.task.workResult || 'Không có kết quả ghi nhận.'}
+          {order.completionDetails || order.task?.workResult || 'Không có kết quả ghi nhận.'}
         </p>
-        <Link className={linkClass} to={`/staff/tasks/${encodeURIComponent(order.task.id)}`}>
-          Xem công việc nguồn của tôi
-        </Link>
+        {order.task && (
+          <Link className={linkClass} to={`/staff/tasks/${encodeURIComponent(order.task.id)}`}>
+            Xem công việc nguồn của tôi
+          </Link>
+        )}
       </div>
     </Panel>
   )
@@ -97,6 +100,14 @@ export function ServiceHistoryPage() {
           </Button>
         }
       />
+      <div className="mb-6 flex flex-wrap gap-3">
+        <Button asChild className="rounded-full">
+          <Link to="/staff/service-history/intake">Ghi nhận yêu cầu</Link>
+        </Button>
+        <Button asChild variant="outline" className="rounded-full">
+          <Link to="/staff/service-history/reports">Yêu cầu tôi ghi nhận</Link>
+        </Button>
+      </div>
       <Panel>
         <form onSubmit={search} className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <FormField label="Từ khóa dịch vụ" htmlFor="history-keyword">
@@ -178,8 +189,13 @@ export function ServiceHistoryPage() {
                       >
                         {order.service.name}
                       </Link>
-                      <p>Hoàn thành: {dateTime(order.task.completedAt)}</p>
-                      <p className="whitespace-pre-wrap">{order.task.workResult}</p>
+                      <p>
+                        Hoàn thành:{' '}
+                        {dateTime(order.actualCompletedAt ?? order.task?.completedAt ?? '')}
+                      </p>
+                      <p className="whitespace-pre-wrap">
+                        {order.completionDetails || order.task?.workResult}
+                      </p>
                     </li>
                   ))}
                 </ul>

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { VersioningType, type INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
@@ -12,6 +13,10 @@ describe('Accounts (e2e)', () => {
   let app: INestApplication;
   let users: Model<User>;
   let managerId: string;
+  const scope = `accounts-e2e-${randomUUID()}`;
+  const domain = `${scope}.vn`;
+  const staffEmail = `le.tan@${domain}`;
+  const fixtureFilter = { email: { $in: [`manager@${domain}`, staffEmail] } };
   const MANAGER = () => ({
     'x-dev-role': 'MANAGER',
     'x-dev-user-id': managerId,
@@ -28,9 +33,8 @@ describe('Accounts (e2e)', () => {
     await app.init();
     await seedRoles(app);
     users = app.get(getModelToken(User.name));
-    await users.deleteMany({ email: /@accounts-e2e\.vn$/ });
     const manager = await users.create({
-      email: 'manager@accounts-e2e.vn',
+      email: `manager@${domain}`,
       fullName: 'Quản Lý E2E',
       role: 'MANAGER',
     });
@@ -38,8 +42,11 @@ describe('Accounts (e2e)', () => {
   });
 
   afterAll(async () => {
-    await users.deleteMany({ email: /@accounts-e2e\.vn$/ });
-    await app.close();
+    try {
+      if (users) await users.deleteMany(fixtureFilter);
+    } finally {
+      if (app) await app.close();
+    }
   });
 
   it('chỉ Manager xem được danh sách (BR-RBAC-01)', async () => {
@@ -49,7 +56,7 @@ describe('Accounts (e2e)', () => {
       .expect(403);
     const res = await http()
       .get('/api/v1/users')
-      .query({ search: 'accounts-e2e', limit: 5 })
+      .query({ search: scope, limit: 5 })
       .set(MANAGER())
       .expect(200);
     expect(res.body).toMatchObject({ total: 1, page: 1, limit: 5 });
@@ -60,14 +67,14 @@ describe('Accounts (e2e)', () => {
       .post('/api/v1/users')
       .set(MANAGER())
       .send({
-        email: 'Le.Tan@accounts-e2e.vn',
+        email: `Le.Tan@${domain}`,
         fullName: 'Lễ Tân E2E',
         role: 'RECEPTIONIST',
         password: 'secret12',
       })
       .expect(201);
     expect(created.body).toMatchObject({
-      email: 'le.tan@accounts-e2e.vn',
+      email: staffEmail,
       role: 'RECEPTIONIST',
       isActive: true,
       emailVerified: true,
@@ -78,7 +85,7 @@ describe('Accounts (e2e)', () => {
       .post('/api/v1/users')
       .set(MANAGER())
       .send({
-        email: 'le.tan@accounts-e2e.vn',
+        email: staffEmail,
         fullName: 'Trùng Email',
         role: 'RECEPTIONIST',
         password: 'secret12',
@@ -88,7 +95,7 @@ describe('Accounts (e2e)', () => {
       .post('/api/v1/users')
       .set(MANAGER())
       .send({
-        email: 'khac@accounts-e2e.vn',
+        email: `khac@${domain}`,
         fullName: 'Sai Role',
         role: 'KHONG_CO',
         password: 'secret12',
@@ -114,7 +121,7 @@ describe('Accounts (e2e)', () => {
 
     const inactive = await http()
       .get('/api/v1/users')
-      .query({ isActive: 'false', search: 'accounts-e2e' })
+      .query({ isActive: 'false', search: scope })
       .set(MANAGER())
       .expect(200);
     expect(inactive.body.total).toBe(1);

@@ -23,6 +23,84 @@ const booking = (
   },
 });
 describe('H9 Vietnamese templates', () => {
+  it.each([
+    {
+      type: 'booking-confirmed' as const,
+      data: {
+        bookingCode: 'GE-250',
+        guestName: '<script>Lan</script>',
+        room: 'Deluxe',
+        checkIn: new Date('2026-10-23T18:00:00Z'),
+        checkOut: new Date('2026-10-25T18:00:00Z'),
+        nights: 2,
+        guests: 2,
+        total: 1250000,
+        depositStatus: 'pending' as const,
+        depositAmount: 500000,
+      },
+    },
+    {
+      type: 'deposit-paid' as const,
+      data: {
+        bookingCode: 'GE-250',
+        guestName: 'Lan',
+        transactionRef: 'VN-1',
+        amount: 1250000,
+        paidAt: new Date('2026-10-23T18:00:00Z'),
+        bookingState: 'CONFIRMED',
+      },
+    },
+    {
+      type: 'final-payment-paid' as const,
+      data: {
+        bookingCode: 'GE-250',
+        guestName: 'Lan',
+        transactionRef: 'VN-2',
+        amount: 1250000,
+        paidAt: new Date('2026-10-23T18:00:00Z'),
+        bookingState: 'CHECKED_OUT',
+        outstandingBalance: 0,
+        roomCharges: 1000000,
+        serviceCharges: 300000,
+        additionalCharges: 0,
+        discounts: 50000,
+        total: 1250000,
+      },
+    },
+    {
+      type: 'booking-cancelled' as const,
+      data: {
+        bookingCode: 'GE-250',
+        guestName: 'Lan',
+        checkIn: new Date('2026-10-23T18:00:00Z'),
+        checkOut: new Date('2026-10-25T18:00:00Z'),
+        cancelledAt: new Date('2026-10-22T18:00:00Z'),
+        refundInfo: 'Refund pending',
+      },
+    },
+  ])(
+    'renders modern $type email with escaped HTML and plain text',
+    ({ type, data }) => {
+      const message = renderNotification({
+        to: 'alice@example.com',
+        type,
+        data,
+      } as NotificationInput);
+      expect(message.html).toContain('<!doctype html>');
+      expect(message.html).toContain('max-width:600px');
+      expect(message.html).not.toContain('<script>');
+      expect(message.html).toContain('(+84) 258 3888 999');
+      expect(message.html).toContain('http://localhost:5173/booking/');
+      expect(message.text.length).toBeGreaterThan(20);
+      expect(message.text).toContain('24/10/2026');
+      expect(message.text).toContain('Hotline: (+84) 258 3888 999');
+      if (type === 'booking-confirmed') {
+        expect(message.text).toContain('1.250.000 ₫');
+        expect(message.html).toContain('&lt;script&gt;Lan&lt;/script&gt;');
+        expect(message.text).toContain('Vui lòng thanh toán');
+      }
+    },
+  );
   it.each([BookingStatus.PendingDeposit, BookingStatus.Confirmed])(
     'renders truthful status %s, VN dates/money and escaped HTML',
     (status) => {

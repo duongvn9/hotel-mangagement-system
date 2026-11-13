@@ -52,7 +52,7 @@ function setup(options: { alreadyCheckedOut?: boolean } = {}) {
   const rooms = {
     updateMany: vi.fn(),
     find: vi.fn(() =>
-      chain([{ _id: roomId, roomNumber: '102', status: 'CLEANING' }]),
+      chain([{ _id: roomId, roomNumber: '102', status: 'AVAILABLE' }]),
     ),
   };
   const payments = { exists: vi.fn(async () => null) };
@@ -104,7 +104,7 @@ describe('CheckOutService email', () => {
 
   it('still checks out when the email cannot be sent', async () => {
     const { sut, send } = setup();
-    send.mockRejectedValueOnce(new Error('smtp down'));
+    send.mockRejectedValueOnce(new Error('notification provider unavailable'));
 
     await expect(sut.checkOut(bookingId.toHexString())).resolves.toMatchObject({
       status: BookingStatus.CheckedOut,

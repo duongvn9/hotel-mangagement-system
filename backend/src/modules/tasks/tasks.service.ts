@@ -184,7 +184,7 @@ export class TasksService {
       .collection(TASK_SOURCE_COLLECTIONS[TaskSourceType.ServiceOrder])
       .findOne(
         { _id: task.sourceId, linkedTask: task._id, reviewStatus: 'ACCEPTED' },
-        { projection: { serviceName: 1, booking: 1 } },
+        { projection: { serviceName: 1, booking: 1, room: 1 } },
       );
     if (!order) return null;
     const parts: string[] = [];
@@ -201,11 +201,14 @@ export class TasksService {
     if (booking) {
       if (typeof booking.code === 'string' && booking.code.trim())
         parts.push(booking.code);
-      const roomIds = Array.isArray(booking.rooms)
-        ? booking.rooms
-            .filter((id: unknown) => Types.ObjectId.isValid(String(id)))
-            .map((id: unknown) => new Types.ObjectId(String(id)))
-        : [];
+      const roomIds =
+        order.room && Types.ObjectId.isValid(String(order.room))
+          ? [new Types.ObjectId(String(order.room))]
+          : Array.isArray(booking.rooms)
+            ? booking.rooms
+                .filter((id: unknown) => Types.ObjectId.isValid(String(id)))
+                .map((id: unknown) => new Types.ObjectId(String(id)))
+            : [];
       if (roomIds.length) {
         const rooms = await this.connection
           .collection('rooms')
@@ -277,6 +280,107 @@ export class TasksService {
         taskType: SERVICE_ORDER_EXECUTION_TASK_TYPE,
       })
       .lean();
+  }
+
+  async reassignServiceOrderExecution(
+    orderId: string,
+    taskId: Types.ObjectId,
+    input: {
+      requestId: string;
+      assigneeId: string;
+      expectedAssigneeId: string;
+      reason: string;
+    },
+    actorId: string,
+  ) {
+    const scope = {
+      _id: taskId,
+      sourceId: new Types.ObjectId(orderId),
+      sourceType: TaskSourceType.ServiceOrder,
+      taskType: SERVICE_ORDER_EXECUTION_TASK_TYPE,
+    };
+    const task = await this.tasks.findOne(scope).lean();
+    if (!task) throw new ConflictException('Canonical task missing');
+    const requestId = input.requestId.toLowerCase();
+    const previous = task.serviceOrderReassignments?.find(
+      (event) => event.requestId === requestId,
+    );
+    if (previous) {
+      if (
+        previous.assigneeId !== input.assigneeId.toLowerCase() ||
+        previous.previousAssigneeId !==
+          input.expectedAssigneeId.toLowerCase() ||
+        previous.reason !== input.reason.trim()
+      )
+        throw new ConflictException(
+          'requestId already used with a different payload',
+        );
+      return task;
+    }
+    if (
+      task.status !== TaskStatus.Assigned ||
+      task.completedAt ||
+      task.workResult ||
+      task.cancellation ||
+      String(task.assignedTo) !== input.expectedAssigneeId.toLowerCase()
+    )
+      throw new ConflictException(
+        'Only unchanged ASSIGNED work can be reassigned',
+      );
+    if (String(task.assignedTo) === input.assigneeId.toLowerCase())
+      throw new ConflictException('Choose a different assignee');
+    const eligible = await this.users
+      .findOne({
+        _id: new Types.ObjectId(input.assigneeId),
+        role: StaffRole.ServiceStaff,
+        isActive: true,
+      })
+      .lean();
+    if (!eligible)
+      throw new ConflictException('Assignee must be active ServiceStaff');
+    const updated = await this.tasks
+      .findOneAndUpdate(
+        {
+          ...scope,
+          assignedTo: task.assignedTo,
+          status: TaskStatus.Assigned,
+          completedAt: { $exists: false },
+          workResult: { $exists: false },
+          cancellation: { $exists: false },
+          'serviceOrderReassignments.requestId': { $ne: requestId },
+        },
+        {
+          $set: { assignedTo: new Types.ObjectId(input.assigneeId) },
+          $push: {
+            serviceOrderReassignments: {
+              requestId,
+              actorId,
+              previousAssigneeId: String(task.assignedTo),
+              assigneeId: input.assigneeId.toLowerCase(),
+              reason: input.reason.trim(),
+              at: new Date(),
+            },
+          },
+          $inc: { revision: 1 },
+        },
+        { new: true, runValidators: true },
+      )
+      .lean();
+    if (!updated) {
+      const current = await this.tasks.findOne(scope).lean();
+      const event = current?.serviceOrderReassignments?.find(
+        (entry) => entry.requestId === requestId,
+      );
+      if (
+        event &&
+        event.assigneeId === input.assigneeId.toLowerCase() &&
+        event.previousAssigneeId === input.expectedAssigneeId.toLowerCase() &&
+        event.reason === input.reason.trim()
+      )
+        return current!;
+      throw new ConflictException('Task assignment or status changed');
+    }
+    return updated;
   }
 
   async listCompletedServiceWork(
@@ -502,6 +606,12 @@ export class TasksService {
     await this.assertCanonicalIssueTask(task);
     if (!this.actionableIssueTask(task))
       throw new ConflictException('Task must be blocked or overdue');
+    if (
+      dueAt !== undefined &&
+      (!Number.isFinite(new Date(dueAt).getTime()) ||
+        new Date(dueAt).getTime() <= Date.now())
+    )
+      throw new BadRequestException('Deadline must be in the future');
     if (
       dueAt !== undefined &&
       task.dueAt &&
@@ -905,14 +1015,18 @@ export class TasksService {
     const updated = await this.tasks.findOneAndUpdate(
       {
         ...scope,
-        ...(task.sourceType === TaskSourceType.Issue &&
-        task.taskType === 'ISSUE_RESOLUTION'
+        ...((task.sourceType === TaskSourceType.Issue &&
+          task.taskType === 'ISSUE_RESOLUTION') ||
+        (task.sourceType === TaskSourceType.ServiceOrder &&
+          task.taskType === SERVICE_ORDER_EXECUTION_TASK_TYPE)
           ? this.revisionFilter(task)
           : {}),
       },
       {
-        ...(task.sourceType === TaskSourceType.Issue &&
-        task.taskType === 'ISSUE_RESOLUTION'
+        ...((task.sourceType === TaskSourceType.Issue &&
+          task.taskType === 'ISSUE_RESOLUTION') ||
+        (task.sourceType === TaskSourceType.ServiceOrder &&
+          task.taskType === SERVICE_ORDER_EXECUTION_TASK_TYPE)
           ? { $inc: { revision: 1 } }
           : {}),
         $set: {

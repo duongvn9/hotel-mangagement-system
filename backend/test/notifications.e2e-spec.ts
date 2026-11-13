@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { MODULE_METADATA } from '@nestjs/common/constants.js';
 import { Test } from '@nestjs/testing';
-import nodemailer from 'nodemailer';
 import { AppModule } from '../src/app.module.js';
 import { NotificationsModule } from '../src/modules/notifications/notifications.module.js';
 import { NotificationsService } from '../src/modules/notifications/notifications.service.js';
@@ -20,9 +19,6 @@ describe('H9 real AppModule, notifications disabled by default', () => {
     uri.pathname = `/hms_h9_${randomUUID().replaceAll('-', '')}_test`;
     process.env.MONGODB_URI = uri.toString();
     delete process.env.NOTIFICATIONS_ENABLED;
-    vi.spyOn(nodemailer, 'createTransport').mockImplementation(() => {
-      throw new Error('SMTP forbidden in e2e');
-    });
     const module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -37,7 +33,7 @@ describe('H9 real AppModule, notifications disabled by default', () => {
     if (originalEnabled === undefined) delete process.env.NOTIFICATIONS_ENABLED;
     else process.env.NOTIFICATIONS_ENABLED = originalEnabled;
   });
-  it('boots without module cycle, exports H9 and never creates SMTP', async () => {
+  it('boots without module cycle, exports H9 and leaves notifications disabled', async () => {
     expect(app!.get(NOTIFICATION_TRANSPORT)).toBeInstanceOf(
       DisabledNotificationTransport,
     );
@@ -59,6 +55,5 @@ describe('H9 real AppModule, notifications disabled by default', () => {
       }),
     ).toEqual({ accepted: true });
     await service.drain();
-    expect(nodemailer.createTransport).not.toHaveBeenCalled();
   });
 });

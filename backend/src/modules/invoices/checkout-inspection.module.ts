@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Booking, BookingSchema } from '../bookings/schemas/booking.schema.js';
+import { Room, RoomSchema } from '../rooms/schemas/room.schema.js';
 import { TasksModule } from '../tasks/tasks.module.js';
 import { User, UserSchema } from '../users/schemas/user.schema.js';
 import {
@@ -16,6 +17,7 @@ import { CheckoutInspectionService } from './checkout-inspection.service.js';
     MongooseModule.forFeature([
       { name: Booking.name, schema: BookingSchema },
       { name: User.name, schema: UserSchema },
+      { name: Room.name, schema: RoomSchema },
     ]),
   ],
   controllers: [CheckoutInspectionController, InspectorsController],

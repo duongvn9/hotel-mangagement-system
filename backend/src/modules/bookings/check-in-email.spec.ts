@@ -38,7 +38,8 @@ function setup(guestEmail: string | undefined = 'alice@example.com') {
   const bookings = {
     findById: vi.fn(async () => booking),
     findOneAndUpdate: vi.fn(() => chain(booking)),
-    updateOne: vi.fn(),
+    updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+    exists: vi.fn().mockResolvedValue({ _id: bookingId }),
   };
   const rooms = {
     find: vi.fn(() =>
@@ -98,7 +99,7 @@ describe('CheckInService email', () => {
 
   it('still checks in when the email cannot be sent', async () => {
     const { sut, send } = setup();
-    send.mockRejectedValueOnce(new Error('smtp down'));
+    send.mockRejectedValueOnce(new Error('notification provider unavailable'));
 
     await expect(
       sut.checkIn(bookingId.toHexString(), {}, [photo]),

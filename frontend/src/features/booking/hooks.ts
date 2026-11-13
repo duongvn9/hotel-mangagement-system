@@ -26,15 +26,18 @@ import {
   getCheckInOptions,
   getRoomStatusBoard,
   getSameDayList,
+  getSearchFilters,
   initiateFinal,
   listBookings,
   listReconciliation,
   reconcilePayment,
   recordCashPayment,
+  resolveBookingCode,
   searchGuests,
   searchAvailability,
   submitBookingDetails,
   updateBooking,
+  updateHoldRooms,
   verifyVnpayReturn,
   type AddChargeInput,
   type AddServiceChargeInput,
@@ -45,6 +48,7 @@ import {
   type RequestInspectionInput,
   type RoomReplacement,
   type RoomStatusBoardParams,
+  type RoomTypeSearchFilters,
   type SearchAvailabilityParams,
   type UpdateBookingInput,
 } from './api'
@@ -59,11 +63,20 @@ export function useAvailability(params: SearchAvailabilityParams | null) {
 }
 
 /** Mọi loại phòng để khách xem trước khi chọn ngày; chỉ chạy khi `enabled`. */
-export function useRoomTypeList(enabled: boolean) {
+export function useRoomTypeList(enabled: boolean, filters: RoomTypeSearchFilters = {}) {
   return useQuery({
-    queryKey: ['room-type-list'],
-    queryFn: listRoomTypes,
+    queryKey: ['room-type-list', filters],
+    queryFn: () => listRoomTypes(filters),
     enabled,
+  })
+}
+
+/** Lựa chọn cho bộ lọc tìm phòng công khai (loại giường, tiện nghi, khoảng giá). */
+export function useSearchFilters() {
+  return useQuery({
+    queryKey: ['search-filters'],
+    queryFn: getSearchFilters,
+    staleTime: 5 * 60 * 1000,
   })
 }
 
@@ -125,6 +138,14 @@ export function useHoldBooking() {
 
 export function useSubmitBookingDetails() {
   return useMutation({ mutationFn: submitBookingDetails })
+}
+
+export function useUpdateHoldRooms() {
+  return useMutation({ mutationFn: updateHoldRooms })
+}
+
+export function useResolveBookingCode() {
+  return useMutation({ mutationFn: (code: string) => resolveBookingCode(code) })
 }
 
 /**

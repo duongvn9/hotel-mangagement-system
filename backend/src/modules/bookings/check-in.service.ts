@@ -18,6 +18,7 @@ import {
 } from '../payments/schemas/payment-transaction.schema.js';
 import { Room } from '../rooms/schemas/room.schema.js';
 import { AvailabilityClock } from './availability.adapters.js';
+import { withBookingFinancialOperation } from './booking-financial-operation.js';
 import { AvailabilityService } from './availability.service.js';
 import {
   applyReplacements,
@@ -79,6 +80,16 @@ export class CheckInService {
         `Check-in requires 1 to ${CHECK_IN_EVIDENCE_MAX} identity-document photos`,
       );
     }
+    return withBookingFinancialOperation(this.bookings, bookingId, () =>
+      this.checkInLocked(bookingId, dto, photos),
+    );
+  }
+
+  private async checkInLocked(
+    bookingId: string,
+    dto: CheckInDto,
+    photos: AssetImageFile[],
+  ): Promise<CheckInResult> {
     const booking = await this.confirmedBooking(bookingId);
     await this.requireDepositPaid(booking);
     const windowError = checkInWindowError(

@@ -9,5 +9,7 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.spec.ts'],
+    setupFiles: ['./test/unit-safety.setup.ts'],
+    maxWorkers: 2,
   },
 });

@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { Booking } from '../src/modules/bookings/schemas/booking.schema.js';
 import { RoomHold } from '../src/modules/bookings/schemas/room-hold.schema.js';
+import { HoldPrincipalLock } from '../src/modules/bookings/schemas/hold-principal-lock.schema.js';
 import { Room } from '../src/modules/rooms/schemas/room.schema.js';
 import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
 
@@ -50,6 +51,9 @@ describe('Create booking (e2e)', () => {
       .find({ rooms: { $in: roomList } })
       .select('_id')
       .lean();
+    await app
+      .get<Model<HoldPrincipalLock>>(getModelToken(HoldPrincipalLock.name))
+      .deleteMany({ booking: { $in: docs.map((d) => d._id) } });
     await holds.deleteMany({ booking: { $in: docs.map((d) => d._id) } });
     await bookings.deleteMany({ rooms: { $in: roomList } });
   };
@@ -145,6 +149,13 @@ describe('Create booking (e2e)', () => {
       .lean();
     expect(hold?.isActive).toBe(true);
     expect(hold?.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    const resumed = await http()
+      .post('/api/v1/bookings')
+      .set(CUSTOMER)
+      .send(body([roomA], '2091-01-10', '2091-01-12'))
+      .expect(201);
+    expect(resumed.body).toEqual(response.body);
+    expect(await bookings.countDocuments({ customer: customerId })).toBe(1);
   });
 
   it('rejects a second overlapping booking on the held room', async () => {
@@ -160,17 +171,18 @@ describe('Create booking (e2e)', () => {
       .expect(409);
   });
 
-  it('allows a non-overlapping stay on the same room', async () => {
+  it('blocks another unconfirmed checkout even for a non-overlapping stay', async () => {
     await http()
       .post('/api/v1/bookings')
       .set(CUSTOMER)
       .send(body([roomA], '2091-01-10', '2091-01-12'))
       .expect(201);
-    await http()
+    const blocked = await http()
       .post('/api/v1/bookings')
       .set(CUSTOMER)
       .send(body([roomA], '2091-01-12', '2091-01-14'))
-      .expect(201);
+      .expect(409);
+    expect(blocked.body.code).toBe('ACTIVE_BOOKING_EXISTS');
   });
 
   it('lets only one of two concurrent bookings win the same room', async () => {
@@ -185,7 +197,8 @@ describe('Create booking (e2e)', () => {
         .send(body([roomA], '2091-02-01', '2091-02-03')),
     ]);
     const statuses = results.map((r) => r.status).sort();
-    expect(statuses).toEqual([201, 409]);
+    expect(statuses).toEqual([201, 201]);
+    expect(results[0].body.id).toBe(results[1].body.id);
     // Kẻ thua đã rollback: đúng một hold còn hiệu lực cho phòng.
     const active = await holds.countDocuments({
       rooms: roomA,

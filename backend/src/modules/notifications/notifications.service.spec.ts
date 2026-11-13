@@ -19,10 +19,11 @@ export const sample: NotificationInput = {
   },
 };
 describe('H9 background queue', () => {
-  it('treats temporary SMTP auth unavailability as 4xx rather than permanent bad credentials', () => {
-    expect(classifyFailure({ code: 'EAUTH', responseCode: 454 })).toEqual({
-      category: 'transient',
-      code: 'SMTP_454',
+  it('classifies Brevo authentication failures without exposing provider details', () => {
+    expect(classifyFailure({ code: 'EAUTH' })).toEqual({
+      category: 'auth',
+      code: 'BREVO_AUTH',
+      hint: 'Check BREVO_API_KEY and the verified GMAIL_USER sender address',
     });
   });
   let send: ReturnType<typeof vi.fn>;
@@ -56,6 +57,96 @@ describe('H9 background queue', () => {
     expect(warn).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
+  it('persists SENT and FAILED states and deduplicates a related event', async () => {
+    const log = {
+      _id: '507f1f77bcf86cd799439011',
+      recipient: 'alice@example.com',
+      type: 'booking-cancelled',
+      subject: 'cancelled',
+      payload: { html: '<p>cancelled</p>', text: 'cancelled' },
+      retryCount: 0,
+    };
+    const logs = {
+      findOne: vi.fn().mockReturnValue({ lean: () => Promise.resolve(null) }),
+      create: vi.fn().mockResolvedValue(log),
+      updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+    };
+    service = new NotificationsService(
+      { send },
+      { ...notificationConfiguration({}), maxAttempts: 1 },
+      new NotificationScheduler(),
+    );
+    (service as unknown as { logs: typeof logs }).logs = logs;
+    const input: NotificationInput = {
+      to: 'alice@example.com',
+      type: 'booking-cancelled',
+      relatedBookingId: '507f1f77bcf86cd799439012',
+      data: {
+        bookingCode: 'GE-1',
+        guestName: 'Alice',
+        checkIn: '2026-10-24',
+        checkOut: '2026-10-25',
+        cancelledAt: '2026-10-23',
+      },
+    };
+    await service.send(input);
+    await service.drain();
+    await service.send(input);
+    await service.drain();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(logs.updateOne).toHaveBeenCalledWith(
+      { _id: log._id },
+      { $set: expect.objectContaining({ status: 'SENT' }) },
+    );
+    send.mockRejectedValue(new Error('Brevo request failed'));
+    await service.send({
+      ...input,
+      relatedBookingId: '507f1f77bcf86cd799439013',
+    });
+    await vi.runAllTimersAsync();
+    await service.drain();
+    expect(logs.updateOne).toHaveBeenCalledWith(
+      { _id: log._id },
+      {
+        $set: expect.objectContaining({
+          status: 'FAILED',
+          lastError: 'SEND_FAILED',
+        }),
+      },
+    );
+  });
+  it('queues only due FAILED logs under the retry limit', async () => {
+    const dueLog = {
+      _id: '507f1f77bcf86cd799439014',
+      recipient: 'alice@example.com',
+      type: 'booking-cancelled',
+      subject: 'cancelled',
+      payload: { html: '<p>cancelled</p>', text: 'cancelled' },
+      retryCount: 0,
+    };
+    const logs = {
+      find: vi.fn().mockReturnValue({
+        limit: () => ({ lean: () => ({ exec: async () => [dueLog] }) }),
+      }),
+      updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+    };
+    service = new NotificationsService(
+      { send },
+      notificationConfiguration({}),
+      new NotificationScheduler(),
+    );
+    (service as unknown as { logs: typeof logs }).logs = logs;
+    await expect(service.retryFailedNotifications()).resolves.toBe(1);
+    await service.drain();
+    expect(logs.find).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'FAILED', retryCount: { $lt: 3 } }),
+    );
+    expect(logs.updateOne).toHaveBeenCalledWith(
+      { _id: dueLog._id, status: 'FAILED' },
+      { $set: { status: 'PENDING' }, $inc: { retryCount: 1 } },
+    );
+    expect(send).toHaveBeenCalledTimes(1);
+  });
   it('returns acceptance without waiting for delivery; bounds active plus pending messages and snapshots data', async () => {
     send.mockImplementation(() => new Promise(() => {}));
     service = setup({ queueCapacity: 2 });
@@ -73,7 +164,7 @@ describe('H9 background queue', () => {
   });
   it('retries after exactly 1000 then 2000ms and resolves drain only after all retries', async () => {
     send
-      .mockRejectedValueOnce({ responseCode: 421 })
+      .mockRejectedValueOnce({ code: 'ECONNECTION' })
       .mockRejectedValueOnce({ code: 'ECONNRESET' })
       .mockResolvedValue(undefined);
     await service.send(sample);
@@ -125,23 +216,30 @@ describe('H9 background queue', () => {
   it.each([
     [550, 'permanent'],
     [535, 'auth'],
-  ])('does not retry SMTP %s', async (responseCode, category) => {
-    send.mockRejectedValue({ responseCode });
-    await service.send(sample);
-    await vi.runAllTimersAsync();
-    await service.drain();
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(error).toHaveBeenCalledWith(
-      expect.objectContaining({ category, final: true }),
-    );
-    if (responseCode === 535)
-      expect(error).toHaveBeenCalledWith(
-        expect.objectContaining({
-          hint: expect.stringContaining('App Password'),
+  ])(
+    'does not retry Brevo permanent failure %s',
+    async (responseCode, category) => {
+      send.mockRejectedValue(
+        Object.assign(new Error('Brevo rejected the request'), {
+          code: responseCode === 535 ? 'EAUTH' : 'SEND_FAILED',
         }),
       );
-  });
+      await service.send(sample);
+      await vi.runAllTimersAsync();
+      await service.drain();
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(error).toHaveBeenCalledWith(
+        expect.objectContaining({ category, final: true }),
+      );
+      if (responseCode === 535)
+        expect(error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            hint: expect.stringContaining('BREVO_API_KEY'),
+          }),
+        );
+    },
+  );
   it('retries timeouts and aborts the expired attempt', async () => {
     send
       .mockImplementationOnce(() => new Promise(() => {}))
@@ -195,7 +293,7 @@ describe('H9 background queue', () => {
   });
   it('shutdown waits for drain, including retry, then rejects new messages', async () => {
     send
-      .mockRejectedValueOnce({ responseCode: 450 })
+      .mockRejectedValueOnce({ code: 'ECONNECTION' })
       .mockResolvedValue(undefined);
     await service.send(sample);
     const closed = vi.fn();

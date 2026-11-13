@@ -1,3 +1,4 @@
+import { isAxiosError } from 'axios'
 import { api } from '@/lib/api-client'
 
 /**
@@ -9,6 +10,7 @@ import { api } from '@/lib/api-client'
 /** Một phòng còn trống trả từ UC05; không lộ booking/customer. */
 export interface AvailableRoom {
   images?: string[]
+  beds?: RoomTypeBedSummary[]
   id: string
   roomTypeId: string
   capacity: number
@@ -18,7 +20,36 @@ export interface AvailableRoom {
   pricePerNight?: number
 }
 
-export interface SearchAvailabilityParams {
+/** Một cấu hình giường công khai của loại phòng. */
+export interface RoomTypeBedSummary {
+  bedTypeId: string
+  bedTypeName: string
+  quantity: number
+}
+
+/** Bộ lọc loại phòng dùng chung cho tìm phòng và danh sách công khai (tất cả AND). */
+export interface RoomTypeSearchFilters {
+  bedTypeIds?: string[]
+  amenityIds?: string[]
+  priceMin?: number
+  priceMax?: number
+  adults?: number
+  children?: number
+}
+
+/** Đưa bộ lọc vào query string; mảng nối bằng dấu phẩy để tránh rắc rối serialize. */
+function filterParams(filters: RoomTypeSearchFilters): Record<string, string | number> {
+  return {
+    ...(filters.bedTypeIds?.length ? { bedTypeIds: filters.bedTypeIds.join(',') } : {}),
+    ...(filters.amenityIds?.length ? { amenityIds: filters.amenityIds.join(',') } : {}),
+    ...(filters.priceMin !== undefined ? { priceMin: filters.priceMin } : {}),
+    ...(filters.priceMax !== undefined ? { priceMax: filters.priceMax } : {}),
+    ...(filters.adults !== undefined ? { adults: filters.adults } : {}),
+    ...(filters.children !== undefined ? { children: filters.children } : {}),
+  }
+}
+
+export interface SearchAvailabilityParams extends RoomTypeSearchFilters {
   /** YYYY-MM-DD, giờ Việt Nam. */
   checkIn: string
   checkOut: string
@@ -26,11 +57,30 @@ export interface SearchAvailabilityParams {
   roomTypeId?: string
 }
 
-/** UC05 — Tìm phòng trống theo ngày ở và số khách. */
+/** UC05 — Tìm phòng trống theo ngày ở, số khách và các tiêu chí lọc. */
 export async function searchAvailability(
   params: SearchAvailabilityParams,
 ): Promise<AvailableRoom[]> {
-  return (await api.get<AvailableRoom[]>('/availability', { params })).data
+  const { bedTypeIds, amenityIds, priceMin, priceMax, adults, children, ...rest } = params
+  return (
+    await api.get<AvailableRoom[]>('/availability', {
+      params: {
+        ...rest,
+        ...filterParams({ bedTypeIds, amenityIds, priceMin, priceMax, adults, children }),
+      },
+    })
+  ).data
+}
+
+/** Lựa chọn cho bộ lọc tìm phòng công khai (loại giường, tiện nghi, khoảng giá). */
+export interface SearchFilters {
+  bedTypes: { id: string; name: string }[]
+  amenities: { id: string; name: string }[]
+  priceRange: { min: number; max: number }
+}
+
+export async function getSearchFilters(): Promise<SearchFilters> {
+  return (await api.get<SearchFilters>('/availability/filters')).data
 }
 
 /** Chi tiết loại phòng công khai (đi kèm UC05) để khách xem trước khi đặt. */
@@ -44,6 +94,7 @@ export interface RoomTypeOverview {
   pricePerNight: number
   images?: string[]
   amenities: { id: string; name: string }[]
+  beds?: RoomTypeBedSummary[]
 }
 
 /** 2.2.2 View Room Details — đọc chi tiết một loại phòng (endpoint công khai). */
@@ -54,9 +105,16 @@ export async function getRoomTypeOverview(id: string): Promise<RoomTypeOverview>
 /** Một loại phòng trong danh sách công khai khi khách chưa chọn ngày. */
 export type RoomTypeSummary = Omit<RoomTypeOverview, 'amenities'>
 
-/** Mọi loại phòng đang kinh doanh (rẻ nhất trước), không cần ngày hay đăng nhập. */
-export async function listRoomTypes(): Promise<RoomTypeSummary[]> {
-  return (await api.get<RoomTypeSummary[]>('/availability/room-types')).data
+/** Mọi loại phòng đang kinh doanh (rẻ nhất trước), có thể lọc, không cần ngày hay đăng nhập. */
+export async function listRoomTypes(
+  filters: RoomTypeSearchFilters = {},
+): Promise<RoomTypeSummary[]> {
+  const params = filterParams(filters)
+  return (
+    await (Object.keys(params).length
+      ? api.get<RoomTypeSummary[]>('/availability/room-types', { params })
+      : api.get<RoomTypeSummary[]>('/availability/room-types'))
+  ).data
 }
 
 export interface CreateBookingInput {
@@ -123,12 +181,49 @@ export interface HoldBookingInput {
   childCount?: number
 }
 
+/** Minimal active-booking metadata; never a resumable hold token. */
+export interface ActiveBooking {
+  id: string
+  code: string
+  status: 'ROOM_HELD' | 'PENDING_DEPOSIT'
+  holdExpiresAt: string
+}
+
+export function getActiveBookingConflict(error: unknown): ActiveBooking | undefined {
+  if (!isAxiosError(error) || error.response?.status !== 409) return
+  const data = error.response.data
+  if (data?.code !== 'ACTIVE_BOOKING_EXISTS') return
+  const existing = data.existingBooking
+  if (
+    !existing ||
+    typeof existing.id !== 'string' ||
+    typeof existing.code !== 'string' ||
+    !['ROOM_HELD', 'PENDING_DEPOSIT'].includes(existing.status) ||
+    typeof existing.holdExpiresAt !== 'string' ||
+    !Number.isFinite(Date.parse(existing.holdExpiresAt))
+  )
+    return
+  return existing
+}
+
+/** Một nhóm phòng cùng loại trong hold, kèm id từng phòng để client chỉnh số lượng. */
+export interface HeldRoomTypeGroup {
+  roomTypeId: string
+  roomTypeName: string
+  pricePerNight: number
+  roomIds: string[]
+}
+
 /** Phản hồi khi giữ phòng (ROOM_HELD) — nguồn chuẩn để hiện tạm tính và đếm ngược. */
 export interface HeldBooking {
   bookingId: string
+  /** Mã booking (vé) — để khách vãng lai huỷ/tra cứu đơn đang giữ. */
+  code: string
   holdToken: string
   status: string
   rooms: string[]
+  /** Phòng đang giữ, gom theo loại — để chỉnh số lượng từng loại trong trang đặt. */
+  roomTypes: HeldRoomTypeGroup[]
   checkIn: string
   checkOut: string
   adultCount: number
@@ -144,6 +239,22 @@ export interface HeldBooking {
  */
 export async function holdBooking(input: HoldBookingInput): Promise<HeldBooking> {
   return (await api.post<HeldBooking>('/bookings/hold', input)).data
+}
+
+/** Chỉnh danh sách phòng của một hold còn hạn (ROOM_HELD) — không tạo hold mới, không gia hạn. */
+export interface UpdateHoldRoomsInput {
+  holdToken: string
+  rooms: string[]
+}
+
+/** Cập nhật số lượng/loại phòng đang giữ ngay trong trang đặt; trả về hold đã tính lại tiền. */
+export async function updateHoldRooms(input: UpdateHoldRoomsInput): Promise<HeldBooking> {
+  return (await api.post<HeldBooking>('/bookings/hold/rooms', input)).data
+}
+
+/** Tra ObjectId của đơn theo mã booking (vé) — để khách vãng lai mở đơn chỉ bằng mã. */
+export async function resolveBookingCode(code: string): Promise<{ id: string }> {
+  return (await api.get<{ id: string }>(`/bookings/by-code/${encodeURIComponent(code)}`)).data
 }
 
 /** Dịch vụ khách chọn kèm khi đặt; tự sinh ServiceOrder khi booking xác nhận. */
@@ -764,6 +875,8 @@ export interface PaymentReturn {
   responseCode: string
   /** Booking của giao dịch (server trả) để đọc lại trạng thái, không cần localStorage. */
   bookingId: string
+  /** Đặt cọc hay thanh toán phần còn lại. Thiếu (backend cũ) thì coi như đặt cọc. */
+  purpose?: 'DEPOSIT' | 'FINAL'
 }
 
 export const PAYMENT_RESULT_DISPLAY: Record<

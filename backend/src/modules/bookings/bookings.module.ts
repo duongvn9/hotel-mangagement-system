@@ -8,6 +8,8 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { RoomsModule } from '../rooms/rooms.module.js';
 import { ServicesModule } from '../services/services.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
+import { AmenitiesModule } from '../amenities/amenities.module.js';
+import { BedTypesModule } from '../bed-types/bed-types.module.js';
 import {
   PaymentTransaction,
   PaymentTransactionSchema,
@@ -19,6 +21,10 @@ import {
 import { Invoice, InvoiceSchema } from '../invoices/schemas/invoice.schema.js';
 import { Booking, BookingSchema } from './schemas/booking.schema.js';
 import { RoomHold, RoomHoldSchema } from './schemas/room-hold.schema.js';
+import {
+  HoldPrincipalLock,
+  HoldPrincipalLockSchema,
+} from './schemas/hold-principal-lock.schema.js';
 import { AvailabilityController } from './availability.controller.js';
 import { AvailabilityService } from './availability.service.js';
 import { RoomTypeOverviewController } from './room-type-overview.controller.js';
@@ -45,9 +51,12 @@ import { RoomStatusBoardService } from './room-status-board.service.js';
     RoomsModule,
     ServicesModule,
     NotificationsModule,
+    AmenitiesModule,
+    BedTypesModule,
     MongooseModule.forFeature([
       { name: Booking.name, schema: BookingSchema },
       { name: RoomHold.name, schema: RoomHoldSchema },
+      { name: HoldPrincipalLock.name, schema: HoldPrincipalLockSchema },
       { name: PaymentTransaction.name, schema: PaymentTransactionSchema },
       // Chỉ đọc RoomType cho endpoint chi tiết phòng công khai; không sửa module RoomType.
       { name: RoomType.name, schema: RoomTypeSchema },

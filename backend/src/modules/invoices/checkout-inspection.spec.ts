@@ -1,6 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { BookingStatus } from '../bookings/schemas/booking.schema.js';
+import { RoomStatus } from '../../common/constants/room-status.enum.js';
 import { TaskSourceType } from '../tasks/task-contract.js';
 import { CheckoutInspectionService } from './checkout-inspection.service.js';
 
@@ -14,12 +15,14 @@ function setup(
     createError?: Error;
   } = {},
 ) {
+  const roomIds = [new Types.ObjectId()];
   const bookings = {
     findById: vi.fn(async () => ({
       _id: bookingId,
       code: 'GE-1',
       status: options.status ?? BookingStatus.CheckedIn,
       isActive: true,
+      rooms: roomIds,
     })),
   };
   const staff = [{ _id: staffId, fullName: 'Lê Văn Dịch Vụ' }];
@@ -44,17 +47,19 @@ function setup(
     }),
     latestForSource: vi.fn(async () => options.latest ?? null),
   };
+  const rooms = { updateMany: vi.fn(async () => ({ modifiedCount: 1 })) };
   const sut = new CheckoutInspectionService(
     bookings as never,
     users as never,
+    rooms as never,
     tasks as never,
   );
-  return { sut, tasks, users };
+  return { sut, tasks, users, rooms, roomIds };
 }
 
 describe('CheckoutInspectionService.request', () => {
   it('asks the chosen service staff to inspect the stay', async () => {
-    const { sut, tasks } = setup();
+    const { sut, tasks, rooms, roomIds } = setup();
 
     const view = await sut.request(bookingId, { assigneeId: staffId });
 
@@ -67,6 +72,10 @@ describe('CheckoutInspectionService.request', () => {
       assigneeId: staffId,
       instructions: expect.stringContaining('dịch vụ'),
     });
+    expect(rooms.updateMany).toHaveBeenCalledWith(
+      { _id: { $in: roomIds }, status: RoomStatus.Occupied },
+      { $set: { status: RoomStatus.Cleaning } },
+    );
     expect(view).toMatchObject({
       status: 'ASSIGNED',
       assigneeName: 'Lê Văn Dịch Vụ',
@@ -99,13 +108,14 @@ describe('CheckoutInspectionService.request', () => {
   });
 
   it('lets the active-task conflict reach the caller', async () => {
-    const { sut } = setup({
+    const { sut, rooms } = setup({
       createError: new ConflictException('An active task already exists'),
     });
 
     await expect(
       sut.request(bookingId, { assigneeId: staffId }),
     ).rejects.toBeInstanceOf(ConflictException);
+    expect(rooms.updateMany).not.toHaveBeenCalled();
   });
 
   it('returns 404 for an unknown booking id format', async () => {

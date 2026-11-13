@@ -1,11 +1,13 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useCallback, useRef, useState, type FormEvent } from 'react'
 import { isAxiosError } from 'axios'
+import { format } from 'date-fns'
 import { Button, Input, NativeSelect, Textarea } from '@/components/atoms'
 import { FormField } from '@/components/molecules'
 import { ConfirmationDialog, Panel } from '@/components/organisms'
 import { dateTime, executionLabels } from './api'
 import type { AssignmentInput, StaffServiceOrder } from './staff-api'
 import { useAssignServiceOrder, useServiceAssignees } from './staff-hooks'
+import { ServiceReassignment } from './ServiceReassignment'
 
 export function ServiceAssignment({
   order,
@@ -15,7 +17,9 @@ export function ServiceAssignment({
   refreshing: boolean
 }) {
   const eligible =
-    order.reviewStatus === 'ACCEPTED' && (!order.feeRequired || order.billingStatus === 'BILLED')
+    order.intakeMode !== 'COMPLETED_ON_SITE' &&
+    order.reviewStatus === 'ACCEPTED' &&
+    (!order.feeRequired || order.billingStatus === 'BILLED')
   const open = eligible && !order.task && order.executionStatus === 'NOT_STARTED'
   const pending = order.executionStatus === 'ASSIGNING'
   const assignees = useServiceAssignees(
@@ -25,6 +29,7 @@ export function ServiceAssignment({
   const mutation = useAssignServiceOrder(order.id)
   const [assigneeId, setAssigneeId] = useState('')
   const [due, setDue] = useState('')
+  const [minimumDue] = useState(() => format(new Date(Date.now()), "yyyy-MM-dd'T'HH:mm"))
   const [intent, setIntent] = useState<AssignmentInput | null>(null)
   const [confirmation, setConfirmation] = useState<AssignmentInput | null>(null)
   const [validation, setValidation] = useState('')
@@ -41,52 +46,74 @@ export function ServiceAssignment({
   const editingRecovery = recoveryMode && canRecover && !intent?.recoveryReason
   const activeIntent = intent ?? (pending ? order.assignmentIntent : undefined)
   const disabled = mutation.isPending || refreshing
-  function prepare(event: FormEvent) {
-    event.preventDefault()
-    if (disabled || sending.current || !eligible || order.task || (!open && !pending)) return
-    if (editingRecovery) {
+  const prepare = useCallback(
+    (event: FormEvent) => {
+      event.preventDefault()
+      if (disabled || sending.current || !eligible || order.task || (!open && !pending)) return
+      if (editingRecovery) {
+        if (
+          assignees.isFetching ||
+          assignees.isError ||
+          !staff.some((item) => item.id === assigneeId) ||
+          assigneeId === order.assignmentIntent?.assigneeId ||
+          !recoveryReason.trim() ||
+          recoveryReason.trim().length > 2000
+        ) {
+          setValidation('Chọn nhân viên thay thế và nhập lý do khôi phục (tối đa 2000 ký tự).')
+          return
+        }
+        setValidation('')
+        setConfirmation({
+          assigneeId,
+          ...(order.assignmentIntent?.dueAt !== undefined
+            ? { dueAt: order.assignmentIntent.dueAt }
+            : {}),
+          recoveryReason: recoveryReason.trim(),
+        })
+        return
+      }
+      if (activeIntent) {
+        setConfirmation({ ...activeIntent })
+        return
+      }
       if (
+        !open ||
         assignees.isFetching ||
         assignees.isError ||
-        !staff.some((item) => item.id === assigneeId) ||
-        assigneeId === order.assignmentIntent?.assigneeId ||
-        !recoveryReason.trim() ||
-        recoveryReason.trim().length > 2000
+        !staff.some((item) => item.id === assigneeId)
       ) {
-        setValidation('Chọn nhân viên thay thế và nhập lý do khôi phục (tối đa 2000 ký tự).')
+        setValidation('Vui lòng chọn nhân viên dịch vụ từ danh sách đã tải.')
+        return
+      }
+      const parsed = due ? new Date(due) : undefined
+      if (parsed && !Number.isFinite(parsed.getTime())) {
+        setValidation('Hạn hoàn thành không hợp lệ.')
+        return
+      }
+      if (parsed && parsed.getTime() <= Date.now()) {
+        setValidation('Thời hạn phải sau thời điểm hiện tại.')
         return
       }
       setValidation('')
-      setConfirmation({
-        assigneeId,
-        ...(order.assignmentIntent?.dueAt !== undefined
-          ? { dueAt: order.assignmentIntent.dueAt }
-          : {}),
-        recoveryReason: recoveryReason.trim(),
-      })
-      return
-    }
-    if (activeIntent) {
-      setConfirmation({ ...activeIntent })
-      return
-    }
-    if (
-      !open ||
-      assignees.isFetching ||
-      assignees.isError ||
-      !staff.some((item) => item.id === assigneeId)
-    ) {
-      setValidation('Vui lòng chọn nhân viên dịch vụ từ danh sách đã tải.')
-      return
-    }
-    const parsed = due ? new Date(due) : undefined
-    if (parsed && !Number.isFinite(parsed.getTime())) {
-      setValidation('Hạn hoàn thành không hợp lệ.')
-      return
-    }
-    setValidation('')
-    setConfirmation({ assigneeId, ...(parsed ? { dueAt: parsed.toISOString() } : {}) })
-  }
+      setConfirmation({ assigneeId, ...(parsed ? { dueAt: parsed.toISOString() } : {}) })
+    },
+    [
+      disabled,
+      eligible,
+      order.task,
+      order.assignmentIntent,
+      open,
+      pending,
+      editingRecovery,
+      assignees.isFetching,
+      assignees.isError,
+      staff,
+      assigneeId,
+      recoveryReason,
+      activeIntent,
+      due,
+    ],
+  )
   async function confirm() {
     if (
       !confirmation ||
@@ -97,6 +124,15 @@ export function ServiceAssignment({
       (!open && !pending)
     )
       return
+    if (
+      !activeIntent &&
+      confirmation.dueAt &&
+      new Date(confirmation.dueAt).getTime() <= Date.now()
+    ) {
+      setValidation('Thời hạn phải sau thời điểm hiện tại.')
+      setConfirmation(null)
+      return
+    }
     sending.current = true
     const payload = confirmation
     setIntent(payload)
@@ -109,6 +145,7 @@ export function ServiceAssignment({
       sending.current = false
     }
   }
+  if (order.intakeMode === 'COMPLETED_ON_SITE') return null
   return (
     <Panel title="Phân công dịch vụ" className="min-w-0 break-words">
       <div className="space-y-4 text-sm">
@@ -119,6 +156,17 @@ export function ServiceAssignment({
             <p>Đã giao: {dateTime(order.task.assignedAt)}</p>
             {order.task.dueAt && <p>Hạn hoàn thành: {dateTime(order.task.dueAt)}</p>}
             {order.task.completedAt && <p>Hoàn thành: {dateTime(order.task.completedAt)}</p>}
+            {order.task.reassignments?.map((entry) => (
+              <div key={entry.requestId} className="space-y-1 border-t border-border pt-2">
+                <p>Đổi phân công: {dateTime(entry.at)}</p>
+                <p>
+                  Nhân viên trước: {entry.previousAssigneeId} · Nhân viên mới: {entry.assigneeId}
+                </p>
+                <p>Người đổi: {entry.actorId}</p>
+                <p className="whitespace-pre-wrap">Lý do: {entry.reason}</p>
+              </div>
+            ))}
+            <ServiceReassignment order={order} refreshing={refreshing} />
           </div>
         ) : !eligible ? (
           <p>Chỉ phân công sau khi đã chấp nhận và hoàn tất ghi phí (nếu có).</p>
@@ -199,6 +247,7 @@ export function ServiceAssignment({
                     <Input
                       id="assignment-due"
                       type="datetime-local"
+                      min={minimumDue}
                       value={due}
                       disabled={disabled}
                       onChange={(event) => setDue(event.target.value)}

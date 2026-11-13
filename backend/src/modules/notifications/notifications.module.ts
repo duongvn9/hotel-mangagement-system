@@ -8,13 +8,14 @@ import { NotificationScheduler } from './notification.scheduler.js';
 import {
   BrevoNotificationTransport,
   DisabledNotificationTransport,
-  GmailNotificationTransport,
 } from './notification.transport.js';
 import { NOTIFICATION_TRANSPORT } from './notification.types.js';
 import { NotificationsService } from './notifications.service.js';
+import { NotificationsPreviewController } from './notifications-preview.controller.js';
 
 @Module({
   imports: [ConfigModule],
+  controllers: [NotificationsPreviewController],
   providers: [
     NotificationScheduler,
     NotificationsService,
@@ -30,9 +31,7 @@ import { NotificationsService } from './notifications.service.js';
       useFactory: (options: NotificationOptions) =>
         !options.enabled
           ? new DisabledNotificationTransport()
-          : options.brevoApiKey
-            ? new BrevoNotificationTransport(options)
-            : new GmailNotificationTransport(options),
+          : new BrevoNotificationTransport(options),
     },
   ],
   exports: [NotificationsService],
