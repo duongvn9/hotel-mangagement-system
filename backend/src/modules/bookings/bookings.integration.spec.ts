@@ -127,7 +127,7 @@ describe('booking merge integration', () => {
     const { service, booking } = setup(false);
     await expect(
       service.update(String(booking._id), { guestName: 'Updated' }),
-    ).rejects.toThrow('Hold has expired');
+    ).rejects.toThrow('hết hạn');
     expect(booking.status).toBe(BookingStatus.Expired);
   });
 
@@ -135,7 +135,7 @@ describe('booking merge integration', () => {
     const { service, booking, payments } = setup(true, true);
     await expect(
       service.update(String(booking._id), { childCount: 0 }),
-    ).rejects.toThrow('deposit payment is pending');
+    ).rejects.toThrow('đặt cọc chờ xử lý');
     expect(payments.exists).toHaveBeenCalledWith({
       booking: booking._id,
       purpose: PaymentPurpose.Deposit,
@@ -332,7 +332,7 @@ describe('updateHoldRooms', () => {
         holdToken: 'HOLDTOKEN_UPDATE_1',
         rooms: [String(roomA), String(roomA)],
       }),
-    ).rejects.toThrow('Duplicate');
+    ).rejects.toThrow('trùng');
   });
 
   it('rejects when the hold is no longer active', async () => {
@@ -342,7 +342,7 @@ describe('updateHoldRooms', () => {
         holdToken: 'HOLDTOKEN_UPDATE_1',
         rooms: [String(new Types.ObjectId())],
       }),
-    ).rejects.toThrow('Hold not found');
+    ).rejects.toThrow('Không tìm thấy phiên giữ phòng');
   });
 
   it('expires and rejects when the hold window has passed', async () => {
@@ -365,7 +365,7 @@ describe('updateHoldRooms', () => {
         holdToken: 'HOLDTOKEN_UPDATE_1',
         rooms: [String(new Types.ObjectId())],
       }),
-    ).rejects.toThrow('expired');
+    ).rejects.toThrow('hết hạn');
     expect(booking.status).toBe(BookingStatus.Expired);
   });
 
@@ -389,7 +389,7 @@ describe('updateHoldRooms', () => {
         holdToken: 'HOLDTOKEN_UPDATE_1',
         rooms: [String(new Types.ObjectId())],
       }),
-    ).rejects.toThrow('not awaiting room selection');
+    ).rejects.toThrow('không ở bước chọn phòng');
   });
 });
 
@@ -428,13 +428,15 @@ describe('resolveByCode', () => {
   it('rejects a malformed code before querying', async () => {
     const { service, bookings } = makeService({ _id: new Types.ObjectId() });
     await expect(service.resolveByCode('!!')).rejects.toThrow(
-      'Invalid booking code',
+      'Mã booking không hợp lệ',
     );
     expect(bookings.findOne).not.toHaveBeenCalled();
   });
 
   it('throws when no booking matches the code', async () => {
     const { service } = makeService(null);
-    await expect(service.resolveByCode('BKZZZ9')).rejects.toThrow('not found');
+    await expect(service.resolveByCode('BKZZZ9')).rejects.toThrow(
+      'Không tìm thấy',
+    );
   });
 });

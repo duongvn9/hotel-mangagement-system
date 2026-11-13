@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Button, Input } from '@/components/atoms'
 import { Alert, FormField } from '@/components/molecules'
 import { getErrorMessage } from '@/lib/api-client'
@@ -34,8 +34,17 @@ export function LookupBookingPage() {
           <p className="text-xs font-semibold tracking-widest text-primary uppercase">Đặt phòng</p>
           <h1 className="mt-2 font-display text-5xl">Tra cứu đặt phòng</h1>
           <p className="mt-3 text-muted-foreground">
-            Dành cho khách chưa đăng nhập. Nhập mã booking (vé) đã nhận qua email để xem và thanh
-            toán đơn.
+            Dành cho đơn bạn đã{' '}
+            <strong className="text-foreground">đặt nhanh, không tạo tài khoản</strong>. Chỉ cần
+            nhập mã booking (vé) trong email xác nhận là xem và thanh toán được đơn — không cần đăng
+            nhập.
+          </p>
+          <p className="mt-3 rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground">
+            Bạn đã đặt phòng bằng tài khoản đã đăng ký?{' '}
+            <Link to="/login" className="font-medium text-primary hover:underline">
+              Đăng nhập
+            </Link>{' '}
+            để xem đơn trong mục đặt phòng của bạn.
           </p>
 
           <form

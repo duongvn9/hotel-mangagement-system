@@ -183,14 +183,18 @@ export class BookingsService {
   async createWalkIn(dto: CreateBookingDto, user: AuthUser) {
     const roomIds = dto.rooms.map((id) => new Types.ObjectId(id));
     if (new Set(dto.rooms).size !== dto.rooms.length) {
-      throw new BadRequestException('Duplicate rooms in request');
+      throw new BadRequestException(
+        'Danh sách phòng bị trùng. Vui lòng kiểm tra lại.',
+      );
     }
     let stay: StayInterval;
     try {
       stay = normalizeStay(dto);
     } catch (error) {
       throw new BadRequestException(
-        error instanceof Error ? error.message : 'Invalid stay dates',
+        error instanceof Error
+          ? error.message
+          : 'Ngày nhận/trả phòng không hợp lệ.',
       );
     }
 
@@ -213,7 +217,7 @@ export class BookingsService {
     if (await this.lostConfirmedRace(booking._id, roomIds, stay)) {
       await this.bookings.deleteOne({ _id: booking._id });
       throw new ConflictException(
-        'One or more rooms were just taken; please choose again',
+        'Có phòng vừa được người khác giữ mất. Vui lòng chọn lại.',
       );
     }
 
@@ -274,7 +278,7 @@ export class BookingsService {
           );
       } catch (error) {
         throw new BadRequestException(
-          error instanceof Error ? error.message : 'Invalid date filter',
+          error instanceof Error ? error.message : 'Bộ lọc ngày không hợp lệ.',
         );
       }
       filter.checkIn = range;
@@ -382,18 +386,20 @@ export class BookingsService {
    */
   async update(bookingId: string, dto: UpdateBookingDto) {
     if (!/^[a-f\d]{24}$/i.test(bookingId)) {
-      throw new BadRequestException('Invalid booking ID');
+      throw new BadRequestException('Đường dẫn đơn đặt phòng không hợp lệ.');
     }
     const fields = Object.values(dto).filter((value) => value !== undefined);
     if (fields.length === 0) {
-      throw new BadRequestException('Nothing to update');
+      throw new BadRequestException('Không có thông tin nào để cập nhật.');
     }
     if (dto.rooms && new Set(dto.rooms).size !== dto.rooms.length) {
-      throw new BadRequestException('Duplicate rooms in request');
+      throw new BadRequestException(
+        'Danh sách phòng bị trùng. Vui lòng kiểm tra lại.',
+      );
     }
     const booking = await this.bookings.findById(bookingId);
     if (!booking || !booking.isActive) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException('Không tìm thấy đơn đặt phòng.');
     }
     if (
       ![BookingStatus.PendingDeposit, BookingStatus.Confirmed].includes(
@@ -401,7 +407,7 @@ export class BookingsService {
       )
     ) {
       throw new ConflictException(
-        'Only a pending or confirmed booking can be updated',
+        'Chỉ có thể chỉnh sửa đơn đang chờ cọc hoặc đã xác nhận.',
       );
     }
 
@@ -434,7 +440,9 @@ export class BookingsService {
       });
       if (!hold) {
         await this.lazyExpire(booking, null, this.clock.now());
-        throw new ConflictException('Hold has expired; please start again');
+        throw new ConflictException(
+          'Phiên giữ phòng đã hết hạn. Vui lòng bắt đầu lại.',
+        );
       }
     }
     if (
@@ -447,7 +455,7 @@ export class BookingsService {
       }))
     ) {
       throw new ConflictException(
-        'Cannot change stay while a deposit payment is pending',
+        'Không thể đổi kỳ lưu trú khi đang có giao dịch đặt cọc chờ xử lý.',
       );
     }
 
@@ -463,7 +471,9 @@ export class BookingsService {
         });
       } catch (error) {
         throw new BadRequestException(
-          error instanceof Error ? error.message : 'Invalid stay dates',
+          error instanceof Error
+            ? error.message
+            : 'Ngày nhận/trả phòng không hợp lệ.',
         );
       }
       const occupancy = {
@@ -471,7 +481,7 @@ export class BookingsService {
         childCount: dto.childCount ?? booking.childCount,
       };
       if (occupancy.adultCount < 1) {
-        throw new BadRequestException('Party must include at least one adult');
+        throw new BadRequestException('Phải có ít nhất một người lớn.');
       }
       const { roomTotal, rates } = await this.priceRooms(
         roomIds,
@@ -518,7 +528,9 @@ export class BookingsService {
         : null;
       if (pending && !hold) {
         await this.bookings.updateOne({ _id: booking._id }, { $set: previous });
-        throw new ConflictException('Hold has expired; please start again');
+        throw new ConflictException(
+          'Phiên giữ phòng đã hết hạn. Vui lòng bắt đầu lại.',
+        );
       }
       // Hai thao tác đổi cùng phòng/ngày cùng lúc: bên có _id nhỏ hơn thắng; bên thua hoàn tác.
       const stay = { checkIn: booking.checkIn, checkOut: booking.checkOut };
@@ -545,7 +557,7 @@ export class BookingsService {
           );
         }
         throw new ConflictException(
-          'One or more rooms were just taken; please choose again',
+          'Có phòng vừa được người khác giữ mất. Vui lòng chọn lại.',
         );
       }
     }
@@ -575,11 +587,11 @@ export class BookingsService {
    */
   async cancel(bookingId: string, actor: BookingActor) {
     if (!/^[a-f\d]{24}$/i.test(bookingId)) {
-      throw new BadRequestException('Invalid booking ID');
+      throw new BadRequestException('Đường dẫn đơn đặt phòng không hợp lệ.');
     }
     const booking = await this.bookings.findById(bookingId);
     if (!booking || !booking.isActive) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException('Không tìm thấy đơn đặt phòng.');
     }
     authorizeBookingAccess(booking, actor);
     if (
@@ -590,7 +602,7 @@ export class BookingsService {
       ].includes(booking.status)
     ) {
       throw new ConflictException(
-        'Only a held, pending or confirmed booking can be cancelled',
+        'Chỉ có thể huỷ đơn đang giữ phòng, đang chờ cọc hoặc đã xác nhận.',
       );
     }
     booking.status = BookingStatus.Cancelled;
@@ -644,13 +656,15 @@ export class BookingsService {
       .exec();
 
     if (rows.length !== roomIds.length) {
-      throw new BadRequestException('One or more rooms do not exist');
+      throw new BadRequestException(
+        'Có phòng không tồn tại. Vui lòng chọn lại.',
+      );
     }
     const nights = Math.round(
       (stay.checkOut.getTime() - stay.checkIn.getTime()) / MS_PER_DAY,
     );
     if (!Number.isSafeInteger(nights) || nights <= 0) {
-      throw new BadRequestException('Stay must cover at least one night');
+      throw new BadRequestException('Kỳ lưu trú phải có ít nhất một đêm.');
     }
 
     let adultCapacity = 0;
@@ -659,10 +673,12 @@ export class BookingsService {
     const rates: RoomRate[] = [];
     for (const room of rows) {
       if (!room.isActive || room.status === RoomStatus.Maintenance) {
-        throw new ConflictException(`Room ${room._id} is not bookable`);
+        throw new ConflictException(`Phòng ${room._id} hiện không thể đặt.`);
       }
       if (!room.roomType || !room.roomType.isActive) {
-        throw new ConflictException(`Room ${room._id} has no active room type`);
+        throw new ConflictException(
+          `Phòng ${room._id} chưa có loại phòng đang hoạt động.`,
+        );
       }
       adultCapacity += room.roomType.adultCapacity;
       childCapacity += room.roomType.childCapacity;
@@ -674,7 +690,7 @@ export class BookingsService {
       occupancy.childCount > childCapacity
     ) {
       throw new BadRequestException(
-        'Selected rooms cannot hold the party size',
+        'Các phòng đã chọn không đủ chỗ cho số khách.',
       );
     }
     return { roomTotal: perNight * nights, rates };
@@ -698,7 +714,7 @@ export class BookingsService {
       )
     ) {
       throw new ConflictException(
-        'One or more rooms are not available for the selected dates',
+        'Có phòng không còn trống trong khoảng ngày bạn chọn. Vui lòng chọn lại.',
       );
     }
   }
@@ -848,7 +864,7 @@ export class BookingsService {
         throw error;
       }
     }
-    throw new ConflictException('Could not allocate a unique booking code');
+    throw new ConflictException('Không tạo được mã booking. Vui lòng thử lại.');
   }
 
   private newBookingCode(): string {
@@ -876,14 +892,18 @@ export class BookingsService {
   ) {
     const roomIds = dto.rooms.map((id) => new Types.ObjectId(id));
     if (new Set(dto.rooms).size !== dto.rooms.length) {
-      throw new BadRequestException('Duplicate rooms in request');
+      throw new BadRequestException(
+        'Danh sách phòng bị trùng. Vui lòng kiểm tra lại.',
+      );
     }
     let stay: StayInterval;
     try {
       stay = normalizeStay(dto);
     } catch (error) {
       throw new BadRequestException(
-        error instanceof Error ? error.message : 'Invalid stay dates',
+        error instanceof Error
+          ? error.message
+          : 'Ngày nhận/trả phòng không hợp lệ.',
       );
     }
     const now = this.clock.now();
@@ -937,7 +957,7 @@ export class BookingsService {
           await new Promise((resolve) => setTimeout(resolve, 25));
         }
         throw new ConflictException(
-          'A booking is being created; please retry shortly',
+          'Đơn đang được tạo. Vui lòng thử lại sau giây lát.',
         );
       }
     }
@@ -996,7 +1016,7 @@ export class BookingsService {
         await this.holds.deleteOne({ _id: hold._id });
         await this.bookings.deleteOne({ _id: booking._id });
         throw new ConflictException(
-          'One or more rooms were just taken; please choose again',
+          'Có phòng vừa được người khác giữ mất. Vui lòng chọn lại.',
         );
       }
       return await this.holdResponse(booking, hold);
@@ -1089,22 +1109,28 @@ export class BookingsService {
   async submitDetails(dto: SubmitBookingDetailsDto) {
     const hold = await this.holds.findOne({ holdToken: dto.holdToken });
     if (!hold || !hold.isActive) {
-      throw new NotFoundException('Hold not found or no longer active');
+      throw new NotFoundException(
+        'Không tìm thấy phiên giữ phòng, hoặc phiên đã kết thúc. Vui lòng bắt đầu lại.',
+      );
     }
     const now = this.clock.now();
     const booking = await this.bookings.findById(hold.booking);
     if (!booking || !booking.isActive) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException('Không tìm thấy đơn đặt phòng.');
     }
     if (!(hold.expiresAt > now)) {
       await this.lazyExpire(booking, hold, now);
-      throw new ConflictException('Hold has expired; please start again');
+      throw new ConflictException(
+        'Phiên giữ phòng đã hết hạn. Vui lòng bắt đầu lại.',
+      );
     }
     if (booking.status === BookingStatus.PendingDeposit) {
       return await this.holdResponse(booking, hold); // idempotent
     }
     if (booking.status !== BookingStatus.RoomHeld) {
-      throw new ConflictException('Booking is not awaiting contact details');
+      throw new ConflictException(
+        'Đơn này không ở bước nhập thông tin liên hệ.',
+      );
     }
     booking.guestName = dto.guestName.trim();
     booking.guestEmail = dto.guestEmail.trim();
@@ -1136,23 +1162,29 @@ export class BookingsService {
    */
   async updateHoldRooms(dto: UpdateHoldRoomsDto) {
     if (new Set(dto.rooms).size !== dto.rooms.length) {
-      throw new BadRequestException('Duplicate rooms in request');
+      throw new BadRequestException(
+        'Danh sách phòng bị trùng. Vui lòng kiểm tra lại.',
+      );
     }
     const hold = await this.holds.findOne({ holdToken: dto.holdToken });
     if (!hold || !hold.isActive) {
-      throw new NotFoundException('Hold not found or no longer active');
+      throw new NotFoundException(
+        'Không tìm thấy phiên giữ phòng, hoặc phiên đã kết thúc. Vui lòng bắt đầu lại.',
+      );
     }
     const now = this.clock.now();
     const booking = await this.bookings.findById(hold.booking);
     if (!booking || !booking.isActive) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException('Không tìm thấy đơn đặt phòng.');
     }
     if (!(hold.expiresAt > now)) {
       await this.lazyExpire(booking, hold, now);
-      throw new ConflictException('Hold has expired; please start again');
+      throw new ConflictException(
+        'Phiên giữ phòng đã hết hạn. Vui lòng bắt đầu lại.',
+      );
     }
     if (booking.status !== BookingStatus.RoomHeld) {
-      throw new ConflictException('Booking is not awaiting room selection');
+      throw new ConflictException('Đơn này không ở bước chọn phòng.');
     }
 
     const roomIds = dto.rooms.map((id) => new Types.ObjectId(id));
@@ -1177,7 +1209,7 @@ export class BookingsService {
       )
     ) {
       throw new ConflictException(
-        'One or more rooms are not available for the selected dates',
+        'Có phòng không còn trống trong khoảng ngày bạn chọn. Vui lòng chọn lại.',
       );
     }
 
@@ -1198,13 +1230,17 @@ export class BookingsService {
   async resolveByCode(code: string) {
     const trimmed = (code ?? '').trim().toUpperCase();
     if (!/^[A-Z0-9-]{4,40}$/.test(trimmed)) {
-      throw new BadRequestException('Invalid booking code');
+      throw new BadRequestException(
+        'Mã booking không hợp lệ. Mã gồm 4–40 ký tự chữ, số hoặc dấu gạch nối.',
+      );
     }
     const booking = await this.bookings
       .findOne({ code: trimmed, isActive: true })
       .select('_id');
     if (!booking) {
-      throw new NotFoundException('Booking not found for this code');
+      throw new NotFoundException(
+        'Không tìm thấy đơn nào với mã này. Vui lòng kiểm tra lại mã booking (vé) trong email.',
+      );
     }
     return { id: String(booking._id) };
   }
@@ -1215,11 +1251,11 @@ export class BookingsService {
     ctx: { code?: string; user?: AuthUser; sessionId?: string },
   ) {
     if (!/^[a-f\d]{24}$/i.test(id)) {
-      throw new BadRequestException('Invalid booking ID');
+      throw new BadRequestException('Đường dẫn đơn đặt phòng không hợp lệ.');
     }
     const booking = await this.bookings.findById(id);
     if (!booking || !booking.isActive) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException('Không tìm thấy đơn đặt phòng.');
     }
     const hold = await this.holds
       .findOne({ booking: booking._id })

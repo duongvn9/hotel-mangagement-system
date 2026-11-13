@@ -16,7 +16,7 @@ export async function withBookingFinancialOperation<T>(
   operation: () => Promise<T>,
 ): Promise<T> {
   if (!/^[a-f\d]{24}$/i.test(bookingId))
-    throw new BadRequestException('Invalid booking ID');
+    throw new BadRequestException('Đường dẫn đơn đặt phòng không hợp lệ.');
   bookingId = new Types.ObjectId(bookingId).toHexString();
   const current = ownership.getStore();
   if (current?.bookingId === bookingId) {
@@ -25,7 +25,9 @@ export async function withBookingFinancialOperation<T>(
       financialOperationToken: current.token,
     });
     if (!owned)
-      throw new ConflictException('Financial operation ownership lost');
+      throw new ConflictException(
+        'Thao tác thanh toán bị gián đoạn. Vui lòng thử lại.',
+      );
     return operation();
   }
   const token = randomUUID();
@@ -54,11 +56,13 @@ export async function withBookingFinancialOperation<T>(
         isActive: true,
       }))
     )
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException('Không tìm thấy đơn đặt phòng.');
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   if (!acquired)
-    throw new ConflictException('A financial operation is in progress; retry');
+    throw new ConflictException(
+      'Đang có một thao tác thanh toán khác diễn ra. Vui lòng thử lại.',
+    );
   try {
     return await ownership.run({ bookingId, token }, operation);
   } finally {
