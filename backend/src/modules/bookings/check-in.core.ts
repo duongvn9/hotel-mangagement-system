@@ -2,6 +2,9 @@ import { BookingStatus } from '../../common/constants/booking-status.enum.js';
 import { RoomStatus } from '../../common/constants/room-status.enum.js';
 import { businessDay } from './room-status-board.core.js';
 
+/** Reception attaches between 1 and this many ID photos when checking a guest in. */
+export const CHECK_IN_EVIDENCE_MAX = 5;
+
 export interface RoomReplacement {
   from: string;
   to: string;

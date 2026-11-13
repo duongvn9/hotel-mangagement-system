@@ -141,6 +141,10 @@ export class Booking {
   @Prop()
   checkedInAt?: Date;
 
+  /** S3 keys of the ID photos (1 to 5) reception attached at check-in (private storage). */
+  @Prop({ type: [String] })
+  checkInEvidence?: string[];
+
   @Prop()
   checkedOutAt?: Date;
 

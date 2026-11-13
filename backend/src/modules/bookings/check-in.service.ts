@@ -6,7 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { type HydratedDocument, Model, Types } from 'mongoose';
+import type { AssetImageFile } from '../../common/asset-images.service.js';
 import { BookingStatus } from '../../common/constants/booking-status.enum.js';
 import { RoomStatus } from '../../common/constants/room-status.enum.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
@@ -20,6 +21,7 @@ import { AvailabilityClock } from './availability.adapters.js';
 import { AvailabilityService } from './availability.service.js';
 import {
   applyReplacements,
+  CHECK_IN_EVIDENCE_MAX,
   checkInStatusError,
   checkInWindowError,
   describeNotReady,
@@ -33,6 +35,7 @@ import type {
   CheckInResult,
 } from './dto/check-in.dto.js';
 import { checkInConfirmationEmail } from './booking-email.js';
+import { CheckInEvidenceStorage } from './check-in-evidence.storage.js';
 import { businessDay } from './room-status-board.core.js';
 import { Booking } from './schemas/booking.schema.js';
 
@@ -57,6 +60,7 @@ export class CheckInService {
     private readonly notifications: NotificationsService,
     @InjectModel(PaymentTransaction.name)
     private readonly payments: Model<PaymentTransaction>,
+    private readonly evidenceStorage: CheckInEvidenceStorage,
   ) {}
 
   /**
@@ -65,7 +69,16 @@ export class CheckInService {
    * không đổi). Mongo không có transaction ở đây nên mọi bước ghi đều có điều kiện, và nếu
    * một phòng bị người khác lấy mất thì hoàn tác phần đã làm rồi trả 409.
    */
-  async checkIn(bookingId: string, dto: CheckInDto): Promise<CheckInResult> {
+  async checkIn(
+    bookingId: string,
+    dto: CheckInDto,
+    photos?: AssetImageFile[],
+  ): Promise<CheckInResult> {
+    if (!photos || photos.length < 1 || photos.length > CHECK_IN_EVIDENCE_MAX) {
+      throw new BadRequestException(
+        `Check-in requires 1 to ${CHECK_IN_EVIDENCE_MAX} identity-document photos`,
+      );
+    }
     const booking = await this.confirmedBooking(bookingId);
     await this.requireDepositPaid(booking);
     const windowError = checkInWindowError(
@@ -90,6 +103,29 @@ export class CheckInService {
       throw new ConflictException(describeNotReady(blocked));
     }
 
+    // The photos are stored only after every check has passed; any later failure deletes them so no orphan file is left behind.
+    const evidenceKeys = await this.evidenceStorage.putAll(photos);
+    try {
+      return await this.commit(
+        booking,
+        finalIds,
+        finalRooms,
+        replacements,
+        evidenceKeys,
+      );
+    } catch (error) {
+      await this.evidenceStorage.removeAll(evidenceKeys);
+      throw error;
+    }
+  }
+
+  private async commit(
+    booking: HydratedDocument<Booking>,
+    finalIds: string[],
+    finalRooms: LeanRoom[],
+    replacements: RoomReplacement[],
+    evidenceKeys: string[],
+  ): Promise<CheckInResult> {
     const swap = new Map(replacements.map(({ from, to }) => [from, to]));
     const roomObjectIds = finalIds.map((id) => new Types.ObjectId(id));
     const now = this.clock.now();
@@ -100,6 +136,7 @@ export class CheckInService {
           $set: {
             status: BookingStatus.CheckedIn,
             checkedInAt: now,
+            checkInEvidence: evidenceKeys,
             rooms: roomObjectIds,
             rateSnapshot: booking.rateSnapshot.map((entry) => ({
               room: new Types.ObjectId(
@@ -138,7 +175,7 @@ export class CheckInService {
               rooms: previous.rooms,
               rateSnapshot: previous.rateSnapshot,
             },
-            $unset: { checkedInAt: 1 },
+            $unset: { checkedInAt: 1, checkInEvidence: 1 },
           },
         );
         throw new ConflictException(
@@ -237,6 +274,34 @@ export class CheckInService {
         };
       }),
     };
+  }
+
+  /** How many ID photos the booking has (0 before check-in or for bookings checked in without one). */
+  async evidenceCount(bookingId: string): Promise<{ count: number }> {
+    return { count: (await this.evidenceKeys(bookingId)).length };
+  }
+
+  /** One stored ID photo, read from private storage; 404 when that position does not exist. */
+  async evidencePhoto(
+    bookingId: string,
+    index: number,
+  ): Promise<{ body: Uint8Array; contentType: string }> {
+    const key = (await this.evidenceKeys(bookingId))[index];
+    if (!key) throw new NotFoundException('This booking has no check-in photo');
+    return this.evidenceStorage.get(key);
+  }
+
+  private async evidenceKeys(bookingId: string): Promise<string[]> {
+    if (!Types.ObjectId.isValid(bookingId)) {
+      throw new BadRequestException('Invalid booking id');
+    }
+    const booking = await this.bookings
+      .findById(bookingId)
+      .select('checkInEvidence')
+      .lean()
+      .exec();
+    if (!booking) throw new NotFoundException('Booking not found');
+    return booking.checkInEvidence ?? [];
   }
 
   /**

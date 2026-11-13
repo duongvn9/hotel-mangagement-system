@@ -3,6 +3,7 @@ import {
   type MiddlewareConsumer,
   type NestModule,
 } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RoomsModule } from '../rooms/rooms.module.js';
 import { ServicesModule } from '../services/services.module.js';
@@ -31,6 +32,7 @@ import { BookingsController } from './bookings.controller.js';
 import { BookingsService } from './bookings.service.js';
 import { GuestSessionMiddleware } from './guest-session.middleware.js';
 import { HoldExpiryService } from './hold-expiry.service.js';
+import { CheckInEvidenceStorage } from './check-in-evidence.storage.js';
 import { CheckInService } from './check-in.service.js';
 import { FrontDeskController } from './front-desk.controller.js';
 import { FrontDeskService } from './front-desk.service.js';
@@ -39,6 +41,7 @@ import { RoomStatusBoardService } from './room-status-board.service.js';
 
 @Module({
   imports: [
+    ConfigModule,
     RoomsModule,
     ServicesModule,
     NotificationsModule,
@@ -68,6 +71,7 @@ import { RoomStatusBoardService } from './room-status-board.service.js';
     RoomStatusBoardService,
     FrontDeskService,
     CheckInService,
+    CheckInEvidenceStorage,
     {
       provide: AvailabilityRoomSource,
       useClass: MongoAvailabilityRoomSource,

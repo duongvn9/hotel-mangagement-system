@@ -5,12 +5,21 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
+  Res,
+  StreamableFile,
+  UploadedFiles,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import type { AssetImageFile } from '../../common/asset-images.service.js';
+import type { Response } from 'express';
 import {
   ApiConflictResponse,
+  ApiConsumes,
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
@@ -51,6 +60,7 @@ import {
 } from './dto/list-bookings.dto.js';
 import { MyBookingItem } from './dto/my-bookings.dto.js';
 import { BookingsService } from './bookings.service.js';
+import { CHECK_IN_EVIDENCE_MAX } from './check-in.core.js';
 import { CheckInService } from './check-in.service.js';
 import { ServicesService } from '../services/services.service.js';
 
@@ -195,19 +205,62 @@ export class BookingsController {
     return this.bookings.update(id, dto);
   }
 
-  @Post(':id/check-in')
+  @Get(':id/check-in-evidence')
   @Roles(Role.Receptionist, Role.Manager)
   @ApiOperation({
     summary:
-      'UC16 — Check in a confirmed booking, optionally swapping rooms that are not ready (Receptionist/Manager)',
+      'How many check-in ID photos the booking has (Receptionist/Manager)',
+  })
+  checkInEvidenceCount(@Param('id') id: string) {
+    return this.checkIns.evidenceCount(id);
+  }
+
+  @Get(':id/check-in-evidence/:index')
+  @Roles(Role.Receptionist, Role.Manager)
+  @ApiOperation({
+    summary:
+      'One check-in ID photo, streamed from private storage (Receptionist/Manager)',
+  })
+  async checkInEvidencePhoto(
+    @Param('id') id: string,
+    @Param('index', ParseIntPipe) index: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { body, contentType } = await this.checkIns.evidencePhoto(id, index);
+    res.set({
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    return new StreamableFile(body, { type: contentType });
+  }
+
+  @Post(':id/check-in')
+  @Roles(Role.Receptionist, Role.Manager)
+  @UseInterceptors(
+    FilesInterceptor('evidence', CHECK_IN_EVIDENCE_MAX, {
+      limits: {
+        fileSize: 5 * 1024 * 1024,
+        files: CHECK_IN_EVIDENCE_MAX,
+        fields: 2,
+      },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary:
+      'UC16 — Check in a confirmed booking with 1 to 5 ID photos, optionally swapping rooms that are not ready (Receptionist/Manager)',
   })
   @ApiCreatedResponse({ type: CheckInResult })
   @ApiConflictResponse({
     description:
       'Booking cannot check in now, or its rooms are not ready or were just taken',
   })
-  checkIn(@Param('id') id: string, @Body() dto: CheckInDto) {
-    return this.checkIns.checkIn(id, dto);
+  checkIn(
+    @Param('id') id: string,
+    @Body() dto: CheckInDto,
+    @UploadedFiles() evidence?: AssetImageFile[],
+  ) {
+    return this.checkIns.checkIn(id, dto, evidence);
   }
 
   @Get(':id/check-in-options')
