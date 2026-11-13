@@ -4,7 +4,11 @@ import { api } from '@/lib/api-client'
 import type { ServiceOrder } from './api'
 
 export interface ServiceHistory extends ServiceOrder {
-  task: {
+  intakeMode?: 'UNPERFORMED' | 'COMPLETED_ON_SITE'
+  actualPerformerId?: string
+  actualCompletedAt?: string
+  completionDetails?: string
+  task: null | {
     id: string
     status: string
     assignedAt: string

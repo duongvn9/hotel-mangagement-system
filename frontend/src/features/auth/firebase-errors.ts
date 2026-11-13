@@ -11,6 +11,10 @@ const MESSAGES: Record<string, string> = {
   'auth/popup-blocked':
     'Trình duyệt đã chặn cửa sổ đăng nhập Google, hãy cho phép popup rồi thử lại',
   'auth/unauthorized-domain': 'Tên miền này chưa được phép đăng nhập bằng Google',
+  'auth/requires-recent-login':
+    'Phiên đăng nhập đã lâu, vui lòng đăng xuất rồi đăng nhập lại để đổi mật khẩu',
+  'auth/provider-already-linked': 'Tài khoản đã có mật khẩu',
+  'auth/missing-email': 'Vui lòng nhập email',
 }
 
 /** Đổi lỗi Firebase Auth (có `code`) sang câu tiếng Việt. */

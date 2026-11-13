@@ -4,6 +4,14 @@ import Joi from 'joi';
 /* eslint-disable unicorn/no-thenable, no-control-regex */
 
 export const notificationConfigFields = {
+  MAIL_FROM_NAME: Joi.string()
+    .pattern(/^[^\r\n\u0000]+$/)
+    .max(200)
+    .default('Grand Emily Hotel'),
+  HOTEL_LOGO_URL: Joi.string().uri().allow('').default(''),
+  HOTEL_BANNER_URL: Joi.string().uri().allow('').default(''),
+  APP_BASE_URL: Joi.string().uri().allow('').default('http://localhost:5173'),
+  NOTIFICATIONS_MAX_RETRIES: Joi.number().integer().min(0).max(10).default(3),
   NOTIFICATIONS_ENABLED: Joi.boolean().default(false),
   GMAIL_USER: Joi.string()
     .email({ tlds: { allow: false } })
@@ -12,19 +20,13 @@ export const notificationConfigFields = {
       then: Joi.required(),
       otherwise: Joi.allow('').optional(),
     }),
-  GMAIL_APP_PASSWORD: Joi.string()
-    .replace(/\s/g, '')
+  BREVO_API_KEY: Joi.string()
+    .trim()
     .when('NOTIFICATIONS_ENABLED', {
       is: true,
-      // Brevo sends over HTTPS with its own key; GMAIL_USER stays the sender address.
-      then: Joi.when('BREVO_API_KEY', {
-        is: Joi.string().min(1).required(),
-        then: Joi.allow('').optional(),
-        otherwise: Joi.required(),
-      }),
+      then: Joi.string().min(1).required(),
       otherwise: Joi.allow('').optional(),
     }),
-  BREVO_API_KEY: Joi.string().allow('').optional(),
   NOTIFICATIONS_FROM_NAME: Joi.string()
     .pattern(/^[^\r\n\u0000]+$/)
     .max(200)
@@ -55,9 +57,13 @@ export const notificationConfigFields = {
 export const notificationConfiguration = (env: NodeJS.ProcessEnv) => ({
   enabled: env.NOTIFICATIONS_ENABLED?.toLowerCase() === 'true',
   user: env.GMAIL_USER ?? '',
-  appPassword: (env.GMAIL_APP_PASSWORD ?? '').replace(/\s/g, ''),
   brevoApiKey: env.BREVO_API_KEY ?? '',
-  fromName: env.NOTIFICATIONS_FROM_NAME ?? 'Grand Emily Hotel',
+  fromName:
+    env.MAIL_FROM_NAME ?? env.NOTIFICATIONS_FROM_NAME ?? 'Grand Emily Hotel',
+  logoUrl: env.HOTEL_LOGO_URL ?? '',
+  bannerUrl: env.HOTEL_BANNER_URL ?? '',
+  appBaseUrl: env.APP_BASE_URL ?? 'http://localhost:5173',
+  maxRetries: Number(env.NOTIFICATIONS_MAX_RETRIES ?? 3),
   maxAttempts: Number(env.NOTIFICATIONS_MAX_ATTEMPTS ?? 3),
   retryBaseDelayMs: Number(env.NOTIFICATIONS_RETRY_BASE_DELAY_MS ?? 1000),
   sendTimeoutMs: Number(env.NOTIFICATIONS_SEND_TIMEOUT_MS ?? 10000),

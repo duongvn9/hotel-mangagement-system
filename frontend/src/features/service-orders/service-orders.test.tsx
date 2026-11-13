@@ -14,6 +14,7 @@ import {
 import { orderKeys } from './hooks'
 import { serviceOrderRoutes } from './routes'
 import { OrderReceipt } from './presentation'
+import { StatusBadge } from '@/components/atoms'
 
 vi.mock('@/lib/api-client', () => ({ api: { get: vi.fn(), post: vi.fn() } }))
 const bookingId = 'a'.repeat(24)
@@ -97,10 +98,51 @@ it('uses human fallbacks when booking context is missing', () => {
   expect(document.body).not.toHaveTextContent(receipt.id)
 })
 
+it('shows abandoned public reasons in the receipt and customer history without private recovery data', async () => {
+  const abandoned = {
+    ...receipt,
+    reviewStatus: 'ABANDONED' as const,
+    reviewReason: 'Lịch dịch vụ đã qua, không thực hiện.',
+    acceptanceRecovery: { reason: 'PRIVATE RECOVERY EVIDENCE' },
+  }
+  expect(normalizeOrderQuery({ page: 1, limit: 20, reviewStatus: 'ABANDONED' })).toEqual({
+    page: 1,
+    limit: 20,
+    reviewStatus: 'ABANDONED',
+  })
+  const view = render(
+    <>
+      <StatusBadge status="ABANDONED" />
+      <OrderReceipt order={abandoned} />
+    </>,
+  )
+  expect(screen.getAllByText('Đã dừng kỹ thuật · lịch dịch vụ đã qua')).toHaveLength(2)
+  expect(
+    screen.getByText('Lý do từ chối: Lịch dịch vụ đã qua, không thực hiện.'),
+  ).toBeInTheDocument()
+  expect(
+    screen.getByText('Trạng thái yêu cầu: Đã dừng kỹ thuật · lịch dịch vụ đã qua'),
+  ).toBeInTheDocument()
+  expect(document.body).not.toHaveTextContent('PRIVATE RECOVERY EVIDENCE')
+  expect(document.body).not.toHaveTextContent('Yêu cầu đã được chấp nhận.')
+  view.unmount()
+  vi.mocked(api.get).mockResolvedValue({
+    data: { items: [abandoned], total: 1, page: 1, limit: 20 },
+  })
+  renderPage('/customer/service-orders/history')
+  await screen.findByRole('link', { name: 'Giặt ủi' })
+  expect(
+    screen.getByRole('option', { name: 'Đã dừng kỹ thuật · lịch dịch vụ đã qua' }),
+  ).toBeInTheDocument()
+  expect(document.body).not.toHaveTextContent('Chưa xác định')
+  expect(document.body).not.toHaveTextContent('PRIVATE RECOVERY EVIDENCE')
+})
+
 describe('shared service-order business states', () => {
   it.each([
     ['PENDING_REVIEW', 'NOT_STARTED', 'PENDING_REVIEW', 'Chờ duyệt'],
     ['REJECTED', 'NOT_STARTED', 'REJECTED', 'Đã từ chối'],
+    ['ABANDONED', 'NOT_STARTED', 'ABANDONED', 'Đã dừng kỹ thuật · lịch dịch vụ đã qua'],
     ['ACCEPTED', 'NOT_STARTED', 'ACCEPTED', 'Đã chấp nhận'],
     ['ACCEPTED', 'ASSIGNED', 'ASSIGNED', 'Đã phân công'],
     ['ACCEPTED', 'IN_PROGRESS', 'IN_PROGRESS', 'Đang thực hiện'],

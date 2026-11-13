@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
@@ -27,6 +27,18 @@ export class CheckInDto {
     type: [RoomReplacementDto],
     description:
       'Đổi phòng chưa sẵn sàng sang phòng khác cùng loại ngay lúc check-in (giá không đổi)',
+  })
+  // In multipart the array arrives as a JSON string; malformed JSON is kept as-is so validation reports it.
+  @Transform(({ value }: { value: unknown }) => {
+    if (typeof value !== 'string') return value;
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return Array.isArray(parsed)
+        ? plainToInstance(RoomReplacementDto, parsed)
+        : parsed;
+    } catch {
+      return value;
+    }
   })
   @IsOptional()
   @IsArray()

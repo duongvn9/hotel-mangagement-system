@@ -2,8 +2,17 @@ import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { AxiosError, AxiosHeaders } from 'axios'
-import { onAuthStateChanged, type User } from 'firebase/auth'
+import {
+  EmailAuthProvider,
+  linkWithCredential,
+  onAuthStateChanged,
+  reauthenticateWithCredential,
+  sendPasswordResetEmail,
+  updatePassword,
+  type User,
+} from 'firebase/auth'
 import { queryClient } from '@/app/query-client'
+import { firebaseAuth } from '@/lib/firebase'
 import { getMe, registerAccount } from './api'
 import { useAuth, type AuthContextValue } from './auth-context'
 import { AuthProvider } from './AuthProvider'
@@ -27,6 +36,11 @@ vi.mock('firebase/auth', () => ({
   deleteUser: vi.fn(),
   sendEmailVerification: vi.fn(),
   signInWithEmailAndPassword: vi.fn(),
+  EmailAuthProvider: { credential: vi.fn(() => 'password-credential') },
+  linkWithCredential: vi.fn(() => Promise.resolve()),
+  reauthenticateWithCredential: vi.fn(() => Promise.resolve()),
+  updatePassword: vi.fn(() => Promise.resolve()),
+  sendPasswordResetEmail: vi.fn(() => Promise.resolve()),
 }))
 vi.mock('./api', () => ({ getMe: vi.fn(), registerAccount: vi.fn() }))
 
@@ -205,5 +219,78 @@ describe('AuthProvider.loginWithGoogle', () => {
     expect(registerAccount).not.toHaveBeenCalled()
     expect(firebase.signOut).toHaveBeenCalled()
     expect(auth().me).toBeNull()
+  })
+})
+
+describe('AuthProvider password', () => {
+  const current = firebaseAuth as unknown as { currentUser?: unknown }
+  const signedInAs = (providerId: string) => {
+    const user = { email: 'a@gmail.com', providerData: [{ providerId }] }
+    current.currentUser = user
+    return user
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getMe).mockResolvedValue(ME)
+  })
+  afterEach(() => {
+    current.currentUser = undefined
+  })
+
+  it('gửi email đặt lại mật khẩu kèm đường quay về trang đăng nhập', async () => {
+    const auth = renderProvider()
+    await act(() => auth().sendPasswordReset('a@gmail.com'))
+    expect(sendPasswordResetEmail).toHaveBeenCalledWith(firebaseAuth, 'a@gmail.com', {
+      url: `${window.location.origin}/login`,
+    })
+  })
+
+  it('báo lỗi tiếng Việt khi Firebase từ chối gửi email', async () => {
+    vi.mocked(sendPasswordResetEmail).mockRejectedValueOnce({ code: 'auth/invalid-email' })
+    const auth = renderProvider()
+    await expect(act(() => auth().sendPasswordReset('x'))).rejects.toThrow('Email không hợp lệ')
+  })
+
+  it('tài khoản chỉ có Google: gắn thêm mật khẩu vào tài khoản', async () => {
+    const user = signedInAs('google.com')
+    const auth = renderProvider()
+    await act(() => auth().loginWithGoogle())
+    expect(auth().hasPassword).toBe(false)
+
+    await act(() => auth().setPassword('secret12'))
+
+    expect(EmailAuthProvider.credential).toHaveBeenCalledWith('a@gmail.com', 'secret12')
+    expect(linkWithCredential).toHaveBeenCalledWith(user, 'password-credential')
+    expect(updatePassword).not.toHaveBeenCalled()
+    expect(auth().hasPassword).toBe(true)
+  })
+
+  it('tài khoản có mật khẩu: xác thực lại bằng mật khẩu hiện tại rồi đổi', async () => {
+    const user = signedInAs('password')
+    const auth = renderProvider()
+    await act(() => auth().loginWithGoogle())
+    expect(auth().hasPassword).toBe(true)
+
+    await act(() => auth().setPassword('secret12', 'old-pass'))
+
+    expect(EmailAuthProvider.credential).toHaveBeenCalledWith('a@gmail.com', 'old-pass')
+    expect(reauthenticateWithCredential).toHaveBeenCalledWith(user, 'password-credential')
+    expect(updatePassword).toHaveBeenCalledWith(user, 'secret12')
+    expect(linkWithCredential).not.toHaveBeenCalled()
+  })
+
+  it('mật khẩu hiện tại sai thì không đổi và báo lỗi', async () => {
+    signedInAs('password')
+    vi.mocked(reauthenticateWithCredential).mockRejectedValueOnce({
+      code: 'auth/invalid-credential',
+    })
+    const auth = renderProvider()
+    await act(() => auth().loginWithGoogle())
+
+    await expect(act(() => auth().setPassword('secret12', 'wrong'))).rejects.toThrow(
+      'Mật khẩu hiện tại không đúng',
+    )
+    expect(updatePassword).not.toHaveBeenCalled()
   })
 })

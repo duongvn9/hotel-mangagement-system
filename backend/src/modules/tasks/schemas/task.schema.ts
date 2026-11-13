@@ -77,6 +77,16 @@ export class Task {
     replacementTaskId?: string;
   };
 
+  @Prop({ type: [Object], default: undefined })
+  serviceOrderReassignments?: {
+    requestId: string;
+    actorId: string;
+    previousAssigneeId: string;
+    assigneeId: string;
+    reason: string;
+    at: Date;
+  }[];
+
   @Prop({ type: String, enum: TaskSourceType, required: true })
   sourceType: TaskSourceType;
 

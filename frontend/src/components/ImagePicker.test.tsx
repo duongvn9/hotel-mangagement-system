@@ -47,4 +47,48 @@ describe('retained ImagePicker presentation', () => {
     expect(choose).toHaveBeenCalledWith([file])
     expect(screen.getByLabelText('Ảnh tiện nghi')).toHaveValue('')
   })
+
+  it('lets reception attach several photos up to the limit', () => {
+    const images = [
+      { src: 'blob:a', label: 'Ảnh 1' },
+      { src: 'blob:b', label: 'Ảnh 2' },
+    ]
+    const onRemove = vi.fn()
+    render(
+      <ImagePicker
+        images={images}
+        max={5}
+        label="Ảnh giấy tờ"
+        name="Khoa"
+        onChoose={() => {}}
+        onRemove={onRemove}
+      />,
+    )
+
+    expect(screen.getByText('2 / 5 ảnh')).toBeInTheDocument()
+    expect(screen.getByLabelText('Ảnh giấy tờ')).toHaveAttribute('multiple')
+    expect(screen.getByText(/Tối đa 5 ảnh JPG, PNG hoặc WebP/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Bỏ ảnh 2' }))
+    expect(onRemove).toHaveBeenCalledWith(1)
+  })
+
+  it('stops accepting photos once the limit is reached', () => {
+    const images = Array.from({ length: 5 }, (_, index) => ({
+      src: `blob:${index}`,
+      label: `Ảnh ${index + 1}`,
+    }))
+    render(
+      <ImagePicker
+        images={images}
+        max={5}
+        label="Ảnh giấy tờ"
+        name="Khoa"
+        onChoose={() => {}}
+        onRemove={() => {}}
+      />,
+    )
+
+    expect(screen.getByText('5 / 5 ảnh')).toBeInTheDocument()
+    expect(screen.getByLabelText('Ảnh giấy tờ')).toBeDisabled()
+  })
 })

@@ -65,7 +65,7 @@ Roles and permissions are editable at runtime, so custom roles with a subset of 
 |---|---|
 | Firebase Authentication | Registration, email verification, login |
 | VNPay payment gateway | Deposit and final invoice payments; the callback is idempotent |
-| Gmail | Notification emails, with error logging and retry (disabled by default) |
+| Brevo | Transactional notification emails, with error logging and retry (disabled by default) |
 | S3-compatible storage | Room type images (a local archive directory, `HMS_ASSET_DIR`, is supported alongside it) |
 
 ---
@@ -210,7 +210,7 @@ The example files document every variable. The main groups:
 | Database | `MONGODB_URI` (backend), `MONGO_ROOT_USERNAME`, `MONGO_ROOT_PASSWORD`, `MONGO_DB` (Compose) |
 | Auth | `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` |
 | Payment | `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`, `VNPAY_PAYMENT_URL`, `VNPAY_RETURN_URL`, `VNPAY_IPN_URL` |
-| Email | `MAIL_*`, and `NOTIFICATIONS_*` / `GMAIL_*` / `BREVO_API_KEY` for the notification service (disabled by default) |
+| Email | `NOTIFICATIONS_*`, `GMAIL_USER` (verified Brevo sender), and `BREVO_API_KEY` (disabled by default) |
 | Images | `S3_*`, `HMS_ASSET_DIR` (backend); `VITE_ASSET_BASE_URL` (frontend) |
 | Frontend | `VITE_APP_NAME`, `VITE_API_BASE_URL`, `VITE_PROXY_TARGET`, `VITE_FIREBASE_*` |
 | Ports and images | `WEB_PORT`, `FRONTEND_PORT`, `BACKEND_PORT`, `MONGO_PORT`, `IMAGE_TAG` |
@@ -247,7 +247,7 @@ Two supported setups: everything on one server with Docker Compose (7.1), or the
 ### 7.1 Docker Compose on one server
 
 ```bash
-cp .env.example .env          # set MONGO_ROOT_PASSWORD, CORS_ORIGINS and the Firebase / VNPay / Gmail secrets
+cp .env.example .env          # set MONGO_ROOT_PASSWORD, CORS_ORIGINS and the Firebase / VNPay / Brevo secrets
 docker compose -f docker-compose.prod.yml up -d --build    # or: make prod
 ```
 
@@ -268,7 +268,7 @@ Vercel proxies `/api/*` to Render (`frontend/vercel.json`), so the browser sees 
    - `MONGODB_URI`: the Atlas connection string.
    - `CORS_ORIGINS`: the Vercel URL, for example `https://hms.vercel.app` (comma-separate several).
    - `FIREBASE_*`, `S3_*`: same values as in `backend/.env.example`.
-   - Email: the free plan blocks outbound SMTP, so Gmail SMTP times out. Create a free [Brevo](https://www.brevo.com) account, verify the sender address, and set `BREVO_API_KEY` plus `GMAIL_USER` (that sender address). Then set `NOTIFICATIONS_ENABLED=true`, or booking emails are skipped.
+  - Email: create a free [Brevo](https://www.brevo.com) account, verify the sender address, and set `BREVO_API_KEY` plus `GMAIL_USER` (that sender address) in the backend service environment. Set `NOTIFICATIONS_ENABLED=true`, or booking emails are skipped. Brevo is the only supported transport.
    - `VNPAY_RETURN_URL`: `https://<vercel-domain>/payment/vnpay-return`.
    - `VNPAY_IPN_URL`: `https://<render-domain>/api/v1/payments/vnpay/ipn`.
    - Check that `https://<render-domain>/api/v1/health/ready` reports MongoDB as up.

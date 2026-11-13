@@ -8,7 +8,7 @@ import { envValidationSchema } from './config/env.validation.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { NotificationsService } from './modules/notifications/notifications.service.js';
 
-// Explicit, user-invoked SMTP tool. Never import/run this entry point in automated tests.
+// Explicit, user-invoked Brevo tool. Never import/run this entry point in automated tests.
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (args.length !== 1 || !isEmail(args[0]) || /[\r\n]/.test(args[0]))
@@ -37,10 +37,10 @@ async function main(): Promise<void> {
     if (
       config.get('notifications.enabled') !== true ||
       !config.get('notifications.user') ||
-      !config.get('notifications.appPassword')
+      !config.get('notifications.brevoApiKey')
     )
       throw new Error(
-        'Enable NOTIFICATIONS_ENABLED and configure GMAIL_USER / GMAIL_APP_PASSWORD first',
+        'Enable NOTIFICATIONS_ENABLED and configure BREVO_API_KEY / GMAIL_USER first',
       );
     const service = app.get(NotificationsService);
     const result = await service.send({
@@ -48,7 +48,7 @@ async function main(): Promise<void> {
       template: 'BOOKING_CANCELLATION',
       data: {
         bookingCode: 'H9-TEST-KHONG-PHAI-BOOKING-THAT',
-        guestName: 'Kiểm tra cấu hình Gmail',
+        guestName: 'Kiểm tra cấu hình Brevo',
         checkIn: new Date(),
         checkOut: new Date(),
         cancelledAt: new Date(),
@@ -57,16 +57,16 @@ async function main(): Promise<void> {
     if (!result.accepted) throw new Error('Test notification was not accepted');
     await service.drain();
     console.log(
-      'Test queue drained. Check the recipient inbox; SMTP acceptance does not guarantee delivery.',
+      'Test queue drained. Check the recipient inbox; Brevo acceptance does not guarantee delivery.',
     );
   } finally {
     await app.close();
   }
 }
 void main().catch(() => {
-  // Joi/SMTP exceptions may include secret values: do not print them.
+  // Joi/Brevo exceptions may include secret values: do not print them.
   console.error(
-    'Notification test refused or failed. Usage: npm run notify:test -- recipient@example.com. Requires NOTIFICATIONS_ENABLED=true, valid GMAIL_USER/GMAIL_APP_PASSWORD and MONGODB_URI. No credentials are printed.',
+    'Notification test refused or failed. Usage: npm run notify:test -- recipient@example.com. Requires NOTIFICATIONS_ENABLED=true, valid BREVO_API_KEY, verified GMAIL_USER sender, and MONGODB_URI. No credentials are printed.',
   );
   process.exitCode = 1;
 });

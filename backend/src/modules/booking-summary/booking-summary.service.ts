@@ -22,7 +22,10 @@ function serviceOrderStatus(order: {
   reviewStatus: ServiceOrderReviewStatus;
   executionStatus: ServiceOrderExecutionStatus;
 }): SummaryServiceOrder['status'] {
-  if (order.reviewStatus === ServiceOrderReviewStatus.Rejected) {
+  if (
+    order.reviewStatus === ServiceOrderReviewStatus.Rejected ||
+    order.reviewStatus === ServiceOrderReviewStatus.Abandoned
+  ) {
     return 'CANCELLED';
   }
   if (order.executionStatus === ServiceOrderExecutionStatus.Completed) {

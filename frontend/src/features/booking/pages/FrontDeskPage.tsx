@@ -245,13 +245,21 @@ function CheckInAction({
   const [panelOpen, setPanelOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [selection, setSelection] = useState<Record<string, string>>({})
+  // Photos from the latest confirmation, reused when reception swaps rooms after a blocked check-in.
+  const [evidence, setEvidence] = useState<File[] | null>(null)
   const options = useCheckInOptions(panelOpen ? booking.id : null)
   const blocked = options.data?.rooms.filter((room) => !room.ready) ?? []
 
-  async function run(replacements?: { from: string; to: string }[]) {
+  async function run(photos: File[], replacements?: { from: string; to: string }[]) {
+    setEvidence(photos)
     try {
-      await checkIn.mutateAsync({ id: booking.id, ...(replacements ? { replacements } : {}) })
+      await checkIn.mutateAsync({
+        id: booking.id,
+        evidence: photos,
+        ...(replacements ? { replacements } : {}),
+      })
       setPanelOpen(false)
+      setEvidence(null)
     } catch {
       setPanelOpen(true)
     }
@@ -307,10 +315,14 @@ function CheckInAction({
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
-              disabled={!complete || checkIn.isPending}
+              disabled={!complete || !evidence || checkIn.isPending}
               className="rounded-full"
               onClick={() =>
-                run(blocked.map((room) => ({ from: room.id, to: selection[room.id] as string })))
+                evidence &&
+                run(
+                  evidence,
+                  blocked.map((room) => ({ from: room.id, to: selection[room.id] as string })),
+                )
               }
             >
               Đổi phòng và Check In
@@ -356,9 +368,9 @@ function CheckInAction({
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         pending={checkIn.isPending}
-        onConfirm={async () => {
+        onConfirm={async (files) => {
           // Lỗi (vd phòng chưa sẵn sàng) hiện ở thẻ khách, không giữ hộp thoại mở.
-          await run()
+          await run(files)
           setConfirmOpen(false)
         }}
       />

@@ -32,9 +32,4 @@ export const envValidationSchema = Joi.object({
   VNPAY_PAYMENT_URL: vnpayConfigFields.paymentUrl.allow('').optional(),
   VNPAY_RETURN_URL: vnpayConfigFields.returnUrl.allow('').optional(),
   VNPAY_IPN_URL: vnpayConfigFields.ipnUrl.allow('').optional(),
-
-  // Gmail notification (BR-NOTI)
-  MAIL_USER: Joi.string().allow('').optional(),
-  MAIL_APP_PASSWORD: Joi.string().allow('').optional(),
-  MAIL_FROM: Joi.string().allow('').optional(),
 });
