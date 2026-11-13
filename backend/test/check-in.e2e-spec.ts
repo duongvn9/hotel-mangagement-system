@@ -14,6 +14,10 @@ import {
   PaymentTransaction,
   PaymentStatus,
 } from '../src/modules/payments/schemas/payment-transaction.schema.js';
+import {
+  validateImage,
+  type AssetImageFile,
+} from '../src/common/asset-images.service.js';
 import { CheckInEvidenceStorage } from '../src/modules/bookings/check-in-evidence.storage.js';
 import { businessDay } from '../src/modules/bookings/room-status-board.core.js';
 
@@ -100,8 +104,10 @@ describe('Check in guest (e2e)', () => {
   /** In-memory stand-in for the ID photo storage so e2e never touches real S3. */
   const stored = new Map<string, Buffer>();
   const fakeStorage = {
-    putAll: async (files: { buffer: Buffer }[]) =>
+    // Mirror the real storage: reject anything that is not a valid image.
+    putAll: async (files: AssetImageFile[]) =>
       files.map((file) => {
+        validateImage(file);
         const key = `private/check-ins/${new Types.ObjectId()}.jpg`;
         stored.set(key, file.buffer);
         return key;
