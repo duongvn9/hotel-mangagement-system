@@ -13,6 +13,7 @@ import {
 } from '../auth/firebase.module.js';
 import { Role } from '../roles/schemas/role.schema.js';
 import type {
+  ChangeAccountPasswordDto,
   CreateAccountDto,
   ListAccountsQuery,
   UpdateAccountDto,
@@ -159,6 +160,32 @@ export class UsersService {
           .lean()
       : null;
     if (!user) throw new NotFoundException('Không tìm thấy tài khoản');
+    return toAccount(user);
+  }
+
+  /** UC43 Change Account Password: Manager đặt lại mật khẩu Firebase của tài khoản khác. */
+  async changePassword(
+    id: string,
+    { newPassword }: ChangeAccountPasswordDto,
+    currentUserId: string,
+  ) {
+    if (id.toLowerCase() === currentUserId.toLowerCase()) {
+      throw new BadRequestException(
+        'Không thể tự đổi mật khẩu tại trang quản lý tài khoản',
+      );
+    }
+    const user = isValidObjectId(id)
+      ? await this.users.findById(id).lean()
+      : null;
+    if (!user) throw new NotFoundException('Không tìm thấy tài khoản');
+    if (!user.firebaseUid) {
+      throw new BadRequestException(
+        'Tài khoản chưa liên kết Firebase, không thể đổi mật khẩu',
+      );
+    }
+    await this.firebase.updateUser(user.firebaseUid, {
+      password: newPassword,
+    });
     return toAccount(user);
   }
 

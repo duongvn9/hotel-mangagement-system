@@ -16,7 +16,10 @@ describe('Accounts (e2e)', () => {
   const scope = `accounts-e2e-${randomUUID()}`;
   const domain = `${scope}.vn`;
   const staffEmail = `le.tan@${domain}`;
-  const fixtureFilter = { email: { $in: [`manager@${domain}`, staffEmail] } };
+  const passwordEmail = `doi.mat.khau@${domain}`;
+  const fixtureFilter = {
+    email: { $in: [`manager@${domain}`, staffEmail, passwordEmail] },
+  };
   const MANAGER = () => ({
     'x-dev-role': 'MANAGER',
     'x-dev-user-id': managerId,
@@ -134,5 +137,43 @@ describe('Accounts (e2e)', () => {
       .send({ isActive: false })
       .expect(400);
     await http().get('/api/v1/users/khong-phai-id').set(MANAGER()).expect(404);
+  });
+
+  it('đổi mật khẩu: chỉ Manager, chặn tự đổi, yêu cầu mật khẩu hợp lệ', async () => {
+    const created = await http()
+      .post('/api/v1/users')
+      .set(MANAGER())
+      .send({
+        email: passwordEmail,
+        fullName: 'Đổi Mật Khẩu E2E',
+        role: 'RECEPTIONIST',
+        password: 'secret12',
+      })
+      .expect(201);
+    const id = created.body.id;
+
+    await http()
+      .patch(`/api/v1/users/${id}/password`)
+      .set({ 'x-dev-role': 'RECEPTIONIST' })
+      .send({ newPassword: 'newpass12' })
+      .expect(403);
+    await http()
+      .patch(`/api/v1/users/${managerId}/password`)
+      .set(MANAGER())
+      .send({ newPassword: 'newpass12' })
+      .expect(400);
+    await http()
+      .patch(`/api/v1/users/${id}/password`)
+      .set(MANAGER())
+      .send({ newPassword: '123' })
+      .expect(400);
+
+    // E2E không có service account Firebase nên tài khoản vừa tạo chưa có firebaseUid.
+    const res = await http()
+      .patch(`/api/v1/users/${id}/password`)
+      .set(MANAGER())
+      .send({ newPassword: 'newpass12' })
+      .expect(400);
+    expect(res.body.message).toContain('chưa liên kết Firebase');
   });
 });

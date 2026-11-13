@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { AccountsPage } from './AccountsPage'
@@ -96,6 +96,78 @@ describe('AccountsPage', () => {
         isActive: false,
       }),
     )
+  })
+
+  it('đổi mật khẩu tài khoản nhân viên', async () => {
+    const { patch } = setup()
+    fireEvent.click(await screen.findByRole('button', { name: `Đổi mật khẩu ${STAFF.email}` }))
+    const form = screen.getByRole('form', { name: 'Đổi mật khẩu' })
+    type(form, /Mật khẩu mới/, 'newpass12')
+    type(form, /Xác nhận mật khẩu mới/, 'newpass12')
+    fireEvent.click(within(form).getByRole('button', { name: 'Đổi mật khẩu' }))
+
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith('/users/s1/password', { newPassword: 'newpass12' }),
+    )
+    expect(await screen.findByText(`Đã đổi mật khẩu ${STAFF.email}`)).toBeInTheDocument()
+  })
+
+  it.each(['Huỷ', 'Close', 'Escape'])(
+    'keeps the password dialog open during a request when dismissed with %s',
+    async (dismissal) => {
+      const { patch } = setup()
+      let resolve!: (result: { data: typeof STAFF }) => void
+      patch.mockImplementationOnce(
+        () =>
+          new Promise((complete) => {
+            resolve = complete
+          }),
+      )
+      fireEvent.click(await screen.findByRole('button', { name: `Đổi mật khẩu ${STAFF.email}` }))
+      const dialog = screen.getByRole('dialog', { name: 'Đổi mật khẩu' })
+      const form = within(dialog).getByRole('form', { name: 'Đổi mật khẩu' })
+      type(form, /Mật khẩu mới/, 'newpass12')
+      type(form, /Xác nhận mật khẩu mới/, 'newpass12')
+      fireEvent.click(within(form).getByRole('button', { name: 'Đổi mật khẩu' }))
+      expect(await screen.findByRole('button', { name: 'Đang lưu…' })).toBeDisabled()
+
+      if (dismissal === 'Escape') {
+        fireEvent.keyDown(dialog, { key: 'Escape' })
+      } else {
+        fireEvent.click(within(dialog).getByRole('button', { name: dismissal }))
+      }
+      expect(screen.getByRole('dialog', { name: 'Đổi mật khẩu' })).toBeInTheDocument()
+      expect(within(form).getByRole('button', { name: 'Huỷ' })).toBeDisabled()
+      expect(patch).toHaveBeenCalledTimes(1)
+
+      await act(async () => resolve({ data: STAFF }))
+      expect(await screen.findByText(`Đã đổi mật khẩu ${STAFF.email}`)).toBeInTheDocument()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: `Đổi mật khẩu ${STAFF.email}` }))
+      expect(screen.getByLabelText(/Mật khẩu mới/)).toHaveValue('')
+      fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }))
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    },
+  )
+
+  it('không gửi khi xác nhận mật khẩu không khớp', async () => {
+    const { patch } = setup()
+    fireEvent.click(await screen.findByRole('button', { name: `Đổi mật khẩu ${STAFF.email}` }))
+    const form = screen.getByRole('form', { name: 'Đổi mật khẩu' })
+    type(form, /Mật khẩu mới/, 'newpass12')
+    type(form, /Xác nhận mật khẩu mới/, 'newpass13')
+    fireEvent.click(within(form).getByRole('button', { name: 'Đổi mật khẩu' }))
+
+    expect(within(form).getByRole('alert')).toHaveTextContent('Mật khẩu xác nhận không khớp')
+    expect(patch).not.toHaveBeenCalled()
+  })
+
+  it('không hiện nút đổi mật khẩu cho tài khoản của chính mình', async () => {
+    setup()
+    await screen.findByText('Trần Thị Lễ Tân')
+    expect(
+      screen.queryByRole('button', { name: `Đổi mật khẩu ${ME.email}` }),
+    ).not.toBeInTheDocument()
   })
 
   it('báo lỗi khi không tải được danh sách', async () => {

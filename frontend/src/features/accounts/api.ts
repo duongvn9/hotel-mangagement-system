@@ -51,3 +51,7 @@ export const createAccount = async (input: CreateAccountInput) =>
 
 export const updateAccount = async (id: string, input: UpdateAccountInput) =>
   (await api.patch<Account>(`/users/${id}`, input)).data
+
+/** UC43: Manager đặt lại mật khẩu đăng nhập của nhân viên. */
+export const changeAccountPassword = async (id: string, newPassword: string) =>
+  (await api.patch<Account>(`/users/${id}/password`, { newPassword })).data

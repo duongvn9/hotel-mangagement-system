@@ -73,3 +73,10 @@ export class UpdateAccountDto extends PartialType(
   @IsBoolean()
   isActive?: boolean;
 }
+
+/** UC43 Change Account Password: Manager đặt mật khẩu mới cho tài khoản khác. */
+export class ChangeAccountPasswordDto {
+  @IsString()
+  @Length(6, 128)
+  newPassword: string;
+}

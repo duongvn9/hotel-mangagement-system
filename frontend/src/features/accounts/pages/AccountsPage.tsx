@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus } from 'lucide-react'
+import { KeyRound, Pencil, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { AssetImage } from '@/components/AssetImage'
 import { Button, NativeSelect, StatusBadge } from '@/components/atoms'
@@ -18,7 +18,9 @@ import { useAuth } from '@/features/auth/auth-context'
 import { listRoles } from '@/features/roles/api'
 import { getErrorMessage } from '@/lib/api-client'
 import { AccountForm } from '../AccountForm'
+import { ChangePasswordForm } from '../ChangePasswordForm'
 import {
+  changeAccountPassword,
   createAccount,
   listAccounts,
   updateAccount,
@@ -37,6 +39,7 @@ export function AccountsPage() {
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState<AccountQuery>({ page: 1, limit: LIMIT })
   const [editing, setEditing] = useState<Account | 'new' | null>(null)
+  const [changingPassword, setChangingPassword] = useState<Account | null>(null)
   const [notice, setNotice] = useState('')
 
   const roles = useQuery({ queryKey: ['roles'], queryFn: listRoles })
@@ -64,11 +67,29 @@ export function AccountsPage() {
     },
   })
 
+  const changePassword = useMutation({
+    mutationFn: ({ account, newPassword }: { account: Account; newPassword: string }) =>
+      changeAccountPassword(account.id, newPassword),
+    onSuccess: (account) => {
+      setNotice(`Đã đổi mật khẩu ${account.email}`)
+      setChangingPassword(null)
+    },
+  })
+
   const filter = (patch: Partial<AccountQuery>) => setQuery((q) => ({ ...q, ...patch, page: 1 }))
   const openForm = (target: Account | 'new') => {
     save.reset()
+    changePassword.reset()
+    setChangingPassword(null)
     setNotice('')
     setEditing(target)
+  }
+  const openChangePassword = (account: Account) => {
+    changePassword.reset()
+    save.reset()
+    setEditing(null)
+    setNotice('')
+    setChangingPassword(account)
   }
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1
 
@@ -94,9 +115,20 @@ export function AccountsPage() {
     {
       key: '_actions',
       header: '',
-      className: 'w-24 text-right',
+      className: 'w-28 text-right',
       render: (account) => (
-        <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
+        <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+          {account.id !== me?.id && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              aria-label={`Đổi mật khẩu ${account.email}`}
+              onClick={() => openChangePassword(account)}
+            >
+              <KeyRound className="size-4" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -208,6 +240,31 @@ export function AccountsPage() {
               error={save.isError ? getErrorMessage(save.error) : undefined}
               onSubmit={(input) => save.mutate(input)}
               onCancel={() => setEditing(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={changingPassword !== null}
+        onOpenChange={(open) => {
+          if (!open && !changePassword.isPending) setChangingPassword(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Đổi mật khẩu</DialogTitle>
+          </DialogHeader>
+          {changingPassword && (
+            <ChangePasswordForm
+              key={changingPassword.id}
+              email={changingPassword.email}
+              pending={changePassword.isPending}
+              error={changePassword.isError ? getErrorMessage(changePassword.error) : undefined}
+              onSubmit={(newPassword) =>
+                changePassword.mutate({ account: changingPassword, newPassword })
+              }
+              onCancel={() => setChangingPassword(null)}
             />
           )}
         </DialogContent>
