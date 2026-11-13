@@ -16,6 +16,36 @@ export interface AssetImageFile {
   size: number;
 }
 
+/** Checks size and file signature (the client-sent mimetype is not trusted); returns the canonical extension. */
+export function validateImage(file?: AssetImageFile): {
+  file: AssetImageFile;
+  extension: 'jpg' | 'png' | 'webp';
+} {
+  if (!file || !file.size || file.size > 5 * 1024 * 1024) {
+    throw new BadRequestException('Chọn ảnh tối đa 5 MB.');
+  }
+  const bytes = file.buffer;
+  const extension =
+    file.mimetype === 'image/jpeg' &&
+    bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255]))
+      ? 'jpg'
+      : file.mimetype === 'image/png' &&
+          bytes
+            .subarray(0, 8)
+            .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+        ? 'png'
+        : file.mimetype === 'image/webp' &&
+            bytes.toString('ascii', 0, 4) === 'RIFF' &&
+            bytes.toString('ascii', 8, 12) === 'WEBP'
+          ? 'webp'
+          : undefined;
+  if (!extension)
+    throw new BadRequestException(
+      'Chỉ chấp nhận ảnh JPG, PNG hoặc WebP hợp lệ.',
+    );
+  return { file, extension };
+}
+
 @Injectable()
 export class AssetImagesService {
   private readonly logger = new Logger(AssetImagesService.name);
@@ -25,28 +55,8 @@ export class AssetImagesService {
     file?: AssetImageFile,
     group: 'room-types' | 'amenities' | 'services' = 'room-types',
   ) {
-    if (!file || !file.size || file.size > 5 * 1024 * 1024) {
-      throw new BadRequestException('Chọn ảnh tối đa 5 MB.');
-    }
-    const bytes = file.buffer;
-    const extension =
-      file.mimetype === 'image/jpeg' &&
-      bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255]))
-        ? 'jpg'
-        : file.mimetype === 'image/png' &&
-            bytes
-              .subarray(0, 8)
-              .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-          ? 'png'
-          : file.mimetype === 'image/webp' &&
-              bytes.toString('ascii', 0, 4) === 'RIFF' &&
-              bytes.toString('ascii', 8, 12) === 'WEBP'
-            ? 'webp'
-            : undefined;
-    if (!extension)
-      throw new BadRequestException(
-        'Chỉ chấp nhận ảnh JPG, PNG hoặc WebP hợp lệ.',
-      );
+    const { file: image, extension } = validateImage(file);
+    const bytes = image.buffer;
     const accessKeyId = this.config.get<string>('S3_ACCESS_KEY_ID');
     const secretAccessKey = this.config.get<string>('S3_SECRET_ACCESS_KEY');
     const endpoint = this.config.get<string>('S3_ENDPOINT');
@@ -78,7 +88,7 @@ export class AssetImagesService {
           Bucket: bucket,
           Key: path.slice(1),
           Body: bytes,
-          ContentType: file.mimetype,
+          ContentType: image.mimetype,
         }),
       );
       return { path };
