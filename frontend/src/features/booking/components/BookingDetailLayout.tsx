@@ -24,6 +24,8 @@ interface BookingDetailLayoutProps {
   actions?: ReactNode
   /** Thông báo hiện giữa đầu trang và nội dung (đếm ngược giữ phòng, lỗi, ...). */
   notices?: ReactNode
+  /** Extra block under the stay details (for example reception's ID photo). */
+  evidence?: ReactNode
 }
 
 /**
@@ -37,6 +39,7 @@ export function BookingDetailLayout({
   backLabel,
   actions,
   notices,
+  evidence,
 }: BookingDetailLayoutProps) {
   const nights = nightsBetween(summary.checkIn, summary.checkOut)
   const roomTypes = [...new Set(summary.rooms.map((room) => room.roomTypeName).filter(Boolean))]
@@ -91,6 +94,8 @@ export function BookingDetailLayout({
               <KeyValue k="Ngày đặt" v={fdate(summary.createdAt)} />
             </div>
           </Panel>
+
+          {evidence}
 
           <Panel title="Thanh toán">
             {summary.payments.length === 0 ? (

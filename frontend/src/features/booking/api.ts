@@ -544,13 +544,42 @@ export interface CheckInResult {
   rooms: { id: string; roomNumber: string }[]
 }
 
+/** Reads one stored photo as a data URL (see `getCheckInEvidence`). */
+async function getCheckInPhoto(id: string, index: number): Promise<string> {
+  const blob = (
+    await api.get<Blob>(`/bookings/${id}/check-in-evidence/${index}`, { responseType: 'blob' })
+  ).data
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}
+
+/**
+ * UC16 — The booking's stored ID photos (reception/manager) as data URLs for `<img>`: the photos
+ * sit behind an authorised API so they have no public URL, and a data URL needs no revoking like a
+ * blob URL. Empty before check-in.
+ */
+export async function getCheckInEvidence(id: string): Promise<string[]> {
+  const { count } = (await api.get<{ count: number }>(`/bookings/${id}/check-in-evidence`)).data
+  return Promise.all(Array.from({ length: count }, (_, index) => getCheckInPhoto(id, index)))
+}
+
 /** UC16 — Nhận phòng; phòng chưa sẵn sàng có thể đổi sang phòng khác cùng loại (giá không đổi). */
 export async function checkInBooking(
   id: string,
-  replacements: RoomReplacement[] = [],
+  input: { evidence: File[]; replacements?: RoomReplacement[] },
 ): Promise<CheckInResult> {
-  const body = replacements.length > 0 ? { replacements } : {}
-  return (await api.post<CheckInResult>(`/bookings/${id}/check-in`, body)).data
+  // The photos travel with the check-in request: the server stores them only after every check-in condition has passed.
+  const body = new FormData()
+  for (const photo of input.evidence) body.append('evidence', photo)
+  if (input.replacements && input.replacements.length > 0) {
+    body.append('replacements', JSON.stringify(input.replacements))
+  }
+  return (await api.post<CheckInResult>(`/bookings/${id}/check-in`, body, { timeout: 120_000 }))
+    .data
 }
 
 export interface CheckInRoomOption {
