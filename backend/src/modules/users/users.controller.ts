@@ -13,6 +13,7 @@ import { Role } from '../../common/constants/role.enum.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import {
+  ChangeAccountPasswordDto,
   CreateAccountDto,
   ListAccountsQuery,
   UpdateAccountDto,
@@ -49,6 +50,17 @@ export class UsersController {
   @Post()
   create(@Body() dto: CreateAccountDto) {
     return this.users.create(dto);
+  }
+
+  /** UC43 Change Account Password. */
+  @Roles(Role.Manager)
+  @Patch(':id/password')
+  changePassword(
+    @Param('id') id: string,
+    @Body() dto: ChangeAccountPasswordDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.users.changePassword(id, dto, user.id);
   }
 
   /** UC43 Update Account. */

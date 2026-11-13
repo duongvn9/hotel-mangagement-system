@@ -23,6 +23,8 @@ export interface FirebaseUserAdmin {
     displayName: string;
   }): Promise<string | null>;
   deleteUser(uid: string): Promise<void>;
+  /** Đặt lại mật khẩu đăng nhập của tài khoản đã có Firebase (UC43). */
+  updateUser(uid: string, input: { password: string }): Promise<void>;
 }
 
 export const ID_TOKEN_VERIFIER = Symbol('ID_TOKEN_VERIFIER');
@@ -79,6 +81,9 @@ const providers: Provider[] = [
           createUser: async (input) =>
             (await auth.createUser({ ...input, emailVerified: true })).uid,
           deleteUser: (uid) => auth.deleteUser(uid),
+          updateUser: async (uid, input) => {
+            await auth.updateUser(uid, input);
+          },
         };
       }
       const isProduction = config.get('env', { infer: true }) === 'production';
@@ -92,6 +97,13 @@ const providers: Provider[] = [
           return Promise.resolve(null);
         },
         deleteUser: () => Promise.resolve(),
+        // Không có service account: không thể đổi mật khẩu thật, báo lỗi thay vì giả vờ thành công.
+        updateUser: () =>
+          Promise.reject(
+            new ServiceUnavailableException(
+              'Chưa cấu hình service account Firebase',
+            ),
+          ),
       };
     },
   },
