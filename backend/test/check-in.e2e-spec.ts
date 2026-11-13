@@ -104,14 +104,15 @@ describe('Check in guest (e2e)', () => {
   /** In-memory stand-in for the ID photo storage so e2e never touches real S3. */
   const stored = new Map<string, Buffer>();
   const fakeStorage = {
-    // Mirror the real storage: reject anything that is not a valid image.
-    putAll: async (files: AssetImageFile[]) =>
-      files.map((file) => {
-        validateImage(file);
+    // Mirror the real storage: validate every file before storing any of them.
+    putAll: async (files: AssetImageFile[]) => {
+      files.forEach((file) => validateImage(file));
+      return files.map((file) => {
         const key = `private/check-ins/${new Types.ObjectId()}.jpg`;
         stored.set(key, file.buffer);
         return key;
-      }),
+      });
+    },
     get: async (key: string) => ({
       body: new Uint8Array(stored.get(key) ?? []),
       contentType: 'image/jpeg',
