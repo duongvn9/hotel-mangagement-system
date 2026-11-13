@@ -69,7 +69,7 @@ export class BookingSummaryService {
       .findById(id)
       .populate<{ rooms: SummaryRoomDoc[] }>(BOOKING_ROOMS_POPULATE)
       .lean();
-    if (!found) throw new NotFoundException('Booking not found');
+    if (!found) throw new NotFoundException('Không tìm thấy đơn đặt phòng.');
     // `timestamps: true` thêm createdAt khi lưu; kiểu của schema không khai báo nó.
     const booking = found as typeof found & { createdAt?: Date };
 
