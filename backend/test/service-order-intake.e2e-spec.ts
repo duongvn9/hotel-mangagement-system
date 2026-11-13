@@ -16,10 +16,17 @@ import { InvoicesService } from '../src/modules/invoices/invoices.service.js';
 import { Room } from '../src/modules/rooms/schemas/room.schema.js';
 import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
 import { addInspection } from './inspection-fixture.js';
+import { CheckInEvidenceStorage } from '../src/modules/bookings/check-in-evidence.storage.js';
 import { CheckInService } from '../src/modules/bookings/check-in.service.js';
 import { BookingsService } from '../src/modules/bookings/bookings.service.js';
 import { CheckOutService } from '../src/modules/invoices/check-out.service.js';
 import { assertServiceOrderTestDatabase } from './test-database.js';
+
+const ID_PHOTO = {
+  buffer: Buffer.from([255, 216, 255, 0]),
+  mimetype: 'image/jpeg',
+  size: 4,
+};
 
 describe('isolated ServiceOrder intake API', () => {
   let app: INestApplication;
@@ -58,7 +65,15 @@ describe('isolated ServiceOrder intake API', () => {
     assertServiceOrderTestDatabase(process.env);
     const module = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      // Check-in now stores ID photos; keep these specs off real S3.
+      .overrideProvider(CheckInEvidenceStorage)
+      .useValue({
+        putAll: async (files: unknown[]) =>
+          files.map(() => `private/check-ins/${new Types.ObjectId()}.jpg`),
+        removeAll: async () => undefined,
+      })
+      .compile();
     app = module.createNestApplication();
     app.setGlobalPrefix('api');
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
@@ -1054,7 +1069,7 @@ describe('isolated ServiceOrder intake API', () => {
   };
   const bookingOperation = (kind: string) => {
     if (kind === 'checkin')
-      return app.get(CheckInService).checkIn(bookingId, {});
+      return app.get(CheckInService).checkIn(bookingId, {}, [ID_PHOTO]);
     if (kind === 'checkout')
       return app.get(CheckOutService).checkOut(bookingId);
     if (kind === 'cancel')
@@ -1342,7 +1357,7 @@ describe('isolated ServiceOrder intake API', () => {
     }) as never);
     const operation = app
       .get(CheckInService)
-      .checkIn(bookingId, {})
+      .checkIn(bookingId, {}, [ID_PHOTO])
       .then(
         () => null,
         (error) => error,

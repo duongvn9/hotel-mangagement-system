@@ -9,6 +9,7 @@ export function ImagePicker({
   onRemove,
   label = 'Ảnh tiện nghi',
   appearance = 'legacy',
+  max = 1,
 }: {
   images: { src: string; label: string }[]
   name: string
@@ -16,10 +17,14 @@ export function ImagePicker({
   onRemove: (index: number) => void
   label?: string
   appearance?: 'legacy' | 'prototype'
+  /** Number of photos that can be attached; above 1 the picker accepts several files and lists them all. */
+  max?: number
 }) {
   const id = useId()
   const [viewing, setViewing] = useState<number | null>(null)
   const polished = appearance === 'prototype'
+  const multiple = max > 1
+  const full = multiple && images.length >= max
   return (
     <div
       className={cn(
@@ -35,7 +40,7 @@ export function ImagePicker({
             polished ? 'border-border bg-card' : 'border-stone-300 bg-white',
           )}
         >
-          {images.length} / 1 ảnh
+          {images.length} / {max} ảnh
         </span>
       </div>
       <input
@@ -45,6 +50,8 @@ export function ImagePicker({
         aria-label={label}
         aria-describedby={`${id}-help`}
         className="peer sr-only"
+        multiple={multiple}
+        disabled={full}
         onChange={(event) => {
           onChoose(Array.from(event.target.files ?? []))
           event.target.value = ''
@@ -68,13 +75,15 @@ export function ImagePicker({
         </span>
         <span className="text-sm font-semibold text-primary">Chọn ảnh từ thiết bị</span>
         <span className={cn('text-xs', polished ? 'text-muted-foreground' : 'text-stone-600')}>
-          Chọn ảnh mới để thay ảnh hiện tại
+          {multiple ? 'Có thể chọn nhiều ảnh cùng lúc' : 'Chọn ảnh mới để thay ảnh hiện tại'}
         </span>
       </label>
       <p id={`${id}-help`} className="text-xs">
-        Một ảnh JPG, PNG hoặc WebP, tối đa 5 MB.
+        {multiple
+          ? `Tối đa ${max} ảnh JPG, PNG hoặc WebP, mỗi ảnh tối đa 5 MB.`
+          : 'Một ảnh JPG, PNG hoặc WebP, tối đa 5 MB.'}
       </p>
-      <div className="mx-auto w-full max-w-64">
+      <div className={cn('mx-auto w-full', multiple ? 'grid grid-cols-2 gap-3' : 'max-w-64')}>
         {images.map((image, index) => (
           <div
             key={`${image.src}-${index}`}

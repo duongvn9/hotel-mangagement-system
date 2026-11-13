@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { bookingRoutes } from './routes'
@@ -70,10 +70,15 @@ const summaryOf = (overrides: Partial<BookingSummary> = {}): BookingSummary => (
   ...overrides,
 })
 
-function mockGet(items: BookingListItem[], summary: BookingSummary = summaryOf()) {
+function mockGet(items: BookingListItem[], summary: BookingSummary = summaryOf(), photoCount = 0) {
   return vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
     if (url === '/bookings') return { data: listPage(items) }
     if (url === `/bookings/${items[0]?.id ?? 'b1'}/summary`) return { data: summary }
+    const evidence = `/bookings/${items[0]?.id ?? 'b1'}/check-in-evidence`
+    if (url === evidence) return { data: { count: photoCount } }
+    if (url.startsWith(`${evidence}/`)) {
+      return { data: new Blob(['x'], { type: 'image/jpeg' }) }
+    }
     throw new Error(`unexpected GET ${url}`)
   })
 }
@@ -84,6 +89,15 @@ function renderDetail(role = receptionist, code = 'BKVIEW1') {
     auth: { me: role, status: 'authenticated' },
   })
 }
+
+beforeEach(() => {
+  HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
+    this.setAttribute('open', '')
+  })
+  HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
+    this.removeAttribute('open')
+  })
+})
 
 describe('ReceptionBookingDetailPage', () => {
   it('blocks roles other than receptionist/manager', () => {
@@ -156,6 +170,40 @@ describe('ReceptionBookingDetailPage', () => {
     expect(within(invoice).getByText('Phụ phí')).toBeInTheDocument()
     expect(within(invoice).getByText('2.590.000 ₫')).toBeInTheDocument() // đã thanh toán
     expect(within(invoice).getByText('0 ₫')).toBeInTheDocument() // còn lại
+  })
+
+  it('shows every check-in ID photo and opens one in the viewer', async () => {
+    mockGet([item({ status: 'CHECKED_IN' })], summaryOf({ status: 'CHECKED_IN' }), 2)
+    renderDetail()
+
+    const panel = (await screen.findByRole('heading', { name: 'Ảnh giấy tờ' })).closest(
+      'section',
+    ) as HTMLElement
+    expect(within(panel).getAllByRole('img')).toHaveLength(2)
+    expect(within(panel).getByRole('img', { name: 'Ảnh giấy tờ 2' })).toHaveAttribute(
+      'src',
+      'data:image/jpeg;base64,eA==',
+    )
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Xem ảnh giấy tờ 2' }))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('hides the ID photo panel when a checked-in booking has no photo', async () => {
+    mockGet([item({ status: 'CHECKED_IN' })], summaryOf({ status: 'CHECKED_IN' }))
+    renderDetail()
+
+    await screen.findByRole('heading', { level: 1, name: 'BKVIEW1' })
+    expect(screen.queryByRole('heading', { name: 'Ảnh giấy tờ' })).not.toBeInTheDocument()
+  })
+
+  it('does not ask for an ID photo before the guest has checked in', async () => {
+    const get = mockGet([item({ status: 'CONFIRMED' })], summaryOf({ status: 'CONFIRMED' }), 2)
+    renderDetail()
+
+    await screen.findByRole('heading', { level: 1, name: 'BKVIEW1' })
+    expect(screen.queryByRole('heading', { name: 'Ảnh giấy tờ' })).not.toBeInTheDocument()
+    expect(get.mock.calls.some(([url]) => String(url).includes('check-in-evidence'))).toBe(false)
   })
 
   it('shows the server error when the booking details cannot be loaded', async () => {

@@ -17,6 +17,7 @@ import {
 import { getErrorMessage } from '@/lib/api-client'
 import { useBookingList, useBookingSummary, useCancelBooking } from '../hooks'
 import { BookingDetailLayout } from '../components/BookingDetailLayout'
+import { CheckInEvidencePanel } from '../components/CheckInEvidencePanel'
 
 /** Trạng thái còn sửa được (UC11): trước khi nhận phòng và chưa huỷ. */
 const EDITABLE_STATUSES = ['PENDING_DEPOSIT', 'CONFIRMED']
@@ -79,6 +80,9 @@ export function ReceptionBookingDetailPage() {
           summary={summary.data}
           backTo="/reception/bookings"
           backLabel="Đặt phòng"
+          evidence={
+            <CheckInEvidencePanel bookingId={summary.data.bookingId} status={summary.data.status} />
+          }
           actions={
             <>
               {editable && (

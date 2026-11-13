@@ -14,6 +14,11 @@ import {
   PaymentTransaction,
   PaymentStatus,
 } from '../src/modules/payments/schemas/payment-transaction.schema.js';
+import {
+  validateImage,
+  type AssetImageFile,
+} from '../src/common/asset-images.service.js';
+import { CheckInEvidenceStorage } from '../src/modules/bookings/check-in-evidence.storage.js';
 import { businessDay } from '../src/modules/bookings/room-status-board.core.js';
 
 describe('Check in guest (e2e)', () => {
@@ -96,11 +101,46 @@ describe('Check in guest (e2e)', () => {
     rooms.updateOne({ _id: ids[key] }, { $set: { status } });
   const roomStatus = async (key: keyof typeof ids) =>
     (await rooms.findById(ids[key]).lean())?.status;
-  const checkIn = (id: unknown, body: Record<string, unknown> = {}) =>
-    http()
+  /** In-memory stand-in for the ID photo storage so e2e never touches real S3. */
+  const stored = new Map<string, Buffer>();
+  const fakeStorage = {
+    // Mirror the real storage: validate every file before storing any of them.
+    putAll: async (files: AssetImageFile[]) => {
+      files.forEach((file) => validateImage(file));
+      return files.map((file) => {
+        const key = `private/check-ins/${new Types.ObjectId()}.jpg`;
+        stored.set(key, file.buffer);
+        return key;
+      });
+    },
+    get: async (key: string) => ({
+      body: new Uint8Array(stored.get(key) ?? []),
+      contentType: 'image/jpeg',
+    }),
+    removeAll: async (keys: string[]) => {
+      for (const key of keys) stored.delete(key);
+    },
+  };
+  const JPEG = Buffer.from([255, 216, 255, 0, 1, 2, 3]);
+  const checkIn = (
+    id: unknown,
+    body: { replacements?: unknown[] } = {},
+    photos: Buffer[] = [JPEG],
+  ) => {
+    const req = http()
       .post(`/api/v1/bookings/${String(id)}/check-in`)
-      .set(RECEPTIONIST)
-      .send(body);
+      .set(RECEPTIONIST);
+    for (const photo of photos) {
+      req.attach('evidence', photo, {
+        filename: 'cccd.jpg',
+        contentType: 'image/jpeg',
+      });
+    }
+    if (body.replacements) {
+      req.field('replacements', JSON.stringify(body.replacements));
+    }
+    return req;
+  };
   const options = (id: unknown) =>
     http()
       .get(`/api/v1/bookings/${String(id)}/check-in-options`)
@@ -118,7 +158,10 @@ describe('Check in guest (e2e)', () => {
   beforeAll(async () => {
     const module = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(CheckInEvidenceStorage)
+      .useValue(fakeStorage)
+      .compile();
     app = module.createNestApplication();
     app.setGlobalPrefix('api');
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
@@ -160,7 +203,10 @@ describe('Check in guest (e2e)', () => {
     );
   });
 
-  beforeEach(reset);
+  beforeEach(async () => {
+    stored.clear();
+    await reset();
+  });
 
   afterAll(async () => {
     await payments.deleteMany({ transactionRef: new RegExp(`^CIN-${tag}`) });
@@ -209,6 +255,87 @@ describe('Check in guest (e2e)', () => {
     expect(saved?.checkedInAt).toBeDefined();
     expect(await roomStatus('r1')).toBe('OCCUPIED');
     expect(await roomStatus('r2')).toBe('OCCUPIED');
+  });
+
+  it('requires 1 to 5 ID photos, and stores them privately with the check-in', async () => {
+    const booking = await seed([ids.r1]);
+
+    await checkIn(booking.id, {}, []).expect(400);
+    await checkIn(booking.id, {}, Array(6).fill(JPEG)).expect(400);
+    expect((await bookings.findById(booking._id))?.status).toBe('CONFIRMED');
+    expect(stored.size).toBe(0);
+
+    const second = Buffer.from([255, 216, 255, 0, 9, 9, 9]);
+    await checkIn(booking.id, {}, [JPEG, second]).expect(201);
+    const saved = await bookings.findById(booking._id).lean();
+    expect(saved?.checkInEvidence).toHaveLength(2);
+    expect(saved?.checkInEvidence?.[0]).toMatch(/^private\/check-ins\//);
+
+    const count = await http()
+      .get(`/api/v1/bookings/${booking.id}/check-in-evidence`)
+      .set(RECEPTIONIST)
+      .expect(200);
+    expect(count.body).toEqual({ count: 2 });
+
+    const photo = await http()
+      .get(`/api/v1/bookings/${booking.id}/check-in-evidence/1`)
+      .set(RECEPTIONIST)
+      .buffer(true)
+      .parse((res, done) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => done(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    expect(photo.headers['content-type']).toBe('image/jpeg');
+    expect(photo.headers['cache-control']).toBe('private, no-store');
+    expect(photo.body).toEqual(second);
+
+    await http()
+      .get(`/api/v1/bookings/${booking.id}/check-in-evidence/2`)
+      .set(RECEPTIONIST)
+      .expect(404);
+  });
+
+  it('refuses a non-image upload and leaves nothing stored', async () => {
+    const booking = await seed([ids.r1]);
+
+    await checkIn(booking.id, {}, [JPEG, Buffer.from('not an image')]).expect(
+      400,
+    );
+    expect((await bookings.findById(booking._id))?.status).toBe('CONFIRMED');
+    expect(stored.size).toBe(0);
+  });
+
+  it('stores no photo when the check-in is refused (room not ready)', async () => {
+    const booking = await seed([ids.r1]);
+    await setStatus('r1', 'CLEANING');
+
+    await checkIn(booking.id).expect(409);
+    expect(stored.size).toBe(0);
+  });
+
+  it('reports no photos before check-in and hides them from customers', async () => {
+    const booking = await seed([ids.r1]);
+    const before = await http()
+      .get(`/api/v1/bookings/${booking.id}/check-in-evidence`)
+      .set(RECEPTIONIST)
+      .expect(200);
+    expect(before.body).toEqual({ count: 0 });
+
+    await checkIn(booking.id).expect(201);
+    const customer = {
+      'x-dev-role': 'CUSTOMER',
+      'x-dev-user-id': String(new Types.ObjectId()),
+    };
+    await http()
+      .get(`/api/v1/bookings/${booking.id}/check-in-evidence`)
+      .set(customer)
+      .expect(403);
+    await http()
+      .get(`/api/v1/bookings/${booking.id}/check-in-evidence/0`)
+      .set(customer)
+      .expect(403);
   });
 
   describe('deposit', () => {

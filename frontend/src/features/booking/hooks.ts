@@ -7,6 +7,7 @@ import {
   createWalkInBooking,
   getBooking,
   getBookingAttention,
+  getCheckInEvidence,
   getMyBookings,
   getRoomTypeOverview,
   getServiceCatalog,
@@ -222,14 +223,31 @@ export function useUpdateBooking() {
 export function useCheckIn() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, replacements }: { id: string; replacements?: RoomReplacement[] }) =>
-      checkInBooking(id, replacements),
+    mutationFn: ({
+      id,
+      evidence,
+      replacements,
+    }: {
+      id: string
+      evidence: File[]
+      replacements?: RoomReplacement[]
+    }) => checkInBooking(id, { evidence, ...(replacements ? { replacements } : {}) }),
     onSuccess: () =>
       Promise.all(
-        ['same-day', 'room-status-board', 'bookings'].map((key) =>
+        ['same-day', 'room-status-board', 'bookings', 'check-in-evidence'].map((key) =>
           queryClient.invalidateQueries({ queryKey: [key] }),
         ),
       ),
+  })
+}
+
+/** UC16 — The booking's stored ID photos; only fetched when `enabled` (guest already checked in). */
+export function useCheckInEvidence(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['check-in-evidence', id],
+    queryFn: () => getCheckInEvidence(id),
+    enabled,
+    retry: false,
   })
 }
 
