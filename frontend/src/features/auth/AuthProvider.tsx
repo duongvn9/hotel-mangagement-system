@@ -2,12 +2,17 @@ import { isAxiosError } from 'axios'
 import {
   createUserWithEmailAndPassword,
   deleteUser,
+  EmailAuthProvider,
   GoogleAuthProvider,
+  linkWithCredential,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   sendEmailVerification,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  updatePassword,
   type User,
 } from 'firebase/auth'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -35,12 +40,17 @@ function googleName(user: User) {
   return name.length >= 2 ? name : 'Khách hàng'
 }
 
+function hasPasswordProvider(user: User | null | undefined) {
+  return Boolean(user?.providerData.some((p) => p.providerId === 'password'))
+}
+
 /**
  * Phiên đăng nhập (UC02, UC03). Có Firebase: đăng nhập email/mật khẩu rồi gọi /auth/me để backend
  * kiểm tra tài khoản HMS. Chưa có Firebase: chọn tài khoản seed, api gửi header x-dev-*.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null)
+  const [hasPassword, setHasPassword] = useState(false)
   // Không có Firebase và chưa chọn tài khoản dev thì biết ngay là chưa đăng nhập.
   const [status, setStatus] = useState<AuthContextValue['status']>(() =>
     firebaseAuth || localStorage.getItem(DEV_USER_KEY) ? 'loading' : 'anonymous',
@@ -55,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const nextPrincipal = `${nextMe.id}:${nextMe.role}`
     if (principal.current !== nextPrincipal) clearSessionCache()
     principal.current = nextPrincipal
+    setHasPassword(hasPasswordProvider(firebaseAuth?.currentUser))
     setMe(nextMe)
     setStatus('authenticated')
   }, [])
@@ -92,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       me,
       status,
       isDevMode: !firebaseAuth,
+      hasPassword,
       async login(email, password) {
         if (!firebaseAuth) throw new Error('Chưa cấu hình Firebase')
         const credential = await signInWithEmailAndPassword(firebaseAuth, email, password).catch(
@@ -170,13 +182,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           registering.current = false
         }
       },
+      async sendPasswordReset(email) {
+        if (!firebaseAuth) throw new Error('Chưa cấu hình Firebase')
+        // Sau khi đặt lại xong, trang của Firebase có nút quay về trang đăng nhập.
+        await sendPasswordResetEmail(firebaseAuth, email, {
+          url: `${window.location.origin}/login`,
+        }).catch((error) => {
+          throw new Error(firebaseErrorMessage(error))
+        })
+      },
+      async setPassword(newPassword, currentPassword) {
+        const user = firebaseAuth?.currentUser
+        if (!user?.email) throw new Error('Vui lòng đăng nhập lại')
+        const email = user.email
+        if (currentPassword === undefined) {
+          await linkWithCredential(user, EmailAuthProvider.credential(email, newPassword)).catch(
+            (error) => {
+              throw new Error(firebaseErrorMessage(error))
+            },
+          )
+        } else {
+          await reauthenticateWithCredential(
+            user,
+            EmailAuthProvider.credential(email, currentPassword),
+          ).catch((error: { code?: string }) => {
+            throw new Error(
+              error?.code === 'auth/invalid-credential' || error?.code === 'auth/wrong-password'
+                ? 'Mật khẩu hiện tại không đúng'
+                : firebaseErrorMessage(error),
+            )
+          })
+          await updatePassword(user, newPassword).catch((error) => {
+            throw new Error(firebaseErrorMessage(error))
+          })
+        }
+        setHasPassword(true)
+      },
       async logout() {
         if (firebaseAuth) await signOut(firebaseAuth)
         clearSession()
       },
       refresh: loadMe,
     }),
-    [me, status, loadMe, clearSession],
+    [me, status, hasPassword, loadMe, clearSession],
   )
 
   return <AuthContext value={value}>{children}</AuthContext>

@@ -268,7 +268,7 @@ While many people migrate pages in parallel, `design-system/legacy.css` keeps th
 - **Shell & landing:** `HomePage`, `ExperiencesPage`, `NotFoundPage`, `Unauthorized`, `PublicLayout`, `UserMenu`
 - **Browse & room details:** `SearchRoomsPage`, `RoomDetailsPage`
 - **Booking flow:** `CreateBookingPage`, `LookupBookingPage`, `BookingDetailPage`, `PaymentReturnPage`
-- **Guest account:** `LoginPage`, `RegisterPage` (with `AuthLayout`), `ProfilePage`, `MyBookingsPage`
+- **Guest account:** `LoginPage`, `RegisterPage`, `ForgotPasswordPage` (with `AuthLayout`), `ProfilePage` (profile and password tabs), `MyBookingsPage`
 
 ### Migrated: Dashboard Shell
 
