@@ -531,7 +531,7 @@ describe('financial coordination on standalone MongoDB', () => {
     );
     await expect(
       withBookingFinancialOperation(bookings, id, async () => undefined),
-    ).rejects.toThrow('in progress');
+    ).rejects.toThrow('thao tác thanh toán khác');
     expect((await bookings.findById(id))!.financialOperationToken).toBe(
       'crashed',
     );
