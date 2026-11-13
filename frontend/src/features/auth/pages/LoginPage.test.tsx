@@ -13,6 +13,7 @@ const routes = [
   { path: '/reception/front-desk', element: <p>quầy lễ tân</p> },
   { path: '/manager/accounts', element: <p>quản lý tài khoản</p> },
   { path: '/my-bookings', element: <p>booking của tôi</p> },
+  { path: '/forgot-password', element: <p>trang quên mật khẩu</p> },
 ]
 
 describe('LoginPage', () => {
@@ -28,6 +29,12 @@ describe('LoginPage', () => {
 
     await screen.findByText('trang chủ')
     expect(login).toHaveBeenCalledWith('a@b.vn', 'secret12')
+  })
+
+  it('có link quên mật khẩu', async () => {
+    renderWithAuth(routes, { path: '/login' })
+    fireEvent.click(screen.getByRole('link', { name: 'Quên mật khẩu?' }))
+    expect(await screen.findByText('trang quên mật khẩu')).toBeInTheDocument()
   })
 
   it('hiển thị lỗi khi đăng nhập thất bại', async () => {

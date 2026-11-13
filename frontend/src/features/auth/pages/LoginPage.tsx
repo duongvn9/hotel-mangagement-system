@@ -86,6 +86,12 @@ export function LoginPage() {
             />
           </FormField>
 
+          <p className="text-right text-sm">
+            <Link to="/forgot-password" className="font-medium text-primary hover:underline">
+              Quên mật khẩu?
+            </Link>
+          </p>
+
           <div className="pt-2">
             <Button
               type="submit"
