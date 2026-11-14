@@ -255,6 +255,10 @@ describe('ReceptionBookingDetailPage', () => {
       within(modal).getByRole('heading', { name: 'Xuất hoá đơn / Phiếu thanh toán' }),
     ).toBeInTheDocument()
     expect(within(modal).getByText('RECEIPT')).toBeInTheDocument()
+    // The brand logo is the real mark from public/, not a text placeholder.
+    const logo = within(modal).getByRole('img', { name: 'Grand Emily Hotel' })
+    expect(logo).toHaveAttribute('src', '/favicon.svg')
+    expect(within(modal).queryByText('EMILY')).not.toBeInTheDocument()
     expect(within(modal).getByText(/#BKVIEW1/)).toBeInTheDocument()
     expect(within(modal).getByText('Nguyễn Văn A')).toBeInTheDocument()
 
