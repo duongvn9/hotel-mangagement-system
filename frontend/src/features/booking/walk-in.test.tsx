@@ -4,6 +4,7 @@ import { ME } from '@/features/auth/test-utils'
 import { renderWithAuth } from '@/features/auth/test-utils'
 import { bookingRoutes } from './routes'
 import type { AvailableRoom } from './api'
+import { daysFromTodayISO, todayISO } from './utils'
 
 const receptionist = { ...ME, id: 'u2', email: 'reception@hms.local', role: 'RECEPTIONIST' }
 
@@ -226,6 +227,12 @@ describe('WalkInBookingPage', () => {
     expect(deposits[1]).toEqual(deposits[0])
   })
 
+  it('prefills check-in with today and check-out with 2 days later by default', () => {
+    renderPage()
+    expect(screen.getByLabelText(/Nhận phòng/)).toHaveValue(todayISO())
+    expect(screen.getByLabelText(/Trả phòng/)).toHaveValue(daysFromTodayISO(2))
+  })
+
   it('prefills the guest details from the query string', async () => {
     renderWithAuth(bookingRoutes, {
       path:
@@ -234,6 +241,8 @@ describe('WalkInBookingPage', () => {
           guestName: 'Ann Nguyễn',
           guestEmail: 'ann@example.test',
           guestPhone: '0900000003',
+          checkIn: '2099-01-10',
+          checkOut: '2099-01-12',
         }).toString(),
       auth: { me: receptionist, status: 'authenticated' },
     })
@@ -241,6 +250,8 @@ describe('WalkInBookingPage', () => {
     expect(screen.getByLabelText(/Họ tên/)).toHaveValue('Ann Nguyễn')
     expect(screen.getByLabelText(/Email/)).toHaveValue('ann@example.test')
     expect(screen.getByLabelText(/Số điện thoại/)).toHaveValue('0900000003')
+    expect(screen.getByLabelText(/Nhận phòng/)).toHaveValue('2099-01-10')
+    expect(screen.getByLabelText(/Trả phòng/)).toHaveValue('2099-01-12')
   })
 
   it('needs at least one room before creating', async () => {
