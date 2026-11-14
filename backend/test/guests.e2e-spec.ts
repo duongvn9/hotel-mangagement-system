@@ -8,10 +8,12 @@ import {
   Booking,
   BookingStatus,
 } from '../src/modules/bookings/schemas/booking.schema.js';
+import { User } from '../src/modules/users/schemas/user.schema.js';
 
 describe('Guest profile search (e2e)', () => {
   let app: INestApplication;
   let bookings: Model<Booking>;
+  let users: Model<User>;
   const tag = String(new Types.ObjectId()).slice(-8).toUpperCase();
   const room = new Types.ObjectId();
   const customerId = new Types.ObjectId();
@@ -59,6 +61,8 @@ describe('Guest profile search (e2e)', () => {
     await app.init();
     bookings = app.get(getModelToken(Booking.name));
     await bookings.init();
+    users = app.get(getModelToken(User.name));
+    await users.init();
     // Cùng một khách (email khác hoa/thường), 3 booking; booking mới nhất đổi tên và số điện thoại.
     await seed(
       'A1',
@@ -105,10 +109,30 @@ describe('Guest profile search (e2e)', () => {
       '2096-04-10',
       '2096-01-04T00:00:00Z',
     );
+    // Ann có tài khoản (cùng email với booking) → hasAccount; Cara chỉ có tài khoản, chưa từng đặt.
+    await users.create({
+      email: `ann-${tag}@example.test`,
+      fullName: 'Ann Account',
+      phone: '0900000009',
+    });
+    await users.create({
+      email: `cara-${tag}@example.test`,
+      fullName: 'Cara Account',
+      phone: '0922222222',
+    });
+    // Nhân viên không phải Customer → không xuất hiện ở tìm khách.
+    await users.create({
+      email: `staff-${tag}@example.test`,
+      fullName: 'Staff Account',
+      role: 'RECEPTIONIST',
+    });
   });
 
   afterAll(async () => {
     await bookings.deleteMany({ code: new RegExp(`^GST${tag}`) });
+    await users.deleteMany({
+      email: new RegExp(`-${tag}@example.test$`, 'i'),
+    });
     await app.close();
   });
 
@@ -133,18 +157,20 @@ describe('Guest profile search (e2e)', () => {
     await http().get('/api/v1/guests').query({ q: tag }).expect(401);
   });
 
-  it('merges bookings of the same email into one profile with stats', async () => {
+  it('merges accounts and bookings of the same email, and includes account-only customers', async () => {
     const { body } = await search({ q: tag }).expect(200);
-    expect(body).toMatchObject({ total: 2, page: 1, limit: 20 });
-    // Khách có booking tạo gần nhất đứng trước.
+    expect(body).toMatchObject({ total: 3, page: 1, limit: 20 });
+    // Khách có booking tạo gần nhất đứng trước; khách chỉ có tài khoản (chưa đặt) đứng cuối.
     expect(body.items.map((item: { email: string }) => item.email)).toEqual([
       `bob-${tag}@example.test`,
       `ann-${tag}@example.test`,
+      `cara-${tag}@example.test`.toLowerCase(),
     ]);
     const ann = body.items[1];
     expect(ann).toMatchObject({
-      name: `Ann New ${tag}`,
-      phone: '0900000003',
+      // Tên/SĐT ưu tiên lấy từ tài khoản, không phải từ booking.
+      name: 'Ann Account',
+      phone: '0900000009',
       hasAccount: true,
       totalBookings: 3,
       completedStays: 1,
@@ -156,6 +182,15 @@ describe('Guest profile search (e2e)', () => {
       hasAccount: false,
       totalBookings: 1,
       completedStays: 0,
+    });
+    // Khách chỉ có tài khoản: lấy tên/SĐT từ tài khoản, chưa có booking nào.
+    expect(body.items[2]).toMatchObject({
+      name: 'Cara Account',
+      phone: '0922222222',
+      hasAccount: true,
+      totalBookings: 0,
+      completedStays: 0,
+      lastCheckIn: null,
     });
   });
 
@@ -183,7 +218,7 @@ describe('Guest profile search (e2e)', () => {
 
   it('paginates', async () => {
     const { body } = await search({ q: tag, limit: 1, page: 2 }).expect(200);
-    expect(body).toMatchObject({ total: 2, page: 2, limit: 1 });
+    expect(body).toMatchObject({ total: 3, page: 2, limit: 1 });
     expect(body.items.map((item: { email: string }) => item.email)).toEqual([
       `ann-${tag}@example.test`,
     ]);

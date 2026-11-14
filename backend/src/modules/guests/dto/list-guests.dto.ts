@@ -35,16 +35,24 @@ export class ListGuestsQuery {
 }
 
 export class GuestProfile {
-  @ApiProperty({ description: 'Tên ở booking mới nhất của khách' })
+  @ApiProperty({
+    description:
+      'Tên lấy từ tài khoản nếu có; nếu không thì theo booking mới nhất',
+  })
   name: string;
 
   @ApiProperty({ description: 'Email dùng để nhận diện khách' })
   email: string;
 
-  @ApiProperty({ description: 'Số điện thoại ở booking mới nhất của khách' })
+  @ApiProperty({
+    description:
+      'SĐT lấy từ tài khoản nếu có; nếu không thì theo booking mới nhất',
+  })
   phone: string;
 
-  @ApiProperty({ description: 'Khách từng đặt khi đã đăng nhập tài khoản' })
+  @ApiProperty({
+    description: 'Email này có tài khoản khách hàng đăng ký trong hệ thống',
+  })
   hasAccount: boolean;
 
   @ApiProperty()
