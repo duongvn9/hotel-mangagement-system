@@ -8,6 +8,7 @@ const summary = (overrides: Partial<BookingSummary> = {}): BookingSummary => ({
   code: 'BK2401',
   status: 'CHECKED_IN',
   source: 'ONLINE',
+  hasAccount: false,
   checkIn: '2026-11-02T17:00:00.000Z',
   checkOut: '2026-11-03T17:00:00.000Z',
   adultCount: 2,
@@ -90,9 +91,15 @@ describe('BookingDetailLayout', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Phòng đang được giữ')
   })
 
-  it('labels a desk booking as a walk-in', () => {
-    renderLayout(summary({ source: 'FRONT_DESK' }))
+  it('labels a desk booking with no linked account as a walk-in', () => {
+    renderLayout(summary({ source: 'FRONT_DESK', hasAccount: false }))
     expect(screen.getByText('Khách vãng lai')).toBeInTheDocument()
+  })
+
+  it('shows no walk-in badge for a desk booking linked to an account', () => {
+    renderLayout(summary({ source: 'FRONT_DESK', hasAccount: true }))
+    expect(screen.queryByText('Khách vãng lai')).not.toBeInTheDocument()
+    expect(screen.queryByText('Khách hàng')).not.toBeInTheDocument()
   })
 
   it('lists the stay details', () => {

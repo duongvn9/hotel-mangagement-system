@@ -69,7 +69,14 @@ export function BookingDetailLayout({
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold break-words">{summary.code}</h1>
             <StatusBadge status={summary.status} />
-            <StatusBadge status={summary.source === 'FRONT_DESK' ? 'WALK_IN' : summary.source} />
+            {summary.source === 'FRONT_DESK' ? (
+              // Chỉ đánh dấu đơn tại quầy chưa liên kết tài khoản (khách vãng lai); đã liên kết thì không cần badge.
+              summary.hasAccount ? null : (
+                <StatusBadge status="WALK_IN" />
+              )
+            ) : (
+              <StatusBadge status={summary.source} />
+            )}
           </div>
           {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
         </div>
