@@ -143,6 +143,9 @@ describe('AuthProvider public search cache during session restoration', () => {
       expect(fetchAvailability).toHaveBeenCalledTimes(1)
       // Even an initial restoration must discard potentially sensitive cached data.
       queryClient.setQueryData(['booking', 'old-private-booking', null], { code: 'PRIVATE' })
+      // The VNPay return result is public (keyed by the signed query) and must survive the
+      // auth-state settle, or a guest returning from VNPay is stranded on "Đang xác minh…".
+      queryClient.setQueryData(['vnpay-return', 'vnp_TxnRef=TXN1'], { status: 'CANCELLED' })
       if (session === 'authenticated') {
         act(() => restoreUser())
         await act(async () => resolveMe(ME))
@@ -150,6 +153,9 @@ describe('AuthProvider public search cache during session restoration', () => {
         act(() => restoreUser())
       }
       expect(queryClient.getQueryData(['booking', 'old-private-booking', null])).toBeUndefined()
+      expect(queryClient.getQueryData(['vnpay-return', 'vnp_TxnRef=TXN1'])).toEqual({
+        status: 'CANCELLED',
+      })
       // Cache removal alone leaves observers displaying old results without fetching.
       expect(fetchFilters).toHaveBeenCalledTimes(1)
       expect(fetchAvailability).toHaveBeenCalledTimes(1)
