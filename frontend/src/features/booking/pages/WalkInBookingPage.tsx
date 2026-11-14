@@ -18,6 +18,7 @@ import {
   useRecordDeskDeposit,
 } from '../hooks'
 import {
+  INVALID_INPUT_CLASS,
   mapGuestServerErrors,
   validateGuestContact,
   type GuestFieldErrors,
@@ -456,6 +457,7 @@ export function WalkInBookingPage() {
                     required
                     maxLength={120}
                     aria-invalid={Boolean(contactErrors.guestName)}
+                    className={cn(contactErrors.guestName && INVALID_INPUT_CLASS)}
                     value={guestName}
                     onChange={(event) => {
                       setGuestName(event.target.value)
@@ -475,6 +477,7 @@ export function WalkInBookingPage() {
                     required
                     maxLength={160}
                     aria-invalid={Boolean(contactErrors.guestEmail)}
+                    className={cn(contactErrors.guestEmail && INVALID_INPUT_CLASS)}
                     value={guestEmail}
                     onChange={(event) => {
                       setGuestEmail(event.target.value)
@@ -495,6 +498,7 @@ export function WalkInBookingPage() {
                     required
                     placeholder="0900000000"
                     aria-invalid={Boolean(contactErrors.guestPhone)}
+                    className={cn(contactErrors.guestPhone && INVALID_INPUT_CLASS)}
                     value={guestPhone}
                     onChange={(event) => {
                       setGuestPhone(event.target.value)
