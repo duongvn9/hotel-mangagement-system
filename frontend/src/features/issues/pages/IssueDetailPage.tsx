@@ -6,9 +6,6 @@ import { IssueBadges, IssueError } from '../IssuePresentation'
 import {
   bookingCode,
   personName,
-  taskStatusLabel,
-  taskTypeLabel,
-  taskPriorityLabel,
   issueDate,
   issueRoomLabel,
   issueViews,
@@ -110,7 +107,7 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
                       <dd>{personName(issue.reviewedByName)}</dd>
                     </div>
                   )}
-                  {issue.assigneeId && (
+                  {!issue.linkedTasks.length && issue.assigneeId && (
                     <div>
                       <dt className="font-semibold">Nhân viên được phân công</dt>
                       <dd>{personName(issue.assigneeName)}</dd>
@@ -126,18 +123,6 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
                     <div>
                       <dt className="font-semibold">Ngày yêu cầu phân công</dt>
                       <dd>{issueDate(issue.assignmentRequestedAt)}</dd>
-                    </div>
-                  )}
-                  {issue.assignedAt && (
-                    <div>
-                      <dt className="font-semibold">Ngày phân công</dt>
-                      <dd>{issueDate(issue.assignedAt)}</dd>
-                    </div>
-                  )}
-                  {issue.dueAt && (
-                    <div>
-                      <dt className="font-semibold">Thời hạn</dt>
-                      <dd>{issueDate(issue.dueAt)}</dd>
                     </div>
                   )}
                 </>
@@ -205,26 +190,11 @@ export function IssueDetailPage({ role }: { role: IssueRole }) {
             >
               <h3 className="font-semibold">Công việc liên quan</h3>
               {role !== 'CUSTOMER' && issue.linkedTasksAvailable ? (
-                issue.linkedTasks.length ? (
-                  <ul className="space-y-4">
-                    {issue.linkedTasks.map((task) => (
-                      <li key={task.id} className="space-y-2 break-words">
-                        <h4 className="font-semibold">{task.title}</h4>
-                        <p>
-                          Loại: {taskTypeLabel(task.taskType)} · Ưu tiên:{' '}
-                          {taskPriorityLabel(task.priority)} · Trạng thái:{' '}
-                          {taskStatusLabel(task.status)}
-                        </p>
-                        <p>Nhân viên: {personName(task.assigneeName)}</p>
-                        <p>Ngày phân công: {issueDate(task.assignedAt)}</p>
-                        {task.dueAt && <p>Thời hạn: {issueDate(task.dueAt)}</p>}
-                        {task.completedAt && <p>Ngày hoàn tất: {issueDate(task.completedAt)}</p>}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>Chưa có công việc liên quan được cung cấp.</p>
-                )
+                <p>
+                  {issue.linkedTasks.length
+                    ? 'Thông tin công việc được hiển thị trong phần theo dõi xử lý sự cố.'
+                    : 'Chưa có công việc liên quan được cung cấp.'}
+                </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Chưa thể cung cấp thông tin công việc liên quan trong phạm vi truy cập này. Điều

@@ -23,6 +23,8 @@ import {
 import { toBookingChargesResponse } from './invoice-summary.js';
 import { InvoicesService } from './invoices.service.js';
 import { InvoiceChargeType } from './schemas/invoice-charge.schema.js';
+import { ServiceOrder } from '../service-orders/schemas/service-order.schema.js';
+import type { InvoiceDocument } from './schemas/invoice.schema.js';
 
 @Injectable()
 export class CheckoutChargesService {
@@ -32,6 +34,8 @@ export class CheckoutChargesService {
     @InjectModel(PaymentTransaction.name)
     private readonly payments: Model<PaymentTransaction>,
     private readonly invoices: InvoicesService,
+    @InjectModel(ServiceOrder.name)
+    private readonly orders: Model<ServiceOrder>,
   ) {}
 
   /**
@@ -156,7 +160,69 @@ export class CheckoutChargesService {
         isActive: true,
       }),
     );
-    return toBookingChargesResponse(booking, invoice, { vnpayPending });
+    const response = toBookingChargesResponse(booking, invoice, {
+      vnpayPending,
+    });
+    await this.enrichPresentation(response, invoice);
+    return response;
+  }
+
+  private async enrichPresentation(
+    response: BookingChargesResponse,
+    invoice: InvoiceDocument,
+  ): Promise<void> {
+    if (!invoice.isActive || String(invoice.booking) !== response.bookingId)
+      return;
+    const sources = invoice.charges
+      .filter(
+        (charge) =>
+          charge.type === InvoiceChargeType.Service &&
+          charge.approved === true &&
+          typeof charge.sourceId === 'string' &&
+          /^[a-f\d]{24}$/i.test(charge.sourceId) &&
+          charge.reason === `Service order ${charge.sourceId}` &&
+          invoice.charges.filter((line) => line.sourceId === charge.sourceId)
+            .length === 1,
+      )
+      .map((charge) => charge.sourceId!);
+    if (sources.length === 0) return;
+    let snapshots;
+    try {
+      snapshots = await this.orders
+        .find({ _id: { $in: sources }, booking: invoice.booking })
+        .select('_id booking serviceName quantity unitPriceVND amount')
+        .lean();
+    } catch {
+      return;
+    }
+    for (const line of response.charges) {
+      if (!line.sourceId || !sources.includes(line.sourceId)) continue;
+      const matches = snapshots.filter(
+        (row) => String(row._id) === line.sourceId,
+      );
+      if (matches.length !== 1) continue;
+      const row = matches[0];
+      if (
+        String(row.booking) !== response.bookingId ||
+        typeof row.serviceName !== 'string' ||
+        !row.serviceName.trim() ||
+        !Number.isSafeInteger(row.quantity) ||
+        row.quantity < 1 ||
+        !Number.isSafeInteger(row.unitPriceVND) ||
+        row.unitPriceVND < 0 ||
+        !Number.isSafeInteger(row.amount) ||
+        row.amount < 0 ||
+        !Number.isSafeInteger(row.quantity * row.unitPriceVND) ||
+        row.amount !== row.quantity * row.unitPriceVND ||
+        line.amount !== row.amount
+      )
+        continue;
+      Object.assign(line, {
+        serviceName: row.serviceName,
+        quantity: row.quantity,
+        unitPriceVND: row.unitPriceVND,
+      });
+    }
   }
 
   private async booking(bookingId: string) {

@@ -88,6 +88,9 @@ export class ChargeLine {
   amount: number;
   reason: string;
   sourceId?: string;
+  serviceName?: string;
+  quantity?: number;
+  unitPriceVND?: number;
 }
 
 export class InvoiceTotals {

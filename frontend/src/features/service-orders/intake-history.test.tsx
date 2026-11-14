@@ -77,6 +77,9 @@ it('renders completed-on-site history without a task or a source task link', asy
   expect(await screen.findByText('Đã giao tại chỗ')).toBeInTheDocument()
   expect(screen.getByText('Người thực hiện thực tế: actual-person')).toBeInTheDocument()
   expect(screen.queryByText('Xem công việc nguồn của tôi')).not.toBeInTheDocument()
+  expect(screen.queryByText(/^Thời gian yêu cầu:/)).not.toBeInTheDocument()
+  expect(screen.getByText(/^Thời điểm ghi nhận:/)).toBeInTheDocument()
+  expect(screen.getByText(/Không tạo công việc phân công/)).toBeInTheDocument()
 })
 it('integrates reporter-only records into the existing service history context', async () => {
   vi.mocked(api.get).mockImplementation(async (url) => ({

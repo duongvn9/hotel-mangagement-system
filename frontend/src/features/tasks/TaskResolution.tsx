@@ -6,7 +6,7 @@ import { FormField } from '@/components/molecules'
 import { ConfirmationDialog } from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
 import { reportUnableToResolve, type AssignedTask, type TaskResolution } from './api'
-import { taskDate } from './presentation'
+import { resolutionEvents, taskDate } from './presentation'
 
 export function ResolutionHistory({ task }: { task: TaskResolution }) {
   return (
@@ -18,32 +18,19 @@ export function ResolutionHistory({ task }: { task: TaskResolution }) {
       )}
       {task.overdue && <p className="text-danger">Quá hạn</p>}
       {task.instructions && <p className="whitespace-pre-wrap">Hướng dẫn: {task.instructions}</p>}
-      {task.blockerHistory?.map((report) => (
-        <div key={report.id} className="border-l-2 border-border pl-3">
-          <p className="whitespace-pre-wrap">Lý do không thể xử lý: {report.reason}</p>
-          <p>Thời điểm báo: {taskDate(report.reportedAt)}</p>
-          {report.resolvedAt && (
-            <p>
-              {report.resolution === 'CONTINUED'
-                ? 'Đã tiếp tục xử lý'
-                : report.resolution === 'REASSIGNED'
-                  ? 'Đã phân công lại'
-                  : 'Đã xem xét báo cáo'}{' '}
-              · {taskDate(report.resolvedAt)}
-            </p>
-          )}
-        </div>
-      ))}
-      {task.continuationHistory?.map((entry, index) => (
-        <p key={`${entry.at}:${index}`} className="whitespace-pre-wrap">
-          Tiếp tục: {taskDate(entry.at)} · Hạn: {taskDate(entry.dueAt)} · {entry.instructions}
-        </p>
-      ))}
-      {task.cancellation && (
-        <p className="whitespace-pre-wrap">
-          Đã hủy do phân công lại: {task.cancellation.reason} · {taskDate(task.cancellation.at)}
-        </p>
-      )}
+      <ol aria-label="Lịch sử xử lý công việc" className="space-y-3">
+        {resolutionEvents(task).map((event) => (
+          <li key={event.id} className="space-y-1 border-l-2 border-border pl-3">
+            <p className="whitespace-pre-wrap">{event.label}</p>
+            <time dateTime={event.at}>{taskDate(event.at)}</time>
+            {event.details.map((detail) => (
+              <p key={detail} className="whitespace-pre-wrap">
+                {detail}
+              </p>
+            ))}
+          </li>
+        ))}
+      </ol>
     </section>
   )
 }

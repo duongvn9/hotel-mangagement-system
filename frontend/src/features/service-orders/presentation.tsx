@@ -68,7 +68,7 @@ export function OrderReceipt({
   order,
   presentation,
 }: {
-  order: ServiceOrder
+  order: ServiceOrder & { intakeMode?: string }
   presentation?: 'workspace'
 }) {
   const Container = presentation === 'workspace' ? Panel : 'div'
@@ -101,7 +101,9 @@ export function OrderReceipt({
             ['Số lượng', `${order.quantity} ${order.service.unit}`],
             ['Đơn giá ghi nhận', money(order.unitPriceVND)],
             ['Thành tiền ghi nhận từ máy chủ', money(order.amount)],
-            ['Thời gian yêu cầu', dateTime(order.requestedTime)],
+            ...(order.intakeMode === 'COMPLETED_ON_SITE'
+              ? []
+              : [['Thời gian yêu cầu', dateTime(order.requestedTime)]]),
             ['Trạng thái duyệt', reviewLabels[order.reviewStatus] ?? 'Chưa xác định'],
             ['Trạng thái thực hiện', executionLabels[order.executionStatus] ?? 'Chưa xác định'],
             ['Ngày tạo', dateTime(order.createdAt)],

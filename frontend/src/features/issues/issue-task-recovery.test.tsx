@@ -1,4 +1,5 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { ResolutionHistory } from '@/features/tasks/TaskResolution'
 import { AxiosError, type AxiosResponse } from 'axios'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { api } from '@/lib/api-client'
@@ -219,9 +220,7 @@ it.each([undefined, 'not-a-date', ''])(
       resolutionTasks: [{ ...issue.resolutionTasks![0], dueAt }],
     })
     expect(
-      screen.getByText(
-        dueAt == null ? /Thời hạn: Không có thời hạn/ : /Thời hạn: Không có thời gian hợp lệ/,
-      ),
+      screen.getByText(dueAt == null ? 'Không có thời hạn' : 'Không có thời gian hợp lệ'),
     ).toBeInTheDocument()
   },
 )
@@ -266,6 +265,187 @@ it('shows named resolution actors and Vietnamese task status without operational
   expect(screen.getByText(/Người khôi phục: Trịnh Minh Anh/)).toBeInTheDocument()
   expect(document.body.textContent).toContain('Đang xử lý')
   expect(document.body.textContent).not.toMatch(/[a-f\d]{24}|IN_PROGRESS|ISSUE_RESOLUTION/)
+})
+
+it('shows one canonical current task and a chronological lifecycle through closure', () => {
+  const first = {
+    ...issue.resolutionTasks![0],
+    assigneeName: 'Người đầu',
+    status: 'CANCELLED',
+    cancellation: {
+      actorId: 'reception',
+      recoveryActorId: 'recovery',
+      requestId: 'r1',
+      at: '2026-10-04T00:00:00Z',
+      reason: 'Đổi ca',
+      replacementTaskId: 'second',
+    },
+    continuationHistory: [
+      { actorId: 'reception', at: '2026-10-03T00:00:00Z', instructions: 'Tiếp tục sửa' },
+    ],
+  }
+  const second = {
+    ...first,
+    id: 'second',
+    title: 'Lần hai',
+    assignedAt: '2026-10-04T00:00:00Z',
+    blockerHistory: [],
+    continuationHistory: [],
+    cancellation: {
+      ...first.cancellation,
+      requestId: 'r2',
+      at: '2026-10-05T00:00:00Z',
+      replacementTaskId: 'third',
+    },
+  }
+  const third = {
+    ...second,
+    id: 'third',
+    title: 'Công việc cuối',
+    assigneeName: 'Người cuối',
+    assignedAt: '2026-10-05T00:00:00Z',
+    status: 'COMPLETED',
+    completedAt: '2026-10-06T00:00:00Z',
+    workResult: 'Đã sửa xong',
+    blocked: false,
+    overdue: false,
+    cancellation: undefined,
+  }
+  mount(
+    {
+      ...issue,
+      status: 'CLOSED',
+      closedAt: '2026-10-07T00:00:00Z',
+      linkedTasks: [third],
+      resolutionTasks: [third, second, first, first],
+    },
+    'MANAGER',
+  )
+  const current = screen.getByRole('region', { name: 'Công việc hiện tại' })
+  expect(current).toHaveTextContent('Người cuối')
+  expect(current).toHaveTextContent('Đã hoàn thành')
+  expect(current).toHaveTextContent('Đã sửa xong')
+  expect(screen.getAllByRole('heading', { name: 'Công việc cuối' })).toHaveLength(1)
+  const history = screen.getByRole('list', { name: 'Lịch sử xử lý sự cố' })
+  const events = within(history).getAllByRole('listitem')
+  const times = events.map((event) => new Date(event.querySelector('time')!.dateTime).getTime())
+  expect(times).toEqual([...times].sort((a, b) => a - b))
+  expect(within(history).getAllByText(/Lý do không thể xử lý: Thiếu linh kiện/)).toHaveLength(1)
+  expect(within(history).getAllByText(/Đã hủy do phân công lại/)).toHaveLength(2)
+  expect(events.at(-2)).toHaveTextContent('Đã hoàn thành công việc')
+  expect(events.at(-1)).toHaveTextContent('Đã đóng sự cố')
+})
+
+it('preserves prior task instructions, deadline, result and assignee in dated timeline entries', () => {
+  const prior = {
+    ...issue.resolutionTasks![0],
+    assigneeName: 'Nhân viên ban đầu',
+    dueAt: '2026-10-03T12:00:00Z',
+    instructions: 'Kiểm tra bo mạch ban đầu',
+    workResult: 'Đã kiểm tra, cần linh kiện thay thế',
+    status: 'CANCELLED',
+    cancellation: {
+      actorId: 'reception',
+      recoveryActorId: 'recovery',
+      requestId: 'prior-request',
+      at: '2026-10-04T00:00:00Z',
+      reason: 'Chuyển chuyên viên',
+      replacementTaskId: 'replacement',
+    },
+  }
+  const replacement = {
+    ...issue.resolutionTasks![0],
+    id: 'replacement',
+    assigneeName: 'Chuyên viên mới',
+    assignedAt: '2026-10-04T00:00:00Z',
+    status: 'COMPLETED',
+    completedAt: '2026-10-05T00:00:00Z',
+    workResult: 'Đã thay linh kiện',
+    blockerHistory: [],
+  }
+  mount({ ...issue, linkedTasks: [replacement], resolutionTasks: [replacement, prior] }, 'MANAGER')
+  const current = screen.getByRole('region', { name: 'Công việc hiện tại' })
+  expect(current).toHaveTextContent('Chuyên viên mới')
+  expect(current).not.toHaveTextContent(prior.instructions)
+  const history = screen.getByRole('list', { name: 'Lịch sử xử lý sự cố' })
+  const events = within(history).getAllByRole('listitem')
+  const assignment = events.find((event) => event.textContent?.includes(prior.instructions))!
+  expect(assignment).toHaveTextContent('Nhân viên ban đầu')
+  expect(assignment).toHaveTextContent(new Date(prior.dueAt).toLocaleString('vi-VN'))
+  expect(assignment.querySelector('time')).toHaveAttribute('dateTime', prior.assignedAt)
+  expect(history).toHaveTextContent(prior.workResult)
+  expect(history).toHaveTextContent('Chuyển chuyên viên')
+  const completion = events.find((event) => event.textContent?.includes('Đã hoàn thành công việc'))!
+  expect(completion).toHaveTextContent(replacement.workResult)
+  expect(completion.querySelector('time')).toHaveAttribute('dateTime', replacement.completedAt)
+  expect(within(history).queryByRole('heading')).not.toBeInTheDocument()
+})
+
+it('keeps pending recovery distinct from the cancellation and completed reassignment', () => {
+  mount(
+    {
+      ...issue,
+      pendingReassignment: { ...pending, requestedAt: '2026-10-04T00:00:00Z' },
+      reassignmentHistory: [{ ...pending, completedAt: '2026-10-03T00:00:00Z' }],
+    },
+    'MANAGER',
+  )
+  const history = screen.getByRole('list', { name: 'Lịch sử xử lý sự cố' })
+  expect(within(history).getByText('Đã phân công lại')).toBeInTheDocument()
+  expect(within(history).getByText('Phân công lại đang chờ khôi phục')).toBeInTheDocument()
+})
+
+it('does not invent timeline events or actors when authoritative dates and names are absent', () => {
+  mount({ ...issue, linkedTasks: [], resolutionTasks: [], status: 'CLOSED' }, 'MANAGER')
+  expect(screen.getByText('Chưa có lịch sử xử lý được cung cấp.')).toBeInTheDocument()
+  expect(screen.queryByText('Đã đóng sự cố')).not.toBeInTheDocument()
+  expect(screen.queryByRole('region', { name: 'Công việc hiện tại' })).not.toBeInTheDocument()
+})
+
+it('preserves distinct blockers with the same time while deduplicating their stable identities', () => {
+  const report = task.blockerHistory![0]
+  mount(
+    {
+      ...issue,
+      resolutionTasks: [
+        {
+          ...issue.resolutionTasks![0],
+          blockerHistory: [
+            report,
+            { ...report, id: 'different-report', reason: 'Thiếu dụng cụ' },
+            report,
+          ],
+        },
+      ],
+    },
+    'MANAGER',
+  )
+  const history = screen.getByRole('list', { name: 'Lịch sử xử lý sự cố' })
+  expect(within(history).getAllByText('Lý do không thể xử lý: Thiếu linh kiện')).toHaveLength(1)
+  expect(within(history).getByText('Lý do không thể xử lý: Thiếu dụng cụ')).toBeInTheDocument()
+  expect(history).not.toHaveTextContent('Người báo không thể xử lý:')
+})
+
+it('orders task resolution events and omits absent continuation fields', () => {
+  renderWithAuth([
+    {
+      path: '/',
+      element: (
+        <ResolutionHistory
+          task={{
+            ...task,
+            continuationHistory: [{ actorId: 'actor', at: '2026-10-01T12:00:00Z' }],
+          }}
+        />
+      ),
+    },
+  ])
+  const history = screen.getByRole('list', { name: 'Lịch sử xử lý công việc' })
+  const events = within(history).getAllByRole('listitem')
+  expect(events[0]).toHaveTextContent('Tiếp tục:')
+  expect(events[1]).toHaveTextContent('Thiếu linh kiện')
+  expect(history).not.toHaveTextContent('Hạn:')
+  expect(history).not.toHaveTextContent('Không có thời gian hợp lệ')
 })
 
 it('continues the same task with optional trimmed instructions and deadline', async () => {

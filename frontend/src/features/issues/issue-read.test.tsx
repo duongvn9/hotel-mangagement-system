@@ -54,7 +54,9 @@ test.each([
   expect(await screen.findByText(label)).toBeInTheDocument()
   expect(screen.queryByText(detail.roomId!)).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('link', { name: detail.title }))
-  expect(await screen.findByRole('heading', { level: 2 })).toHaveTextContent(detail.title)
+  expect(await screen.findByRole('heading', { level: 2, name: detail.title })).toHaveTextContent(
+    detail.title,
+  )
   expect(screen.getByText(label)).toBeInTheDocument()
   expect(screen.queryByText(detail.roomId!)).not.toBeInTheDocument()
   expect(screen.queryByText('Mã phòng tham chiếu')).not.toBeInTheDocument()
@@ -177,7 +179,9 @@ test.each(views)('%s sees exact role title, list and detail', async (role, path,
   const result = page(path, role)
   expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(title)
   fireEvent.click(await screen.findByRole('link', { name: detail.title }))
-  expect(await screen.findByRole('heading', { level: 2 })).toHaveTextContent(detail.title)
+  expect(await screen.findByRole('heading', { level: 2, name: detail.title })).toHaveTextContent(
+    detail.title,
+  )
   expect(screen.getByText(/Điều này không có nghĩa/)).toBeInTheDocument()
   expect(screen.getByText('Ngày kết luận')).toBeInTheDocument()
   expect(screen.queryByText(detail.bookingId)).not.toBeInTheDocument()

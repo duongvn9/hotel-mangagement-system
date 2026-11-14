@@ -57,6 +57,7 @@ it('rejects a requested time exactly at checkout', async () => {
   const time = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}T${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`
   fireEvent.change(screen.getByLabelText('Thời gian yêu cầu'), { target: { value: time } })
   fireEvent.click(screen.getByRole('button', { name: 'Ghi nhận yêu cầu' }))
+  fireEvent.submit(screen.getByRole('button', { name: 'Ghi nhận yêu cầu' }).closest('form')!)
   expect(await screen.findByRole('alert')).toHaveTextContent(/Thời gian/)
   expect(api.post).not.toHaveBeenCalled()
 })
@@ -78,6 +79,7 @@ it('rejects actual completion exactly at checkout', async () => {
   })
   fireEvent.change(screen.getByLabelText('Kết quả thực hiện'), { target: { value: 'Đã giao' } })
   fireEvent.click(screen.getByRole('button', { name: 'Ghi nhận yêu cầu' }))
+  fireEvent.submit(screen.getByRole('button', { name: 'Ghi nhận yêu cầu' }).closest('form')!)
   expect(await screen.findByRole('alert')).toHaveTextContent(/Chọn người thực hiện/)
   expect(api.post).not.toHaveBeenCalled()
 })
@@ -142,6 +144,7 @@ it('validates requested time against the selected stay before posting', async ()
     target: { value: '2028-01-01T12:00' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Ghi nhận yêu cầu' }))
+  fireEvent.submit(screen.getByRole('button', { name: 'Ghi nhận yêu cầu' }).closest('form')!)
   expect(await screen.findByRole('alert')).toHaveTextContent(/Thời gian/)
   expect(api.post).not.toHaveBeenCalled()
 })
@@ -186,6 +189,62 @@ it('keeps the identical UUID and payload on uncertain intake failure without cla
   })
   expect(screen.queryByText('Đã chấp nhận')).not.toBeInTheDocument()
 })
+it('hides and omits a previous schedule for onsite intake and retries identical evidence', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-11-14T12:00Z').getTime())
+  vi.mocked(api.post).mockRejectedValue(new Error('Unknown outcome'))
+  page('SERVICE_STAFF')
+  await fill()
+  fireEvent.change(screen.getByLabelText('Thời gian yêu cầu'), {
+    target: { value: '2028-01-01T12:00' },
+  })
+  fireEvent.change(screen.getByLabelText('Hình thức ghi nhận'), {
+    target: { value: 'COMPLETED_ON_SITE' },
+  })
+  expect(screen.queryByLabelText('Thời gian yêu cầu')).not.toBeInTheDocument()
+  await screen.findByRole('option', { name: 'Mai' })
+  fireEvent.change(screen.getByLabelText('Người thực hiện thực tế'), {
+    target: { value: 'd'.repeat(24) },
+  })
+  fireEvent.change(screen.getByLabelText('Thời điểm hoàn thành thực tế'), {
+    target: { value: '2026-11-02T12:00' },
+  })
+  fireEvent.change(screen.getByLabelText('Kết quả thực hiện'), { target: { value: 'Đã giao' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Ghi nhận yêu cầu' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Thử lại cùng nội dung' }))
+  await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2))
+  expect(vi.mocked(api.post).mock.calls[0][1]).not.toHaveProperty('requestedTime')
+  expect(vi.mocked(api.post).mock.calls[0][1]).toEqual(vi.mocked(api.post).mock.calls[1][1])
+})
+
+it('explains local to UTC conversion and bounds completion by the selected stay and now', async () => {
+  const now = new Date('2026-11-14T12:00Z').getTime()
+  vi.spyOn(Date, 'now').mockReturnValue(now)
+  const local = (value: string | number) => {
+    const date = new Date(value)
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  }
+  page('SERVICE_STAFF')
+  await fill()
+  expect(screen.getByLabelText('Thời gian yêu cầu')).toHaveAttribute('min', local(now + 60000))
+  expect(screen.getByLabelText('Thời gian yêu cầu')).toHaveAttribute(
+    'max',
+    local(new Date(booking.checkOut).getTime() - 60000),
+  )
+  expect(screen.getByText(/giờ địa phương.*UTC/)).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Hình thức ghi nhận'), {
+    target: { value: 'COMPLETED_ON_SITE' },
+  })
+  expect(screen.getByLabelText('Thời điểm hoàn thành thực tế')).toHaveAttribute(
+    'min',
+    local(booking.checkIn),
+  )
+  expect(screen.getByLabelText('Thời điểm hoàn thành thực tế')).toHaveAttribute('max', local(now))
+  fireEvent.change(screen.getByLabelText('Hình thức ghi nhận'), {
+    target: { value: 'UNPERFORMED' },
+  })
+  expect(screen.getByLabelText('Thời gian yêu cầu')).toBeInTheDocument()
+})
+
 it('requires actual completion evidence for staff completed-on-site intake', async () => {
   vi.mocked(api.post).mockResolvedValue({
     data: { id: 'report-1', reviewStatus: 'PENDING_REVIEW', executionStatus: 'NOT_STARTED' },

@@ -134,9 +134,20 @@ export function CheckoutCharges({
                   ) : (
                     <ul aria-label="Phụ phí đã ghi" className="divide-y divide-border text-sm">
                       {charges.data.charges.map((charge, index) => (
-                        <li key={charge.sourceId ?? index} className="flex justify-between py-1.5">
-                          <span className="text-foreground">
-                            {charge.reason}
+                        <li
+                          key={charge.sourceId ?? index}
+                          className="flex justify-between gap-3 py-1.5"
+                        >
+                          <span className="min-w-0 break-words text-foreground">
+                            {charge.serviceName ?? charge.reason}
+                            {charge.serviceName &&
+                              charge.quantity !== undefined &&
+                              charge.unitPriceVND !== undefined && (
+                                <span className="block text-xs text-muted-foreground">
+                                  Số lượng: {charge.quantity} · Đơn giá:{' '}
+                                  {money.format(charge.unitPriceVND)}
+                                </span>
+                              )}
                             {charge.category && (
                               <span className="ml-2 text-xs text-muted-foreground">
                                 {CHARGE_CATEGORY_LABEL[charge.category]}

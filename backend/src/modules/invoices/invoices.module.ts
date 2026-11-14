@@ -21,6 +21,10 @@ import {
   PersistedInvoiceChargesAdapter,
 } from './invoice-adapters.js';
 import { RoomTypePricingAdapter } from './room-type-pricing.adapter.js';
+import {
+  ServiceOrder,
+  ServiceOrderSchema,
+} from '../service-orders/schemas/service-order.schema.js';
 
 @Module({
   imports: [
@@ -30,7 +34,10 @@ import { RoomTypePricingAdapter } from './room-type-pricing.adapter.js';
     RoomsModule,
     ServicesModule,
     TasksModule,
-    MongooseModule.forFeature([{ name: Invoice.name, schema: InvoiceSchema }]),
+    MongooseModule.forFeature([
+      { name: Invoice.name, schema: InvoiceSchema },
+      { name: ServiceOrder.name, schema: ServiceOrderSchema },
+    ]),
   ],
   controllers: [
     CheckoutChargesController,

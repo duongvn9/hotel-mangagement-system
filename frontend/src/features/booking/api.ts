@@ -502,6 +502,9 @@ export interface BookingCharge {
   amount: number
   reason: string
   sourceId?: string
+  serviceName?: string
+  quantity?: number
+  unitPriceVND?: number
 }
 
 export interface BookingCharges {
