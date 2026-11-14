@@ -15,6 +15,14 @@ export interface BookingAttentionCounts {
   dueCheckIn: number;
 }
 
+/** The attention categories, in the order reception sees them. */
+export const ATTENTION_KINDS = [
+  'overdueCheckOut',
+  'overdueCheckIn',
+  'dueCheckOut',
+  'dueCheckIn',
+] as const satisfies readonly (keyof BookingAttentionCounts)[];
+
 type AttentionFilter = Record<string, unknown>;
 
 /**

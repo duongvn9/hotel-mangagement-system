@@ -17,6 +17,8 @@ import { Role } from '../../common/constants/role.enum.js';
 import { BookingsService } from './bookings.service.js';
 import { toBookingListItem } from './booking-list-item.js';
 import { UpdateBookingDto } from './dto/create-booking.dto.js';
+import { ListBookingsQuery } from './dto/list-bookings.dto.js';
+import { bookingAttentionQueries } from './booking-attention.core.js';
 import { validate } from 'class-validator';
 
 const now = new Date('2026-10-28T00:00:00Z');
@@ -454,6 +456,92 @@ describe('resolveByCode', () => {
     await expect(service.resolveByCode('BKZZZ9')).rejects.toThrow(
       'Không tìm thấy',
     );
+  });
+});
+
+describe('list with an attention filter', () => {
+  const clockNow = new Date('2026-11-10T05:00:00.000Z');
+  const makeService = () => {
+    const query: Record<string, unknown> = {};
+    for (const name of ['sort', 'skip', 'limit', 'populate', 'lean']) {
+      query[name] = vi.fn(() => query);
+    }
+    query.exec = vi.fn(async () => []);
+    const bookings = {
+      find: vi.fn(() => query),
+      countDocuments: vi.fn(async () => 0),
+    };
+    const service = new BookingsService(
+      bookings as unknown as Model<Booking>,
+      {} as Model<RoomHold>,
+      {} as Model<Room>,
+      { now: () => clockNow } as AvailabilityClock,
+      {} as Model<PaymentTransaction>,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    return { service, bookings };
+  };
+  const query = (extra: Partial<ListBookingsQuery>) =>
+    Object.assign(new ListBookingsQuery(), extra);
+
+  it.each([
+    'overdueCheckOut',
+    'overdueCheckIn',
+    'dueCheckOut',
+    'dueCheckIn',
+  ] as const)(
+    'lists exactly the bookings the %s chip counts',
+    async (attention) => {
+      const { service, bookings } = makeService();
+
+      await service.list(query({ attention }));
+
+      const expected = {
+        isActive: true,
+        $and: [bookingAttentionQueries(clockNow)[attention]],
+      };
+      expect(bookings.find).toHaveBeenCalledWith(expected);
+      expect(bookings.countDocuments).toHaveBeenCalledWith(expected);
+    },
+  );
+
+  it('narrows further with the other filters instead of replacing them', async () => {
+    const { service, bookings } = makeService();
+
+    await service.list(
+      query({
+        attention: 'dueCheckIn',
+        q: 'an',
+        status: BookingStatus.Confirmed,
+      }),
+    );
+
+    expect(bookings.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: BookingStatus.Confirmed,
+        $or: expect.any(Array),
+        $and: [bookingAttentionQueries(clockNow).dueCheckIn],
+      }),
+    );
+  });
+
+  it('adds no attention condition when the filter is not used', async () => {
+    const { service, bookings } = makeService();
+
+    await service.list(query({}));
+
+    expect(bookings.find).toHaveBeenCalledWith({ isActive: true });
+  });
+
+  it('accepts only the four attention kinds in the query', async () => {
+    expect(await validate(query({ attention: 'overdueCheckIn' }))).toEqual([]);
+    expect(await validate(query({}))).toEqual([]);
+    expect(
+      await validate(query({ attention: 'nonsense' as never })),
+    ).not.toEqual([]);
   });
 });
 

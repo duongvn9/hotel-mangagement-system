@@ -303,7 +303,7 @@ export class BookingsService {
   }
 
   /**
-   * UC10: danh sách booking cho lễ tân/quản lý, lọc theo trạng thái, từ khoá và ngày nhận
+   * UC10: danh sách booking cho lễ tân/quản lý, lọc theo trạng thái, từ khoá, nhóm cần chú ý và ngày nhận
    * phòng (theo ngày làm việc giờ Việt Nam, gồm cả hai đầu), mới nhận phòng nhất trước.
    */
   async list(query: ListBookingsQuery): Promise<BookingListResponse> {
@@ -319,6 +319,12 @@ export class BookingsService {
         { guestName: pattern },
         { guestEmail: pattern },
         { guestPhone: pattern },
+      ];
+    }
+    if (query.attention) {
+      // Same conditions the attention chip counts, so the list always matches the number shown.
+      filter.$and = [
+        bookingAttentionQueries(this.clock.now())[query.attention],
       ];
     }
     if (query.checkInFrom || query.checkInTo) {
