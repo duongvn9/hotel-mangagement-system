@@ -10,14 +10,21 @@ export function IntakeDetails({ order }: { order: StaffServiceOrder }) {
         <p>
           Hình thức:{' '}
           {order.intakeMode === 'COMPLETED_ON_SITE'
-            ? 'Đã thực hiện tại chỗ · chờ duyệt trước khi xác nhận hoàn thành'
+            ? order.reviewStatus === 'ACCEPTED'
+              ? 'Đã thực hiện tại chỗ · đã được duyệt'
+              : 'Đã thực hiện tại chỗ · chưa được chấp nhận'
             : 'Chưa thực hiện'}
         </p>
         <p>Người ghi nhận: {order.reportedByName || order.reportedBy || 'Chưa có thông tin'}</p>
         <p>Người tạo: {order.createdByName || order.createdBy || 'Chưa có thông tin'}</p>
         <p>Người yêu cầu: {order.requesterName || 'Không chỉ định'}</p>
         <p>Phòng yêu cầu: {order.roomNumber || order.roomId || 'Không chỉ định'}</p>
-        <p>Thời gian yêu cầu: {dateTime(order.requestedTime)}</p>
+        <p>Thời điểm ghi nhận: {dateTime(order.createdAt)}</p>
+        {order.intakeMode === 'COMPLETED_ON_SITE' ? (
+          <p>Không tạo công việc phân công</p>
+        ) : (
+          <p>Thời gian yêu cầu: {dateTime(order.requestedTime)}</p>
+        )}
         {order.actualPerformerId && (
           <p>Người thực hiện thực tế: {order.actualPerformerName || order.actualPerformerId}</p>
         )}

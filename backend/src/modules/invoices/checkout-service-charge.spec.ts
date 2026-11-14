@@ -8,6 +8,8 @@ import { validate } from 'class-validator';
 import { Types } from 'mongoose';
 import { BookingStatus } from '../bookings/schemas/booking.schema.js';
 import { CheckoutChargesService } from './checkout-charges.service.js';
+import { toBookingChargesResponse } from './invoice-summary.js';
+import { PersistedInvoiceChargesAdapter } from './invoice-adapters.js';
 import {
   AddCheckoutChargeDto,
   AddCheckoutServiceDto,
@@ -25,6 +27,8 @@ function setup(
     status?: BookingStatus;
     service?: Record<string, unknown> | null;
     charges?: unknown[];
+    orders?: Record<string, unknown>[];
+    invoice?: Record<string, unknown>;
   } = {},
 ) {
   const booking = {
@@ -62,6 +66,10 @@ function setup(
     finalPaid: 0,
     balanceDue: 150_000,
     charges: options.charges ?? [],
+    _id: new Types.ObjectId(),
+    booking: booking._id,
+    isActive: true,
+    ...options.invoice,
   };
   const invoices = {
     addCharge: vi.fn(async () => invoice),
@@ -69,14 +77,187 @@ function setup(
   };
   // list() asks whether a VNPay payment is still pending; none is in these tests.
   const payments = { exists: vi.fn(async () => null) };
+  const orders = {
+    find: vi.fn(() => ({
+      select: vi.fn(() => ({ lean: vi.fn(async () => options.orders ?? []) })),
+    })),
+  };
   const sut = new CheckoutChargesService(
     bookings as never,
     services as never,
     payments as never,
     invoices as never,
+    orders as never,
   );
-  return { sut, invoices, services, bookings, booking };
+  return { sut, invoices, services, bookings, booking, orders, invoice };
 }
+
+describe('CheckoutChargesService.list snapshot presentation', () => {
+  const id = new Types.ObjectId();
+  const charge = {
+    type: InvoiceChargeType.Service,
+    sourceId: String(id),
+    reason: `Service order ${id}`,
+    amount: 150_000,
+    approved: true,
+  };
+  const order = {
+    _id: id,
+    booking: new Types.ObjectId(bookingId),
+    serviceName: 'Giặt ủi lịch sử',
+    quantity: 3,
+    unitPriceVND: 50_000,
+    amount: 150_000,
+  };
+
+  it('adds immutable snapshot display fields without changing evidence or totals', async () => {
+    const { sut, services, invoice, orders, booking, bookings, invoices } =
+      setup({
+        charges: [charge],
+        orders: [order],
+      });
+    const before = JSON.stringify(invoice);
+    const canonical = toBookingChargesResponse(booking, invoice as never);
+    const adapter = new PersistedInvoiceChargesAdapter();
+    const evidence = await adapter.getApprovedCharges(invoice as never);
+    const result = await sut.list(bookingId);
+    expect(result.charges[0]).toEqual({
+      type: charge.type,
+      sourceId: charge.sourceId,
+      reason: charge.reason,
+      amount: charge.amount,
+      serviceName: order.serviceName,
+      quantity: 3,
+      unitPriceVND: 50_000,
+    });
+    expect(result.totals).toEqual(canonical.totals);
+    expect(JSON.stringify(invoice)).toBe(before);
+    expect(await adapter.getApprovedCharges(invoice as never)).toEqual(
+      evidence,
+    );
+    expect(toBookingChargesResponse(booking, invoice as never)).toEqual(
+      canonical,
+    );
+    expect(bookings.updateOne).not.toHaveBeenCalled();
+    expect(invoices.addCharge).not.toHaveBeenCalled();
+    expect(services.findById).not.toHaveBeenCalled();
+    expect(orders.find).toHaveBeenCalledWith({
+      _id: { $in: [String(id)] },
+      booking: invoice.booking,
+    });
+  });
+
+  it.each([
+    ['missing snapshot', {}, [], {}],
+    ['duplicate snapshots', {}, [order, order], {}],
+    ['wrong identity', {}, [{ ...order, _id: new Types.ObjectId() }], {}],
+    ['wrong booking', {}, [{ ...order, booking: new Types.ObjectId() }], {}],
+    ['wrong reason', { reason: 'Edited' }, [order], {}],
+    ['wrong type', { type: InvoiceChargeType.Additional }, [order], {}],
+    ['unapproved', { approved: false }, [order], {}],
+    ['missing approval', { approved: undefined }, [order], {}],
+    ['invalid source', { sourceId: 'not-an-object-id' }, [order], {}],
+    ['missing source', { sourceId: undefined }, [order], {}],
+    ['missing quantity', {}, [{ ...order, quantity: undefined }], {}],
+    ['missing price', {}, [{ ...order, unitPriceVND: undefined }], {}],
+    ['missing amount', {}, [{ ...order, amount: undefined }], {}],
+    ['missing name', {}, [{ ...order, serviceName: undefined }], {}],
+    ['wrong amount', { amount: 1 }, [order], {}],
+    ['bad arithmetic', {}, [{ ...order, amount: 1 }], {}],
+    ['fractional quantity', {}, [{ ...order, quantity: 1.5 }], {}],
+    ['zero quantity', {}, [{ ...order, quantity: 0 }], {}],
+    ['negative price', {}, [{ ...order, unitPriceVND: -50_000 }], {}],
+    [
+      'unsafe arithmetic',
+      {},
+      [{ ...order, quantity: Number.MAX_SAFE_INTEGER }],
+      {},
+    ],
+    ['empty name', {}, [{ ...order, serviceName: ' ' }], {}],
+    ['inactive invoice', {}, [order], { isActive: false }],
+    ['wrong invoice booking', {}, [order], { booking: new Types.ObjectId() }],
+  ])(
+    'keeps original fallback for %s',
+    async (_label, override, rows, invoice) => {
+      const { sut } = setup({
+        charges: [{ ...charge, ...override }],
+        orders: rows,
+        invoice,
+      });
+      const result = await sut.list(bookingId);
+      expect(result.charges[0]).not.toHaveProperty('serviceName');
+      expect(result.charges[0]).not.toHaveProperty('quantity');
+      expect(result.charges[0]).not.toHaveProperty('unitPriceVND');
+      expect(result.charges[0].reason).toBe(override.reason ?? charge.reason);
+      expect(result.charges[0].amount).toBe(override.amount ?? charge.amount);
+    },
+  );
+
+  it('rejects duplicate source evidence across all charge types', async () => {
+    const { sut } = setup({
+      charges: [charge, { ...charge, type: InvoiceChargeType.Additional }],
+      orders: [order],
+    });
+    expect(
+      (await sut.list(bookingId)).charges.every(
+        (line) => !('serviceName' in line),
+      ),
+    ).toBe(true);
+  });
+
+  it('falls back if snapshot reading fails', async () => {
+    const { sut, orders } = setup({ charges: [charge] });
+    orders.find.mockImplementation(() => {
+      throw new Error('unavailable');
+    });
+    expect((await sut.list(bookingId)).charges[0].reason).toBe(charge.reason);
+  });
+
+  it('does not enrich write responses even when canonical snapshot evidence exists', async () => {
+    const { sut, orders } = setup({ charges: [charge], orders: [order] });
+    const results = [
+      await sut.add(bookingId, {
+        amount: 1,
+        reason: 'Manual',
+        requestId: 'req-12345678',
+      }),
+      await sut.addService(bookingId, {
+        serviceId,
+        quantity: 1,
+        requestId: 'req-12345678',
+      }),
+      await sut.confirmFees(bookingId),
+    ];
+    for (const result of results) {
+      expect(result.charges[0]).toEqual({
+        type: charge.type,
+        sourceId: charge.sourceId,
+        reason: charge.reason,
+        amount: charge.amount,
+      });
+    }
+    expect(orders.find).not.toHaveBeenCalled();
+  });
+
+  it('does not read snapshots for manual charges or write responses', async () => {
+    const { sut, orders } = setup({
+      charges: [{ ...charge, sourceId: 'frontdesk-service:req-12345678' }],
+    });
+    await sut.list(bookingId);
+    await sut.add(bookingId, {
+      amount: 1,
+      reason: 'Manual',
+      requestId: 'req-12345678',
+    });
+    await sut.addService(bookingId, {
+      serviceId,
+      quantity: 1,
+      requestId: 'req-12345678',
+    });
+    await sut.confirmFees(bookingId);
+    expect(orders.find).not.toHaveBeenCalled();
+  });
+});
 
 describe('CheckoutChargesService.addService', () => {
   it('records a SERVICE charge of price x quantity with a readable reason', async () => {

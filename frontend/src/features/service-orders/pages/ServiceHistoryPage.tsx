@@ -39,7 +39,12 @@ function HistoryResult({ order }: { order: ServiceHistory }) {
         <p>
           Số lượng: {order.quantity} {order.service.unit}
         </p>
-        <p>Thời gian yêu cầu: {dateTime(order.requestedTime)}</p>
+        <p>Thời điểm ghi nhận: {dateTime(order.createdAt)}</p>
+        {order.intakeMode === 'COMPLETED_ON_SITE' ? (
+          <p>Đã thực hiện tại chỗ · Không tạo công việc phân công</p>
+        ) : (
+          <p>Thời gian yêu cầu: {dateTime(order.requestedTime)}</p>
+        )}
         {order.task && <p>Đã giao: {dateTime(order.task.assignedAt)}</p>}
         {order.task?.dueAt && <p>Hạn hoàn thành: {dateTime(order.task.dueAt)}</p>}
         <p>Hoàn thành: {dateTime(order.actualCompletedAt ?? order.task?.completedAt ?? '')}</p>

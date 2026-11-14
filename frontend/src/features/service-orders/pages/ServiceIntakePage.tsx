@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { isAxiosError } from 'axios'
+import { format } from 'date-fns'
 import { Link } from 'react-router'
 import { Button, Input, NativeSelect, Skeleton, StatusBadge, Textarea } from '@/components/atoms'
 import { Alert, EmptyState, FormField } from '@/components/molecules'
@@ -35,6 +36,15 @@ export function ServiceIntakePage() {
   const booking = contexts.data?.items.find((item) => item.id === bookingId)
   const service = catalog.data?.items.find((item) => item.id === serviceId)
   const amount = service ? estimateAmount(service, Number(quantity)) : null
+  const now = currentTime()
+  const localMinute = (value: number) => format(new Date(value), "yyyy-MM-dd'T'HH:mm")
+  const stayStart = booking ? new Date(booking.checkIn).getTime() : undefined
+  const stayEnd = booking ? new Date(booking.checkOut).getTime() : undefined
+  const scheduleMin = localMinute(Math.ceil(Math.max(now + 1, stayStart ?? now) / 60000) * 60000)
+  const stayMax = stayEnd === undefined ? undefined : Math.ceil(stayEnd / 60000) * 60000 - 60000
+  const completionMin =
+    stayStart === undefined ? undefined : localMinute(Math.ceil(stayStart / 60000) * 60000)
+  const completionMax = localMinute(Math.min(Math.floor(now / 60000) * 60000, stayMax ?? now))
   const locked = Boolean(intent) || mutation.isPending
   const response = isAxiosError<{ message?: unknown }>(mutation.error)
     ? mutation.error.response
@@ -52,7 +62,7 @@ export function ServiceIntakePage() {
     if (sending.current || mutation.isPending || mutation.isSuccess) return
     let payload = intent
     if (!payload) {
-      const time = requestedTime ? new Date(requestedTime) : undefined
+      const time = !completed && requestedTime ? new Date(requestedTime) : undefined
       const finished = actualCompletedAt ? new Date(actualCompletedAt) : undefined
       if (
         !booking ||
@@ -69,7 +79,9 @@ export function ServiceIntakePage() {
             time.getTime() <= currentTime() ||
             time < new Date(booking.checkIn) ||
             time >= new Date(booking.checkOut))) ||
-        (booking.status === 'CONFIRMED' && (!time || time < new Date(booking.checkIn)))
+        (!completed &&
+          booking.status === 'CONFIRMED' &&
+          (!time || time < new Date(booking.checkIn)))
       ) {
         setValidation(
           'Thời gian yêu cầu phải trong kỳ lưu trú và sau hiện tại; đặt phòng chưa nhận cần hẹn giờ.',
@@ -138,7 +150,12 @@ export function ServiceIntakePage() {
             <Alert tone="success">
               {staff ? 'Đã ghi nhận, chờ lễ tân duyệt.' : reviewLabels[mutation.data.reviewStatus]}
             </Alert>
-            <p>Thời gian yêu cầu: {dateTime(mutation.data.requestedTime)}</p>
+            <p>Thời điểm ghi nhận: {dateTime(mutation.data.createdAt)}</p>
+            {intent?.intakeMode === 'COMPLETED_ON_SITE' ? (
+              <p>Thời điểm hoàn thành thực tế: {dateTime(intent.actualCompletedAt!)}</p>
+            ) : (
+              <p>Thời gian yêu cầu: {dateTime(mutation.data.requestedTime)}</p>
+            )}
             <Button asChild className="rounded-full">
               <Link
                 to={
@@ -271,19 +288,23 @@ export function ServiceIntakePage() {
                   Tổng phí dự kiến: {amount === null ? 'Chọn dịch vụ' : money(amount)}. Không xác
                   nhận thanh toán.
                 </p>
-                <FormField
-                  label="Thời gian yêu cầu"
-                  htmlFor="intake-time"
-                  hint="Đặt phòng đã xác nhận nhưng chưa nhận cần hẹn trong kỳ lưu trú."
-                >
-                  <Input
-                    id="intake-time"
-                    type="datetime-local"
-                    required={booking?.status === 'CONFIRMED'}
-                    value={requestedTime}
-                    onChange={(event) => setRequestedTime(event.target.value)}
-                  />
-                </FormField>
+                {!completed && (
+                  <FormField
+                    label="Thời gian yêu cầu"
+                    htmlFor="intake-time"
+                    hint="Nhập giờ địa phương; gửi lên máy chủ theo UTC. Sau hiện tại, từ lúc nhận phòng và trước lúc trả phòng. Đặt phòng chưa nhận cần hẹn giờ."
+                  >
+                    <Input
+                      id="intake-time"
+                      type="datetime-local"
+                      min={scheduleMin}
+                      max={stayMax === undefined ? undefined : localMinute(stayMax)}
+                      required={booking?.status === 'CONFIRMED'}
+                      value={requestedTime}
+                      onChange={(event) => setRequestedTime(event.target.value)}
+                    />
+                  </FormField>
+                )}
                 <FormField label="Ghi chú" htmlFor="intake-notes">
                   <Textarea
                     id="intake-notes"
@@ -333,10 +354,16 @@ export function ServiceIntakePage() {
                         ))}
                       </NativeSelect>
                     </FormField>
-                    <FormField label="Thời điểm hoàn thành thực tế" htmlFor="intake-completed">
+                    <FormField
+                      label="Thời điểm hoàn thành thực tế"
+                      htmlFor="intake-completed"
+                      hint="Nhập giờ địa phương; gửi lên máy chủ theo UTC. Trong kỳ lưu trú, trước lúc trả phòng và không sau hiện tại."
+                    >
                       <Input
                         id="intake-completed"
                         type="datetime-local"
+                        min={completionMin}
+                        max={completionMax}
                         required
                         value={actualCompletedAt}
                         onChange={(event) => setActualCompletedAt(event.target.value)}

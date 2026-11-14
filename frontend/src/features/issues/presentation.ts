@@ -1,4 +1,86 @@
-import type { CustomerHistoryType } from './api'
+import type { CustomerHistoryType, IssueDetail } from './api'
+import { resolutionEvents, type ResolutionEvent } from '@/features/tasks/presentation'
+
+export function issueResolutionEvents(issue: IssueDetail): ResolutionEvent[] {
+  const tasks = [
+    ...new Map(
+      [...issue.linkedTasks, ...(issue.resolutionTasks ?? [])].map((task) => [task.id, task]),
+    ).values(),
+  ]
+  const events: ResolutionEvent[] = []
+  for (const task of tasks) {
+    events.push({
+      id: `assigned:${task.id}`,
+      at: task.assignedAt,
+      label: 'Đã giao công việc',
+      details: [
+        `Công việc: ${task.title}`,
+        ...(task.assigneeName ? [`Nhân viên: ${personName(task.assigneeName)}`] : []),
+        ...(task.dueAt ? [`Thời hạn: ${issueDate(task.dueAt)}`] : []),
+        ...(task.instructions ? [`Hướng dẫn: ${task.instructions}`] : []),
+      ],
+    })
+    const workResult =
+      'workResult' in task && typeof task.workResult === 'string' ? task.workResult : undefined
+    events.push(
+      ...resolutionEvents(task).map((event) => ({
+        ...event,
+        id: `${task.id}:${event.id}`,
+        details: [
+          ...event.details,
+          ...(event.id.startsWith('cancel:') && workResult ? [`Kết quả: ${workResult}`] : []),
+        ],
+      })),
+    )
+    if (task.completedAt)
+      events.push({
+        id: `completed:${task.id}`,
+        at: task.completedAt,
+        label: 'Đã hoàn thành công việc',
+        details: [
+          `Công việc: ${task.title}`,
+          ...(task.assigneeName ? [`Nhân viên: ${personName(task.assigneeName)}`] : []),
+          ...(workResult ? [`Kết quả: ${workResult}`] : []),
+        ],
+      })
+  }
+  for (const entry of issue.reassignmentHistory ?? []) {
+    events.push({
+      id: `reassigned:${entry.requestId}`,
+      at: entry.completedAt,
+      label: 'Đã phân công lại',
+      details: [
+        entry.actorName && `Người yêu cầu: ${personName(entry.actorName)}`,
+        entry.assigneeName && `Nhân viên thay thế: ${personName(entry.assigneeName)}`,
+        `Lý do: ${entry.reason}`,
+        ...(entry.recoveryActorNames ?? [])
+          .filter(Boolean)
+          .map((name) => `Người khôi phục: ${personName(name)}`),
+      ].filter((value): value is string => Boolean(value)),
+    })
+  }
+  const pending = issue.pendingReassignment
+  if (pending)
+    events.push({
+      id: `pending:${pending.requestId}:${pending.targetTaskId}`,
+      at: pending.requestedAt,
+      label: 'Phân công lại đang chờ khôi phục',
+      details: [
+        `Lý do: ${pending.reason}`,
+        ...(pending.assigneeName ? [`Nhân viên đích: ${personName(pending.assigneeName)}`] : []),
+      ],
+    })
+  if (issue.closedAt)
+    events.push({
+      id: `closed:${issue.id}`,
+      at: issue.closedAt,
+      label: 'Đã đóng sự cố',
+      details: issue.closedByName ? [`Người đóng: ${personName(issue.closedByName)}`] : [],
+    })
+  return [...new Map(events.map((event) => [event.id, event])).values()]
+    .filter((event) => Boolean(event.at) && Number.isFinite(new Date(event.at).getTime()))
+    .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+}
 
 export const customerHistoryLabels: Record<CustomerHistoryType, string> = {
   REPORTED: 'Đã báo sự cố',

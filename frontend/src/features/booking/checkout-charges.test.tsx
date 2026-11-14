@@ -146,6 +146,46 @@ describe('Additional charges from the same-day list', () => {
     expect(departure().getByText(/Còn phải trả: 1\.600\.000/)).toBeInTheDocument()
   })
 
+  it('shows snapshot description, quantity, unit price and the unchanged line total', async () => {
+    const data = charges()
+    data.charges = [
+      {
+        type: 'SERVICE',
+        sourceId: '507f1f77bcf86cd799439011',
+        reason: 'Service order 507f1f77bcf86cd799439011',
+        amount: 150_000,
+        serviceName: 'Giặt ủi lịch sử',
+        quantity: 3,
+        unitPriceVND: 50_000,
+      },
+    ]
+    mockGet(data)
+    await openPanel()
+    const recorded = within(await departure().findByRole('list', { name: 'Phụ phí đã ghi' }))
+    expect(recorded.getByText('Giặt ủi lịch sử')).toBeInTheDocument()
+    expect(recorded.getByText('Số lượng: 3 · Đơn giá: 50.000 ₫')).toBeInTheDocument()
+    expect(recorded.getByText('150.000 ₫')).toBeInTheDocument()
+    expect(recorded.queryByText(data.charges[0].reason)).not.toBeInTheDocument()
+  })
+
+  it('keeps original descriptions and amounts without inventing missing snapshot details', async () => {
+    const data = charges()
+    data.charges = [
+      { type: 'SERVICE', reason: 'Service order missing', amount: 150_000 },
+      { type: 'SERVICE', reason: 'Giặt ủi x3 (kg)', amount: 150_000 },
+      { type: 'ADDITIONAL', reason: 'Vỡ ly', amount: 30_000, category: 'DAMAGE' },
+    ]
+    mockGet(data)
+    await openPanel()
+    const recorded = within(await departure().findByRole('list', { name: 'Phụ phí đã ghi' }))
+    expect(recorded.getByText('Service order missing')).toBeInTheDocument()
+    expect(recorded.getByText('Giặt ủi x3 (kg)')).toBeInTheDocument()
+    expect(recorded.getByText('Vỡ ly')).toBeInTheDocument()
+    expect(recorded.getByText('Hư hỏng')).toBeInTheDocument()
+    expect(recorded.queryByText(/Số lượng:|Đơn giá:/)).not.toBeInTheDocument()
+    expect(recorded.getAllByText('150.000 ₫')).toHaveLength(2)
+  })
+
   it('says so when there are no charges yet', async () => {
     mockGet(charges())
     await openPanel()

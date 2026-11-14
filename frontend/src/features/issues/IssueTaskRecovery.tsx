@@ -3,10 +3,10 @@ import { isAxiosError } from 'axios'
 import { format } from 'date-fns'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Input, NativeSelect } from '@/components/atoms'
-import { FormField } from '@/components/molecules'
+import { FormField, KeyValue } from '@/components/molecules'
 import { ConfirmationDialog } from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
-import { ResolutionHistory } from '@/features/tasks/TaskResolution'
+import { Panel } from '@/components/organisms'
 import {
   continueIssue,
   getIssueAssignees,
@@ -17,7 +17,7 @@ import {
   type ReassignIssueInput,
 } from './api'
 import { issueKeys } from './hooks'
-import { issueDate, personName, taskStatusLabel } from './presentation'
+import { issueDate, personName, taskStatusLabel, issueResolutionEvents } from './presentation'
 
 type Action =
   { kind: 'continue'; input: ContinueIssueInput } | { kind: 'reassign'; input: ReassignIssueInput }
@@ -179,53 +179,63 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
     }
   }
   if (me?.role !== 'RECEPTIONIST' && me?.role !== 'MANAGER') return null
+  const events = issueResolutionEvents(issue)
   return (
     <section className="space-y-4" aria-label="Theo dõi xử lý sự cố">
       <h3 className="font-semibold">Công việc xử lý hiện tại và lịch sử</h3>
-      {current && (
-        <p>
-          Công việc hiện tại: {current.title} · {personName(current.assigneeName)} ·{' '}
-          {taskStatusLabel(current.status)}
-        </p>
+      {currentDetail && (
+        <section aria-label="Công việc hiện tại" className="min-w-0 break-words">
+          <Panel title="Công việc hiện tại">
+            <h4 className="mb-3 text-sm font-semibold">{currentDetail.title}</h4>
+            <div className="divide-y divide-border">
+              <KeyValue k="Nhân viên" v={personName(currentDetail.assigneeName)} />
+              <KeyValue k="Trạng thái" v={taskStatusLabel(currentDetail.status)} />
+              <KeyValue k="Ngày giao" v={issueDate(currentDetail.assignedAt)} />
+              <KeyValue
+                k="Thời hạn"
+                v={
+                  currentDetail.dueAt == null ? 'Không có thời hạn' : issueDate(currentDetail.dueAt)
+                }
+              />
+              {currentDetail.completedAt && (
+                <KeyValue k="Hoàn tất" v={issueDate(currentDetail.completedAt)} />
+              )}
+            </div>
+            {currentDetail.blocked && (
+              <p role="status" className="text-danger">
+                Bị chặn — chờ lễ tân tiếp tục hoặc phân công lại.
+              </p>
+            )}
+            {currentDetail.overdue && <p className="text-danger">Quá hạn</p>}
+            {currentDetail.instructions && (
+              <p className="whitespace-pre-wrap">Hướng dẫn: {currentDetail.instructions}</p>
+            )}
+            {'workResult' in currentDetail && typeof currentDetail.workResult === 'string' && (
+              <p className="whitespace-pre-wrap">Kết quả: {currentDetail.workResult}</p>
+            )}
+          </Panel>
+        </section>
       )}
-      {history.map((task) => (
-        <article
-          key={task.id}
-          className="min-w-0 space-y-2 rounded-xl border border-border bg-surface/40 p-4 break-words"
-        >
-          <h4 className="font-semibold">{task.title}</h4>
-          <p>
-            Nhân viên: {personName(task.assigneeName)} · Trạng thái: {taskStatusLabel(task.status)}
-          </p>
-          <p>
-            Ngày giao: {issueDate(task.assignedAt)} · Thời hạn:{' '}
-            {task.dueAt == null ? 'Không có thời hạn' : issueDate(task.dueAt)}
-          </p>
-          {task.completedAt && <p>Hoàn tất: {issueDate(task.completedAt)}</p>}
-          {'workResult' in task && typeof task.workResult === 'string' && (
-            <p className="whitespace-pre-wrap">Kết quả: {task.workResult}</p>
-          )}
-          <ResolutionHistory task={task} />
-          {task.blockerHistory?.map((report) => (
-            <p key={report.id}>
-              Người báo không thể xử lý: {personName(report.reportedByName)} ·{' '}
-              {issueDate(report.reportedAt)}
-              {report.resolvedAt && <> · Người xem xét: {personName(report.resolvedByName)}</>}
-            </p>
+      <Panel title="Lịch sử xử lý sự cố">
+        {!events.length && (
+          <p className="text-sm text-muted-foreground">Chưa có lịch sử xử lý được cung cấp.</p>
+        )}
+        <ol aria-label="Lịch sử xử lý sự cố" className="space-y-4 text-sm">
+          {events.map((event) => (
+            <li key={event.id} className="space-y-1 border-l-2 border-border pl-3 break-words">
+              <p className="font-medium whitespace-pre-wrap">{event.label}</p>
+              <time dateTime={event.at} className="text-muted-foreground">
+                {issueDate(event.at)}
+              </time>
+              {event.details.map((detail) => (
+                <p key={detail} className="whitespace-pre-wrap">
+                  {detail}
+                </p>
+              ))}
+            </li>
           ))}
-          {task.continuationHistory?.map((entry, index) => (
-            <p key={`${entry.at}-${index}`}>
-              Người tiếp tục xử lý: {personName(entry.actorName)} · {issueDate(entry.at)}
-            </p>
-          ))}
-          {task.cancellation && (
-            <p>
-              Người yêu cầu phân công lại: {personName(task.cancellation.actorName)} · Người khôi
-              phục: {personName(task.cancellation.recoveryActorName)}
-            </p>
-          )}
-        </article>
-      ))}
+        </ol>
+      </Panel>
       {pending && (
         <div role="status" className="space-y-2 rounded border border-warning p-4">
           <p>
@@ -242,19 +252,6 @@ export function IssueTaskRecovery({ issue }: { issue: IssueDetail }) {
           </p>
         </div>
       )}
-      {issue.reassignmentHistory?.map((entry) => (
-        <div key={entry.requestId} className="space-y-2 break-words">
-          <p>Đã phân công lại · {issueDate(entry.completedAt)}</p>
-          <p>
-            Người yêu cầu: {personName(entry.actorName)} · Nhân viên thay thế:{' '}
-            {personName(entry.assigneeName)}
-          </p>
-          <p className="whitespace-pre-wrap">Lý do: {entry.reason}</p>
-          {entry.recoveryActorNames?.map((name, index) => (
-            <p key={index}>Người khôi phục: {personName(name)}</p>
-          ))}
-        </div>
-      ))}
       {mutation.isSuccess && <p role="status">Đã cập nhật xử lý sự cố.</p>}
       {mutation.isError && (
         <p role="alert" className="text-danger">

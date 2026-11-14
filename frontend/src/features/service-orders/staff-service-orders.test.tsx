@@ -1,4 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { useQueryClient } from '@tanstack/react-query'
+import { StaffServiceOrdersPage } from './pages/StaffServiceOrdersPage'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { UserMenu } from '@/features/auth/UserMenu'
@@ -86,6 +88,59 @@ beforeEach(() => {
   })
 })
 
+it.each([{ items: [] }, { items: [receipt] }])(
+  'keeps error exclusive after initial failure and stale refetch, then recovers with cache $items.length',
+  async ({ items }) => {
+    function ListWithRefresh() {
+      const client = useQueryClient()
+      return (
+        <>
+          <button onClick={() => void client.invalidateQueries()}>Refresh test query</button>
+          <StaffServiceOrdersPage />
+        </>
+      )
+    }
+    vi.mocked(api.get).mockRejectedValueOnce(httpError(500))
+    renderWithAuth([{ path: '/', element: <ListWithRefresh /> }], {
+      auth: { status: 'authenticated', me: receptionist },
+    })
+    await screen.findByRole('alert')
+    expect(screen.queryByText('Không có yêu cầu dịch vụ phù hợp.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    vi.mocked(api.get).mockResolvedValue({
+      data: { items, page: 1, limit: 20, total: items.length },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Tải lại trạng thái' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    if (items.length) await screen.findByRole('link', { name: receipt.service.name })
+    else await screen.findByText('Không có yêu cầu dịch vụ phù hợp.')
+    vi.mocked(api.get).mockRejectedValue(httpError(500))
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh test query' }))
+    await screen.findByRole('alert')
+    expect(screen.queryByText('Không có yêu cầu dịch vụ phù hợp.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: receipt.service.name })).not.toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    let resolve!: (value: unknown) => void
+    vi.mocked(api.get).mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done
+        }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Tải lại trạng thái' }))
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(4))
+    expect(screen.queryByText('Không có yêu cầu dịch vụ phù hợp.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: receipt.service.name })).not.toBeInTheDocument()
+    await act(async () => resolve({ data: { items: [receipt], page: 1, limit: 20, total: 1 } }))
+    expect(await screen.findByRole('link', { name: receipt.service.name })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText('Không có yêu cầu dịch vụ phù hợp.')).not.toBeInTheDocument()
+    expect(api.get).toHaveBeenLastCalledWith('/service-orders/requests', {
+      params: { page: 1, limit: 20, reviewStatus: 'PENDING_REVIEW' },
+    })
+  },
+)
+
 it('shows names and booking context without technical customer, reviewer or task IDs', async () => {
   current = {
     ...receipt,
@@ -149,6 +204,123 @@ it('never falls back to reviewer or assignee IDs when names are missing', async 
   for (const value of ['reviewer-id', 'task-id', 'assignee-id']) {
     expect(document.body).not.toHaveTextContent(value)
   }
+})
+
+it('shows a service-first review table with long names, multiple rooms and free onsite context', async () => {
+  const name = 'Dịch vụ chăm sóc khách lưu trú '.repeat(12).trim()
+  current = {
+    ...receipt,
+    service: { name, unit: 'lần' },
+    customer: { id: 'customer-1', fullName: null },
+    booking: { ...receipt.booking!, roomNumbers: ['201', '202', '203'] },
+    feeRequired: false,
+    amount: 0,
+    intakeMode: 'COMPLETED_ON_SITE',
+    actualCompletedAt: receipt.requestedTime,
+  }
+  page('/staff/service-orders')
+  const table = await screen.findByRole('table', { name: 'Yêu cầu dịch vụ' })
+  expect(within(table).getByRole('columnheader', { name: 'Trạng thái duyệt' })).toBeInTheDocument()
+  expect(within(table).getByRole('columnheader', { name: 'Thực hiện' })).toBeInTheDocument()
+  expect(await within(table).findByRole('link', { name })).toHaveAttribute(
+    'href',
+    '/staff/service-orders/order-1',
+  )
+  expect(within(table).getByText('Chưa có tên khách hàng')).toBeInTheDocument()
+  expect(within(table).getByText('Phòng: 201, 202, 203')).toBeInTheDocument()
+  expect(within(table).getAllByText('Không tính phí').length).toBeGreaterThan(0)
+  expect(within(table).getByText(/Không tạo công việc phân công/)).toBeInTheDocument()
+  expect(within(table).getByText(/Thời điểm hoàn thành thực tế:/)).toBeInTheDocument()
+  expect(within(table).queryByText(/Thời gian yêu cầu:/)).not.toBeInTheDocument()
+})
+
+it.each([
+  ['PENDING_REVIEW', 'NOT_STARTED', 'NOT_REQUIRED', 'Chờ duyệt', 'Chưa bắt đầu', 'Chưa ghi phí'],
+  [
+    'ACCEPTING',
+    'NOT_STARTED',
+    'PENDING',
+    'Đang chấp nhận · chờ hoàn tất ghi phí',
+    'Chưa bắt đầu',
+    'Chờ ghi phí vào hóa đơn',
+  ],
+  [
+    'ACCEPTED',
+    'ASSIGNING',
+    'BILLED',
+    'Đã chấp nhận',
+    'Đang phân công',
+    'Đã ghi vào hóa đơn · không xác nhận thanh toán',
+  ],
+  ['ACCEPTED', 'ASSIGNED', 'PENDING', 'Đã chấp nhận', 'Đã phân công', 'Chờ ghi phí vào hóa đơn'],
+  [
+    'ACCEPTED',
+    'IN_PROGRESS',
+    'BILLED',
+    'Đã chấp nhận',
+    'Đang thực hiện',
+    'Đã ghi vào hóa đơn · không xác nhận thanh toán',
+  ],
+  [
+    'ACCEPTED',
+    'COMPLETED',
+    'BILLED',
+    'Đã chấp nhận',
+    'Đã hoàn thành',
+    'Đã ghi vào hóa đơn · không xác nhận thanh toán',
+  ],
+  [
+    'REJECTED',
+    'NOT_STARTED',
+    'NOT_REQUIRED',
+    'Đã từ chối',
+    'Chưa bắt đầu',
+    'Không ghi phí · đã từ chối',
+  ],
+  [
+    'ABANDONED',
+    'NOT_STARTED',
+    'NOT_REQUIRED',
+    'Đã dừng kỹ thuật · lịch dịch vụ đã qua',
+    'Chưa bắt đầu',
+    'Không ghi phí · đã dừng kỹ thuật',
+  ],
+] as const)(
+  'shows Vietnamese review %s and execution %s once while retaining billing %s',
+  async (reviewStatus, executionStatus, billingStatus, review, execution, billing) => {
+    current = { ...receipt, reviewStatus, executionStatus, billingStatus }
+    page('/staff/service-orders')
+    const table = await screen.findByRole('table', { name: 'Yêu cầu dịch vụ' })
+    const row = await within(table).findByRole('row', { name: /Giặt ủi/ })
+    const cells = within(row).getAllByRole('cell')
+    expect(cells[0]).toHaveTextContent(review)
+    expect(within(cells[0]).getAllByText(review)).toHaveLength(1)
+    expect(cells[0]).not.toHaveTextContent('Trạng thái yêu cầu:')
+    expect(cells[0]).not.toHaveTextContent(/Accepted|Pending Review|Accepting|Rejected|Abandoned/)
+    expect(within(cells[2]).getByText(execution)).toBeInTheDocument()
+    expect(within(row).getByText(billing)).toBeInTheDocument()
+  },
+)
+
+it('retains the unknown business-state warning for inconsistent review and execution', async () => {
+  current = { ...receipt, reviewStatus: 'REJECTED', executionStatus: 'ASSIGNED' }
+  page('/staff/service-orders')
+  const table = await screen.findByRole('table', { name: 'Yêu cầu dịch vụ' })
+  expect(await within(table).findByText('Trạng thái yêu cầu: Chưa xác định')).toBeInTheDocument()
+})
+
+it('does not label the server default as a scheduled time in onsite detail', async () => {
+  current = {
+    ...receipt,
+    intakeMode: 'COMPLETED_ON_SITE',
+    actualCompletedAt: receipt.requestedTime,
+  }
+  page()
+  await screen.findByRole('heading', { name: 'Thông tin ghi nhận' })
+  expect(screen.queryByText('Thời gian yêu cầu')).not.toBeInTheDocument()
+  expect(screen.queryByText(/^Thời gian yêu cầu:/)).not.toBeInTheDocument()
+  expect(screen.getByText(/^Thời điểm ghi nhận:/)).toBeInTheDocument()
+  expect(screen.getByText(/Không tạo công việc phân công/)).toBeInTheDocument()
 })
 
 describe('expired acceptance abandonment', () => {
@@ -353,11 +525,11 @@ describe('receptionist room context', () => {
     const booking = { ...receipt.booking!, roomNumbers: numbers ? [...numbers] : undefined }
     current = { ...receipt, booking }
     page('/staff/service-orders')
-    const item = (await screen.findByRole('link', { name: 'Giặt ủi' })).closest('li')!
+    const item = (await screen.findByRole('link', { name: 'Giặt ủi' })).closest('tr')!
     expect(
       within(item).getByText(`Phòng: ${numbers?.length ? numbers.join(', ') : '—'}`),
     ).toBeInTheDocument()
-    expect(item).toHaveClass('break-words')
+    expect(within(item).getByRole('rowheader')).toHaveClass('break-words')
     expect(within(item).getByText('Đặt phòng: BK001')).toBeInTheDocument()
     expect(api.patch).not.toHaveBeenCalled()
   })
@@ -388,7 +560,7 @@ describe('receptionist room context', () => {
     vi.mocked(api.get).mockResolvedValue({ data: { items, page: 1, limit: 20, total: 2 } })
     page('/staff/service-orders')
     await screen.findByRole('link', { name: 'Đơn trước' })
-    const rows = screen.getAllByRole('listitem')
+    const rows = screen.getAllByRole('row').slice(1)
     expect(rows).toHaveLength(2)
     expect(rows[0]).toHaveTextContent('Đơn trước')
     expect(rows[0]).toHaveTextContent('Phòng: 909')
@@ -407,7 +579,7 @@ describe('staff list and detail', () => {
       'text-2xl',
     )
     expect(link.closest('.card-soft')).toBeInTheDocument()
-    expect(link.closest('li')).toHaveClass('break-words')
+    expect(link.closest('th')).toHaveClass('break-words')
     expect(link).toHaveAttribute('href', '/staff/service-orders/order-1')
     expect(screen.getByLabelText('Từ khóa dịch vụ')).toHaveClass('border-input')
     expect(screen.getByLabelText('Từ khóa dịch vụ')).toHaveAttribute('maxlength', '100')
@@ -440,16 +612,17 @@ describe('staff list and detail', () => {
   })
 
   it.each([
-    ['ACCEPTING', 'NOT_STARTED', 'Đang xử lý'],
-    ['ACCEPTED', 'ASSIGNING', 'Đang xử lý'],
+    ['ACCEPTING', 'NOT_STARTED', 'Đang chấp nhận · chờ hoàn tất ghi phí'],
+    ['ACCEPTED', 'ASSIGNING', 'Đang phân công'],
     ['ACCEPTED', 'ASSIGNED', 'Đã phân công'],
-    ['REJECTED', 'COMPLETED', 'Chưa xác định'],
+    ['REJECTED', 'COMPLETED', 'Trạng thái yêu cầu: Chưa xác định'],
   ] as const)(
-    'shows shared staff list summary for %s / %s',
+    'shows distinct staff list state for %s / %s',
     async (reviewStatus, executionStatus, label) => {
       current = { ...current, reviewStatus, executionStatus }
       page('/staff/service-orders')
-      expect(await screen.findByText(`Trạng thái yêu cầu: ${label}`)).toBeInTheDocument()
+      const table = await screen.findByRole('table', { name: 'Yêu cầu dịch vụ' })
+      expect(await within(table).findByText(label)).toBeInTheDocument()
     },
   )
   it('defaults pending and filters, searches and paginates with the staff endpoint', async () => {

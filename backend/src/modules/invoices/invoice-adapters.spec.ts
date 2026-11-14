@@ -83,6 +83,8 @@ describe('invoice adapter contracts', () => {
       .useValue({})
       .overrideProvider(getModelToken('Service'))
       .useValue({})
+      .overrideProvider(getModelToken('ServiceOrder'))
+      .useValue({})
       // TasksModule (check-out cần xác nhận kiểm tra phòng của nhân viên dịch vụ).
       .overrideProvider(getModelToken('Task'))
       .useValue({})
