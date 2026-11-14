@@ -16,7 +16,7 @@ import {
   removeStoredBooking,
   upsertStoredBooking,
 } from './storage'
-import { nightsBetween, todayISO } from './utils'
+import { daysFromTodayISO, nightsBetween, todayISO } from './utils'
 
 const booking: Booking = {
   id: 'b1',
@@ -119,6 +119,11 @@ describe('booking utils', () => {
 
   it('formats today as YYYY-MM-DD', () => {
     expect(todayISO()).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('calculates future dates from today as YYYY-MM-DD', () => {
+    expect(daysFromTodayISO(2)).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(nightsBetween(todayISO(), daysFromTodayISO(2))).toBe(2)
   })
 })
 

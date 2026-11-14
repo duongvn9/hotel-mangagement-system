@@ -1,5 +1,6 @@
 import { isAxiosError } from 'axios'
 import { api } from '@/lib/api-client'
+import type { AttentionKind } from './attention'
 
 /**
  * Client cho luồng đặt phòng của Guest/Customer (UC05, UC07/UC46, UC12, UC20, UC21).
@@ -439,6 +440,8 @@ export interface BookingListParams {
   /** YYYY-MM-DD, giờ Việt Nam, gồm cả hai đầu. */
   checkInFrom?: string
   checkInTo?: string
+  /** Only the bookings one "Đơn cần xử lý" chip counts (overdue, or due today). */
+  attention?: AttentionKind
 }
 
 export interface BookingListRoom {

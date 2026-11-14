@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -10,6 +11,10 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import {
+  ATTENTION_KINDS,
+  type BookingAttentionCounts,
+} from '../booking-attention.core.js';
 import { BookingStatus } from '../schemas/booking.schema.js';
 import { BookingSource } from '../../../common/constants/booking-source.enum.js';
 
@@ -34,6 +39,15 @@ export class ListBookingsQuery {
   @IsString()
   @Length(1, 100)
   q?: string;
+
+  @ApiPropertyOptional({
+    enum: ATTENTION_KINDS,
+    description:
+      'Only the bookings one attention chip counts (overdue or due today); combines with the other filters',
+  })
+  @IsOptional()
+  @IsIn(ATTENTION_KINDS)
+  attention?: keyof BookingAttentionCounts;
 
   @ApiPropertyOptional({
     description: 'Check-in on or after this day (YYYY-MM-DD, giờ Việt Nam)',

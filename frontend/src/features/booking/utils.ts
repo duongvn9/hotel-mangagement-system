@@ -31,11 +31,16 @@ export function nightsBetween(checkIn: string, checkOut: string): number {
   return Math.max(0, Math.round((end - start) / 86_400_000))
 }
 
+/** Ngày sau ngày hôm nay `days` ngày dạng YYYY-MM-DD theo giờ Việt Nam. */
+export function daysFromTodayISO(days: number = 0): string {
+  const now = new Date()
+  const vn = new Date(now.getTime() + (now.getTimezoneOffset() + 420) * 60_000 + days * 86_400_000)
+  return vn.toISOString().slice(0, 10)
+}
+
 /** Ngày hôm nay dạng YYYY-MM-DD theo giờ Việt Nam, để chặn chọn ngày quá khứ. */
 export function todayISO(): string {
-  const now = new Date()
-  const vn = new Date(now.getTime() + (now.getTimezoneOffset() + 420) * 60_000)
-  return vn.toISOString().slice(0, 10)
+  return daysFromTodayISO(0)
 }
 
 /** Ngày làm việc (YYYY-MM-DD, giờ Việt Nam) của một mốc ISO; giá trị đã là ngày thì giữ nguyên. */

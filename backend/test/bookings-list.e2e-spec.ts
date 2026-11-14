@@ -10,6 +10,7 @@ import {
 } from '../src/modules/bookings/schemas/booking.schema.js';
 import { Room } from '../src/modules/rooms/schemas/room.schema.js';
 import { RoomType } from '../src/modules/room-types/schemas/room-type.schema.js';
+import { businessDay } from '../src/modules/bookings/room-status-board.core.js';
 
 describe('View booking list (e2e)', () => {
   let app: INestApplication;
@@ -188,5 +189,33 @@ describe('View booking list (e2e)', () => {
     await list({ limit: 101 }).expect(400);
     await list({ status: 'NOPE' }).expect(400);
     await list({ checkInFrom: '10/01/2093' }).expect(400);
+  });
+
+  it('lists exactly the bookings behind each attention chip', async () => {
+    const day = (offset: number) =>
+      businessDay(new Date(Date.now() + offset * 86_400_000));
+    // Check-out is two nights after check-in, so these land on the four attention categories.
+    await seed('OI', day(-3), BookingStatus.Confirmed); // overdue check-in
+    await seed('DI', day(0), BookingStatus.Confirmed); // check-in due today
+    await seed('OO', day(-5), BookingStatus.CheckedIn); // check-out was 3 days ago
+    await seed('DO', day(-2), BookingStatus.CheckedIn); // check-out due today
+    const codes = async (query: Record<string, string>) =>
+      (await list(query).expect(200)).body.items
+        .map((item: { code: string }) => item.code)
+        .sort();
+
+    expect(await codes({ attention: 'overdueCheckIn' })).toEqual([
+      `LST${tag}OI`,
+    ]);
+    expect(await codes({ attention: 'dueCheckIn' })).toEqual([`LST${tag}DI`]);
+    expect(await codes({ attention: 'overdueCheckOut' })).toEqual([
+      `LST${tag}OO`,
+    ]);
+    expect(await codes({ attention: 'dueCheckOut' })).toEqual([`LST${tag}DO`]);
+    // It narrows together with the other filters, and the chip list can be empty.
+    expect(
+      await codes({ attention: 'overdueCheckIn', status: 'CHECKED_IN' }),
+    ).toEqual([]);
+    await list({ attention: 'nonsense' }).expect(400);
   });
 });

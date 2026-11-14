@@ -76,13 +76,14 @@ export class DeskDepositService {
     ) {
       throw new ConflictException('The deposit has already been paid');
     }
-    if (
-      await this.payments.exists({ ...filter, status: PaymentStatus.Pending })
-    ) {
-      throw new ConflictException(
-        'A VNPay deposit is still pending; wait for it to finish or fail',
-      );
-    }
+    // A VNPay link the guest walked away from stays PENDING and cannot be cancelled on VNPay's
+    // side. The guest is now paying at the desk, so supersede it the same way a re-initiated
+    // VNPay payment does: it becomes CANCELLED, and if VNPay still reports it paid later the IPN
+    // flags it for manual reconciliation instead of adding it to the invoice.
+    await this.payments.updateMany(
+      { ...filter, method: PaymentMethod.Vnpay, status: PaymentStatus.Pending },
+      { $set: { status: PaymentStatus.Cancelled, supersededAt: new Date() } },
+    );
 
     const invoice = await this.invoices.getOrCreateForBooking(bookingId);
     try {
