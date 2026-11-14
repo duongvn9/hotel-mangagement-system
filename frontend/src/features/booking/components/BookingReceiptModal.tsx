@@ -284,12 +284,8 @@ export function BookingReceiptModal({
 
               <div className="text-right">
                 <div className="mb-2 flex justify-end">
-                  {/* Geometric Logo Mark */}
-                  <div className="flex size-11 items-center justify-center rounded border-2 border-foreground print:border-zinc-900">
-                    <span className="text-xs font-black tracking-tighter text-foreground print:text-zinc-900 uppercase">
-                      EMILY
-                    </span>
-                  </div>
+                  {/* The brand mark from public/; an <img> prints reliably, unlike CSS backgrounds. */}
+                  <img src="/favicon.svg" alt={env.appName} className="size-14 rounded-xl" />
                 </div>
                 <p className="text-xs text-muted-foreground print:text-zinc-500">
                   Receipt #:{' '}
