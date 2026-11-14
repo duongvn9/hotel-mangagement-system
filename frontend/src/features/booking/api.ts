@@ -374,6 +374,14 @@ export async function getMyBookings(): Promise<MyBookingItem[]> {
   return (await api.get<MyBookingItem[]>('/bookings/mine')).data
 }
 
+/**
+ * Đồng bộ đặt phòng: rà các đơn vãng lai cùng email tài khoản mà chưa được liên kết,
+ * rồi gắn vào tài khoản đang đăng nhập (POST /bookings/mine/sync). Trả về số đơn vừa liên kết.
+ */
+export async function syncMyBookings(): Promise<{ linked: number }> {
+  return (await api.post<{ linked: number }>('/bookings/mine/sync')).data
+}
+
 /** Booking walk-in lễ tân vừa tạo (UC08): vào thẳng CONFIRMED, không cọc/giữ phòng. */
 export interface WalkInBooking {
   id: string

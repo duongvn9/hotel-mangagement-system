@@ -178,6 +178,19 @@ export class BookingsController {
     return this.bookings.listForCustomer(user.id);
   }
 
+  @Post('mine/sync')
+  @Roles(Role.Customer)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Link guest bookings made with the signed-in customer’s email to their account',
+  })
+  @ApiOkResponse({ description: 'How many bookings were linked' })
+  @ApiUnauthorizedResponse()
+  syncMyBookings(@CurrentUser() user: AuthUser) {
+    return this.bookings.syncCustomerBookings(user);
+  }
+
   @Get('attention')
   @Roles(Role.Receptionist, Role.Manager)
   @ApiOperation({

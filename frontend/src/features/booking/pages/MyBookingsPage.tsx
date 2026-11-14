@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
+import { RefreshCw } from 'lucide-react'
 import { AssetImage } from '@/components/AssetImage'
 import { Button, Input, NativeSelect, StatusBadge } from '@/components/atoms'
 import { EmptyState, FormField } from '@/components/molecules'
@@ -7,7 +8,7 @@ import { PageContainer, PageHeader, Pager } from '@/components/organisms'
 import { getErrorMessage } from '@/lib/api-client'
 import { fdate, vnd } from '@/lib/format'
 import { BOOKING_STATUS_DISPLAY, type MyBookingItem } from '../api'
-import { useMyBookings } from '../hooks'
+import { useMyBookings, useSyncMyBookings } from '../hooks'
 
 const NO_BOOKINGS: MyBookingItem[] = []
 
@@ -34,6 +35,7 @@ const STATUS_OPTIONS = [
  */
 export function MyBookingsPage() {
   const query = useMyBookings()
+  const sync = useSyncMyBookings()
   const bookings = query.data ?? NO_BOOKINGS
 
   const [sort, setSort] = useState<SortKey>('checkin-desc')
@@ -68,11 +70,53 @@ export function MyBookingsPage() {
         title="Đặt phòng của tôi"
         subtitle="Xem, theo dõi và quản lý các đơn đặt phòng của bạn."
         actions={
-          <Button asChild className="rounded-full">
-            <Link to="/search">Tìm phòng mới</Link>
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => sync.mutate()}
+              disabled={sync.isPending}
+            >
+              <RefreshCw className={sync.isPending ? 'animate-spin' : undefined} />
+              {sync.isPending ? 'Đang đồng bộ…' : 'Đồng bộ đơn'}
+            </Button>
+            <Button asChild className="rounded-full">
+              <Link to="/search">Tìm phòng mới</Link>
+            </Button>
+          </>
         }
       />
+
+      <p className="text-sm text-muted-foreground">
+        Đã từng đặt phòng mà không đăng nhập? Bấm{' '}
+        <span className="font-medium text-foreground">Đồng bộ đơn</span> để liên kết các đơn đặt
+        bằng email của tài khoản này.
+      </p>
+
+      {sync.isSuccess && (
+        <div
+          role="status"
+          className={
+            sync.data.linked > 0
+              ? 'rounded-xl border border-success/20 bg-success/10 p-4 text-sm text-success'
+              : 'rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground'
+          }
+        >
+          {sync.data.linked > 0
+            ? `Đã liên kết ${sync.data.linked} đơn đặt phòng vào tài khoản của bạn.`
+            : 'Không tìm thấy đơn đặt phòng nào cùng email để liên kết.'}
+        </div>
+      )}
+
+      {sync.isError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive"
+        >
+          {getErrorMessage(sync.error, 'Không đồng bộ được đặt phòng. Vui lòng thử lại.')}
+        </div>
+      )}
 
       {query.isPending && (
         <div role="status" className="py-8">

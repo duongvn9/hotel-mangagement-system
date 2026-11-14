@@ -19,6 +19,7 @@ import {
   RoomTypeSchema,
 } from '../room-types/schemas/room-type.schema.js';
 import { Invoice, InvoiceSchema } from '../invoices/schemas/invoice.schema.js';
+import { User, UserSchema } from '../users/schemas/user.schema.js';
 import { Booking, BookingSchema } from './schemas/booking.schema.js';
 import { RoomHold, RoomHoldSchema } from './schemas/room-hold.schema.js';
 import {
@@ -62,6 +63,8 @@ import { RoomStatusBoardService } from './room-status-board.service.js';
       { name: RoomType.name, schema: RoomTypeSchema },
       // Chỉ đọc hoá đơn (H7) để trả tóm tắt thanh toán cho khách; không ghi từ module này.
       { name: Invoice.name, schema: InvoiceSchema },
+      // Chỉ đọc User để liên kết booking vãng lai với tài khoản Customer cùng email.
+      { name: User.name, schema: UserSchema },
     ]),
   ],
   controllers: [
