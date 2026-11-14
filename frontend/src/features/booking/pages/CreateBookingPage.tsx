@@ -426,6 +426,8 @@ export function CreateBookingPage() {
         ...(me ? {} : { code: held.code }),
       })
       rememberPaymentRef(result.transactionRef, held.bookingId)
+      // Sang cổng VNPay là chủ đích (không phải lỡ rời trang) nên tắt cảnh báo rời trang.
+      doneRef.current = true
       window.location.href = result.paymentUrl
     } catch {
       // Giữ bước thanh toán để thử lại mà không gửi lại thông tin liên hệ hoặc tạo hold mới.
