@@ -3,6 +3,7 @@ import { CheckCircle2, XCircle } from 'lucide-react'
 import { Button, StatusBadge } from '@/components/atoms'
 import { KeyValue } from '@/components/molecules'
 import { getErrorMessage } from '@/lib/api-client'
+import { useAuth } from '@/features/auth/auth-context'
 import { BOOKING_STATUS_DISPLAY, PAYMENT_RESULT_DISPLAY } from '../api'
 import { useBooking, useVerifyReturn } from '../hooks'
 
@@ -11,6 +12,7 @@ import { useBooking, useVerifyReturn } from '../hooks'
  * thật là trạng thái Booking authoritative từ backend (IPN chốt), không coi redirect là đã xong.
  */
 export function PaymentReturnPage() {
+  const { me } = useAuth()
   const rawQuery = window.location.search.replace(/^\?/, '')
   const verify = useVerifyReturn(rawQuery)
 
@@ -140,9 +142,11 @@ export function PaymentReturnPage() {
               <Link to={`/booking/${bookingId}`}>Xem chi tiết booking</Link>
             </Button>
           )}
-          <Button asChild variant="outline" className="rounded-full">
-            <Link to="/my-bookings">Đặt phòng của tôi</Link>
-          </Button>
+          {me && (
+            <Button asChild variant="outline" className="rounded-full">
+              <Link to="/my-bookings">Đặt phòng của tôi</Link>
+            </Button>
+          )}
           <Button asChild variant="ghost" className="rounded-full">
             <Link to="/">Về trang chủ</Link>
           </Button>

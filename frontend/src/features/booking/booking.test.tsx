@@ -1928,4 +1928,35 @@ describe('PaymentReturnPage (server-authoritative)', () => {
     expect(screen.getByText(/thử lại từ trang chi tiết booking/i)).toBeInTheDocument()
     expect(screen.queryByText(/phòng vẫn đang được giữ/i)).not.toBeInTheDocument()
   })
+
+  it('hides the "my bookings" link for a guest (walk-in) booking', async () => {
+    renderWithAuth(bookingRoutes, { path: mockReturn('DEPOSIT', 'SUCCESS', 'CONFIRMED') })
+
+    expect(
+      await screen.findByRole('heading', { name: 'Đặt phòng thành công.' }),
+    ).toBeInTheDocument()
+    // Khách vãng lai (chưa đăng nhập) không có trang "Đặt phòng của tôi" nên ẩn nút này.
+    expect(screen.queryByRole('link', { name: 'Đặt phòng của tôi' })).not.toBeInTheDocument()
+  })
+
+  it('shows the "my bookings" link for a signed-in customer', async () => {
+    renderWithAuth(bookingRoutes, {
+      path: mockReturn('DEPOSIT', 'SUCCESS', 'CONFIRMED'),
+      auth: {
+        me: {
+          id: 'c1',
+          email: 'customer@hms.local',
+          fullName: 'Khách Hàng',
+          role: 'CUSTOMER',
+          permissions: [],
+        },
+        status: 'authenticated',
+      },
+    })
+
+    expect(
+      await screen.findByRole('heading', { name: 'Đặt phòng thành công.' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Đặt phòng của tôi' })).toBeInTheDocument()
+  })
 })
