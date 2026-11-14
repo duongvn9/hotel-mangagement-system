@@ -8,7 +8,7 @@ import { BookingAttentionAlert } from '../components/BookingAttentionAlert'
 import { getErrorMessage } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { BOOKING_STATUS_DISPLAY, type BookingListParams } from '../api'
-import { ATTENTION_META, classifyAttention } from '../attention'
+import { ATTENTION_META, classifyAttention, type AttentionKind } from '../attention'
 import { useBookingList } from '../hooks'
 import { formatDate, money, todayISO } from '../utils'
 
@@ -41,6 +41,8 @@ export function BookingListPage() {
   }))
   const [draft, setDraft] = useState<Filters>(initial)
   const [applied, setApplied] = useState<Filters>(initial)
+  // Selected "Đơn cần xử lý" chip; it applies as soon as it is clicked, without pressing "Lọc".
+  const [attentionFilter, setAttentionFilter] = useState<AttentionKind | null>(null)
   const [pageNumber, setPageNumber] = useState(1)
 
   const params: BookingListParams = {
@@ -50,6 +52,7 @@ export function BookingListPage() {
     ...(applied.status ? { status: applied.status } : {}),
     ...(applied.checkInFrom ? { checkInFrom: applied.checkInFrom } : {}),
     ...(applied.checkInTo ? { checkInTo: applied.checkInTo } : {}),
+    ...(attentionFilter ? { attention: attentionFilter } : {}),
   }
   const list = useBookingList(params)
   const totalPages = Math.max(1, Math.ceil((list.data?.total ?? 0) / PAGE_SIZE))
@@ -73,9 +76,15 @@ export function BookingListPage() {
     setPageNumber(1)
   }
 
+  function selectAttention(kind: AttentionKind | null) {
+    setAttentionFilter(kind)
+    setPageNumber(1)
+  }
+
   function resetFilters() {
     setDraft(EMPTY_FILTERS)
     setApplied(EMPTY_FILTERS)
+    setAttentionFilter(null)
     setPageNumber(1)
   }
 
@@ -95,7 +104,11 @@ export function BookingListPage() {
         }
       />
 
-      <BookingAttentionAlert showLink={false} />
+      <BookingAttentionAlert
+        showLink={false}
+        selected={attentionFilter}
+        onSelect={selectAttention}
+      />
 
       <form
         onSubmit={applyFilters}

@@ -180,4 +180,86 @@ describe('BookingListPage', () => {
     expect(codes).toEqual(['BK-OVERDUE', 'BK-NORMAL'])
     vi.useRealTimers()
   })
+
+  describe('attention chips', () => {
+    const counts = { overdueCheckOut: 0, overdueCheckIn: 4, dueCheckOut: 1, dueCheckIn: 8 }
+    function mockApi() {
+      return vi
+        .spyOn(api, 'get')
+        .mockImplementation(async (url) =>
+          url === '/bookings/attention' ? { data: counts } : { data: page({ total: 45 }) },
+        )
+    }
+    const bookingCalls = (get: ReturnType<typeof mockApi>) =>
+      get.mock.calls.filter(([url]) => url === '/bookings')
+
+    it('filters the list by the chip that is clicked, and unfilters on a second click', async () => {
+      const get = mockApi()
+      renderPage()
+      await screen.findByText('BKLIST1')
+      fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
+      await waitFor(() =>
+        expect(bookingCalls(get).at(-1)?.[1]).toEqual({ params: { page: 2, limit: 20 } }),
+      )
+
+      fireEvent.click(await screen.findByRole('button', { name: /Quá hạn nhận phòng\s*4/ }))
+
+      await waitFor(() =>
+        expect(bookingCalls(get).at(-1)?.[1]).toEqual({
+          params: { page: 1, limit: 20, attention: 'overdueCheckIn' },
+        }),
+      )
+      expect(screen.getByRole('button', { name: /Quá hạn nhận phòng\s*4/ })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: /Quá hạn nhận phòng\s*4/ }))
+      await waitFor(() =>
+        expect(bookingCalls(get).at(-1)?.[1]).toEqual({ params: { page: 1, limit: 20 } }),
+      )
+    })
+
+    it('switches straight from one chip to another', async () => {
+      const get = mockApi()
+      renderPage()
+      fireEvent.click(await screen.findByRole('button', { name: /Quá hạn nhận phòng\s*4/ }))
+      fireEvent.click(screen.getByRole('button', { name: /Nhận phòng hôm nay\s*8/ }))
+
+      await waitFor(() =>
+        expect(bookingCalls(get).at(-1)?.[1]).toEqual({
+          params: { page: 1, limit: 20, attention: 'dueCheckIn' },
+        }),
+      )
+      expect(screen.getByRole('button', { name: /Quá hạn nhận phòng\s*4/ })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      )
+    })
+
+    it('keeps the chip while the search form is applied, and clears it with the other filters', async () => {
+      const get = mockApi()
+      renderPage()
+      fireEvent.click(await screen.findByRole('button', { name: /Trả phòng hôm nay\s*1/ }))
+      fireEvent.change(screen.getByLabelText('Tìm kiếm'), { target: { value: 'an' } })
+      // "Lọc" is disabled while the list reloads after the chip click.
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Lọc' })).toBeEnabled())
+      fireEvent.click(screen.getByRole('button', { name: 'Lọc' }))
+
+      await waitFor(() =>
+        expect(bookingCalls(get).at(-1)?.[1]).toEqual({
+          params: { page: 1, limit: 20, q: 'an', attention: 'dueCheckOut' },
+        }),
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Xoá bộ lọc' }))
+      await waitFor(() =>
+        expect(bookingCalls(get).at(-1)?.[1]).toEqual({ params: { page: 1, limit: 20 } }),
+      )
+      expect(screen.getByRole('button', { name: /Trả phòng hôm nay\s*1/ })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      )
+    })
+  })
 })
