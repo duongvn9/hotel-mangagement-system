@@ -36,6 +36,7 @@ import {
   searchGuests,
   searchAvailability,
   submitBookingDetails,
+  syncMyBookings,
   updateBooking,
   updateHoldRooms,
   verifyVnpayReturn,
@@ -130,6 +131,15 @@ export function useRoomStatusBoard(params: RoomStatusBoardParams) {
 /** Booking của Customer đang đăng nhập (đọc từ server). */
 export function useMyBookings() {
   return useQuery({ queryKey: ['my-bookings'], queryFn: getMyBookings })
+}
+
+/** Đồng bộ đơn vãng lai cùng email vào tài khoản rồi tải lại "Đặt phòng của tôi". */
+export function useSyncMyBookings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: syncMyBookings,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-bookings'] }),
+  })
 }
 
 export function useHoldBooking() {

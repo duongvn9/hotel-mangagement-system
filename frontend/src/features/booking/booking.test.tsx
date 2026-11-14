@@ -636,6 +636,35 @@ describe('MyBookingsPage', () => {
     expect(screen.getByText('Chờ đặt cọc')).toBeInTheDocument()
   })
 
+  it('syncs guest bookings made with the account email and refreshes the list', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue({ data: [] })
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { linked: 2 } })
+    renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
+
+    expect(await screen.findByText(/Bạn chưa có đặt phòng nào/)).toBeInTheDocument()
+
+    // Sau khi đồng bộ, server trả về đơn vừa được liên kết.
+    get.mockResolvedValue({ data: [myItem({ id: 'b9', code: 'BK999' })] })
+    fireEvent.click(screen.getByRole('button', { name: /Đồng bộ đơn/ }))
+
+    expect(await screen.findByText(/Đã liên kết 2 đơn/)).toBeInTheDocument()
+    expect(post).toHaveBeenCalledWith('/bookings/mine/sync')
+    expect(await screen.findByText('BK999')).toBeInTheDocument()
+  })
+
+  it('reports when no guest booking matches the account email', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: [] })
+    vi.spyOn(api, 'post').mockResolvedValue({ data: { linked: 0 } })
+    renderWithAuth(bookingRoutes, { path: '/my-bookings', auth: customer })
+
+    expect(await screen.findByText(/Bạn chưa có đặt phòng nào/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Đồng bộ đơn/ }))
+
+    expect(
+      await screen.findByText(/Không tìm thấy đơn đặt phòng nào cùng email/),
+    ).toBeInTheDocument()
+  })
+
   it('shows each booking as a card with the room photo, room type, code, total and amount paid', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({
       data: [

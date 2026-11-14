@@ -13,6 +13,7 @@ import {
   PaymentStatus,
 } from '../payments/schemas/payment-transaction.schema.js';
 import { AvailabilityClock } from './availability.adapters.js';
+import { Role } from '../../common/constants/role.enum.js';
 import { BookingsService } from './bookings.service.js';
 import { toBookingListItem } from './booking-list-item.js';
 import { UpdateBookingDto } from './dto/create-booking.dto.js';
@@ -66,6 +67,13 @@ const setup = (
     }),
   };
   const notifications = { send: vi.fn().mockResolvedValue({ accepted: true }) };
+  const users = {
+    findOne: vi.fn().mockReturnValue({
+      select: vi
+        .fn()
+        .mockReturnValue({ lean: vi.fn().mockResolvedValue(null) }),
+    }),
+  };
   const service = new BookingsService(
     bookings as unknown as Model<Booking>,
     holds as unknown as Model<RoomHold>,
@@ -75,6 +83,7 @@ const setup = (
     invoices as never,
     notifications as never,
     {} as never,
+    users as never,
   );
   return {
     service,
@@ -84,6 +93,7 @@ const setup = (
     payments,
     invoices,
     notifications,
+    users,
     hold,
   };
 };
@@ -299,6 +309,7 @@ describe('updateHoldRooms', () => {
       {} as never,
       { send: vi.fn() } as never,
       {} as never,
+      {} as never,
     );
     return { service, booking, hold, roomA, roomB };
   };
@@ -413,6 +424,7 @@ describe('resolveByCode', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     return { service, bookings };
   };
@@ -442,5 +454,180 @@ describe('resolveByCode', () => {
     await expect(service.resolveByCode('BKZZZ9')).rejects.toThrow(
       'Không tìm thấy',
     );
+  });
+});
+
+describe('customer account linking', () => {
+  const now = new Date('2026-10-28T00:00:00Z');
+
+  const makeService = (
+    overrides: {
+      bookings?: Record<string, unknown>;
+      users?: Record<string, unknown>;
+      rooms?: Record<string, unknown>;
+      holds?: Record<string, unknown>;
+    } = {},
+  ) =>
+    new BookingsService(
+      (overrides.bookings ?? {}) as never,
+      (overrides.holds ?? {}) as never,
+      (overrides.rooms ?? {}) as never,
+      { now: () => now } as AvailabilityClock,
+      {} as never,
+      {} as never,
+      { send: vi.fn() } as never,
+      {} as never,
+      (overrides.users ?? {}) as never,
+    );
+
+  const usersFindingAccount = (account: unknown) => ({
+    findOne: vi.fn().mockReturnValue({
+      select: vi
+        .fn()
+        .mockReturnValue({ lean: vi.fn().mockResolvedValue(account) }),
+    }),
+  });
+
+  // users.findById(id).select('email').lean() -> tài khoản (email chuẩn hoá) để đồng bộ.
+  const usersWithStoredEmail = (account: unknown) => ({
+    findById: vi.fn().mockReturnValue({
+      select: vi
+        .fn()
+        .mockReturnValue({ lean: vi.fn().mockResolvedValue(account) }),
+    }),
+  });
+
+  it('syncCustomerBookings links unlinked bookings by the stored account email, case-insensitively', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ modifiedCount: 2 });
+    const userId = new Types.ObjectId();
+    const service = makeService({
+      bookings: { updateMany },
+      // Email token khác email tài khoản: phải dùng email tài khoản trong DB.
+      users: usersWithStoredEmail({ email: 'guest@example.com' }),
+    });
+
+    const result = await service.syncCustomerBookings({
+      id: String(userId),
+      email: 'stale-token@example.com',
+      role: Role.Customer,
+    });
+
+    expect(result).toEqual({ linked: 2 });
+    const [filter, update] = updateMany.mock.calls[0] as [
+      {
+        guestEmail: RegExp;
+        isActive: boolean;
+        $or: unknown[];
+      },
+      { $set: { customer: Types.ObjectId } },
+    ];
+    expect(filter.isActive).toBe(true);
+    expect(filter.$or).toEqual([
+      { customer: { $exists: false } },
+      { customer: null },
+    ]);
+    expect(filter.guestEmail).toBeInstanceOf(RegExp);
+    expect(filter.guestEmail.flags).toContain('i');
+    expect('guest@example.com').toMatch(filter.guestEmail);
+    expect('x-guest@example.com').not.toMatch(filter.guestEmail);
+    expect(String(update.$set.customer)).toBe(String(userId));
+  });
+
+  it('syncCustomerBookings does nothing when neither the account nor the token has an email', async () => {
+    const updateMany = vi.fn();
+    const service = makeService({
+      bookings: { updateMany },
+      users: usersWithStoredEmail(null),
+    });
+
+    const result = await service.syncCustomerBookings({
+      id: String(new Types.ObjectId()),
+      email: '   ',
+      role: Role.Customer,
+    });
+
+    expect(result).toEqual({ linked: 0 });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  const heldBooking = () => ({
+    _id: new Types.ObjectId(),
+    code: 'BKLINK',
+    isActive: true,
+    status: BookingStatus.RoomHeld,
+    rooms: [] as Types.ObjectId[],
+    adultCount: 2,
+    childCount: 0,
+    source: BookingSource.Online,
+    roomTotal: 1_000_000,
+    depositAmount: 100_000,
+    checkIn: new Date('2094-01-10T00:00:00Z'),
+    checkOut: new Date('2094-01-12T00:00:00Z'),
+    customer: undefined as Types.ObjectId | undefined,
+    save: vi.fn(),
+  });
+
+  const submitDeps = (
+    booking: ReturnType<typeof heldBooking>,
+    users: Record<string, unknown>,
+  ) => ({
+    bookings: { findById: vi.fn().mockResolvedValue(booking) },
+    holds: {
+      findOne: vi.fn().mockResolvedValue({
+        holdToken: 'HOLDTOKEN_LINK',
+        booking: booking._id,
+        isActive: true,
+        expiresAt: new Date(now.getTime() + 60_000),
+      }),
+    },
+    rooms: {
+      find: vi.fn().mockReturnValue({
+        populate: vi.fn().mockReturnValue({
+          lean: vi
+            .fn()
+            .mockReturnValue({ exec: vi.fn().mockResolvedValue([]) }),
+        }),
+      }),
+    },
+    users,
+  });
+
+  it('submitDetails links a held guest booking to a Customer account with the same email', async () => {
+    const booking = heldBooking();
+    const accountId = new Types.ObjectId();
+    const users = usersFindingAccount({ _id: accountId });
+    const service = makeService(submitDeps(booking, users));
+
+    await service.submitDetails({
+      holdToken: 'HOLDTOKEN_LINK',
+      guestName: 'Khách Vãng Lai',
+      guestEmail: 'Guest@Example.com',
+      guestPhone: '0900000000',
+    });
+
+    expect(users.findOne).toHaveBeenCalledWith({
+      email: 'guest@example.com',
+      role: Role.Customer,
+      isActive: true,
+    });
+    expect(String(booking.customer)).toBe(String(accountId));
+    expect(booking.status).toBe(BookingStatus.PendingDeposit);
+    expect(booking.save).toHaveBeenCalled();
+  });
+
+  it('submitDetails leaves the booking unlinked when no account matches the email', async () => {
+    const booking = heldBooking();
+    const users = usersFindingAccount(null);
+    const service = makeService(submitDeps(booking, users));
+
+    await service.submitDetails({
+      holdToken: 'HOLDTOKEN_LINK',
+      guestName: 'Khách Vãng Lai',
+      guestEmail: 'nobody@example.com',
+      guestPhone: '0900000000',
+    });
+
+    expect(booking.customer).toBeUndefined();
+    expect(booking.status).toBe(BookingStatus.PendingDeposit);
   });
 });

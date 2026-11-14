@@ -29,6 +29,7 @@ import {
   BookingSource,
 } from './schemas/booking.schema.js';
 import { Invoice, InvoiceStatus } from '../invoices/schemas/invoice.schema.js';
+import { User } from '../users/schemas/user.schema.js';
 import {
   BLOCKING_BOOKING_STATUSES,
   RELEASED_BOOKING_STATUSES,
@@ -125,7 +126,54 @@ export class BookingsService {
     private readonly notifications: NotificationsService,
     @InjectModel(HoldPrincipalLock.name)
     private readonly principalLocks: Model<HoldPrincipalLock>,
+    // Chỉ đọc User để liên kết booking vãng lai với tài khoản Customer cùng email; không ghi.
+    @InjectModel(User.name)
+    private readonly users: Model<User>,
   ) {}
+
+  /**
+   * Tìm _id của tài khoản Customer đang hoạt động có email trùng với email khách nhập,
+   * để gắn booking vãng lai vào tài khoản đó. Chỉ khớp tài khoản Customer (không gắn vào
+   * tài khoản nhân viên) và chuẩn hoá email về chữ thường như lúc tạo tài khoản.
+   */
+  private async resolveCustomerIdByEmail(
+    email: string | undefined,
+  ): Promise<Types.ObjectId | undefined> {
+    const normalized = email?.trim().toLowerCase();
+    if (!normalized) return undefined;
+    const account = await this.users
+      .findOne({ email: normalized, role: Role.Customer, isActive: true })
+      .select('_id')
+      .lean();
+    return account ? new Types.ObjectId(String(account._id)) : undefined;
+  }
+
+  /**
+   * "Đồng bộ đặt phòng": rà các đơn đang hoạt động có guestEmail trùng email tài khoản
+   * (không phân biệt hoa thường) nhưng chưa gắn với tài khoản nào, rồi gắn vào tài khoản
+   * của chính Customer đang đăng nhập. Trả về số đơn vừa liên kết.
+   */
+  async syncCustomerBookings(user: AuthUser): Promise<{ linked: number }> {
+    // Dùng email tài khoản lưu trong DB (đã chuẩn hoá) làm chuẩn, không lệ thuộc email trong token.
+    const account = Types.ObjectId.isValid(user.id)
+      ? await this.users.findById(user.id).select('email').lean()
+      : null;
+    const email = (account?.email ?? user.email)?.trim();
+    if (!email) return { linked: 0 };
+    const exact = new RegExp(
+      `^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+      'i',
+    );
+    const result = await this.bookings.updateMany(
+      {
+        guestEmail: exact,
+        isActive: true,
+        $or: [{ customer: { $exists: false } }, { customer: null }],
+      },
+      { $set: { customer: new Types.ObjectId(user.id) } },
+    );
+    return { linked: result.modifiedCount ?? 0 };
+  }
 
   /** Gửi email booking (best-effort): không bao giờ làm hỏng luồng nghiệp vụ. */
   private emailBooking(data: BookingEmailData): void {
@@ -206,12 +254,16 @@ export class BookingsService {
     );
     await this.assertRoomsFree(roomIds, stay, this.clock.now());
 
+    // Liên kết đơn tại quầy với tài khoản Customer cùng email (nếu có).
+    const customer = await this.resolveCustomerIdByEmail(dto.guestEmail);
+
     const booking = await this.createBookingDocument(dto, roomIds, stay, {
       roomTotal,
       rates,
       source: BookingSource.FrontDesk,
       status: BookingStatus.Confirmed,
       createdBy: new Types.ObjectId(user.id),
+      ...(customer ? { customer } : {}),
     });
 
     // Hai lễ tân đặt trùng phòng cùng lúc: booking tạo trước (_id nhỏ hơn) thắng.
@@ -1148,6 +1200,11 @@ export class BookingsService {
     booking.guestName = dto.guestName.trim();
     booking.guestEmail = dto.guestEmail.trim();
     booking.guestPhone = dto.guestPhone.trim();
+    // Khách vãng lai nhập email trùng tài khoản Customer: gắn đơn vào tài khoản đó.
+    if (!booking.customer) {
+      const customer = await this.resolveCustomerIdByEmail(booking.guestEmail);
+      if (customer) booking.customer = customer;
+    }
     // Lưu dịch vụ chọn kèm (gộp trùng theo serviceId); tự sinh đơn khi booking qua CONFIRMED.
     if (dto.serviceSelections?.length) {
       const merged = new Map<string, number>();
