@@ -266,4 +266,18 @@ describe('WalkInBookingPage', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
   })
+
+  it('shows a Vietnamese error on the phone field and does not submit when the phone is invalid', async () => {
+    const post = vi.spyOn(api, 'post')
+    renderPage()
+    fireEvent.click(await searchRooms())
+    fireEvent.change(screen.getByLabelText(/Họ tên/), { target: { value: 'Khách vãng lai' } })
+    fireEvent.change(screen.getByLabelText(/Email/), { target: { value: 'k@example.test' } })
+    fireEvent.change(screen.getByLabelText(/Số điện thoại/), { target: { value: 'abc' } })
+    chooseDeposit('CASH')
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo booking' }))
+
+    expect(await screen.findByText(/Số điện thoại không hợp lệ/)).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+  })
 })

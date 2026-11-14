@@ -23,36 +23,40 @@ export class CreateBookingDto {
   rooms: string[];
 
   @ApiProperty({ description: 'Ngày nhận phòng (YYYY-MM-DD, giờ Việt Nam)' })
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'checkIn must be YYYY-MM-DD' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'Ngày nhận phòng phải có dạng YYYY-MM-DD',
+  })
   checkIn: string;
 
   @ApiProperty({ description: 'Ngày trả phòng (YYYY-MM-DD, giờ Việt Nam)' })
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'checkOut must be YYYY-MM-DD' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'Ngày trả phòng phải có dạng YYYY-MM-DD',
+  })
   checkOut: string;
 
   @ApiProperty({ minimum: 1, description: 'Số người lớn' })
-  @IsInt()
-  @Min(1)
+  @IsInt({ message: 'Số người lớn phải là số nguyên' })
+  @Min(1, { message: 'Số người lớn tối thiểu là 1' })
   adultCount: number;
 
   @ApiProperty({ minimum: 0, default: 0, description: 'Số trẻ em' })
   @IsOptional()
-  @IsInt()
-  @Min(0)
+  @IsInt({ message: 'Số trẻ em phải là số nguyên' })
+  @Min(0, { message: 'Số trẻ em không được âm' })
   childCount: number = 0;
 
   @ApiProperty()
-  @IsString()
-  @MaxLength(120)
+  @IsString({ message: 'Họ tên không hợp lệ' })
+  @MaxLength(120, { message: 'Họ tên tối đa 120 ký tự' })
   guestName: string;
 
   @ApiProperty()
-  @IsEmail()
-  @MaxLength(160)
+  @IsEmail({}, { message: 'Email không hợp lệ' })
+  @MaxLength(160, { message: 'Email tối đa 160 ký tự' })
   guestEmail: string;
 
   @ApiProperty({ description: 'Số điện thoại liên hệ' })
-  @Matches(/^[0-9+\-\s]{6,20}$/, { message: 'guestPhone is invalid' })
+  @Matches(/^[0-9+\-\s]{6,20}$/, { message: 'Số điện thoại không hợp lệ' })
   guestPhone: string;
 }
 
@@ -70,41 +74,45 @@ export class UpdateBookingDto {
 
   @ApiPropertyOptional({ description: 'Ngày nhận phòng (YYYY-MM-DD, giờ VN)' })
   @IsOptional()
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'checkIn must be YYYY-MM-DD' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'Ngày nhận phòng phải có dạng YYYY-MM-DD',
+  })
   checkIn?: string;
 
   @ApiPropertyOptional({ description: 'Ngày trả phòng (YYYY-MM-DD, giờ VN)' })
   @IsOptional()
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'checkOut must be YYYY-MM-DD' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'Ngày trả phòng phải có dạng YYYY-MM-DD',
+  })
   checkOut?: string;
 
   @ApiPropertyOptional({ minimum: 1 })
   @IsOptional()
-  @IsInt()
-  @Min(1)
+  @IsInt({ message: 'Số người lớn phải là số nguyên' })
+  @Min(1, { message: 'Số người lớn tối thiểu là 1' })
   adultCount?: number;
 
   @ApiPropertyOptional({ minimum: 0 })
   @IsOptional()
-  @IsInt()
-  @Min(0)
+  @IsInt({ message: 'Số trẻ em phải là số nguyên' })
+  @Min(0, { message: 'Số trẻ em không được âm' })
   childCount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
-  @MaxLength(120)
+  @IsString({ message: 'Họ tên không hợp lệ' })
+  @MaxLength(120, { message: 'Họ tên tối đa 120 ký tự' })
   guestName?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsEmail()
-  @MaxLength(160)
+  @IsEmail({}, { message: 'Email không hợp lệ' })
+  @MaxLength(160, { message: 'Email tối đa 160 ký tự' })
   guestEmail?: string;
 
   @ApiPropertyOptional({ description: 'Số điện thoại liên hệ' })
   @IsOptional()
-  @Matches(/^[0-9+\-\s]{6,20}$/, { message: 'guestPhone is invalid' })
+  @Matches(/^[0-9+\-\s]{6,20}$/, { message: 'Số điện thoại không hợp lệ' })
   guestPhone?: string;
 }
 
