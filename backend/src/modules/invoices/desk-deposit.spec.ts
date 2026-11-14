@@ -18,7 +18,6 @@ function setup(
     depositAmount?: number;
     replay?: Record<string, unknown>;
     settled?: boolean;
-    pending?: boolean;
     missing?: boolean;
   } = {},
 ) {
@@ -37,14 +36,11 @@ function setup(
   const payments = {
     findOne: vi.fn(async () => options.replay ?? null),
     exists: vi.fn(async (filter: { status?: string }) =>
-      filter.status === PaymentStatus.Success
-        ? options.settled
-          ? { _id: 1 }
-          : null
-        : options.pending
-          ? { _id: 1 }
-          : null,
+      filter.status === PaymentStatus.Success && options.settled
+        ? { _id: 1 }
+        : null,
     ),
+    updateMany: vi.fn(async () => ({ modifiedCount: 0 })),
     create: vi.fn(async () => ({})),
   };
   const invoice = {
@@ -108,14 +104,58 @@ describe('DeskDepositService', () => {
     }
   });
 
-  it('refuses a second deposit and a deposit while VNPay is pending', async () => {
-    for (const options of [{ settled: true }, { pending: true }]) {
-      const { sut, payments } = setup(options);
+  it('refuses a second deposit and leaves any pending VNPay link alone', async () => {
+    const { sut, payments } = setup({ settled: true });
+
+    await expect(
+      sut.record(bookingId.toHexString(), dto, PaymentMethod.Cash),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(payments.updateMany).not.toHaveBeenCalled();
+    expect(payments.create).not.toHaveBeenCalled();
+  });
+
+  it.each([PaymentMethod.Cash, PaymentMethod.Card] as const)(
+    'cancels a pending VNPay deposit left behind by an abandoned payment page, then takes the %s deposit',
+    async (method) => {
+      const { sut, payments } = setup();
+      payments.updateMany.mockResolvedValueOnce({ modifiedCount: 1 });
+
       await expect(
-        sut.record(bookingId.toHexString(), dto, PaymentMethod.Cash),
-      ).rejects.toBeInstanceOf(ConflictException);
-      expect(payments.create).not.toHaveBeenCalled();
-    }
+        sut.record(bookingId.toHexString(), dto, method),
+      ).resolves.toBeDefined();
+
+      // The old link is superseded (not deleted) so a late VNPay payment is still flagged for reconciliation.
+      expect(payments.updateMany).toHaveBeenCalledWith(
+        {
+          booking: bookingId,
+          purpose: PaymentPurpose.Deposit,
+          method: PaymentMethod.Vnpay,
+          status: PaymentStatus.Pending,
+          isActive: true,
+        },
+        {
+          $set: {
+            status: PaymentStatus.Cancelled,
+            supersededAt: expect.any(Date),
+          },
+        },
+      );
+      expect(payments.create).toHaveBeenCalledWith(
+        expect.objectContaining({ method, status: PaymentStatus.Success }),
+      );
+      expect(payments.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+        payments.create.mock.invocationCallOrder[0] as number,
+      );
+    },
+  );
+
+  it('does not touch VNPay links when the booking cannot take a desk deposit', async () => {
+    const { sut, payments } = setup({ status: BookingStatus.CheckedIn });
+
+    await expect(
+      sut.record(bookingId.toHexString(), dto, PaymentMethod.Cash),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(payments.updateMany).not.toHaveBeenCalled();
   });
 
   it('returns 404 for an unknown booking', async () => {
