@@ -132,8 +132,10 @@ describe('UC57 labels and report', () => {
     expect(screen.getByRole('heading', { name: 'Tại thời điểm xem báo cáo' })).toBeInTheDocument()
     expect(screen.getByText('125,0%')).toBeInTheDocument()
     expect(screen.getByText(/Công suất ước tính vượt/)).toBeInTheDocument()
-    for (const text of ['Danh mục mới', 'Loại mới', 'NEW_SOURCE'])
+    for (const text of ['Danh mục mới', 'NEW_SOURCE'])
       expect(screen.getByText(text)).toBeInTheDocument()
+    expect(screen.queryByText('Theo loại task')).not.toBeInTheDocument()
+    expect(screen.queryByText('Loại mới')).not.toBeInTheDocument()
     expect(within(screen.getByRole('table')).getAllByRole('columnheader')).toHaveLength(7)
     fireEvent.change(screen.getByLabelText('Chỉ số biểu đồ'), {
       target: { value: 'tasksCompleted' },

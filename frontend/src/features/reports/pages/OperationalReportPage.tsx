@@ -274,12 +274,6 @@ function Report({ data: d }: { data: OperationalReport }) {
                         'Hoàn thành trung bình (giờ)': d.tasks.period.avgCompletionHours,
                       }}
                     />
-                    <h4 className="font-semibold">Theo loại task</h4>
-                    <Counts
-                      values={Object.fromEntries(
-                        d.tasks.period.byTaskType.map((r) => [r.taskType, r.count]),
-                      )}
-                    />
                     <h4 className="font-semibold">Theo nguồn</h4>
                     <Counts
                       values={Object.fromEntries(
