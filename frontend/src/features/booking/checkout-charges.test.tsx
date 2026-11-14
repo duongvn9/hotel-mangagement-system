@@ -462,6 +462,21 @@ describe('Classifying additional charges and late check-out', () => {
 
     expect(departure().queryByText(/quá giờ trả phòng/i)).not.toBeInTheDocument()
   })
+
+  it('opens receipt modal when clicking In / Xuất hoá đơn in checkout charges dialog', async () => {
+    mockGet(charges())
+    await openPanel()
+
+    const receiptBtn = await departure().findByRole('button', { name: 'In / Xuất hoá đơn' })
+    expect(receiptBtn).toBeInTheDocument()
+    fireEvent.click(receiptBtn)
+
+    expect(
+      await screen.findByRole('heading', { name: 'Xuất hoá đơn / Phiếu thanh toán' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('RECEIPT')).toBeInTheDocument()
+    expect(screen.getByText(/#DPI/)).toBeInTheDocument()
+  })
 })
 
 describe('Room inspection inside the check-out dialog', () => {
