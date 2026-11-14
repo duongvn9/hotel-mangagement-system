@@ -38,42 +38,46 @@ export class HoldBookingDto {
   rooms: string[];
 
   @ApiProperty({ description: 'Ngày nhận phòng (YYYY-MM-DD, giờ Việt Nam)' })
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'checkIn must be YYYY-MM-DD' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'Ngày nhận phòng phải có dạng YYYY-MM-DD',
+  })
   checkIn: string;
 
   @ApiProperty({ description: 'Ngày trả phòng (YYYY-MM-DD, giờ Việt Nam)' })
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'checkOut must be YYYY-MM-DD' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'Ngày trả phòng phải có dạng YYYY-MM-DD',
+  })
   checkOut: string;
 
   @ApiProperty({ minimum: 1, description: 'Số người lớn' })
-  @IsInt()
-  @Min(1)
+  @IsInt({ message: 'Số người lớn phải là số nguyên' })
+  @Min(1, { message: 'Số người lớn tối thiểu là 1' })
   adultCount: number;
 
   @ApiProperty({ minimum: 0, default: 0, description: 'Số trẻ em' })
   @IsOptional()
-  @IsInt()
-  @Min(0)
+  @IsInt({ message: 'Số trẻ em phải là số nguyên' })
+  @Min(0, { message: 'Số trẻ em không được âm' })
   childCount: number = 0;
 }
 
 /** Nhập thông tin liên hệ cho hold hiện có (ROOM_HELD -> PENDING_DEPOSIT). */
 export class SubmitBookingDetailsDto {
   @ApiProperty({ description: 'Mã giữ phòng nhận khi cấp hold' })
-  @Matches(/^[A-Za-z0-9_-]{10,80}$/, { message: 'Invalid holdToken' })
+  @Matches(/^[A-Za-z0-9_-]{10,80}$/, { message: 'Mã giữ phòng không hợp lệ' })
   holdToken: string;
 
   @ApiProperty()
-  @MaxLength(120)
+  @MaxLength(120, { message: 'Họ tên tối đa 120 ký tự' })
   guestName: string;
 
   @ApiProperty()
-  @IsEmail()
-  @MaxLength(160)
+  @IsEmail({}, { message: 'Email không hợp lệ' })
+  @MaxLength(160, { message: 'Email tối đa 160 ký tự' })
   guestEmail: string;
 
   @ApiProperty({ description: 'Số điện thoại liên hệ' })
-  @Matches(/^[0-9+\-\s]{6,20}$/, { message: 'guestPhone is invalid' })
+  @Matches(/^[0-9+\-\s]{6,20}$/, { message: 'Số điện thoại không hợp lệ' })
   guestPhone: string;
 
   @ApiPropertyOptional({

@@ -66,6 +66,7 @@ function setup(
     forbidden?: boolean;
     payments?: unknown[];
     orders?: unknown[];
+    customer?: Types.ObjectId;
   } = {},
 ) {
   const bookings = {
@@ -74,9 +75,12 @@ function setup(
       return {};
     }),
   };
+  const loaded = options.customer
+    ? { ...booking, customer: options.customer }
+    : booking;
   const bookingModel = {
     findById: vi.fn(() => ({
-      populate: () => ({ lean: async () => booking }),
+      populate: () => ({ lean: async () => loaded }),
     })),
   };
   const payments = {
@@ -125,6 +129,22 @@ describe('BookingSummaryService', () => {
       depositAmount: 170_000,
       invoice: { serviceTotal: 430_000, depositPaid: 170_000 },
     });
+  });
+
+  it('marks a booking with no linked account as not having one', async () => {
+    const { sut } = setup();
+
+    const summary = await sut.get(bookingId.toHexString(), ctx);
+
+    expect(summary.hasAccount).toBe(false);
+  });
+
+  it('marks a booking linked to a customer account as having one', async () => {
+    const { sut } = setup({ customer: new Types.ObjectId() });
+
+    const summary = await sut.get(bookingId.toHexString(), ctx);
+
+    expect(summary.hasAccount).toBe(true);
   });
 
   it('authorizes through the booking read rule before loading anything', async () => {

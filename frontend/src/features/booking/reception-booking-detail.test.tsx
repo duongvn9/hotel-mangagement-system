@@ -37,6 +37,7 @@ const summaryOf = (overrides: Partial<BookingSummary> = {}): BookingSummary => (
   code: 'BKVIEW1',
   status: 'CONFIRMED',
   source: 'FRONT_DESK',
+  hasAccount: false,
   checkIn: '2099-01-09T17:00:00.000Z',
   checkOut: '2099-01-11T17:00:00.000Z',
   adultCount: 2,

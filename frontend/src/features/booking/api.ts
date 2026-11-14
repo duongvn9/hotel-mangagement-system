@@ -327,6 +327,8 @@ export interface BookingSummary {
   code: string
   status: string
   source: BookingSource
+  /** Đã liên kết với một tài khoản khách hàng (không còn là khách vãng lai); thiếu coi như chưa. */
+  hasAccount?: boolean
   checkIn: string
   checkOut: string
   adultCount: number

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router'
 import { Button, Input, NativeSelect, StatusBadge } from '@/components/atoms'
 import { Alert, FormField, KeyValue } from '@/components/molecules'
 import { PageContainer, PageHeader, Panel } from '@/components/organisms'
-import { getErrorMessage } from '@/lib/api-client'
+import { getErrorMessage, getErrorMessages } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import {
   DESK_DEPOSIT_LABEL,
@@ -17,6 +17,11 @@ import {
   useInitiateDeposit,
   useRecordDeskDeposit,
 } from '../hooks'
+import {
+  mapGuestServerErrors,
+  validateGuestContact,
+  type GuestFieldErrors,
+} from '../guest-validation'
 import { rememberPaymentRef } from '../storage'
 import {
   daysFromTodayISO,
@@ -29,6 +34,13 @@ import {
 
 /** Cách khách đóng cọc tại quầy: tiền mặt hoặc thẻ ghi ngay, hoặc VNPay mở trang thanh toán. */
 type WalkInDepositMethod = DeskDepositMethod | 'VNPAY'
+
+/** id ô nhập theo từng trường, để focus vào ô lỗi đầu tiên. */
+const FIELD_IDS: Record<keyof GuestFieldErrors, string> = {
+  guestName: 'walkin-guest-name',
+  guestEmail: 'walkin-guest-email',
+  guestPhone: 'walkin-guest-phone',
+}
 
 /** UC08 — Create Booking for Guest. Lễ tân chọn phòng trống rồi đặt hộ khách vãng lai, vào thẳng CONFIRMED. */
 export function WalkInBookingPage() {
@@ -48,7 +60,20 @@ export function WalkInBookingPage() {
   const [guestName, setGuestName] = useState(params.get('guestName') ?? '')
   const [guestEmail, setGuestEmail] = useState(params.get('guestEmail') ?? '')
   const [guestPhone, setGuestPhone] = useState(params.get('guestPhone') ?? '')
+  // Lỗi theo từng trường thông tin khách (client kiểm trước, server map sau), hiện ngay dưới ô nhập.
+  const [contactErrors, setContactErrors] = useState<GuestFieldErrors>({})
+  // Lỗi tạo booking không thuộc trường nào (vd phòng vừa bị giữ) để hiện ở thông báo chung.
+  const [submitBanner, setSubmitBanner] = useState('')
   const [created, setCreated] = useState<WalkInBooking | null>(null)
+
+  function clearContactError(field: keyof GuestFieldErrors) {
+    setContactErrors((prev) => {
+      if (!prev[field]) return prev
+      const next = { ...prev }
+      delete next[field]
+      return next
+    })
+  }
   const [depositMethod, setDepositMethod] = useState<WalkInDepositMethod | ''>('')
   // Giữ nguyên mã khi thu cọc lỗi để bấm lại không ghi trùng.
   const [depositRequestId, setDepositRequestId] = useState(newRequestId)
@@ -108,6 +133,20 @@ export function WalkInBookingPage() {
   async function submitBooking(event: FormEvent) {
     event.preventDefault()
     if (!criteria || selected.length === 0 || !depositMethod) return
+
+    // Kiểm tra thông tin khách phía client: lỗi hiện ngay dưới đúng ô nhập, bằng tiếng Việt.
+    const clientErrors = validateGuestContact({ guestName, guestEmail, guestPhone })
+    setSubmitBanner('')
+    if (Object.keys(clientErrors).length > 0) {
+      setContactErrors(clientErrors)
+      const firstField = (['guestName', 'guestEmail', 'guestPhone'] as const).find(
+        (field) => clientErrors[field],
+      )
+      if (firstField) document.getElementById(FIELD_IDS[firstField])?.focus()
+      return
+    }
+    setContactErrors({})
+
     try {
       const booking = await create.mutateAsync({
         rooms: selected,
@@ -118,8 +157,17 @@ export function WalkInBookingPage() {
       })
       setCreated(booking)
       await takeDeposit(booking.id, depositMethod)
-    } catch {
-      // Lỗi hiển thị qua create.isError bên dưới.
+    } catch (error) {
+      // Server vẫn báo lỗi: đưa lỗi validate về đúng ô, phần còn lại hiện ở thông báo chung.
+      const { fieldErrors, rest } = mapGuestServerErrors(getErrorMessages(error))
+      setContactErrors(fieldErrors)
+      setSubmitBanner(
+        rest.join(', ') || (Object.keys(fieldErrors).length ? '' : getErrorMessage(error)),
+      )
+      const firstField = (['guestName', 'guestEmail', 'guestPhone'] as const).find(
+        (field) => fieldErrors[field],
+      )
+      if (firstField) document.getElementById(FIELD_IDS[firstField])?.focus()
     }
   }
 
@@ -149,6 +197,8 @@ export function WalkInBookingPage() {
     setGuestName('')
     setGuestEmail('')
     setGuestPhone('')
+    setContactErrors({})
+    setSubmitBanner('')
     setDepositMethod('')
     setDepositRequestId(newRequestId())
     create.reset()
@@ -349,7 +399,11 @@ export function WalkInBookingPage() {
       {availability.isError && <Alert tone="danger">{getErrorMessage(availability.error)}</Alert>}
 
       {criteria && availability.isSuccess && (
-        <form onSubmit={submitBooking} className="grid items-start gap-6 lg:grid-cols-[1fr_360px]">
+        <form
+          noValidate
+          onSubmit={submitBooking}
+          className="grid items-start gap-6 lg:grid-cols-[1fr_360px]"
+        >
           <div className="space-y-5">
             <Panel title={`Chọn phòng (${nights} đêm · ${rooms.length} phòng trống)`}>
               {rooms.length === 0 ? (
@@ -391,23 +445,41 @@ export function WalkInBookingPage() {
 
             <Panel title="Thông tin khách">
               <div className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Họ tên" htmlFor="walkin-guest-name" required>
+                <FormField
+                  label="Họ tên"
+                  htmlFor="walkin-guest-name"
+                  required
+                  error={contactErrors.guestName}
+                >
                   <Input
                     id="walkin-guest-name"
                     required
                     maxLength={120}
+                    aria-invalid={Boolean(contactErrors.guestName)}
                     value={guestName}
-                    onChange={(event) => setGuestName(event.target.value)}
+                    onChange={(event) => {
+                      setGuestName(event.target.value)
+                      clearContactError('guestName')
+                    }}
                   />
                 </FormField>
-                <FormField label="Email" htmlFor="walkin-guest-email" required>
+                <FormField
+                  label="Email"
+                  htmlFor="walkin-guest-email"
+                  required
+                  error={contactErrors.guestEmail}
+                >
                   <Input
                     id="walkin-guest-email"
                     type="email"
                     required
                     maxLength={160}
+                    aria-invalid={Boolean(contactErrors.guestEmail)}
                     value={guestEmail}
-                    onChange={(event) => setGuestEmail(event.target.value)}
+                    onChange={(event) => {
+                      setGuestEmail(event.target.value)
+                      clearContactError('guestEmail')
+                    }}
                   />
                 </FormField>
                 <FormField
@@ -415,14 +487,19 @@ export function WalkInBookingPage() {
                   htmlFor="walkin-guest-phone"
                   required
                   className="sm:col-span-2"
+                  error={contactErrors.guestPhone}
                 >
                   <Input
                     id="walkin-guest-phone"
                     type="tel"
                     required
                     placeholder="0900000000"
+                    aria-invalid={Boolean(contactErrors.guestPhone)}
                     value={guestPhone}
-                    onChange={(event) => setGuestPhone(event.target.value)}
+                    onChange={(event) => {
+                      setGuestPhone(event.target.value)
+                      clearContactError('guestPhone')
+                    }}
                   />
                 </FormField>
               </div>
@@ -450,7 +527,7 @@ export function WalkInBookingPage() {
               </p>
             </Panel>
 
-            {create.isError && <Alert tone="danger">{getErrorMessage(create.error)}</Alert>}
+            {submitBanner && <Alert tone="danger">{submitBanner}</Alert>}
           </div>
 
           <aside className="card-soft h-fit space-y-4 p-6 lg:sticky lg:top-6">

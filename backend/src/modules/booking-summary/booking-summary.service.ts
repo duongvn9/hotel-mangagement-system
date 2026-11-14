@@ -91,6 +91,8 @@ export class BookingSummaryService {
       code: booking.code,
       status: booking.status,
       source: booking.source,
+      // Đã liên kết tài khoản khách hàng chưa; để UI phân biệt khách có tài khoản với khách vãng lai.
+      hasAccount: Boolean(booking.customer),
       checkIn: booking.checkIn.toISOString(),
       checkOut: booking.checkOut.toISOString(),
       adultCount: booking.adultCount,

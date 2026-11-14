@@ -40,6 +40,8 @@ export class BookingSummaryResponse {
   code: string;
   status: string;
   source: string;
+  /** Booking đã liên kết với một tài khoản khách hàng (không còn là khách vãng lai). */
+  hasAccount: boolean;
   checkIn: string;
   checkOut: string;
   adultCount: number;

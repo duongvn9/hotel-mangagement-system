@@ -921,6 +921,72 @@ describe('CreateBookingPage (hold-first flow)', () => {
     )
   })
 
+  it('shows a Vietnamese error on the phone field and does not submit when the phone is invalid', async () => {
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+      if (url === '/bookings/hold') return { data: held }
+      throw new Error(`unexpected POST ${url}`)
+    })
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/service-catalog') return { data: { items: [] } }
+      if (url === '/availability') return { data: [] }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    renderWithAuth(bookingRoutes, {
+      path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+    })
+
+    await screen.findByRole('button', { name: 'Tiếp tục đặt cọc' })
+    fireEvent.change(screen.getByLabelText('Họ tên', { exact: false }), {
+      target: { value: 'Nguyen Van A' },
+    })
+    fireEvent.change(screen.getByLabelText('Email', { exact: false }), {
+      target: { value: 'a@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText('Số điện thoại', { exact: false }), {
+      target: { value: 'abc' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục đặt cọc' }))
+
+    expect(await screen.findByText(/Số điện thoại không hợp lệ/)).toBeInTheDocument()
+    expect(post).not.toHaveBeenCalledWith('/bookings/details', expect.anything())
+  })
+
+  it('routes a server validation error back to the matching field in Vietnamese', async () => {
+    vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+      if (url === '/bookings/hold') return { data: held }
+      if (url === '/bookings/details')
+        throw {
+          isAxiosError: true,
+          response: { status: 400, data: { message: ['guestPhone is invalid'] } },
+        }
+      throw new Error(`unexpected POST ${url}`)
+    })
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/bookings/service-catalog') return { data: { items: [] } }
+      if (url === '/availability') return { data: [] }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    renderWithAuth(bookingRoutes, {
+      path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+    })
+
+    await screen.findByRole('button', { name: 'Tiếp tục đặt cọc' })
+    fireEvent.change(screen.getByLabelText('Họ tên', { exact: false }), {
+      target: { value: 'Nguyen Van A' },
+    })
+    fireEvent.change(screen.getByLabelText('Email', { exact: false }), {
+      target: { value: 'a@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText('Số điện thoại', { exact: false }), {
+      target: { value: '0900000000' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục đặt cọc' }))
+
+    expect(await screen.findByText(/Số điện thoại không hợp lệ/)).toBeInTheDocument()
+  })
+
   it.each(['GUEST', 'CUSTOMER', 'MANAGER'])(
     'keeps %s checkout in-page and retries VNPay without resubmitting contact details',
     async (role) => {
