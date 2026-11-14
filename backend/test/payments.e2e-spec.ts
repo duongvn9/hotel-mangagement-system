@@ -302,15 +302,32 @@ describe('Payments VNPay endpoints (e2e)', () => {
       await initiate(CUSTOMER).expect(409);
     });
 
-    it('blocks a cash deposit at the desk while the VNPay one is pending', async () => {
+    it('cancels a pending VNPay deposit when taking cash at the desk', async () => {
       await seedWalkIn();
-      await initiate().expect(201);
+      const { body } = await initiate().expect(201);
 
       await http()
         .post(`/api/v1/bookings/${bookingId}/payments/deposit`)
         .set(RECEPTIONIST)
         .send({ method: 'CASH', requestId: 'dep-12345678' })
-        .expect(409);
+        .expect(201);
+
+      const oldPayment = await payments.findOne({
+        transactionRef: body.transactionRef,
+      });
+      expect(oldPayment?.status).toBe('CANCELLED');
+      expect(oldPayment?.supersededAt).toBeInstanceOf(Date);
+
+      const cashPayment = await payments.findOne({
+        booking: bookingId,
+        method: 'CASH',
+      });
+      expect(cashPayment?.status).toBe('SUCCESS');
+      expect(await invoices.findOne({ booking: bookingId })).toMatchObject({
+        depositPaid: 300000,
+        balanceDue: 700000,
+        status: 'PARTIALLY_PAID',
+      });
     });
   });
 
