@@ -1307,6 +1307,49 @@ describe('CreateBookingPage (hold-first flow)', () => {
     },
   )
 
+  it('does not warn about leaving once the guest proceeds to the VNPay page', async () => {
+    const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+      if (url === '/bookings/hold')
+        return {
+          data: {
+            ...held,
+            status: 'PENDING_DEPOSIT',
+            holdExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+          },
+        }
+      if (url === '/payments/deposit')
+        return {
+          data: { transactionRef: 'TXN-GO', paymentUrl: 'https://vnpay.test/pay', amount: 600_000 },
+        }
+      throw new Error(`unexpected POST ${url}`)
+    })
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => ({
+      data: url === '/bookings/service-catalog' ? { items: [] } : [],
+    }))
+
+    renderWithAuth(bookingRoutes, {
+      path: '/booking/new?checkIn=2099-01-10&checkOut=2099-01-12&guests=2&rooms=r1',
+    })
+    await screen.findByRole('heading', { name: 'Thanh toán cọc' })
+
+    // Đang giữ phòng, chưa thanh toán: lỡ rời trang vẫn phải cảnh báo.
+    const before = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(before)
+    expect(before.defaultPrevented).toBe(true)
+
+    // Chủ đích sang VNPay: không còn cảnh báo rời trang.
+    fireEvent.click(screen.getByRole('button', { name: /Thanh toán/ }))
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        '/payments/deposit',
+        expect.objectContaining({ bookingId: 'b9' }),
+      ),
+    )
+    const after = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(after)
+    expect(after.defaultPrevented).toBe(false)
+  })
+
   it('lets the guest pick add-on services sent with the contact details', async () => {
     const post = vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
       if (url === '/bookings/hold') return { data: held }
