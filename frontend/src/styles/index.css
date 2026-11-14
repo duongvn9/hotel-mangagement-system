@@ -23,21 +23,59 @@
   }
 }
 
+/*
+ * Printing the receipt. The receipt lives inside a Radix dialog (fixed, centred, height-limited and
+ * scrollable), which clips it to a strip when printed. So print only the receipt: drop everything
+ * else from the layout and let the dialog around it flow like a normal block that grows with its
+ * content. The receipt's own ancestors are matched with :has() so nothing else on the page prints.
+ */
+@page {
+  size: A4;
+  margin: 14mm;
+}
+
 @media print {
-  body * {
-    visibility: hidden;
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: transparent !important;
   }
-  #printable-receipt,
-  #printable-receipt * {
-    visibility: visible;
+  body > *:not(:has(#printable-receipt)) {
+    display: none !important;
+  }
+  [role='dialog']:has(#printable-receipt) {
+    position: static !important;
+    transform: none !important;
+    /* Tailwind v4 centres with the separate `translate` property, driven by these variables. */
+    --tw-translate-x: 0px !important;
+    --tw-translate-y: 0px !important;
+    animation: none !important;
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+  [role='dialog']:has(#printable-receipt) > *:not(:has(#printable-receipt)) {
+    display: none !important;
+  }
+  [role='dialog']:has(#printable-receipt) > :has(#printable-receipt) {
+    overflow: visible !important;
+    padding: 0 !important;
   }
   #printable-receipt {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 0;
-    background: transparent !important;
+    break-inside: avoid;
+  }
+  /* Browsers drop background colours when printing; keep the dark total bar and table header. */
+  #printable-receipt,
+  #printable-receipt * {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 }
