@@ -18,7 +18,14 @@ import {
   useRecordDeskDeposit,
 } from '../hooks'
 import { rememberPaymentRef } from '../storage'
-import { formatDate, money, newRequestId, nightsBetween, todayISO } from '../utils'
+import {
+  daysFromTodayISO,
+  formatDate,
+  money,
+  newRequestId,
+  nightsBetween,
+  todayISO,
+} from '../utils'
 
 /** Cách khách đóng cọc tại quầy: tiền mặt hoặc thẻ ghi ngay, hoặc VNPay mở trang thanh toán. */
 type WalkInDepositMethod = DeskDepositMethod | 'VNPAY'
@@ -27,8 +34,8 @@ type WalkInDepositMethod = DeskDepositMethod | 'VNPAY'
 export function WalkInBookingPage() {
   // Từ trang tìm khách (UC14): điền sẵn thông tin khách cũ, lễ tân vẫn sửa được.
   const [params] = useSearchParams()
-  const [checkIn, setCheckIn] = useState('')
-  const [checkOut, setCheckOut] = useState('')
+  const [checkIn, setCheckIn] = useState(() => params.get('checkIn') || todayISO())
+  const [checkOut, setCheckOut] = useState(() => params.get('checkOut') || daysFromTodayISO(2))
   const [adultCount, setAdultCount] = useState('2')
   const [childCount, setChildCount] = useState('0')
   const [formError, setFormError] = useState('')
