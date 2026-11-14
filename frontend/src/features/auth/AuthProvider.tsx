@@ -26,10 +26,16 @@ import { firebaseErrorMessage } from './firebase-errors'
 const DEV_USER_KEY = 'hms.devUser'
 
 function clearSessionCache() {
-  // Public search data is identity-independent. Removing active queries leaves their
-  // observers showing old data until the next local render recreates and refetches them.
+  // Public, identity-independent data is kept. Removing active queries leaves their observers
+  // showing old data until the next local render recreates and refetches them — and the VNPay
+  // return page does not re-render on the auth-state settle, so removing its in-flight verify
+  // query would strand a guest on "Đang xác minh…" forever. The verify result is keyed by the
+  // signed VNPay query (not by user), so it is safe to keep like `availability`.
   queryClient.removeQueries({
-    predicate: ({ queryKey }) => queryKey[0] !== 'availability' && queryKey[0] !== 'search-filters',
+    predicate: ({ queryKey }) =>
+      queryKey[0] !== 'availability' &&
+      queryKey[0] !== 'search-filters' &&
+      queryKey[0] !== 'vnpay-return',
   })
   queryClient.getMutationCache().clear()
 }
