@@ -37,6 +37,7 @@ import {
 } from '../hooks'
 import { nightsBetween } from '../utils'
 import {
+  INVALID_INPUT_CLASS,
   mapGuestServerErrors,
   validateGuestContact,
   type GuestFieldErrors,
@@ -725,6 +726,7 @@ export function CreateBookingPage() {
                         required
                         maxLength={120}
                         aria-invalid={Boolean(contactErrors.guestName)}
+                        className={cn(contactErrors.guestName && INVALID_INPUT_CLASS)}
                         value={guestName}
                         onChange={(e) => {
                           setGuestName(e.target.value)
@@ -744,6 +746,7 @@ export function CreateBookingPage() {
                         required
                         maxLength={160}
                         aria-invalid={Boolean(contactErrors.guestEmail)}
+                        className={cn(contactErrors.guestEmail && INVALID_INPUT_CLASS)}
                         value={guestEmail}
                         onChange={(e) => {
                           setGuestEmail(e.target.value)
@@ -764,6 +767,7 @@ export function CreateBookingPage() {
                           required
                           placeholder="0900000000"
                           aria-invalid={Boolean(contactErrors.guestPhone)}
+                          className={cn(contactErrors.guestPhone && INVALID_INPUT_CLASS)}
                           value={guestPhone}
                           onChange={(e) => {
                             setGuestPhone(e.target.value)

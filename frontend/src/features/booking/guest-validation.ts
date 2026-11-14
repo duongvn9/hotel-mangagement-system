@@ -3,6 +3,9 @@
 export type GuestField = 'guestName' | 'guestEmail' | 'guestPhone'
 export type GuestFieldErrors = Partial<Record<GuestField, string>>
 
+/** Class bôi đỏ viền ô nhập đang có lỗi (dùng chung cho các form đặt phòng). */
+export const INVALID_INPUT_CLASS = 'border-destructive focus-visible:ring-destructive'
+
 export interface GuestContact {
   guestName: string
   guestEmail: string
@@ -33,10 +36,15 @@ export function validateGuestContact(contact: GuestContact): GuestFieldErrors {
   return errors
 }
 
+// Nhận diện trường từ message server: khớp cả tên trường tiếng Anh (vd "guestPhone is invalid")
+// lẫn message tiếng Việt backend trả về (vd "Số điện thoại không hợp lệ", "Email tối đa 160 ký tự").
+const PHONE_HINT = /guestphone|số điện thoại/i
+const EMAIL_HINT = /guestemail|email/i
+const NAME_HINT = /guestname|họ tên/i
+
 /**
- * Phân loại message validate từ server về đúng trường (tiếng Việt). Message backend bắt đầu bằng
- * tên trường (vd "guestPhone is invalid", "guestEmail must be an email"); phần không nhận ra giữ
- * nguyên để hiển thị ở thông báo chung.
+ * Phân loại message validate từ server về đúng trường (tiếng Việt); phần không nhận ra (vd mã giữ
+ * phòng, ngày, số khách) giữ nguyên để hiển thị ở thông báo chung.
  */
 export function mapGuestServerErrors(messages: string[]): {
   fieldErrors: GuestFieldErrors
@@ -47,9 +55,9 @@ export function mapGuestServerErrors(messages: string[]): {
   for (const raw of messages) {
     const message = raw.trim()
     if (!message) continue
-    if (/guestphone/i.test(message)) fieldErrors.guestPhone = PHONE_INVALID
-    else if (/guestemail/i.test(message)) fieldErrors.guestEmail = EMAIL_INVALID
-    else if (/guestname/i.test(message)) fieldErrors.guestName = NAME_INVALID
+    if (PHONE_HINT.test(message)) fieldErrors.guestPhone = PHONE_INVALID
+    else if (EMAIL_HINT.test(message)) fieldErrors.guestEmail = EMAIL_INVALID
+    else if (NAME_HINT.test(message)) fieldErrors.guestName = NAME_INVALID
     else rest.push(message)
   }
   return { fieldErrors, rest }
