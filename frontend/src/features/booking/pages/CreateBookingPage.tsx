@@ -16,7 +16,7 @@ import {
   Panel,
 } from '@/components/organisms'
 import { useAuth } from '@/features/auth/auth-context'
-import { getErrorMessage } from '@/lib/api-client'
+import { getErrorMessage, getErrorMessages } from '@/lib/api-client'
 import { fdate, vnd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import {
@@ -36,6 +36,11 @@ import {
   useUpdateHoldRooms,
 } from '../hooks'
 import { nightsBetween } from '../utils'
+import {
+  mapGuestServerErrors,
+  validateGuestContact,
+  type GuestFieldErrors,
+} from '../guest-validation'
 import { rememberPaymentRef } from '../storage'
 import { formatRemaining, useHoldCountdown } from './useHoldCountdown'
 
@@ -178,6 +183,19 @@ export function CreateBookingPage() {
   const [guestName, setGuestName] = useState(me?.fullName ?? '')
   const [guestEmail, setGuestEmail] = useState(me?.email ?? '')
   const [guestPhone, setGuestPhone] = useState(me?.phone ?? '')
+  // Lỗi theo từng trường thông tin liên hệ (client kiểm trước, server map sau), hiển thị ngay dưới ô nhập.
+  const [contactErrors, setContactErrors] = useState<GuestFieldErrors>({})
+  // Lỗi submit không thuộc trường nào (vd hold hết hạn) để hiện ở thông báo chung.
+  const [submitBanner, setSubmitBanner] = useState('')
+
+  function clearContactError(field: keyof GuestFieldErrors) {
+    setContactErrors((prev) => {
+      if (!prev[field]) return prev
+      const next = { ...prev }
+      delete next[field]
+      return next
+    })
+  }
 
   // Dịch vụ chọn kèm (tuỳ chọn): serviceId -> số lượng.
   const catalog = useServiceCatalog()
@@ -352,6 +370,20 @@ export function CreateBookingPage() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
     if (!held || held.status !== 'ROOM_HELD' || holdExpired || submit.isPending) return
+
+    // Kiểm tra phía client trước: lỗi hiện ngay dưới đúng ô nhập, bằng tiếng Việt.
+    const clientErrors = validateGuestContact({ guestName, guestEmail, guestPhone })
+    setSubmitBanner('')
+    if (Object.keys(clientErrors).length > 0) {
+      setContactErrors(clientErrors)
+      const firstField = (['guestName', 'guestEmail', 'guestPhone'] as const).find(
+        (field) => clientErrors[field],
+      )
+      if (firstField) document.getElementById(firstField)?.focus()
+      return
+    }
+    setContactErrors({})
+
     try {
       const updated = await submit.mutateAsync({
         holdToken: held.holdToken,
@@ -364,8 +396,17 @@ export function CreateBookingPage() {
       submittedRef.current = true
       setHeld(updated)
       heldRef.current = updated
-    } catch {
-      // Lỗi hiển thị qua submit.isError bên dưới.
+    } catch (error) {
+      // Server vẫn báo lỗi: đưa lỗi validate về đúng ô, phần còn lại hiện ở thông báo chung.
+      const { fieldErrors, rest } = mapGuestServerErrors(getErrorMessages(error))
+      setContactErrors(fieldErrors)
+      setSubmitBanner(
+        rest.join(', ') || (Object.keys(fieldErrors).length ? '' : getErrorMessage(error)),
+      )
+      const firstField = (['guestName', 'guestEmail', 'guestPhone'] as const).find(
+        (field) => fieldErrors[field],
+      )
+      if (firstField) document.getElementById(firstField)?.focus()
     }
   }
 
@@ -499,7 +540,11 @@ export function CreateBookingPage() {
       )}
 
       {held && (
-        <form onSubmit={onSubmit} className="mt-8 grid items-start gap-8 lg:grid-cols-[1fr_380px]">
+        <form
+          noValidate
+          onSubmit={onSubmit}
+          className="mt-8 grid items-start gap-8 lg:grid-cols-[1fr_380px]"
+        >
           {/* Cột trái: form thông tin khách */}
           <div className="space-y-6">
             {holdExpired ? (
@@ -669,34 +714,61 @@ export function CreateBookingPage() {
                     </p>
                   )}
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <FormField label="Họ tên" htmlFor="guestName" required>
+                    <FormField
+                      label="Họ tên"
+                      htmlFor="guestName"
+                      required
+                      error={contactErrors.guestName}
+                    >
                       <Input
                         id="guestName"
                         required
                         maxLength={120}
+                        aria-invalid={Boolean(contactErrors.guestName)}
                         value={guestName}
-                        onChange={(e) => setGuestName(e.target.value)}
+                        onChange={(e) => {
+                          setGuestName(e.target.value)
+                          clearContactError('guestName')
+                        }}
                       />
                     </FormField>
-                    <FormField label="Email" htmlFor="guestEmail" required>
+                    <FormField
+                      label="Email"
+                      htmlFor="guestEmail"
+                      required
+                      error={contactErrors.guestEmail}
+                    >
                       <Input
                         id="guestEmail"
                         type="email"
                         required
                         maxLength={160}
+                        aria-invalid={Boolean(contactErrors.guestEmail)}
                         value={guestEmail}
-                        onChange={(e) => setGuestEmail(e.target.value)}
+                        onChange={(e) => {
+                          setGuestEmail(e.target.value)
+                          clearContactError('guestEmail')
+                        }}
                       />
                     </FormField>
                     <div className="sm:col-span-2">
-                      <FormField label="Số điện thoại" htmlFor="guestPhone" required>
+                      <FormField
+                        label="Số điện thoại"
+                        htmlFor="guestPhone"
+                        required
+                        error={contactErrors.guestPhone}
+                      >
                         <Input
                           id="guestPhone"
                           type="tel"
                           required
                           placeholder="0900000000"
+                          aria-invalid={Boolean(contactErrors.guestPhone)}
                           value={guestPhone}
-                          onChange={(e) => setGuestPhone(e.target.value)}
+                          onChange={(e) => {
+                            setGuestPhone(e.target.value)
+                            clearContactError('guestPhone')
+                          }}
                         />
                       </FormField>
                     </div>
@@ -759,12 +831,12 @@ export function CreateBookingPage() {
                   </Panel>
                 )}
 
-                {submit.isError && (
+                {submitBanner && (
                   <div
                     role="alert"
                     className="rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-destructive"
                   >
-                    {getErrorMessage(submit.error)}
+                    {submitBanner}
                   </div>
                 )}
 

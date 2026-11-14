@@ -55,3 +55,10 @@ export function getErrorMessage(
   if (Array.isArray(message)) return message.join(', ')
   return message || fallback
 }
+
+/** Danh sách message lỗi backend trả về (mảng validate hoặc một câu), để map theo từng trường. */
+export function getErrorMessages(error: unknown): string[] {
+  const message = isAxiosError<ApiError>(error) ? error.response?.data?.message : undefined
+  if (Array.isArray(message)) return message
+  return message ? [message] : []
+}
