@@ -656,6 +656,24 @@ export async function checkOutBooking(id: string): Promise<CheckOutResult> {
   return (await api.post<CheckOutResult>(`/bookings/${id}/check-out`)).data
 }
 
+export interface SendInvoiceEmailResult {
+  success: boolean
+  recipient: string
+}
+
+/** Gửi hoá đơn / phiếu thanh toán qua email cho khách hàng. */
+export async function sendInvoiceEmail(
+  bookingId: string,
+  email?: string,
+): Promise<SendInvoiceEmailResult> {
+  return (
+    await api.post<SendInvoiceEmailResult>(
+      `/bookings/${bookingId}/invoice/email`,
+      email ? { email } : {},
+    )
+  ).data
+}
+
 export interface RoomReplacement {
   /** Phòng đang thuộc booking cần đổi đi. */
   from: string

@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { api } from '@/lib/api-client'
 import { ME, renderWithAuth } from '@/features/auth/test-utils'
 import { bookingRoutes } from './routes'
@@ -231,5 +231,49 @@ describe('ReceptionBookingDetailPage', () => {
     mockGet([])
     renderDetail()
     expect(await screen.findByText('Không tìm thấy booking')).toBeInTheDocument()
+  })
+
+  it('opens printable receipt modal and sends email to guest', async () => {
+    const originalPrint = window.print
+    window.print = vi.fn()
+    const post = vi.spyOn(api, 'post').mockResolvedValue({
+      data: {
+        success: true,
+        recipient: 'a@example.test',
+        message: 'Đã gửi email hoá đơn thành công',
+      },
+    })
+    mockGet([item()])
+    renderDetail()
+
+    const printBtn = await screen.findByRole('button', { name: 'In hoá đơn' })
+    expect(printBtn).toBeInTheDocument()
+    fireEvent.click(printBtn)
+
+    const modal = await screen.findByRole('dialog')
+    expect(
+      within(modal).getByRole('heading', { name: 'Xuất hoá đơn / Phiếu thanh toán' }),
+    ).toBeInTheDocument()
+    expect(within(modal).getByText('RECEIPT')).toBeInTheDocument()
+    expect(within(modal).getByText(/#BKVIEW1/)).toBeInTheDocument()
+    expect(within(modal).getByText('Nguyễn Văn A')).toBeInTheDocument()
+
+    // Test print button
+    const printDocBtn = within(modal).getByRole('button', { name: 'In / Xuất PDF' })
+    fireEvent.click(printDocBtn)
+    expect(window.print).toHaveBeenCalled()
+
+    // Test email button
+    const sendEmailBtn = within(modal).getByRole('button', { name: 'Gửi email cho khách' })
+    fireEvent.click(sendEmailBtn)
+
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledWith('/bookings/b1/invoice/email', {})
+    })
+    expect(
+      await within(modal).findByText(/Đã gửi phiếu thanh toán đến a@example.test thành công!/),
+    ).toBeInTheDocument()
+
+    window.print = originalPrint
   })
 })

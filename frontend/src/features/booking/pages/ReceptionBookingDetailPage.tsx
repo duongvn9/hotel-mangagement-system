@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Pencil, XCircle } from 'lucide-react'
+import { Pencil, Receipt, XCircle } from 'lucide-react'
 import { Link, useParams } from 'react-router'
 import { Button } from '@/components/atoms'
 import { Alert, EmptyState } from '@/components/molecules'
@@ -17,6 +17,7 @@ import {
 import { getErrorMessage } from '@/lib/api-client'
 import { useBookingList, useBookingSummary, useCancelBooking } from '../hooks'
 import { BookingDetailLayout } from '../components/BookingDetailLayout'
+import { BookingReceiptModal } from '../components/BookingReceiptModal'
 import { CheckInEvidencePanel } from '../components/CheckInEvidencePanel'
 
 /** Trạng thái còn sửa được (UC11): trước khi nhận phòng và chưa huỷ. */
@@ -34,6 +35,7 @@ export function ReceptionBookingDetailPage() {
   const summary = useBookingSummary(booking?.id ?? '')
   const editable = summary.data ? EDITABLE_STATUSES.includes(summary.data.status) : false
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const [showReceipt, setShowReceipt] = useState(false)
   const cancellingRef = useRef(false)
   const cancel = useCancelBooking()
   const cancellable = summary.data && ['ROOM_HELD', 'PENDING_DEPOSIT'].includes(summary.data.status)
@@ -85,6 +87,14 @@ export function ReceptionBookingDetailPage() {
           }
           actions={
             <>
+              <Button
+                variant="outline"
+                className="rounded-full"
+                onClick={() => setShowReceipt(true)}
+              >
+                <Receipt className="size-4" />
+                In hoá đơn
+              </Button>
               {editable && (
                 <Button asChild variant="outline" className="rounded-full">
                   <Link to={`/reception/bookings/${encodeURIComponent(summary.data.code)}/edit`}>
@@ -116,6 +126,16 @@ export function ReceptionBookingDetailPage() {
               </p>
             )
           }
+        />
+      )}
+
+      {summary.data && (
+        <BookingReceiptModal
+          open={showReceipt}
+          onOpenChange={setShowReceipt}
+          bookingId={summary.data.bookingId}
+          bookingCode={summary.data.code}
+          summary={summary.data}
         />
       )}
       <AlertDialog

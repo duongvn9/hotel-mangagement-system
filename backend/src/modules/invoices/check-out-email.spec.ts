@@ -110,4 +110,43 @@ describe('CheckOutService email', () => {
       status: BookingStatus.CheckedOut,
     });
   });
+
+  describe('sendInvoiceEmail', () => {
+    it('sends the invoice receipt email on demand using the booking guest email', async () => {
+      const { sut, send } = setup();
+
+      const result = await sut.sendInvoiceEmail(bookingId.toHexString());
+
+      expect(result).toEqual({ success: true, recipient: 'alice@example.com' });
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'alice@example.com',
+          template: 'CHECK_OUT_RECEIPT',
+          data: expect.objectContaining({
+            bookingCode: 'GE-123',
+            totalAmount: 1_900_000,
+          }),
+        }),
+      );
+    });
+
+    it('allows overriding the recipient email', async () => {
+      const { sut, send } = setup();
+
+      const result = await sut.sendInvoiceEmail(bookingId.toHexString(), {
+        email: 'custom@example.com',
+      });
+
+      expect(result).toEqual({
+        success: true,
+        recipient: 'custom@example.com',
+      });
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'custom@example.com',
+          template: 'CHECK_OUT_RECEIPT',
+        }),
+      );
+    });
+  });
 });

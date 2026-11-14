@@ -197,4 +197,41 @@ export class CheckOutService {
       ),
     };
   }
+
+  /**
+   * Gửi hoá đơn / phiếu thanh toán qua email cho khách theo yêu cầu của lễ tân/quản lý.
+   */
+  async sendInvoiceEmail(
+    bookingId: string,
+    dto?: { email?: string },
+  ): Promise<{ success: boolean; recipient: string }> {
+    if (!/^[a-f\d]{24}$/i.test(bookingId)) {
+      throw new BadRequestException('Invalid booking ID');
+    }
+    const booking = await this.bookings.findById(bookingId);
+    if (!booking || !booking.isActive) {
+      throw new NotFoundException('Booking not found');
+    }
+    const targetEmail = dto?.email?.trim() || booking.guestEmail?.trim();
+    if (!targetEmail) {
+      throw new BadRequestException('Booking has no guest email address');
+    }
+
+    const invoice = await this.invoices.getOrCreateForBooking(bookingId);
+    const email = checkOutReceiptEmail(
+      {
+        code: booking.code,
+        guestName: booking.guestName,
+        guestEmail: targetEmail,
+      },
+      invoice,
+      booking.checkedOutAt ?? new Date(),
+    );
+    if (!email) {
+      throw new BadRequestException('Failed to generate receipt email');
+    }
+
+    await this.notifications.send(email);
+    return { success: true, recipient: targetEmail };
+  }
 }

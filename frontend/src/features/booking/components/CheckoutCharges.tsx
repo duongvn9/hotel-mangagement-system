@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { LogOut } from 'lucide-react'
+import { LogOut, Receipt } from 'lucide-react'
 import { Button, Input, NativeSelect } from '@/components/atoms'
 import { Alert, FormField } from '@/components/molecules'
 import {
@@ -15,6 +15,7 @@ import { CHARGE_CATEGORY_LABEL, type BookingListItem, type ChargeCategory } from
 import { useAddCharge, useBookingCharges } from '../hooks'
 import { isPastCheckOut, money, newRequestId } from '../utils'
 import { AddServiceForm } from './AddServiceForm'
+import { BookingReceiptModal } from './BookingReceiptModal'
 import { CheckoutInspection } from './CheckoutInspection'
 import { SettleAndCheckOut } from './SettleAndCheckOut'
 
@@ -30,6 +31,7 @@ export function CheckoutCharges({
   detailLink?: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
+  const [showReceipt, setShowReceipt] = useState(false)
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
   const [category, setCategory] = useState<ChargeCategory | ''>('')
@@ -118,6 +120,19 @@ export function CheckoutCharges({
                     onReload={() => void charges.refetch()}
                     reloading={charges.isFetching}
                   />
+
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 rounded-full"
+                      onClick={() => setShowReceipt(true)}
+                    >
+                      <Receipt className="size-4" />
+                      In / Xuất hoá đơn
+                    </Button>
+                  </div>
                 </div>
 
                 {booking.status === 'CHECKED_IN' && <CheckoutInspection bookingId={booking.id} />}
@@ -233,6 +248,16 @@ export function CheckoutCharges({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <BookingReceiptModal
+        open={showReceipt}
+        onOpenChange={setShowReceipt}
+        bookingId={booking.id}
+        bookingCode={booking.code}
+        bookingItem={booking}
+        totals={charges.data?.totals}
+        charges={charges.data?.charges}
+      />
     </>
   )
 }

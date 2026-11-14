@@ -13,6 +13,7 @@ import { RecordCashPaymentDto } from './dto/cash-payment.dto.js';
 import { BookingChargesResponse } from './dto/checkout-charge.dto.js';
 import { CheckOutResult } from './dto/check-out.dto.js';
 import { CheckOutService } from './check-out.service.js';
+import { SendInvoiceEmailDto } from './dto/send-invoice-email.dto.js';
 
 @ApiTags('invoices')
 @Controller('bookings')
@@ -73,5 +74,15 @@ export class CheckOutController {
   })
   checkOut(@Param('id') id: string) {
     return this.checkOuts.checkOut(id);
+  }
+
+  @Post(':id/invoice/email')
+  @ApiOperation({
+    summary:
+      'Send or resend the invoice receipt email to the guest (Receptionist/Manager)',
+  })
+  @ApiCreatedResponse({ description: 'Receipt email dispatched' })
+  sendInvoiceEmail(@Param('id') id: string, @Body() dto?: SendInvoiceEmailDto) {
+    return this.checkOuts.sendInvoiceEmail(id, dto);
   }
 }

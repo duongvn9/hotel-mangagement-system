@@ -4,6 +4,7 @@ import {
   cancelBooking,
   checkInBooking,
   checkOutBooking,
+  sendInvoiceEmail,
   createWalkInBooking,
   getBooking,
   getBookingAttention,
@@ -362,6 +363,14 @@ export function useCheckOut() {
           queryClient.invalidateQueries({ queryKey: [key] }),
         ),
       ),
+  })
+}
+
+/** Gửi hoá đơn / phiếu thanh toán qua email cho khách. */
+export function useSendInvoiceEmail() {
+  return useMutation({
+    mutationFn: ({ bookingId, email }: { bookingId: string; email?: string }) =>
+      sendInvoiceEmail(bookingId, email),
   })
 }
 
