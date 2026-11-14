@@ -43,7 +43,7 @@ describe('validateGuestContact', () => {
 })
 
 describe('mapGuestServerErrors', () => {
-  it('routes server validation messages to the matching field in Vietnamese', () => {
+  it('routes English server validation messages to the matching field', () => {
     const { fieldErrors, rest } = mapGuestServerErrors([
       'guestPhone is invalid',
       'guestEmail must be an email',
@@ -55,9 +55,24 @@ describe('mapGuestServerErrors', () => {
     expect(rest).toEqual([])
   })
 
-  it('keeps unrecognized messages for the general banner', () => {
-    const { fieldErrors, rest } = mapGuestServerErrors(['Mã giữ phòng không hợp lệ'])
+  it('routes the Vietnamese server messages to the matching field', () => {
+    const { fieldErrors, rest } = mapGuestServerErrors([
+      'Số điện thoại không hợp lệ',
+      'Email tối đa 160 ký tự',
+      'Họ tên tối đa 120 ký tự',
+    ])
+    expect(fieldErrors.guestPhone).toContain('Số điện thoại không hợp lệ')
+    expect(fieldErrors.guestEmail).toBe('Email không hợp lệ.')
+    expect(fieldErrors.guestName).toContain('Họ tên không hợp lệ')
+    expect(rest).toEqual([])
+  })
+
+  it('keeps unrecognized messages (hold token, dates) for the general banner', () => {
+    const { fieldErrors, rest } = mapGuestServerErrors([
+      'Mã giữ phòng không hợp lệ',
+      'Ngày nhận phòng phải có dạng YYYY-MM-DD',
+    ])
     expect(fieldErrors).toEqual({})
-    expect(rest).toEqual(['Mã giữ phòng không hợp lệ'])
+    expect(rest).toEqual(['Mã giữ phòng không hợp lệ', 'Ngày nhận phòng phải có dạng YYYY-MM-DD'])
   })
 })
