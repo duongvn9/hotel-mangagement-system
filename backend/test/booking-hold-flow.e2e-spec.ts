@@ -457,29 +457,33 @@ describe('Booking hold flow (e2e)', () => {
     expect(hold?.isActive).toBe(false);
   });
 
-  it('rate-limits repeated holds from the same client', async () => {
-    // Ba lượt giữ (ngày không chồng nhau) từ cùng client đều qua.
-    const slots: [string, string][] = [
-      ['2093-09-01', '2093-09-03'],
-      ['2093-09-08', '2093-09-10'],
-      ['2093-09-15', '2093-09-17'],
-    ];
+  it('rate-limits repeated holds from the same client after 20 in the window', async () => {
+    // Twenty holds on non-overlapping dates (a stay every 4 days) from one client all go through.
+    const stay = (index: number): [string, string] => {
+      const day = (offset: number) =>
+        new Date(Date.UTC(2093, 10, 1 + index * 4 + offset))
+          .toISOString()
+          .slice(0, 10);
+      return [day(0), day(2)];
+    };
     const ip = '203.0.113.9';
-    for (const [checkIn, checkOut] of slots) {
+    for (let index = 0; index < 20; index++) {
+      const [checkIn, checkOut] = stay(index);
       await http()
         .post('/api/v1/bookings/hold')
         .set('x-forwarded-for', ip)
         .send(holdBody(roomA, checkIn, checkOut))
         .expect(201);
     }
-    // Lượt thứ 4 trong cửa sổ bị chặn.
+    // The 21st in the window is blocked.
+    const [checkIn, checkOut] = stay(20);
     const limited = await http()
       .post('/api/v1/bookings/hold')
       .set('x-forwarded-for', ip)
-      .send(holdBody(roomA, '2093-10-01', '2093-10-03'))
+      .send(holdBody(roomA, checkIn, checkOut))
       .expect(429);
     expect(limited.body.message).toBe(
-      'Bạn đã đạt giới hạn 3 lượt giữ phòng trong 30 phút cho phiên hoặc địa chỉ mạng này. Vui lòng chờ các lượt giữ phòng cũ ra khỏi khoảng 30 phút rồi thử lại.',
+      'Bạn đã đạt giới hạn 20 lượt giữ phòng trong 30 phút cho phiên hoặc địa chỉ mạng này. Vui lòng chờ các lượt giữ phòng cũ ra khỏi khoảng 30 phút rồi thử lại.',
     );
   });
 });

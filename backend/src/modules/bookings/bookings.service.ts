@@ -83,7 +83,7 @@ const HOLD_WINDOW_MS = 15 * 60 * 1000;
 const MS_PER_DAY = 86_400_000;
 /** Chống lạm dụng: tối đa số hold một phiên/IP tạo trong cửa sổ thời gian. */
 const HOLD_RATE_WINDOW_MS = 30 * 60 * 1000;
-const HOLD_RATE_MAX = 3;
+const HOLD_RATE_MAX = 20;
 /** Tỷ lệ đặt cọc trên tiền phòng (chốt theo nghiệp vụ: 10%). */
 export const DEPOSIT_RATE = 0.1;
 
@@ -1395,7 +1395,7 @@ export class BookingsService {
     });
     if (recent >= HOLD_RATE_MAX) {
       throw new HttpException(
-        'Bạn đã đạt giới hạn 3 lượt giữ phòng trong 30 phút cho phiên hoặc địa chỉ mạng này. Vui lòng chờ các lượt giữ phòng cũ ra khỏi khoảng 30 phút rồi thử lại.',
+        `Bạn đã đạt giới hạn ${HOLD_RATE_MAX} lượt giữ phòng trong 30 phút cho phiên hoặc địa chỉ mạng này. Vui lòng chờ các lượt giữ phòng cũ ra khỏi khoảng 30 phút rồi thử lại.`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
